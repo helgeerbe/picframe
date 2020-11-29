@@ -29,7 +29,27 @@ def test_for_file_changes():
 def test_get_files():
     m = model.Model('/home/pi/dev/picture_frame/picframe/configuration.yaml')
     num = m.get_number_of_files()
-    assert num == 443 # actual image folder 
+    assert num == 443 
+
+def test_get_next_file():
+    m = model.Model('/home/pi/dev/picture_frame/picframe/configuration.yaml')
+    file1 = m.get_next_file()
+    file2 = m.get_next_file()
+    assert file1 != file2
+
+def test_get_next_file_whole_loop():
+    m = model.Model('/home/pi/dev/picture_frame/picframe/configuration.yaml')
+    num = m.get_number_of_files()
+    m.shuffle = False
+    file1 = m.get_next_file()
+    for i in range(0, num):
+        file2 = m.get_next_file()
+    assert file1 == file2
+
+def test_get_next_file_no_file_in_range():
+    m = model.Model('/home/pi/dev/picture_frame/picframe/configuration.yaml')
+    file = m.get_next_file((1990,1,1), (1990,1,2))
+    assert file == '/home/pi/dev/picture_frame/picframe/PictureFrame2020img.jpg'
 
 def test_get_file_for_empty_dir():
     m = model.Model('/home/pi/dev/picture_frame/picframe/configuration.yaml')

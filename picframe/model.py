@@ -63,10 +63,10 @@ class Model:
                 print(exc)
         self.__file_list = []
         self.__number_of_files = 0
+        self.__get_files()
         self.__file_index = 0
         self.__num_run_through = 0
-        self.__file_list, self.__number_of_files = self.__get_files()
-    
+        
     def get_viewer_config(self):
         return self.__config['viewer']
 
@@ -99,15 +99,19 @@ class Model:
     @subdirectory.setter
     def subdirectory(self, dir):
         self.__config['model']['subdirectory'] = dir
-        self.__file_list, self.__number_of_files = self.__get_files()
+        self.__get_files()
     
     @property
     def shuffle(self):
         return self.__config['model']['shuffle']
     
     @shuffle.setter
-    def shuffle(self, val):
+    def shuffle(self, val:bool):
         self.__config['model']['shuffle'] = val
+        if val == True:
+            self.__shuffle_files()
+        else:
+            self.__sort_files()
     
     def check_for_file_changes(self):
     # check modification time of pic_dir and its sub folders
@@ -120,7 +124,7 @@ class Model:
                 self.__logger.info('files changed in %s at %s', pic_dir, self.__last_file_change)
                 update = True
         if update == True:
-            self.__file_list, self.__number_of_files = self.__get_files()
+            self.__get_files()
             self.__num_run_through = 0
             self.__file_index = 0
         return update
@@ -138,7 +142,7 @@ class Model:
         return dt
 
     def __get_files(self):
-        file_list = []
+        self.__file_list = []
         picture_dir = os.path.join(self.get_model_config()['pic_dir'], self.get_model_config()['subdirectory'])
         for root, _dirnames, filenames in os.walk(picture_dir):
             mod_tm = os.stat(root).st_mtime # time of alteration in a directory
@@ -150,35 +154,56 @@ class Model:
                     file_path_name = os.path.join(root, filename)
                     dt = self.__get_image_date(file_path_name)
                     # iFiles now list of lists [file_name, exif or if not exist file_changed_date] 
-                    file_list.append([file_path_name, dt])
-            if len(file_list) == 0:
+                    self.__file_list.append([file_path_name, dt])
+            if len(self.__file_list) == 0:
                 img = self.get_model_config()['no_files_img']
                 dt = self.__get_image_date(img)
-                file_list.append([img, dt])
+                self.__file_list.append([img, dt])
         if self.get_model_config()['shuffle']:
-            file_list.sort(key=lambda x: x[1]) # will be later files last
-            recent_n = self.get_model_config()['recent_n']
-            temp_list_first = file_list[-recent_n:]
-            temp_list_last = file_list[:-recent_n]
-            random.shuffle(temp_list_first)
-            random.shuffle(temp_list_last)
-            file_list = temp_list_first + temp_list_last
+            self.__shuffle_files()
         else:
-            file_list.sort() # if not shuffled; sort by name
-        return file_list, len(file_list) # tuple of file list, number of pictures
+            self.__sort_files()
+        self.__number_of_files = len(self.__file_list)
     
-    def get_next_file(self):
-        self.__file_index  += 1
+    def get_next_file(self, date_from:tuple = None, date_to:tuple = None):
         if self.__file_index == self.__number_of_files:
             self.__num_run_through += 1
             if self.get_model_config()['shuffle'] and (self.__num_run_through >= self.get_model_config()['reshuffle_num']):
                 self.__num_run_through = 0
                 self.__shuffle_files()
             self.__file_index = 0
-        return self.__file_list[self.__file_index][0]
+
+        found = False
+        for i in range(0,self.get_number_of_files()):
+            if date_from is not None:
+                if self.__file_list[self.__file_index][1] < time.mktime(date_from + (0, 0, 0, 0, 0, 0)):
+                    self.__file_index = (self.__file_index + 1) % self.get_number_of_files()
+                    continue
+            if date_to is not None:
+                if self.__file_list[self.__file_index][1] > time.mktime(date_to + (0, 0, 0, 0, 0, 0)):
+                    self.__file_index = (self.__file_index + 1) % self.get_number_of_files()
+                    continue
+            found = True
+            break
+        if found == True:
+            file = self.__file_list[self.__file_index][0]
+        else:
+            file = self.get_model_config()['no_files_img']
+        self.__file_index  += 1
+        return file
+        
 
     def __shuffle_files(self):
-        random.shuffle(self.__file_list)
+        self.__file_list.sort(key=lambda x: x[1]) # will be later files last
+        recent_n = self.get_model_config()['recent_n']
+        temp_list_first = self.__file_list[-recent_n:]
+        temp_list_last = self.__file_list[:-recent_n]
+        random.shuffle(temp_list_first)
+        random.shuffle(temp_list_last)
+        self.__file_list = temp_list_first + temp_list_last
+    
+    def __sort_files(self):
+        self.__file_list.sort() # if not shuffled; sort by name
 
     def get_number_of_files(self):
         return self.__number_of_files
