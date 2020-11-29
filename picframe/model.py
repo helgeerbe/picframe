@@ -61,6 +61,11 @@ class Model:
                 self.__logger.info('config data = %s', self.__config)
             except yaml.YAMLError as exc:
                 print(exc)
+        self.__file_list = []
+        self.__number_of_files = 0
+        self.__file_index = 0
+        self.__num_run_through = 0
+        self.__file_list, self.__number_of_files = self.__get_files()
     
     def get_viewer_config(self):
         return self.__config['viewer']
@@ -94,6 +99,7 @@ class Model:
     @subdirectory.setter
     def subdirectory(self, dir):
         self.__config['model']['subdirectory'] = dir
+        self.__file_list, self.__number_of_files = self.__get_files()
     
     @property
     def shuffle(self):
@@ -113,6 +119,10 @@ class Model:
                 self.__last_file_change = mod_tm
                 self.__logger.info('files changed in %s at %s', pic_dir, self.__last_file_change)
                 update = True
+        if update == True:
+            self.__file_list, self.__number_of_files = self.__get_files()
+            self.__num_run_through = 0
+            self.__file_index = 0
         return update
     
     def __get_image_date(self, file_path_name):
@@ -127,7 +137,7 @@ class Model:
             self.__logger.warning("Cause: %s", e.args[1])
         return dt
 
-    def get_files(self):
+    def __get_files(self):
         file_list = []
         picture_dir = os.path.join(self.get_model_config()['pic_dir'], self.get_model_config()['subdirectory'])
         for root, _dirnames, filenames in os.walk(picture_dir):
@@ -156,8 +166,23 @@ class Model:
         else:
             file_list.sort() # if not shuffled; sort by name
         return file_list, len(file_list) # tuple of file list, number of pictures
+    
+    def get_next_file(self):
+        self.__file_index  += 1
+        if self.__file_index == self.__number_of_files:
+            self.__num_run_through += 1
+            if self.get_model_config()['shuffle'] and (self.__num_run_through >= self.get_model_config()['reshuffle_num']):
+                self.__num_run_through = 0
+                self.__shuffle_files()
+            self.__file_index = 0
+        return self.__file_list[self.__file_index][0]
 
-    def shuffle_files(self, file_list):
-        random.shuffle(file_list)
+    def __shuffle_files(self):
+        random.shuffle(self.__file_list)
+
+    def get_number_of_files(self):
+        return self.__number_of_files
+    
+
     
     
