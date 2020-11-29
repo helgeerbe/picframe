@@ -38,6 +38,8 @@ class ViewerDisplay:
         self.__delta_alpha = 1.0
         self.__display = None
         self.__slide = None
+        self.__xstep = None
+        self.__ystep = None
         self.__text = None
         self.__textblock = None
         self.__sfg = None # slide for background
@@ -199,7 +201,7 @@ class ViewerDisplay:
             self.__slide.unif[os1] = (wh_rat - 1.0) * 0.5
             self.__slide.unif[os2] = 0.0
             if self.__kenburns:
-                xstep, ystep = (self.__slide.unif[i] * 2.0 / time_delay for i in (48, 49))
+                self.__xstep, self.__ystep = (self.__slide.unif[i] * 2.0 / time_delay for i in (48, 49))
                 self.__slide.unif[48] = 0.0
                 self.__slide.unif[49] = 0.0
                 self.__kb_up = not self.__kb_up
@@ -208,8 +210,8 @@ class ViewerDisplay:
             t_factor = self.__next_tm - tm
             if self.__kb_up:
                 t_factor = time_delay - t_factor
-            self.__slide.unif[48] = xstep * t_factor
-            self.__slide.unif[49] = ystep * t_factor
+            self.__slide.unif[48] = self.__xstep * t_factor
+            self.__slide.unif[49] = self.__ystep * t_factor
 
         if self.__alpha < 1.0: # transition is happening
             self.__in_transition = True
