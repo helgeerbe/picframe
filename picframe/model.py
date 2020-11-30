@@ -32,7 +32,8 @@ DEFAULT_CONFIG = {
         'reshuffle_num': 1, 
         'time_delay': 200.0, 
         'fade_time': 10.0, 
-        'shuffle': True 
+        'shuffle': True,
+        'image_attr': ['PICFRAME GPS']                           # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat
     },
     'mqtt': {
         'server': '', 
@@ -48,7 +49,7 @@ class Model:
 
     def __init__(self, configfile = DEFAULT_CONFIGFILE):
         self.__logger = logging.getLogger("model.Model")
-        self.__logger.info('creating an instance of Model')
+        self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
         self.__date_to = None
@@ -58,7 +59,7 @@ class Model:
                 conf = yaml.safe_load(stream)
                 for section in ['viewer', 'model', 'mqtt']:
                     self.__config[section] = {**DEFAULT_CONFIG[section], **conf[section]}
-                self.__logger.info('config data = %s', self.__config)
+                self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
                 print(exc)
         self.__file_list = []
@@ -141,6 +142,24 @@ class Model:
             self.__logger.warning("Cause: %s", e.args[1])
         return dt
 
+    def __get_image_attr(self, file_path_name):
+        orientation = 1
+        image_attr_list = {}
+        try:
+            exifs = exif2dict.Exif2Dict(file_path_name)
+            val = exifs.get_exif('EXIF Orientation')
+            if val['EXIF Orientation'] != None:
+                orientation = int(val['EXIF Orientation'])
+            for exif in self.get_model_config()['image_attr']:
+                if (exif == 'PICFRAME GPS'):
+                    image_attr_list.update(exifs.get_locaction())
+                else:
+                    image_attr_list.update(exifs.get_exif(exif))
+        except OSError as e:
+            self.__logger.warning("Can't extract exif data from file: \"%s\"", file_path_name)
+            self.__logger.warning("Cause: %s", e.args[1])
+        return orientation, image_attr_list
+
     def __get_files(self):
         self.__file_list = []
         picture_dir = os.path.join(self.get_model_config()['pic_dir'], self.get_model_config()['subdirectory'])
@@ -189,8 +208,11 @@ class Model:
             file = self.__file_list[self.__file_index][0]
         else:
             file = self.get_model_config()['no_files_img']
+        orientation, image_attr = self.__get_image_attr(file)
         self.__file_index  += 1
-        return file
+        self.__logger.info('Next file in list: %s', file)
+        self.__logger.debug('Image attributes: %s', image_attr)
+        return file, orientation, image_attr
         
 
     def __shuffle_files(self):

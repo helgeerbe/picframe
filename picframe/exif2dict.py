@@ -8,7 +8,6 @@ class Exif2Dict:
 
     def __init__(self, filename):
         self.__logger = logging.getLogger("exif2dict.Exif2Dict")
-        self.__logger.info('creating an instance of Exif2Dict')
         self.__tags = {}
         try:
             with open(filename, 'rb') as fh:

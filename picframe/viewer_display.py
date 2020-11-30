@@ -64,22 +64,8 @@ class ViewerDisplay:
             cmd = ["vcgencmd", "display_power", "1"]   
         subprocess.call(cmd)
 
-    def __get_image_orientation(self, file_path_name):
-        orientation = 1
+    def __tex_load(self, filename, orientation = 1, size=None):
         try:
-            exifs = exif2dict.Exif2Dict(file_path_name)
-            val = exifs.get_exif('EXIF Orientation')
-            if val['EXIF Orientation'] != None:
-                orientation = int(val['EXIF Orientation'])
-        except Exception as e:
-            orientation = 1
-            self.__logger.warning("Can't extract exif data from file: \"%s\"", file_path_name)
-            self.__logger.warning("Cause: %s", e.args[1])
-        return orientation
-
-    def __tex_load(self, filename, size=None):
-        try:
-            orientation = self.__get_image_orientation(filename)
             im = Image.open(filename)
             (w, h) = im.size
             max_dimension = MAX_SIZE # TODO changing MAX_SIZE causes serious crash on linux laptop!
@@ -166,14 +152,14 @@ class ViewerDisplay:
         self.__text.add_text_block(self.__textblock)
 
 
-    def slideshow_is_running(self, filename = None, time_delay = 200.0, fade_time = 10.0):
+    def slideshow_is_running(self, filename = None, orientation = 1, time_delay = 200.0, fade_time = 10.0):
         tm = time.time()
         if filename is not None:
             self.__sbg = self.__sfg
             self.__sfg = None
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + self.__show_names_tm
-            self.__sfg = self.__tex_load(filename, (self.__display.width, self.__display.height))
+            self.__sfg = self.__tex_load(filename, orientation, (self.__display.width, self.__display.height))
             self.__alpha = 0.0
             self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
             # set the file name as the description

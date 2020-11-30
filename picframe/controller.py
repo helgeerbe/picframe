@@ -14,14 +14,14 @@ class Controller:
 
         next_tm = time.time() + self.__model.time_delay
         next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
-        next_file = self.__model.get_next_file()
+        next_file, orientation, image_attr = self.__model.get_next_file()
         
-        while self.__viewer.slideshow_is_running(next_file, self.__model.time_delay, self.__model.fade_time):
+        while self.__viewer.slideshow_is_running(next_file, orientation, self.__model.time_delay, self.__model.fade_time):
             tm = time.time()
             next_file = None
             if tm > next_tm:
                 next_tm = tm + self.__model.time_delay
-                next_file = self.__model.get_next_file()
+                next_file, orientation, image_attr = self.__model.get_next_file()
                 
             if self.__viewer.is_in_transition() == False: # safe to do long running tasks
                 if tm > next_check_tm:

@@ -7,7 +7,7 @@ from picframe import model, viewer_display, controller
 
 
 def main(): 
-    logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     logger = logging.getLogger("picture_frame.py")
     logger.info('starting')
     m = model.Model()

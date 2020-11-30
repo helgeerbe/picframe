@@ -48,14 +48,34 @@ def test_get_next_file_whole_loop():
 
 def test_get_next_file_no_file_in_range():
     m = model.Model('/home/pi/dev/picture_frame/picframe/configuration.yaml')
-    file = m.get_next_file((1990,1,1), (1990,1,2))
+    file, orientation, image_attr = m.get_next_file((1990,1,1), (1990,1,2))
     assert file == '/home/pi/dev/picture_frame/picframe/PictureFrame2020img.jpg'
+    assert orientation == 1
+    assert image_attr == {
+        'latitude':None,
+        'longitude':None,
+        'EXIF FNumber':None,
+        'EXIF ExposureTime':None,
+        'EXIF ISOSpeedRatings':None,
+        'EXIF FocalLength':None,
+        'EXIF DateTimeOriginal':None,
+        'Image Model':None}
 
 def test_get_file_for_empty_dir():
     m = model.Model('/home/pi/dev/picture_frame/picframe/configuration.yaml')
     m.subdirectory = 'testdir'
-    file = m.get_next_file()
+    file, orientation, image_attr  = m.get_next_file()
     assert file == '/home/pi/dev/picture_frame/picframe/PictureFrame2020img.jpg'
+    assert orientation == 1
+    assert image_attr == {
+        'latitude':None,
+        'longitude':None,
+        'EXIF FNumber':None,
+        'EXIF ExposureTime':None,
+        'EXIF ISOSpeedRatings':None,
+        'EXIF FocalLength':None,
+        'EXIF DateTimeOriginal':None,
+        'Image Model':None}
 
 def test_getter_setter_fade_time():
     m = model.Model('/home/pi/dev/picture_frame/picframe/configuration.yaml')
