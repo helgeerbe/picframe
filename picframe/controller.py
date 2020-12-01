@@ -1,6 +1,8 @@
 import logging
 import time
 import paho.mqtt.client as mqtt
+import json
+import os
 
 class Controller:
 
@@ -11,65 +13,123 @@ class Controller:
         self.__viewer = viewer
     
     def loop(self):
-        next_tm = time.time() + self.__model.time_delay
+        next_tm = 0.0
         next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
-        next_file, orientation, image_attr = self.__model.get_next_file()
-        
-        while self.__viewer.slideshow_is_running(next_file, orientation, self.__model.time_delay, self.__model.fade_time):
+        while True:
             tm = time.time()
             next_file = None
             if tm > next_tm:
                 next_tm = tm + self.__model.time_delay
                 next_file, orientation, image_attr = self.__model.get_next_file()
+                device_id = self.__model.get_mqtt_config()['device_id']
+                state_topic = "homeassistant/sensor/" + device_id + "/state"
+                payload = {}
+                payload["image_counter"] = str(self.__model.get_number_of_files()) 
+                _, tail = os.path.split(next_file)
+                payload["image"] = tail
+                self.__client.publish(state_topic, json.dumps(payload), qos=0, retain=False)
+                attributes_topic = "homeassistant/sensor/" + device_id + "_image/attributes"
+                self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
                 
             if self.__viewer.is_in_transition() == False: # safe to do long running tasks
                 if tm > next_check_tm:
                     self.__model.check_for_file_changes()
                     next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
+            
+            if self.__viewer.slideshow_is_running(next_file, orientation, self.__model.time_delay, self.__model.fade_time) == False:
+                break
 
     
     def start(self):
+        try:
+            self.__client = mqtt.Client()
+            login = self.__model.get_mqtt_config()['login']
+            password = self.__model.get_mqtt_config()['password']
+            self.__client.username_pw_set(login, password) 
+            tls = self.__model.get_mqtt_config()['tls']
+            self.__client.tls_set(tls)
+            server = self.__model.get_mqtt_config()['server']
+            port = self.__model.get_mqtt_config()['port']
+            self.__client.connect(server, port, 60) 
+            self.__client.will_set("homeassistant/switch/" + self.__model.get_mqtt_config()['device_id'] + "/available", "offline", qos=0, retain=True)
+            self.__client.on_connect = self.on_connect
+            self.__client.on_message = self.on_message
+            self.__client.loop_start()
+        except Exception as e:
+            self.__logger.info("MQTT not set up because of: {}".format(e))
         self.__viewer.slideshow_start()
 
     def stop(self):
+        try:
+            self.__client.loop_stop()
+        except Exception as e:
+            self.__logger.info("MQTT stopping failed because of: {}".format(e))
         self.__viewer.slideshow_stop()
     
-    def on_connect(client, userdata, flags, rc):
+    def on_connect(self, client, userdata, flags, rc):
         self.__logger.info('Connected with mqtt broker')
-        
-        # send last will and testament
-        client.publish("homeassistant/switch/picframe/available", "online", qos=0, retain=True)
-        
-        client.subscribe("frame/date_from", qos=0)
-        client.subscribe("frame/date_to", qos=0)
-        client.subscribe("frame/time_delay", qos=0)
-        client.subscribe("frame/fade_time", qos=0)
-        client.subscribe("frame/shuffle", qos=0)
-        client.subscribe("frame/quit", qos=0)
-        client.subscribe("frame/paused", qos=0)
-        client.subscribe("frame/back", qos=0)
-        client.subscribe("frame/subdirectory", qos=0)
-        client.subscribe("frame/delete", qos=0)
-        client.subscribe( "homeassistant/switch/picframe/set" , qos=0)
-        # send configuration topic for image counter sensor
-        client.publish("homeassistant/sensor/sensorPicframeImages/config", '{"name":"images", "icon":"mdi:camera-burst", "state_topic":"homeassistant/sensor/sensorPicframe/state",  "unit_of_measurement": "Bilder", "value_template": "{{ value_json.imageCounter}}", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_ic", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
-        # send  configuration for image sensor metadata
-        client.publish("homeassistant/sensor/sensorPicframeGpsLat/config", '{"name":"latitude", "state_topic":"homeassistant/sensor/sensorPicframe/state", "value_template": "{{ value_json.latitude}}", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_lat", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
-        client.publish("homeassistant/sensor/sensorPicframeGpsLon/config", '{"name":"longitude", "state_topic":"homeassistant/sensor/sensorPicframe/state", "value_template": "{{ value_json.longitude}}", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_ion", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
-        client.publish("homeassistant/sensor/sensorPicframeFnumber/config", '{"name":"fnumber", "icon":"mdi:camera-iris", "state_topic":"homeassistant/sensor/sensorPicframe/state",  "unit_of_measurement": "f", "value_template": "{{ value_json.fnumber}}", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_fnum", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
-        client.publish("homeassistant/sensor/sensorPicframeExposure/config", '{"name":"exposure", "icon":"mdi:camera-timer", "state_topic":"homeassistant/sensor/sensorPicframe/state",  "unit_of_measurement": "sec", "value_template": "{{ value_json.exposure}}", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_exp", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
-        client.publish("homeassistant/sensor/sensorPicframeIso/config", '{"name":"iso", "icon":"mdi:film", "state_topic":"homeassistant/sensor/sensorPicframe/state",  "unit_of_measurement": "ISO", "value_template": "{{ value_json.iso}}", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_iso", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
-        client.publish("homeassistant/sensor/sensorPicframeFocallength/config", '{"name":"focallength", "icon":"mdi:signal-distance-variant", "state_topic":"homeassistant/sensor/sensorPicframe/state",  "unit_of_measurement": "mm", "value_template": "{{ value_json.focallength}}", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_fl", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
-        client.publish("homeassistant/sensor/sensorPicframeModel/config", '{"name":"model", "icon":"mdi:camera", "state_topic":"homeassistant/sensor/sensorPicframe/state", "value_template": "{{ value_json.model}}", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_mod", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
-        client.publish("homeassistant/sensor/sensorPicframeImagedate/config", '{"name":"imagedate", "icon":"mdi:calendar-clock", "state_topic":"homeassistant/sensor/sensorPicframe/state", "value_template": "{{ value_json.imagedate}}", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_id", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
-        client.publish("homeassistant/sensor/sensorPicframeFilename/config", '{"name":"filename", "icon":"mdi:file-image", "state_topic":"homeassistant/sensor/sensorPicframe/state", "value_template": "{{ value_json.filename}}", "json_attributes_topic":"homeassistant/sensor/sensorPicframe/attributes", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_fn", "dev":{"ids":["picframe"]}}', qos=0, retain=True)
 
-        # send configuration topic and display state
-        client.publish("homeassistant/switch/picframe/config", '{"name":"display", "icon":"mdi:panorama", "command_topic":"homeassistant/switch/picframe/set", "pl_off":"OFF", "pl_on":"ON", "state_topic":"homeassistant/switch/picframe/state", "avty_t":"homeassistant/switch/picframe/available", "pl_avail":"online", "pl_not_avail":"offline", "uniq_id":"picframe_rl_1", "dev":{"ids":["picframe"], "name":"Picframe", "mdl":"Picture Frame", "sw":"1.0.0.", "mf":"erbehome"}}', qos=0, retain=True)
-        CONTROL = "vcgencmd"
-        CONTROL_BLANK = [CONTROL, "display_power"]
-        state = str(subprocess.check_output(CONTROL_BLANK))
-        if (state.find("display_power=1") != -1):
-            client.publish("homeassistant/switch/picframe/state", "ON", qos=0, retain=True)
+        device_id = self.__model.get_mqtt_config()['device_id']
+
+        # send last will and testament
+        available_topic = "homeassistant/switch/" + device_id + "/available"
+        client.publish(available_topic, "online", qos=0, retain=True)
+        
+        client.subscribe(device_id + "/date_from", qos=0)
+        client.subscribe(device_id + "/date_to", qos=0)
+        client.subscribe(device_id + "/time_delay", qos=0)
+        client.subscribe(device_id + "/fade_time", qos=0)
+        client.subscribe(device_id + "/shuffle", qos=0)
+        client.subscribe(device_id + "/paused", qos=0)
+        client.subscribe(device_id + "/back", qos=0)
+        client.subscribe(device_id + "/next", qos=0)
+        client.subscribe(device_id + "/subdirectory", qos=0)
+        
+
+        # missing
+        # sensor:
+        #   date_from
+        #   date_to
+        #   time_delay
+        #   fade_time
+        #   subdirectory
+
+        # switch
+        #    shuffle
+        #    paused
+
+        # state_topic for all picframe sensors
+        state_topic = "homeassistant/sensor/" + device_id + "/state"
+        # send image counter sensor configuration 
+        config_topic = "homeassistant/sensor/" + device_id + "_image_counter/config"
+        config_payload = '{"name":"' + device_id + '_image_counter", "icon":"mdi:camera-burst", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.image_counter}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_ic", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        # send  image sensor configuration
+        config_topic = "homeassistant/sensor/" + device_id + "_image/config"
+        attributes_topic = "homeassistant/sensor/" + device_id + "_image/attributes"
+        config_payload = '{"name":"' + device_id + '_image", "icon":"mdi:file-image", "state_topic":"' + state_topic + '",  "value_template": "{{ value_json.image}}", "json_attributes_topic":"' + attributes_topic + '","avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_fn", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+
+        # send display switch configuration  and display state
+        config_topic = "homeassistant/switch/" + device_id + "_display/config"
+        command_topic = "homeassistant/switch/" + device_id + "_display/set"
+        state_topic = "homeassistant/switch/" + device_id + "_display/state"
+        config_payload = '{"name":"' + device_id + '_display", "icon":"mdi:panorama", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_disp", "dev":{"ids":["' + device_id + '"], "name":"' + device_id + '", "mdl":"Picture Frame", "sw":"0.0.1.", "mf":"erbehome"}}'
+        client.subscribe(command_topic , qos=0)
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        if self.__viewer.display_is_on == True:
+            client.publish(state_topic, "ON", qos=0, retain=True)
         else :
-            client.publish("homeassistant/switch/picframe/state", "OFF", qos=0, retain=True)
+            client.publish(state_topic, "OFF", qos=0, retain=True)
+
+    def on_message(self, client, userdata, message):
+        device_id = self.__model.get_mqtt_config()['device_id']
+        msg = message.payload.decode("utf-8")
+        state_topic = "homeassistant/switch/" + device_id + "_display/state"
+        if message.topic == "homeassistant/switch/" + device_id + "_display/set":
+            if msg == "ON":
+                self.__viewer.display_is_on = True
+                client.publish(state_topic, "ON", retain=True)
+            elif msg == "OFF":
+                self.__viewer.display_is_on = False
+                client.publish(state_topic, "OFF", retain=True)

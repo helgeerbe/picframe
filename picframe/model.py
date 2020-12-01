@@ -39,8 +39,8 @@ DEFAULT_CONFIG = {
         'server': '', 
         'port': 8883, 
         'login': '', 
-        'passwort': '', 
-        'tls': ''
+        'password': '', 
+        'tls': '',
         'device_id': 'picframe'                                 # unique id of device. change if there is more than one picture frame
     }
 }

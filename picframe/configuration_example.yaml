@@ -33,10 +33,10 @@ model:
     'EXIF DateTimeOriginal', 
     'Image Model']
 
-mqtt:                                     # No defaults for mqtt settings!!!!!
-  server: "home"
-  port: 8883
-  login: "mosquitto"
-  passwort: "OkY8tPNuDffEPf2In6QZ"
-  tls: "/home/pi/picframe/ca.crt"
+mqtt:                                     
+  server: "your_mqtt_broker"              # No defaults for server
+  port: 8883                              # derfault=8883 for tls, 1883 else
+  login: "name"                           # your mqtt user
+  password: "your_password"               # password for mqtt user
+  tls: "/path/to/your/ca.crt"             # filename including path to your ca.crt
   device_id: 'picframe'                   # default='picframe' unique id of device. change if there is more than one picture frame
