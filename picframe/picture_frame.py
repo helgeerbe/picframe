@@ -13,7 +13,9 @@ def main():
     m = model.Model()
     v = viewer_display.ViewerDisplay(m.get_viewer_config())
     c = controller.Controller(m, v)
+    c.start()
     c.loop()
+    c.stop()
     
     
 

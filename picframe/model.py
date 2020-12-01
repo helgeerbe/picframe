@@ -41,6 +41,7 @@ DEFAULT_CONFIG = {
         'login': '', 
         'passwort': '', 
         'tls': ''
+        'device_id': 'picframe'                                 # unique id of device. change if there is more than one picture frame
     }
 }
 EXTENSIONS = ['.png','.jpg','.jpeg'] # can add to these
