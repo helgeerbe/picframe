@@ -185,6 +185,9 @@ class Model:
             self.__sort_files()
         self.__number_of_files = len(self.__file_list)
     
+    def set_next_file_to_privious_file(self):
+        self.__file_index = (self.__file_index - 2) % self.get_number_of_files()
+    
     def get_next_file(self, date_from:tuple = None, date_to:tuple = None):
         if self.__file_index == self.__number_of_files:
             self.__num_run_through += 1
@@ -194,7 +197,7 @@ class Model:
             self.__file_index = 0
 
         found = False
-        for i in range(0,self.get_number_of_files()):
+        for _ in range(0,self.get_number_of_files()):
             if date_from is not None:
                 if self.__file_list[self.__file_index][1] < time.mktime(date_from + (0, 0, 0, 0, 0, 0)):
                     self.__file_index = (self.__file_index + 1) % self.get_number_of_files()
