@@ -104,8 +104,7 @@ class Controller:
 
         # send image counter sensor configuration 
         config_topic = sensor_topic_head + "_image_counter/config"
-        attributes_topic = sensor_topic_head + "_image/attributes"
-        config_payload = '{"name":"' + device_id + '_image_counter", "icon":"mdi:camera-burst", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.image_counter}}", "json_attributes_topic":"' + attributes_topic + '"avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_ic", "dev":{"ids":["' + device_id + '"]}}'
+        config_payload = '{"name":"' + device_id + '_image_counter", "icon":"mdi:camera-burst", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.image_counter}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_ic", "dev":{"ids":["' + device_id + '"]}}'
         client.publish(config_topic, config_payload, qos=0, retain=True)
         
         # send  image sensor configuration
