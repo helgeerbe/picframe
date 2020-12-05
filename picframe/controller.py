@@ -42,18 +42,11 @@ class Controller:
 
             tm = time.time()
             next_file = None
+            orientation = 1
             if not self.paused and tm > self.__next_tm:
                 self.__next_tm = tm + self.__model.time_delay
                 next_file, orientation, image_attr = self.__model.get_next_file()
-                device_id = self.__model.get_mqtt_config()['device_id']
-                state_topic = "homeassistant/sensor/" + device_id + "/state"
-                payload = {}
-                payload["image_counter"] = str(self.__model.get_number_of_files()) 
-                _, tail = os.path.split(next_file)
-                payload["image"] = tail
-                self.__client.publish(state_topic, json.dumps(payload), qos=0, retain=False)
-                attributes_topic = "homeassistant/sensor/" + device_id + "_image/attributes"
-                self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
+                self.publish_sensors(next_file, image_attr)
                 
             if self.__viewer.is_in_transition() == False: # safe to do long running tasks
                 if tm > next_check_tm:
@@ -94,46 +87,44 @@ class Controller:
         self.__logger.info('Connected with mqtt broker')
 
         device_id = self.__model.get_mqtt_config()['device_id']
+        sensor_topic_head = "homeassistant/sensor/" + device_id
+        switch_topic_head = "homeassistant/switch/" + device_id
 
         # send last will and testament
-        available_topic = "homeassistant/switch/" + device_id + "/available"
+        available_topic = switch_topic_head + "/available"
         client.publish(available_topic, "online", qos=0, retain=True)
         
         client.subscribe(device_id + "/date_from", qos=0)
         client.subscribe(device_id + "/date_to", qos=0)
         client.subscribe(device_id + "/time_delay", qos=0)
         client.subscribe(device_id + "/fade_time", qos=0)
-        client.subscribe(device_id + "/back", qos=0)
-        client.subscribe(device_id + "/next", qos=0)
-        client.subscribe(device_id + "/subdirectory", qos=0)
-        
-
-        # missing
-        # sensor:
-        #   date_from
-        #   date_to
-        #   time_delay
-        #   fade_time
-        #   subdirectory
 
         # state_topic for all picframe sensors
-        state_topic = "homeassistant/sensor/" + device_id + "/state"
+        state_topic = sensor_topic_head + "/state"
 
         # send image counter sensor configuration 
-        config_topic = "homeassistant/sensor/" + device_id + "_image_counter/config"
-        config_payload = '{"name":"' + device_id + '_image_counter", "icon":"mdi:camera-burst", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.image_counter}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_ic", "dev":{"ids":["' + device_id + '"]}}'
+        config_topic = sensor_topic_head + "_image_counter/config"
+        attributes_topic = sensor_topic_head + "_image/attributes"
+        config_payload = '{"name":"' + device_id + '_image_counter", "icon":"mdi:camera-burst", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.image_counter}}", "json_attributes_topic":"' + attributes_topic + '"avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_ic", "dev":{"ids":["' + device_id + '"]}}'
         client.publish(config_topic, config_payload, qos=0, retain=True)
         
         # send  image sensor configuration
-        config_topic = "homeassistant/sensor/" + device_id + "_image/config"
-        attributes_topic = "homeassistant/sensor/" + device_id + "_image/attributes"
+        config_topic = sensor_topic_head + "_image/config"
+        attributes_topic = sensor_topic_head + "_image/attributes"
         config_payload = '{"name":"' + device_id + '_image", "icon":"mdi:file-image", "state_topic":"' + state_topic + '",  "value_template": "{{ value_json.image}}", "json_attributes_topic":"' + attributes_topic + '","avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_fn", "dev":{"ids":["' + device_id + '"]}}'
         client.publish(config_topic, config_payload, qos=0, retain=True)
+
+        # send  directory sensor configuration
+        config_topic = sensor_topic_head + "_dir/config"
+        attributes_topic = sensor_topic_head + "_dir/attributes"
+        config_payload = '{"name":"' + device_id + '_dir", "icon":"mdi:folder-multiple-image", "state_topic":"' + state_topic + '",  "value_template": "{{ value_json.dir}}", "json_attributes_topic":"' + attributes_topic + '","avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_dir", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/subdirectory", qos=0)
         
         # send display switch configuration  and display state
-        config_topic = "homeassistant/switch/" + device_id + "_display/config"
-        command_topic = "homeassistant/switch/" + device_id + "_display/set"
-        state_topic = "homeassistant/switch/" + device_id + "_display/state"
+        config_topic = switch_topic_head + "_display/config"
+        command_topic = switch_topic_head + "_display/set"
+        state_topic = switch_topic_head + "_display/state"
         config_payload = '{"name":"' + device_id + '_display", "icon":"mdi:panorama", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_disp", "dev":{"ids":["' + device_id + '"], "name":"' + device_id + '", "mdl":"Picture Frame", "sw":"0.0.1.", "mf":"erbehome"}}'
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
@@ -143,9 +134,9 @@ class Controller:
             client.publish(state_topic, "OFF", qos=0, retain=True)
         
         # send shuffle switch configuration  and shuffle state
-        config_topic = "homeassistant/switch/" + device_id + "_shuffle/config"
-        command_topic = "homeassistant/switch/" + device_id + "_shuffle/set"
-        state_topic = "homeassistant/switch/" + device_id + "_shuffle/state"
+        config_topic = switch_topic_head + "_shuffle/config"
+        command_topic = switch_topic_head + "_shuffle/set"
+        state_topic = switch_topic_head + "_shuffle/state"
         config_payload = '{"name":"' + device_id + '_shuffle", "icon":"mdi:shuffle-variant", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_shuf", "dev":{"ids":["' + device_id + '"]}}'
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
@@ -155,9 +146,9 @@ class Controller:
             client.publish(state_topic, "OFF", qos=0, retain=True)
         
         # send paused switch configuration and paused state
-        config_topic = "homeassistant/switch/" + device_id + "_paused/config"
-        command_topic = "homeassistant/switch/" + device_id + "_paused/set"
-        state_topic = "homeassistant/switch/" + device_id + "_paused/state"
+        config_topic = switch_topic_head + "_paused/config"
+        command_topic = switch_topic_head + "_paused/set"
+        state_topic = switch_topic_head + "_paused/state"
         config_payload = '{"name":"' + device_id + '_paused", "icon":"mdi:pause", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_paused", "dev":{"ids":["' + device_id + '"]}}'
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
@@ -167,18 +158,18 @@ class Controller:
             client.publish(state_topic, "OFF", qos=0, retain=True)
         
         # send back switch configuration  and back state
-        config_topic = "homeassistant/switch/" + device_id + "_back/config"
-        command_topic = "homeassistant/switch/" + device_id + "_back/set"
-        state_topic = "homeassistant/switch/" + device_id + "_back/state"
+        config_topic = switch_topic_head + "_back/config"
+        command_topic = switch_topic_head + "_back/set"
+        state_topic = switch_topic_head + "_back/state"
         config_payload = '{"name":"' + device_id + '_back", "icon":"mdi:skip-previous", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_back", "dev":{"ids":["' + device_id + '"]}}'
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.publish(state_topic, "OFF", qos=0, retain=True)
 
         # send next switch configuration  and next state
-        config_topic = "homeassistant/switch/" + device_id + "_next/config"
-        command_topic = "homeassistant/switch/" + device_id + "_next/set"
-        state_topic = "homeassistant/switch/" + device_id + "_next/state"
+        config_topic = switch_topic_head + "_next/config"
+        command_topic = switch_topic_head + "_next/set"
+        state_topic = switch_topic_head + "_next/state"
         config_payload = '{"name":"' + device_id + '_next", "icon":"mdi:skip-next", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_next", "dev":{"ids":["' + device_id + '"]}}'
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
@@ -188,9 +179,11 @@ class Controller:
     def on_message(self, client, userdata, message):
         device_id = self.__model.get_mqtt_config()['device_id']
         msg = message.payload.decode("utf-8") 
+        switch_topic_head = "homeassistant/switch/" + device_id
+
         # display
-        if message.topic == "homeassistant/switch/" + device_id + "_display/set":
-            state_topic = "homeassistant/switch/" + device_id + "_display/state"
+        if message.topic == switch_topic_head + "_display/set":
+            state_topic = switch_topic_head + "_display/state"
             if msg == "ON":
                 self.__viewer.display_is_on = True
                 client.publish(state_topic, "ON", retain=True)
@@ -198,8 +191,8 @@ class Controller:
                 self.__viewer.display_is_on = False
                 client.publish(state_topic, "OFF", retain=True)
         # shuffle
-        elif message.topic == "homeassistant/switch/" + device_id + "_shuffle/set":
-            state_topic = "homeassistant/switch/" + device_id + "_shuffle/state"
+        elif message.topic == switch_topic_head + "_shuffle/set":
+            state_topic = switch_topic_head + "_shuffle/state"
             if msg == "ON":
                 self.__model.shuffle = True
                 client.publish(state_topic, "ON", retain=True)
@@ -207,8 +200,8 @@ class Controller:
                 self.__model.shuffle = False
                 client.publish(state_topic, "OFF", retain=True)
         # paused
-        elif message.topic == "homeassistant/switch/" + device_id + "_paused/set":
-            state_topic = "homeassistant/switch/" + device_id + "_paused/state"
+        elif message.topic == switch_topic_head + "_paused/set":
+            state_topic = switch_topic_head + "_paused/state"
             if msg == "ON":
                 self.paused = True
                 client.publish(state_topic, "ON", retain=True)
@@ -216,14 +209,43 @@ class Controller:
                 self.paused = False
                 client.publish(state_topic, "OFF", retain=True)
         # back buttons
-        elif message.topic == "homeassistant/switch/" + device_id + "_back/set":
-            state_topic = "homeassistant/switch/" + device_id + "_back/state"
+        elif message.topic == switch_topic_head + "_back/set":
+            state_topic = switch_topic_head + "_back/state"
             if msg == "ON":
                 client.publish(state_topic, "OFF", retain=True)
                 self.back()
         # next buttons
-        elif message.topic == "homeassistant/switch/" + device_id + "_next/set":
-            state_topic = "homeassistant/switch/" + device_id + "_next/state"
+        elif message.topic == switch_topic_head + "_next/set":
+            state_topic = switch_topic_head + "_next/state"
             if msg == "ON":
                 client.publish(state_topic, "OFF", retain=True)
                 self.next()
+        # next buttons
+        elif message.topic == device_id + "/subdirectory":
+            self.__model.subdirectory = msg
+            self.__next_tm = 0
+            
+            
+    
+    def publish_sensors(self, image, image_attr):
+        device_id = self.__model.get_mqtt_config()['device_id']
+        topic_head =  "homeassistant/sensor/" + device_id
+        state_topic = topic_head + "/state"
+        state_payload = {}
+        # directory sensor
+        actual_dir, dir_list = self.__model.get_directory_list()
+        state_payload["dir"] = actual_dir
+        dir_attr = {}
+        dir_attr['directories'] = dir_list
+        # image counter sensor
+        state_payload["image_counter"] = str(self.__model.get_number_of_files()) 
+        # image sensor
+        _, tail = os.path.split(image)
+        state_payload["image"] = tail
+        #pulish sensors
+        attributes_topic = topic_head + "_image/attributes"
+        self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
+        attributes_topic = topic_head + "_dir/attributes"
+        self.__client.publish(attributes_topic, json.dumps(dir_attr), qos=0, retain=False)
+        self.__client.publish(state_topic, json.dumps(state_payload), qos=0, retain=False)
+        

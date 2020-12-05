@@ -42,7 +42,7 @@ def test_get_next_file_whole_loop():
     num = m.get_number_of_files()
     m.shuffle = False
     file1 = m.get_next_file()
-    for i in range(0, num):
+    for _ in range(0, num):
         file2 = m.get_next_file()
     assert file1 == file2
 
@@ -100,3 +100,11 @@ def test_getter_setter_shuffle():
     assert m.shuffle == True
     m.shuffle = False
     assert m.shuffle == False
+
+
+def test_get_subdirectory_list():
+    m = model.Model('/home/pi/dev/picframe/picframe/configuration.yaml')
+    act_dir, dir_list = m.get_directory_list()
+    assert act_dir == '/'
+    assert dir_list[0] == '/'
+    assert dir_list[1] == 'testdir'
