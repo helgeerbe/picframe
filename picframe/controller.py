@@ -124,7 +124,7 @@ class Controller:
         config_topic = switch_topic_head + "_display/config"
         command_topic = switch_topic_head + "_display/set"
         state_topic = switch_topic_head + "_display/state"
-        config_payload = '{"name":"' + device_id + '_display", "icon":"mdi:panorama", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_disp", "dev":{"ids":["' + device_id + '"], "name":"' + device_id + '", "mdl":"Picture Frame", "sw":"0.0.1.", "mf":"erbehome"}}'
+        config_payload = '{"name":"' + device_id + '_display", "icon":"mdi:panorama", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_disp", "dev":{"ids":["' + device_id + '"], "name":"' + device_id + '", "mdl":"Picture Frame", "sw":"0.0.2.", "mf":"erbehome"}}'
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
         if self.__viewer.display_is_on == True:

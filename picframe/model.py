@@ -151,6 +151,7 @@ class Model:
                 update = True
         if update == True:
             self.__reload_files = True
+        self.__logger.info('Check for file changes = %s', update)
         return update
     
     def __get_image_date(self, file_path_name):
