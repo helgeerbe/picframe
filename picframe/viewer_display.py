@@ -22,8 +22,8 @@ class ViewerDisplay:
         self.__fps = config['fps']
         self.__background = config['background'] 
         self.__blend_type = config['blend_type']
-        self.__font_file = config['font_file']
-        self.__shader = config['shader']
+        self.__font_file = os.path.expanduser(config['font_file'])
+        self.__shader = os.path.expanduser(config['shader'])
         self.__show_names_tm = config['show_names_tm']
         self.__fit = config['fit']
         self.__auto_resize = config['auto_resize']

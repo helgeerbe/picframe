@@ -18,8 +18,16 @@ setup(name='picframe',
       license='MIT',
       packages=['picframe'],
       install_requires=[
-          'ExifRead',
-          'pi3d'
+        'ExifRead',
+        'pi3d'
       ],
+      data_files=[
+        ('picframe/config', ['config/configuration_example.yaml']),
+        ('picframe/data', ['data/PictureFrame2020img.jpg'])
+
+      ],
+      entry_points = {
+        'console_scripts': ['picture_frame=picframe.picture_frame:main']
+      },
       include_package_data=True,
       zip_safe=False)

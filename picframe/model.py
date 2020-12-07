@@ -5,7 +5,7 @@ import logging
 import random
 from picframe import exif2dict
 
-DEFAULT_CONFIGFILE = "./picframe/configuration.yaml"
+DEFAULT_CONFIGFILE = "~/.local/picframe/config/configuration.yaml"
 DEFAULT_CONFIG = {
     'viewer': {
         'blur_amount': 12,
@@ -15,8 +15,8 @@ DEFAULT_CONFIG = {
         'fps': 20.0, 
         'background': [0.2, 0.2, 0.3, 1.0],  
         'blend_type': 0.0, # {"blend":0.0, "burn":1.0, "bump":2.0}
-        'font_file': '/home/pi/pi3d_demos/fonts/NotoSans-Regular.ttf', 
-        'shader': '/home/pi/pi3d_demos/shaders/blend_new', 
+        'font_file': '~/pi3d_demos/fonts/NotoSans-Regular.ttf', 
+        'shader': '~/pi3d_demos/shaders/blend_new', 
         'show_names_tm': 0.0, 
         'fit': False, 
         'auto_resize': True,
@@ -24,8 +24,8 @@ DEFAULT_CONFIG = {
         'test_key': 'test_value'
     }, 
     'model': {
-        'pic_dir': '/home/pi/Pictures', 
-        'no_files_img': 'PictureFrame2020img.jpg',
+        'pic_dir': '~/Pictures', 
+        'no_files_img': '~/.local/picframe/data/PictureFrame2020img.jpg',
         'subdirectory': '', 
         'check_dir_tm': 60.0, 
         'recent_n': 3, 
@@ -55,6 +55,8 @@ class Model:
         self.__last_file_change = 0.0
         self.__date_to = None
         self.__date_from = None
+        configfile = os.path.expanduser(configfile)
+        self.__logger.error("Open config file: %s:",configfile)
         with open(configfile, 'r') as stream:
             try:
                 conf = yaml.safe_load(stream)
@@ -62,7 +64,7 @@ class Model:
                     self.__config[section] = {**DEFAULT_CONFIG[section], **conf[section]}
                 self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
-                print(exc)
+                self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
         self.__file_list = []
         self.__number_of_files = 0
         self.__reload_files = False
@@ -155,6 +157,7 @@ class Model:
         return update
     
     def __get_image_date(self, file_path_name):
+        file_path_name = os.path.expanduser(file_path_name)
         dt = os.path.getmtime(file_path_name) # use file last modified date as default
         try:
             exifs = exif2dict.Exif2Dict(file_path_name)

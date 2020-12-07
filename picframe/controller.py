@@ -3,9 +3,8 @@ import time
 import paho.mqtt.client as mqtt
 import json
 import os
-from ._version import get_versions
-__version__ = get_versions()['version']
-del get_versions
+from picframe import __version__
+
 
 class Controller:
 
