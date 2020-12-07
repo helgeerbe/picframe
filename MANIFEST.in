@@ -1,0 +1,3 @@
+include picframe/configuration_example.yaml
+include picframe/PictureFrame2020img.jpginclude versioneer.py
+include picframe/_version.py
