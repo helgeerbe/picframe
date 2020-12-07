@@ -56,7 +56,7 @@ class Model:
         self.__date_to = None
         self.__date_from = None
         configfile = os.path.expanduser(configfile)
-        self.__logger.error("Open config file: %s:",configfile)
+        self.__logger.info("Open config file: %s:",configfile)
         with open(configfile, 'r') as stream:
             try:
                 conf = yaml.safe_load(stream)
@@ -118,7 +118,7 @@ class Model:
             self.__reload_files = True
     
     def get_directory_list(self):
-        pic_dir = self.get_model_config()['pic_dir']
+        pic_dir = os.path.expanduser(self.get_model_config()['pic_dir'])
         _, root = os.path.split(pic_dir)
         actual_dir = root
         if self.subdirectory != '':
@@ -153,7 +153,7 @@ class Model:
                 update = True
         if update == True:
             self.__reload_files = True
-        self.__logger.info('Check for file changes = %s', update)
+        self.__logger.debug('Check for file changes = %s', update)
         return update
     
     def __get_image_date(self, file_path_name):
@@ -189,7 +189,7 @@ class Model:
 
     def __get_files(self):
         self.__file_list = []
-        picture_dir = os.path.join(self.get_model_config()['pic_dir'], self.get_model_config()['subdirectory'])
+        picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.get_model_config()['subdirectory'])
         for root, _dirnames, filenames in os.walk(picture_dir):
             mod_tm = os.stat(root).st_mtime # time of alteration in a directory
             if mod_tm > self.__last_file_change:

@@ -1,0 +1,15 @@
+[Unit]
+Description=picture_frame on pi
+After=multi-user.target
+
+[Service]
+Type=idle
+
+User=pi
+WorkingDirectory = /home/pi/picframe/picture_frame
+ExecStart=/usr/bin/python3 -m picframe.picture_frame
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

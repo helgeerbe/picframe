@@ -1,0 +1,14 @@
+[Unit]
+Description=picture_frame on pi
+After=multi-user.target
+
+[Service]
+Type=idle
+
+User=pi
+ExecStart=/home/pi/.local/bin/picture_frame
+
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
