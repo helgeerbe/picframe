@@ -66,7 +66,8 @@ class Controller:
             password = self.__model.get_mqtt_config()['password']
             self.__client.username_pw_set(login, password) 
             tls = self.__model.get_mqtt_config()['tls']
-            self.__client.tls_set(tls)
+            if tls:
+                self.__client.tls_set(tls)
             server = os.path.expanduser(self.__model.get_mqtt_config()['server'])
             port = self.__model.get_mqtt_config()['port']
             self.__client.connect(server, port, 60) 
