@@ -1,4 +1,5 @@
 from setuptools import setup
+from glob import glob
 import versioneer
 
 setup(name='picframe',
@@ -23,8 +24,8 @@ setup(name='picframe',
       ],
       data_files=[
         ('picframe/config', ['config/configuration_example.yaml']),
-        ('picframe/data', ['data/PictureFrame2020img.jpg'])
-
+        ('picframe/data', glob('data/*')),
+        ('picframe/examples', glob('examples/*')),
       ],
       entry_points = {
         'console_scripts': ['picture_frame=picframe.picture_frame:main']
