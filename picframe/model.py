@@ -142,7 +142,7 @@ class Model:
     def check_for_file_changes(self):
     # check modification time of pic_dir and its sub folders
         update = False
-        pic_dir = self.get_model_config()['pic_dir']
+        pic_dir = os.path.expanduser(self.get_model_config()['pic_dir'])
         sub_dir = self.get_model_config()['subdirectory']
         picture_dir = os.path.join(pic_dir, sub_dir)
         for root, _, _ in os.walk(picture_dir):
@@ -202,7 +202,7 @@ class Model:
                     # iFiles now list of lists [file_name, exif or if not exist file_changed_date] 
                     self.__file_list.append([file_path_name, dt])
         if len(self.__file_list) == 0:
-            img = self.get_model_config()['no_files_img']
+            img = os.path.expanduser(self.get_model_config()['no_files_img'])
             dt = self.__get_image_date(img)
             self.__file_list.append([img, dt])
         else: 
@@ -245,7 +245,7 @@ class Model:
         if found == True:
             file = self.__file_list[self.__file_index][0]
         else:
-            file = self.get_model_config()['no_files_img']
+            file = os.path.expanduser(self.get_model_config()['no_files_img'])
         orientation, image_attr = self.__get_image_attr(file)
         self.__file_index  += 1
         self.__logger.info('Next file in list: %s', file)

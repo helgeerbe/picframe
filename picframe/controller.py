@@ -67,7 +67,7 @@ class Controller:
             self.__client.username_pw_set(login, password) 
             tls = self.__model.get_mqtt_config()['tls']
             self.__client.tls_set(tls)
-            server = self.__model.get_mqtt_config()['server']
+            server = os.path.expanduser(self.__model.get_mqtt_config()['server'])
             port = self.__model.get_mqtt_config()['port']
             self.__client.connect(server, port, 60) 
             self.__client.will_set("homeassistant/switch/" + self.__model.get_mqtt_config()['device_id'] + "/available", "offline", qos=0, retain=True)
