@@ -17,7 +17,7 @@ setup(name='picframe',
       author='Helge Erbe',
       author_email='helge@erbehome.de',
       license='MIT',
-      packages=find_packages(exclude=("test",)),
+      packages=find_packages(exclude=("test", "oldcode")),
       install_requires=[
         'ExifRead',
         'pi3d'

@@ -53,8 +53,6 @@ class Model:
         self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
-        self.__date_to = None
-        self.__date_from = None
         configfile = os.path.expanduser(configfile)
         self.__logger.info("Open config file: %s:",configfile)
         with open(configfile, 'r') as stream:
@@ -219,7 +217,7 @@ class Model:
     def set_next_file_to_privious_file(self):
         self.__file_index = (self.__file_index - 2) % self.get_number_of_files()
     
-    def get_next_file(self, date_from:tuple = None, date_to:tuple = None):
+    def get_next_file(self, date_from = None, date_to = None):
         if self.__reload_files == True:
             self.__get_files()
 
@@ -233,11 +231,11 @@ class Model:
         found = False
         for _ in range(0,self.get_number_of_files()):
             if date_from is not None:
-                if self.__file_list[self.__file_index][1] < time.mktime(date_from + (0, 0, 0, 0, 0, 0)):
+                if self.__file_list[self.__file_index][1] < date_from:
                     self.__file_index = (self.__file_index + 1) % self.get_number_of_files()
                     continue
             if date_to is not None:
-                if self.__file_list[self.__file_index][1] > time.mktime(date_to + (0, 0, 0, 0, 0, 0)):
+                if self.__file_list[self.__file_index][1] > date_to:
                     self.__file_index = (self.__file_index + 1) % self.get_number_of_files()
                     continue
             found = True

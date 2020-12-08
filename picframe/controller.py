@@ -15,6 +15,8 @@ class Controller:
         self.__viewer = viewer
         self.__paused = False
         self.__next_tm = 0.0
+        self.__date_from = time.mktime((1970, 1, 1, 0, 0, 0, 0, 0, 0))
+        self.__date_to = time.mktime((2038, 1, 1, 0, 0, 0, 0, 0, 0))
 
     @property
     def paused(self):
@@ -30,6 +32,22 @@ class Controller:
     def back(self):
         self.__model.set_next_file_to_privious_file()
         self.__next_tm = 0.0
+
+    @property
+    def date_from(self):
+        return self.__date_from
+    
+    @date_from.setter
+    def date_from(self, val):
+              self.__date_from = val
+
+    @property
+    def date_to(self):
+        return self.__date_to
+    
+    @date_to.setter
+    def date_to(self, val):
+        self.__date_to = val
 
     def loop(self):
         next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
@@ -47,7 +65,7 @@ class Controller:
             orientation = 1
             if not self.paused and tm > self.__next_tm:
                 self.__next_tm = tm + self.__model.time_delay
-                next_file, orientation, image_attr = self.__model.get_next_file()
+                next_file, orientation, image_attr = self.__model.get_next_file(self.date_from, self.date_to)
                 self.publish_sensors(next_file, image_attr)
                 
             if self.__viewer.is_in_transition() == False: # safe to do long running tasks
@@ -96,14 +114,33 @@ class Controller:
         # send last will and testament
         available_topic = switch_topic_head + "/available"
         client.publish(available_topic, "online", qos=0, retain=True)
-        
-        client.subscribe(device_id + "/date_from", qos=0)
-        client.subscribe(device_id + "/date_to", qos=0)
-        client.subscribe(device_id + "/time_delay", qos=0)
-        client.subscribe(device_id + "/fade_time", qos=0)
 
         # state_topic for all picframe sensors
         state_topic = sensor_topic_head + "/state"
+
+        # send date_from sensor configuration 
+        config_topic = sensor_topic_head + "_date_from/config"
+        config_payload = '{"name":"' + device_id + '_date_from", "icon":"mdi:calendar-arrow-left", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.date_from}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_date_from", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/date_from", qos=0)
+
+        # send date_to sensor configuration 
+        config_topic = sensor_topic_head + "_date_to/config"
+        config_payload = '{"name":"' + device_id + '_date_to", "icon":"mdi:calendar-arrow-right", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.date_to}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_date_to", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/date_to", qos=0)
+
+        # send time_delay sensor configuration 
+        config_topic = sensor_topic_head + "_time_delay/config"
+        config_payload = '{"name":"' + device_id + '_time_delay", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.time_delay}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_time_delay", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/time_delay", qos=0)
+
+        # send fade_time sensor configuration 
+        config_topic = sensor_topic_head + "_fade_time/config"
+        config_payload = '{"name":"' + device_id + '_fade_time", "icon":"mdi:image-size-select-large", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.fade_time}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_fade_time", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/fade_time", qos=0)
 
         # send image counter sensor configuration 
         config_topic = sensor_topic_head + "_image_counter/config"
@@ -226,6 +263,14 @@ class Controller:
         elif message.topic == device_id + "/subdirectory":
             self.__model.subdirectory = msg
             self.__next_tm = 0
+        # date_from
+        elif message.topic == device_id + "/date_from":
+            self.__date_from = msg
+            self.__next_tm = 0
+        # date_to
+        elif message.topic == device_id + "/date_to":
+            self.__date_to = msg
+            self.__next_tm = 0
             
             
     
@@ -244,6 +289,15 @@ class Controller:
         # image sensor
         _, tail = os.path.split(image)
         state_payload["image"] = tail
+        # date_from
+        state_payload["date_from"] = int(self.__date_from)
+        # date_to
+        state_payload["date_to"] = int(self.__date_to)
+        # time_delay
+        state_payload["time_delay"] = self.__model.time_delay
+        # fade_time
+        state_payload["fade_time"] = self.__model.fade_time
+
         #pulish sensors
         attributes_topic = topic_head + "_image/attributes"
         self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
