@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 from glob import glob
 import versioneer
 
@@ -17,7 +17,7 @@ setup(name='picframe',
       author='Helge Erbe',
       author_email='helge@erbehome.de',
       license='MIT',
-      packages=['picframe'],
+      packages=find_packages(exclude=("test",)),
       install_requires=[
         'ExifRead',
         'pi3d'

@@ -1,6 +1,4 @@
 include config/configuration_example.yaml
 include picframe/_version.py
-include test/*.jpg
-include test/*.JPG
 include data/*
 include examples/*
