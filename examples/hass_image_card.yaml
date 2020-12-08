@@ -1,0 +1,58 @@
+cards:
+  - type: picture-glance
+    image: 'https://demo.home-assistant.io/stub_config/kitchen.png'
+    entities:
+      - entity: switch.picframe_shuffle
+      - entity: switch.picframe_back
+      - entity: switch.picframe_paused
+      - entity: switch.picframe_next
+    camera_image: camera.frame_image_icon
+    tap_action:
+      action: none
+  - type: entities
+    entities:
+      - type: attribute
+        entity: sensor.picframe_image
+        attribute: EXIF DateTimeOriginal
+        icon: 'mdi:calendar-clock'
+        name: Datum
+      - type: attribute
+        entity: sensor.picframe_image
+        attribute: EXIF ExposureTime
+        unit: sec
+        icon: 'mdi:camera-timer'
+        name: Belichtungszeit
+      - type: attribute
+        entity: sensor.picframe_image
+        attribute: EXIF FNumber
+        unit: f
+        icon: 'mdi:camera-iris'
+        name: Blende
+      - type: attribute
+        entity: sensor.picframe_image
+        attribute: EXIF ISOSpeedRatings
+        icon: 'mdi:film'
+        name: ISO
+      - type: attribute
+        entity: sensor.picframe_image
+        attribute: EXIF FocalLength
+        unit: iso
+        icon: 'mdi:signal-distance-variant'
+        name: Brennweite
+      - type: attribute
+        entity: sensor.picframe_image
+        attribute: Image Model
+        unit: mm
+        icon: 'mdi:camera'
+        name: Kamera
+      - entity: sensor.picframe_image
+        name: Dateiname
+  - aspect_ratio: '3:2'
+    dark_mode: false
+    default_zoom: 11
+    entities:
+      - entity: sensor.picframe_image
+    type: map
+    hours_to_show: 0
+title: Aktuelles Bild
+type: vertical-stack

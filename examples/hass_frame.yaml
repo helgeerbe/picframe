@@ -1,0 +1,20 @@
+entities:
+  - entity: switch.picframe_display
+    name: Bilderrahmen
+  - entity: input_select.picframe_dir
+    name: Directory
+  - entity: sensor.picframe_image_counter
+    name: Bilder
+  - entity: input_datetime.picframe_date_from
+    name: Bilder ab
+  - entity: input_datetime.picframe_date_to
+    name: Bilder bis
+  - entity: input_number.picframe_time_delay
+    name: Dauer
+  - entity: input_number.picframe_fade_time
+    name: Fade
+show_header_toggle: false
+theme: Backend-selected
+title: Digitaler Bilderrahmen
+type: entities
+state_color: true

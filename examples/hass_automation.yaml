@@ -1,0 +1,166 @@
+- id: '1607021277342'
+  alias: picframe_dir_get
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: sensor.picframe_dir
+  condition:
+  - condition: or
+    conditions:
+    - condition: template
+      value_template: '{{ ( states("sensor.picframe_dir") ) != ( states("input_select.picframe_dir")
+        ) }}'
+    - condition: template
+      value_template: '{{ ( state_attr("sensor.picframe_dir", "directories") ) !=
+        ( state_attr("input_select.picframe_dir", "options") ) }}'
+  action:
+  - service: input_select.set_options
+    data:
+      options: '{{ state_attr(''sensor.picframe_dir'', ''directories'') }}'
+    entity_id: input_select.picframe_dir
+  - service: input_select.select_option
+    data:
+      option: '{{  states("sensor.picframe_dir") }}'
+    entity_id: input_select.picframe_dir
+  mode: single
+- id: '1607034504666'
+  alias: picframe_dir_set
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: input_select.picframe_dir
+  condition: []
+  action:
+  - service: mqtt.publish
+    data:
+      topic: picframe/subdirectory
+      payload: '{{ states(''input_select.picframe_dir'') }}'
+  mode: single
+- id: '1607454156183'
+  alias: picframe_fade_time_get
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: sensor.picframe_fade_time
+  condition:
+  - condition: template
+    value_template: '{{ states("input_number.picframe_fade_time") != states("sensor.picframe_fade_time")
+      }}'
+  action:
+  - service: input_number.set_value
+    data:
+      value: '{{ states("sensor.picframe_fade_time") }}'
+    entity_id: input_number.picframe_fade_time
+  mode: single
+- id: '1607454536910'
+  alias: picframe_time_delay_get
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: sensor.picframe_time_delay
+  condition:
+  - condition: template
+    value_template: '{{ states("input_number.picframe_time_delay") != states("sensor.picframe_time_delay")
+      }}'
+  action:
+  - service: input_number.set_value
+    data:
+      value: '{{ states("sensor.picframe_time_delay") }}'
+    entity_id: input_number.picframe_time_delay
+  mode: single
+- id: '1607456131052'
+  alias: picframe.date_from_get
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: sensor.picframe_date_from
+  condition:
+  - condition: template
+    value_template: '{{ state_attr("input_datetime.picframe_date_from", "timestamp")|int
+      != states("sensor.picframe_date_from")|int }}'
+  action:
+  - service: input_datetime.set_datetime
+    data:
+      timestamp: '{{ states("sensor.picframe_date_from")|int }}'
+    entity_id: input_datetime.picframe_date_from
+  mode: single
+- id: '1607456341584'
+  alias: picframe.date_to_get
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: sensor.picframe_date_to
+  condition:
+  - condition: template
+    value_template: '{{ state_attr("input_datetime.picframe_date_to", "timestamp")|int
+      != states("sensor.picframe_date_to")|int }}'
+  action:
+  - service: input_datetime.set_datetime
+    data:
+      timestamp: '{{ states("sensor.picframe_date_to")|int }}'
+    entity_id: input_datetime.picframe_date_to
+  mode: single
+- id: '1607456725404'
+  alias: picframe_fade_time_set
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: input_number.picframe_fade_time
+  condition:
+  - condition: template
+    value_template: '{{ states("input_number.picframe_fade_time") != states("sensor.picframe_fade_time")
+      }}'
+  action:
+  - service: mqtt.publish
+    data:
+      topic: picframe/fade_time
+      payload: '{{ states("input_number.picframe_fade_time") }}'
+  mode: single
+- id: '1607457027848'
+  alias: picframe_time_delay_set
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: input_number.picframe_time_delay
+  condition:
+  - condition: template
+    value_template: '{{ states("input_number.picframe_time_delay") != states("sensor.picframe_time_delay")
+      }}'
+  action:
+  - service: mqtt.publish
+    data:
+      topic: picframe/time_delay
+      payload: '{{ states("input_number.picframe_time_delay") }}'
+  mode: single
+- id: '1607457885153'
+  alias: picframe.date_to_set
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: input_datetime.picframe_date_to
+  condition:
+  - condition: template
+    value_template: '{{ state_attr("input_datetime.picframe_date_to", "timestamp")|int
+      != states("sensor.picframe_date_to")|int }}'
+  action:
+  - service: mqtt.publish
+    data:
+      topic: picframe/date_to
+      payload: '{{ state_attr("input_datetime.picframe_date_to", "timestamp") }}'
+  mode: single
+- id: '1607466334037'
+  alias: picframe.date_from_set
+  description: ''
+  trigger:
+  - platform: state
+    entity_id: input_datetime.picframe_date_from
+  condition:
+  - condition: template
+    value_template: '{{ state_attr("input_datetime.picframe_date_from", "timestamp")|int
+      != states("sensor.picframe_date_from")|int }}'
+  action:
+  - service: mqtt.publish
+    data:
+      topic: picframe/date_from
+      payload: '{{ state_attr("input_datetime.picframe_date_from", "timestamp") }}'
+  mode: single
