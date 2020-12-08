@@ -261,23 +261,28 @@ class Controller:
                 self.next()
         # next buttons
         elif message.topic == device_id + "/subdirectory":
+            self.__logger.info("Recieved subdirectory: %s", msg)
             self.__model.subdirectory = msg
             self.__next_tm = 0
         # date_from
         elif message.topic == device_id + "/date_from":
+            self.__logger.info("Recieved date_from: %s", msg)
             self.__date_from = float(msg)
             self.__next_tm = 0
         # date_to
         elif message.topic == device_id + "/date_to":
-            self.__date_to = float(msg)
+            self.__logger.info("Recieved date_to: %s", msg)
+            self.__date_to = float(msg) 
             self.__next_tm = 0
         # fade_time
         elif message.topic == device_id + "/fade_time":
-            self.__model.fade_time = int(msg)
+            self.__logger.info("Recieved fade_time: %s", msg)
+            self.__model.fade_time = float(msg)
             self.__next_tm = 0
-                # fade_time
+        # fade_time
         elif message.topic == device_id + "/time_delay":
-            self.__model.time_delay = int(msg)
+            self.__logger.info("Recieved time_delay: %s", msg)
+            self.__model.time_delay = float(msg)
             self.__next_tm = 0
             
             
@@ -311,5 +316,6 @@ class Controller:
         self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
         attributes_topic = topic_head + "_dir/attributes"
         self.__client.publish(attributes_topic, json.dumps(dir_attr), qos=0, retain=False)
+        self.__logger.info("Send state: %s", state_payload)
         self.__client.publish(state_topic, json.dumps(state_payload), qos=0, retain=False)
         
