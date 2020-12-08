@@ -265,11 +265,19 @@ class Controller:
             self.__next_tm = 0
         # date_from
         elif message.topic == device_id + "/date_from":
-            self.__date_from = msg
+            self.__date_from = float(msg)
             self.__next_tm = 0
         # date_to
         elif message.topic == device_id + "/date_to":
-            self.__date_to = msg
+            self.__date_to = float(msg)
+            self.__next_tm = 0
+        # fade_time
+        elif message.topic == device_id + "/fade_time":
+            self.__model.fade_time = int(msg)
+            self.__next_tm = 0
+                # fade_time
+        elif message.topic == device_id + "/time_delay":
+            self.__model.time_delay = int(msg)
             self.__next_tm = 0
             
             
