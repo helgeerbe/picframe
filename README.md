@@ -175,7 +175,7 @@ Commands:
 
 ### Home Assistant
 The image shows a sample integration into Home Assistant.  
-![Image of Home Assistant integration](https://github.com/helgeerbe/picture_frame/blob/main/screenshots/hass_integration.PNG)  
+![Image of Home Assistant integration](https://raw.githubusercontent.com/helgeerbe/picture_frame/main/screenshots/hass_integration.PNG)  
 Assuming you use `picframe` as `device_id`. Home Assistant shows the following entities:
 1. Switches
 
