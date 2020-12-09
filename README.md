@@ -175,9 +175,42 @@ Commands:
 
 ### Home Assistant
 The images shows a sample integration into Home Assistant.  
-![Image of Home Assistant integration](https://octodex.github.com/images/yaktocat.png)
-#### Helpers
-#### Automation
+![Image of Home Assistant integration](https://github.com/helgeerbe/picture_frame/blob/dev/screenshots/hass_integration.PNG).
+  Assumeing you use `picframe` as `device_id`. Home Assistant shows the following entities:
+1. Switches
+  entity | function
+  ------ | --------
+  switch.picframe_display | Switch to turn on/of the display.
+  switch.picframe_back | Each toggle of the switch goes one image back
+  switch.picframe_next | Each toggle of the switch goes one image forward
+  switch.picframe_paused | Switch to pause/continue slide show
+  switch.picframe_shuffle | Switch on shuffle list, off sort list by filename
+
+2. Sensors
+  entity | state | attributes 
+  ------ | ----- | ----------
+  sensor.picframe_date_from | actual filter for date_from as timestamp in seconds since 1970-01-01 |
+  sensor.picframe_date_to | actual filter for date_to as timestamp in seconds since 1970-01-01 |
+  sensor.picframe_image | file name | image Metadata as configured in `image_attr`
+  sensor.picframe_dir | name of actual selected subdirectory or root of image directory | list of subdirectories
+  sensor.picframe_image_counter | number of files below selected directory | 
+  sensor.picframe_time_delay | actual setting for delay | 
+  sensor.picframe_fade_time | actual setting fading time | 
+
+3. MQTT
+Assumeing you use `picframe` as `device_id`. picture_frame subscribes to the following topics to recieve settings.
+topic | command
+----- | -------
+picframe/date_from | timestamp attribute from input_datetime entity
+picframe/date_to | timestamp attribute from input_datetime entity
+picframe/fade_time | state from input_number entity
+picframe/time_delay | state from input_number entity
+picframe/subdirectory | state from input_select entity
+
+```
+My example yaml sniplet config from the above image counld be found unter ~/.local/picframe/examples.
+```
+
 ## Documentation
 Please note that picture_frame may change significantly during its development.
 Bug reports, comments, feature requests and fixes are most welcome!
