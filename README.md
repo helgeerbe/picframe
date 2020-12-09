@@ -175,16 +175,16 @@ Commands:
 
 ### Home Assistant
 The images shows a sample integration into Home Assistant.  
-![Image of Home Assistant integration](https://github.com/helgeerbe/picture_frame/blob/dev/screenshots/hass_integration.PNG).
+![Image of Home Assistant integration](https://github.com/helgeerbe/picture_frame/blob/dev/screenshots/hass_integration.PNG)  
   Assumeing you use `picframe` as `device_id`. Home Assistant shows the following entities:
 1. Switches
-  entity | function
-  ------ | --------
-  switch.picframe_display | Switch to turn on/of the display.
-  switch.picframe_back | Each toggle of the switch goes one image back
-  switch.picframe_next | Each toggle of the switch goes one image forward
-  switch.picframe_paused | Switch to pause/continue slide show
-  switch.picframe_shuffle | Switch on shuffle list, off sort list by filename
+entity | function
+------ | --------
+switch.picframe_display | Switch to turn on/of the display.
+switch.picframe_back | Each toggle of the switch goes one image back
+switch.picframe_next | Each toggle of the switch goes one image forward
+switch.picframe_paused | Switch to pause/continue slide show
+switch.picframe_shuffle | Switch on shuffle list, off sort list by filename
 
 2. Sensors
   entity | state | attributes 
