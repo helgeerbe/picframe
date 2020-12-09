@@ -7,7 +7,7 @@ viewer:
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
   blend_type: 0.0                         # default="blend", choices={"blend":0.0, "burn":1.0, "bump":2.0}, type of blend the shader can do"
   font_file: "~/.local/picframe/data/fonts/NotoSans-Regular.ttf"
-  shader: "~/pi3d_demos/shaders/blend_new"
+  shader: "~/.local/picframe/data/shaders/blend_new"
   show_names_tm: 0.0                      # default=0.0, time to show text over image with file name
   fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
   auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4. 

@@ -19,12 +19,15 @@ setup(name='picframe',
       license='MIT',
       packages=find_packages(exclude=("test", "oldcode")),
       install_requires=[
+        'Pillow',
         'ExifRead',
-        'pi3d'
+        'pi3d',
+        'paho-mqtt'
       ],
       data_files=[
         ('picframe/config', ['config/configuration_example.yaml']),
         ('picframe/data/fonts', glob('data/fonts/*')),
+        ('picframe/data/shaders', glob('data/shaders/*')),
         ('picframe/data', glob('data/*.jpg')),
         ('picframe/examples', glob('examples/*')),
       ],
