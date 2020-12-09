@@ -15,8 +15,8 @@ DEFAULT_CONFIG = {
         'fps': 20.0, 
         'background': [0.2, 0.2, 0.3, 1.0],  
         'blend_type': 0.0, # {"blend":0.0, "burn":1.0, "bump":2.0}
-        'font_file': '~/pi3d_demos/fonts/NotoSans-Regular.ttf', 
-        'shader': '~/pi3d_demos/shaders/blend_new', 
+        'font_file': '~/.local/picframe/data/fonts/NotoSans-Regular.ttf', 
+        'shader': '~/.local/picframe/data/shaders/blend_new', 
         'show_names_tm': 0.0, 
         'fit': False, 
         'auto_resize': True,
@@ -25,7 +25,7 @@ DEFAULT_CONFIG = {
     }, 
     'model': {
         'pic_dir': '~/Pictures', 
-        'no_files_img': '~/.local/picframe/data/PictureFrame2020img.jpg',
+        'no_files_img': '~/.local/picframe/data/no_pictures.jpg',
         'subdirectory': '', 
         'check_dir_tm': 60.0, 
         'recent_n': 3, 
