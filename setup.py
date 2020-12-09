@@ -13,7 +13,7 @@ setup(name='picframe',
       cmdclass=versioneer.get_cmdclass(),
       description='Picture frame viewer powered by raspberry with homeassistant integration',
       long_description=long_description,
-      long_description_content_type='text/markdown'
+      long_description_content_type='text/markdown',
       classifiers=[
         'Development Status :: 4 - Beta',
         'License :: OSI Approved :: MIT License',
