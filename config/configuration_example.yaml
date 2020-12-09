@@ -16,7 +16,7 @@ viewer:
   
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
-  no_files_img: "~/.local/picframe/data/PictureFrame2020img.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
+  no_files_img: "~/.local/picframe/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   check_dir_tm: 60.0                      # default=60.0, time in seconds between checking if the image directory has changed
   recent_n: 3                             # default=3, when shuffling the keep n most recent ones to play before the rest
