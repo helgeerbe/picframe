@@ -174,7 +174,8 @@ Commands:
 * **Stop:** `sudo systemctl stop picture_frame.service`
 
 ### Home Assistant
-#### MQTT
+The images shows a sample integration into Home Assistant.  
+![Image of Home Assistant integration](https://octodex.github.com/images/yaktocat.png)
 #### Helpers
 #### Automation
 ## Documentation
