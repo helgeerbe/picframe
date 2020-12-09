@@ -2,12 +2,20 @@ from setuptools import setup, find_packages
 from glob import glob
 import versioneer
 
+# read the contents of your README file
+from os import path
+this_directory = path.abspath(path.dirname(__file__))
+with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
+
 setup(name='picframe',
       version=versioneer.get_version(),
       cmdclass=versioneer.get_cmdclass(),
       description='Picture frame viewer powered by raspberry with homeassistant integration',
+      long_description=long_description,
+      long_description_content_type='text/markdown'
       classifiers=[
-        'Development Status :: 3 - Alpha',
+        'Development Status :: 4 - Beta',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3.7',
         'Topic :: Multimedia :: Graphics :: Viewers',
