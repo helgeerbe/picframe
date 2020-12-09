@@ -6,7 +6,7 @@ viewer:
   fps: 20.0                               # default=20.0
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
   blend_type: 0.0                         # default="blend", choices={"blend":0.0, "burn":1.0, "bump":2.0}, type of blend the shader can do"
-  font_file: "~/pi3d_demos/fonts/NotoSans-Regular.ttf"
+  font_file: "~/.local/picframe/data/fonts/NotoSans-Regular.ttf"
   shader: "~/pi3d_demos/shaders/blend_new"
   show_names_tm: 0.0                      # default=0.0, time to show text over image with file name
   fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
@@ -16,7 +16,7 @@ viewer:
   
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
-  no_files_img: "~/.local/picframe/data//PictureFrame2020img.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
+  no_files_img: "~/.local/picframe/data/PictureFrame2020img.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   check_dir_tm: 60.0                      # default=60.0, time in seconds between checking if the image directory has changed
   recent_n: 3                             # default=3, when shuffling the keep n most recent ones to play before the rest
