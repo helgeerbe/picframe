@@ -24,7 +24,8 @@ setup(name='picframe',
       ],
       data_files=[
         ('picframe/config', ['config/configuration_example.yaml']),
-        ('picframe/data', glob('data/*')),
+        ('picframe/data/fonts', glob('data/fonts/*')),
+        ('picframe/data', glob('data/*.jpg')),
         ('picframe/examples', glob('examples/*')),
       ],
       entry_points = {
