@@ -20,9 +20,9 @@ Main highlights in Home Assistant:
 * provide gps information as longitude/latitude to show image location on a map in Home Assistant
 
 ## Quick Install
-* `pip3 install picture_frame`
+* `pip3 install picframe`
 * all configurable items will be installed under `~/.local/picframe` of the current user's home
-* copy `~/.local/picframe/config/configuration_example.yaml' to `~/.local/picframe/config/configuration.yaml' and do your settings
+* copy `~/.local/picframe/config/configuration_example.yaml` to `~/.local/picframe/config/configuration.yaml` and do your settings
 * picture_frame makes use of [pi3d](https://github.com/pi3d/pi3d.github.com) which needs some extra config with `sudo raspi-config`. In the raspi-config module, go
   * on **pi 4** to
       * 4 Performance Options > P2 GPU Memory > enter 256
@@ -80,7 +80,6 @@ The configuration is splitted in three sections:
   * `kenburns: False`  
     *default=False*  
     Will set `fit->False` and `blur_edges->False`.
-  
 2. Model:
   * `pic_dir: "~/Pictures"`  
     *default="~/Pictures"*  
@@ -131,8 +130,7 @@ The configuration is splitted in three sections:
     * GPS: GPS information (sub-IFD).
     * Interoperability: Interoperability information (sub-IFD).
     * MakerNote: Manufacturer specific information. There are no official published references for these tags.
-    * 'PICFRAME GPS' is special to picframe. It retrieves the GPS info as longitude/latitude pair. So you can show the image location in Home Assistant on a map.
-
+    * 'PICFRAME GPS' is special to picframe. It retrieves the GPS info as longitude/latitude pair. So you can show the image location in Home Assistant on a map.  
 3. MQTT:                                     
   * `server: "your_mqtt_broker"`  
     Host name of your MQTT broker
@@ -177,7 +175,7 @@ Commands:
 The image shows a sample integration into Home Assistant.  
 ![Image of Home Assistant integration](https://raw.githubusercontent.com/helgeerbe/picture_frame/main/screenshots/hass_integration.PNG)  
 Assuming you use `picframe` as `device_id`. Home Assistant shows the following entities:
-1. Switches
+1. Switches  
 
   entity | function
   ------ | --------

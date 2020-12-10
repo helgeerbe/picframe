@@ -30,6 +30,7 @@ setup(name='picframe',
         'Pillow',
         'ExifRead',
         'pi3d',
+        'PyYAML',
         'paho-mqtt'
       ],
       data_files=[
