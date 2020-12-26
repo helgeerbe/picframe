@@ -256,6 +256,7 @@ class Model:
         recent_n = self.get_model_config()['recent_n']
         temp_list_first = self.__file_list[-recent_n:]
         temp_list_last = self.__file_list[:-recent_n]
+        random.seed()
         random.shuffle(temp_list_first)
         random.shuffle(temp_list_last)
         self.__file_list = temp_list_first + temp_list_last
