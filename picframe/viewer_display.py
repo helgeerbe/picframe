@@ -42,6 +42,7 @@ class ViewerDisplay:
         self.__ystep = None
         self.__text = None
         self.__textblock = None
+        self.__text_bkg = None
         self.__sfg = None # slide for background
         self.__sbg = None # slide for foreground
         self.__next_tm = 0.0
@@ -150,6 +151,10 @@ class ViewerDisplay:
                                 text_format="{}".format(" "), size=0.99, 
                                 spacing="F", space=0.02, colour=(1.0, 1.0, 1.0, 1.0))
         self.__text.add_text_block(self.__textblock)
+        back_shader = pi3d.Shader("mat_flat")
+        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=90, y=-self.__display.height * 0.4 - 20, z=4.0)
+        self.__text_bkg.set_shader(back_shader)
+        self.__text_bkg.set_material((0, 0, 0))
 
 
     def slideshow_is_running(self, filename = None, orientation = 1, time_delay = 200.0, fade_time = 10.0):
@@ -213,9 +218,13 @@ class ViewerDisplay:
         if tm < self.__name_tm:
             # this sets alpha for the TextBlock from 0 to 1 then back to 0
             dt = (self.__show_names_tm - self.__name_tm + tm + 0.1) / self.__show_names_tm
-            alpha = max(0.0, min(1.0, 3.0 - abs(3.0 - 6.0 * dt)))
+            ramp_pt = max(4.0, self.__show_names_tm / 4.0)
+            alpha = max(0.0, min(1.0, ramp_pt * (self.__alpha- abs(1.0 - 2.0 * dt)))) # cap text alpha at image alpha
             self.__textblock.colouring.set_colour(alpha=alpha)
             self.__text.regen()
+            text_bkg.set_alpha(alpha * 0.6)
+            if len(self.__textblock.text_format.strip()) > 0: #only draw background if text there
+            text_bkg.draw()
 
         self.__text.draw()
         return self.__display.loop_running()
