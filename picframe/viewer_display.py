@@ -222,9 +222,9 @@ class ViewerDisplay:
             alpha = max(0.0, min(1.0, ramp_pt * (self.__alpha- abs(1.0 - 2.0 * dt)))) # cap text alpha at image alpha
             self.__textblock.colouring.set_colour(alpha=alpha)
             self.__text.regen()
-            text_bkg.set_alpha(alpha * 0.6)
+            self.__text_bkg.set_alpha(alpha * 0.6)
             if len(self.__textblock.text_format.strip()) > 0: #only draw background if text there
-            text_bkg.draw()
+                self.__text_bkg.draw()
 
         self.__text.draw()
         return self.__display.loop_running()
