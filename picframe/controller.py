@@ -1,3 +1,5 @@
+"""Controller of picture_frame."""
+
 import logging
 import time
 import paho.mqtt.client as mqtt
@@ -7,6 +9,28 @@ from picframe import __version__
 
 
 class Controller:
+    """Controller of picture_frame.
+    
+    This controller interacts via mqtt with the user to steer the image display.
+
+    Attributes
+    ----------
+    model : Model 
+        model of picture_frame containing config and business logic
+    viewer : ViewerDisplay
+        viewer of picture_frame representing the display
+   
+
+    Methods
+    -------
+    paused
+        Getter and setter for pausing image display.
+    next
+        Show next image.
+    back
+        Show previous image.
+
+    """
 
     def __init__(self, model, viewer):
         self.__logger = logging.getLogger("controller.Controller")
@@ -20,6 +44,9 @@ class Controller:
 
     @property
     def paused(self):
+        """Get or set the current state for pausing image display. Setting paused to true
+        will show the actual image as long paused is not set to false.
+        """
         return self.__paused
     
     @paused.setter
@@ -79,7 +106,8 @@ class Controller:
     
     def start(self):
         try:
-            self.__client = mqtt.Client()
+            device_id = self.__model.get_mqtt_config()['device_id']
+            self.__client = mqtt.Client(client_id = device_id, clean_session=True)
             login = self.__model.get_mqtt_config()['login']
             password = self.__model.get_mqtt_config()['password']
             self.__client.username_pw_set(login, password) 
@@ -105,6 +133,9 @@ class Controller:
         self.__viewer.slideshow_stop()
     
     def on_connect(self, client, userdata, flags, rc):
+        if rc != 0:
+            self.__logger.warning("Can't connect with mqtt broker. Reason = {0}".format(rc))   
+            return 
         self.__logger.info('Connected with mqtt broker')
 
         device_id = self.__model.get_mqtt_config()['device_id']
@@ -290,6 +321,7 @@ class Controller:
     def publish_sensors(self, image, image_attr):
         device_id = self.__model.get_mqtt_config()['device_id']
         topic_head =  "homeassistant/sensor/" + device_id
+        switch_topic_head = "homeassistant/switch/" + device_id
         state_topic = topic_head + "/state"
         state_payload = {}
         # directory sensor
@@ -310,6 +342,11 @@ class Controller:
         state_payload["time_delay"] = self.__model.time_delay
         # fade_time
         state_payload["fade_time"] = self.__model.fade_time
+
+        
+        # send last will and testament
+        available_topic = switch_topic_head + "/available"
+        self.__client.publish(available_topic, "online", qos=0, retain=True)
 
         #pulish sensors
         attributes_topic = topic_head + "_image/attributes"
