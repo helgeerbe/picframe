@@ -54,7 +54,14 @@ class Exif2Dict:
                 lon = 0 - lon
             gps["longitude"] = lon
         return gps
-    
+
+    def get_orientation(self):
+        val = self.__get_if_exist('Image Orientation')
+        if val is not None:
+            return int(val.values[0])
+        else:
+            return 1
+
     def get_exif(self, key):
         exif = {}
         val = self.__get_if_exist(key)
