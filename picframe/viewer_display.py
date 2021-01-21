@@ -12,9 +12,9 @@ import numpy as np
 from PIL import Image, ImageFilter
 from picframe import exif2dict
 
-#CODEPOINTS = '1234567890AÄÀBCÇDÈÉÊEFGHIÍJKLMNÑOÓÖPQRSTUÚÙÜVWXYZ., _-/abcdefghijklmnñopqrstuvwxyzáéèêàçíóúäöüß' # limit to 49 ie 7x7 grid_size
 
 def parse_show_text(txt):
+    # utility function with no dependency on ViewerDisplay properties
     show_text = 0
     txt = txt.lower()
     if "name" in txt:
@@ -45,6 +45,7 @@ class ViewerDisplay:
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
         self.__text_width = config['text_width']
+        self.__load_geoloc = config['load_geoloc']
         self.__fit = config['fit']
         self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
@@ -92,10 +93,11 @@ class ViewerDisplay:
         except:
             return None
 
-    def __tex_load(self, filename, orientation = 1, size=None):
+    def __tex_load(self, pic, size=None):
         try:
-            im = Image.open(filename)
+            im = Image.open(pic.fname)
             (w, h) = im.size
+            pic.aspect = h / w if pic.orientation == 6 or pic.orientation == 8 else w / h #TODO convoluted to add this info here!
             max_dimension = MAX_SIZE # TODO changing MAX_SIZE causes serious crash on linux laptop!
             if not self.__auto_resize: # turned off for 4K display - will cause issues on RPi before v4
                 max_dimension = 3840 # TODO check if mipmapping should be turned off with this setting.
@@ -103,19 +105,19 @@ class ViewerDisplay:
                 im = im.resize((max_dimension, int(h * max_dimension / w)), resample=Image.BICUBIC)
             elif h > max_dimension:
                 im = im.resize((int(w * max_dimension / h), max_dimension), resample=Image.BICUBIC)
-            if orientation == 2:
+            if pic.orientation == 2:
                 im = im.transpose(Image.FLIP_LEFT_RIGHT)
-            elif orientation == 3:
+            elif pic.orientation == 3:
                 im = im.transpose(Image.ROTATE_180) # rotations are clockwise
-            elif orientation == 4:
+            elif pic.orientation == 4:
                 im = im.transpose(Image.FLIP_TOP_BOTTOM)
-            elif orientation == 5:
+            elif pic.orientation == 5:
                 im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_270)
-            elif orientation == 6:
+            elif pic.orientation == 6:
                 im = im.transpose(Image.ROTATE_270)
-            elif orientation == 7:
+            elif pic.orientation == 7:
                 im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_90)
-            elif orientation == 8:
+            elif pic.orientation == 8:
                 im = im.transpose(Image.ROTATE_90)
             if self.__blur_edges and size is not None:
                 wh_rat = (size[0] * im.size[1]) / (size[1] * im.size[0])
@@ -155,21 +157,19 @@ class ViewerDisplay:
         name = ''.join([c for c in name if c in self.__codepoints])
         return name
 
-    def __make_text(self, filename, paused):
+    def __make_text(self, pic, paused):
         info_strings = []
         if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
             if (self.__show_text & 1) == 1: # name
-                info_strings.append(self.__sanitize_string(filename))
-            """
+                info_strings.append(self.__sanitize_string(pic.fname))
             if (self.__show_text & 2) == 2: # date
-                info_strings.append(iFiles[pic_num].fdt)
-            if config.LOAD_GEOLOC and (self.__show_text & 4) == 4: # location
-                loc_string = self.__sanitize_string(iFiles[pic_num].location.strip())
+                info_strings.append(pic.fdt)
+            if self.__load_geoloc and (self.__show_text & 4) == 4: # location
+                loc_string = self.__sanitize_string(pic.location.strip())
                 if loc_string:
                     info_strings.append(loc_string)
-            """
             if (self.__show_text & 8) == 8: # folder
-                info_strings.append(self.__sanitize_string(os.path.basename(os.path.dirname(filename))))
+                info_strings.append(self.__sanitize_string(os.path.basename(os.path.dirname(pic.fname))))
             if paused:
                 info_strings.append("PAUSED")
 
@@ -179,8 +179,6 @@ class ViewerDisplay:
             last_ch = len(final_string)
             adj_y = self.__text.locations[:last_ch,1].min() + self.__display.height // 2 # y pos of last char rel to bottom of screen
             self.__textblock.set_position(y = (self.__textblock.y - adj_y + self.__show_text_sz))
-
-            #self.__textblock.set_text(text_format="{}".format(self.__sanitize_string(filename)))
 
     def is_in_transition(self):
         return self.__in_transition
@@ -215,19 +213,19 @@ class ViewerDisplay:
         self.__text_bkg.set_draw_details(back_shader, [text_bkg_tex])
 
 
-    def slideshow_is_running(self, filename = None, orientation = 1, time_delay = 200.0, fade_time = 10.0, paused = False):
+    def slideshow_is_running(self, pic=None, time_delay = 200.0, fade_time = 10.0, paused=False):
         tm = time.time()
-        if filename is not None:
+        if pic is not None:
             self.__sbg = self.__sfg
             self.__sfg = None
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
-            self.__sfg = self.__tex_load(filename, orientation, (self.__display.width, self.__display.height))
+            self.__sfg = self.__tex_load(pic, (self.__display.width, self.__display.height))
             self.__alpha = 0.0
             self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
             # set the file name as the description
             if self.__show_text_tm > 0.0:
-                self.__make_text(filename, paused)
+                self.__make_text(pic, paused)
                 self.__text.regen()
             else: # could have a NO IMAGES selected and being drawn
                 self.__textblock.set_text(text_format="{}".format(" "))

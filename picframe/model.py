@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
         'show_text_sz': 40,
         'show_text': 14,
         'text_width': 90,
+        'load_geoloc': True,
         'fit': False, 
         'auto_resize': True,
         'kenburns': False,
@@ -59,11 +60,13 @@ class Pic:
     self.mtime = mtime
     self.dt = dt
     self.fdt = fdt
-    self.location = location
+    self.location = location # this is key to location desc record lat lon as #.####,#.####
     self.aspect = aspect
     self.shown_with = None # set to pic_num of image this was paired with
     self.image_attr = None
-
+    # TODO this could be made JSON saveable by subclassing from dict and using
+    # dict.__init__(self, fname=fname, orientation=orientation, mtime...
+    # then deserialized pic = Pic(**json.loads(jsonpic))
 
 class Model:
 
