@@ -10,7 +10,7 @@ import logging
 import os
 import numpy as np
 from PIL import Image, ImageFilter
-from picframe import exif2dict
+from picframe.get_image_meta import GetImageMeta
 
 
 def parse_show_text(txt):
@@ -36,7 +36,7 @@ class ViewerDisplay:
         self.__blur_edges = config['blur_edges']
         self.__edge_alpha = config['edge_alpha']
         self.__fps = config['fps']
-        self.__background = config['background'] 
+        self.__background = config['background']
         self.__blend_type = {"blend":0.0, "burn":1.0, "bump":2.0}[config['blend_type']]
         self.__font_file = os.path.expanduser(config['font_file'])
         self.__shader = os.path.expanduser(config['shader'])
@@ -45,7 +45,6 @@ class ViewerDisplay:
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
         self.__text_width = config['text_width']
-        self.__load_geoloc = config['load_geoloc']
         self.__fit = config['fit']
         self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
@@ -97,7 +96,6 @@ class ViewerDisplay:
         try:
             im = Image.open(pic.fname)
             (w, h) = im.size
-            pic.aspect = h / w if pic.orientation == 6 or pic.orientation == 8 else w / h #TODO convoluted to add this info here!
             max_dimension = MAX_SIZE # TODO changing MAX_SIZE causes serious crash on linux laptop!
             if not self.__auto_resize: # turned off for 4K display - will cause issues on RPi before v4
                 max_dimension = 3840 # TODO check if mipmapping should be turned off with this setting.
@@ -164,10 +162,8 @@ class ViewerDisplay:
                 info_strings.append(self.__sanitize_string(pic.fname))
             if (self.__show_text & 2) == 2: # date
                 info_strings.append(pic.fdt)
-            if self.__load_geoloc and (self.__show_text & 4) == 4: # location
-                loc_string = self.__sanitize_string(pic.location.strip())
-                if loc_string:
-                    info_strings.append(loc_string)
+            if (self.__show_text & 4) == 4 and pic.location is not None: # location
+                info_strings.append(pic.location) #TODO need to sanitize and check longer than 0 for real
             if (self.__show_text & 8) == 8: # folder
                 info_strings.append(self.__sanitize_string(os.path.basename(os.path.dirname(pic.fname))))
             if paused:
