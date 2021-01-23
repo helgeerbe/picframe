@@ -2,13 +2,14 @@
 
 import exifread
 import logging
+from PIL import Image
 
-class Exif2Dict:
-
+class GetImageMeta:
 
     def __init__(self, filename):
-        self.__logger = logging.getLogger("exif2dict.Exif2Dict")
+        self.__logger = logging.getLogger("get_image_meta.GetImageMeta")
         self.__tags = {}
+        self.__filename = filename # in case no exif data in which case needed for size
         try:
             with open(filename, 'rb') as fh:
                 self.__tags = exifread.process_file(fh, details=False)
@@ -54,7 +55,14 @@ class Exif2Dict:
                 lon = 0 - lon
             gps["longitude"] = lon
         return gps
-    
+
+    def get_orientation(self):
+        val = self.__get_if_exist('Image Orientation')
+        if val is not None:
+            return int(val.values[0])
+        else:
+            return 1
+
     def get_exif(self, key):
         exif = {}
         val = self.__get_if_exist(key)
@@ -65,3 +73,6 @@ class Exif2Dict:
                 val = val.printable
         exif[key] = val
         return exif
+
+    def get_size(self):
+        return Image.open(self.__filename).size
