@@ -92,9 +92,50 @@ class ViewerDisplay:
         except:
             return None
 
-    def __tex_load(self, pic, size=None):
+    # Concatenate the specified images horizontally. Clip the taller
+    # image to the height of the shorter image.
+    def __create_image_pair(self, im1, im2):
+        sep = 8 # separation between the images
+        # scale widest image to same width as narrower to avoid drastic cropping on mismatched images
+        if im1.width > im2.width:
+            im1 = im1.resize((im2.width, int(im1.height * im2.width / im1.width)))
+        else:
+            im2 = im2.resize((im1.width, int(im2.height * im1.width / im2.width)))
+        dst = Image.new('RGB', (im1.width + im2.width + sep, min(im1.height, im2.height)))
+        dst.paste(im1, (0, 0))
+        dst.paste(im2, (im1.width + sep, 0))
+        return dst
+
+    def __orientate_image(self, im, orientation):
+        if orientation == 2:
+            im = im.transpose(Image.FLIP_LEFT_RIGHT)
+        elif orientation == 3:
+            im = im.transpose(Image.ROTATE_180) # rotations are clockwise
+        elif orientation == 4:
+            im = im.transpose(Image.FLIP_TOP_BOTTOM)
+        elif orientation == 5:
+            im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_270)
+        elif orientation == 6:
+            im = im.transpose(Image.ROTATE_270)
+        elif orientation == 7:
+            im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_90)
+        elif orientation == 8:
+            im = im.transpose(Image.ROTATE_90)
+        return im
+
+    def __tex_load(self, pics, size=None):
         try:
-            im = Image.open(pic.fname)
+            im = Image.open(pics[0].fname)
+            orientation = pics[0].orientation
+            if pics[1] is not None: #i.e portrait pair
+                # generate combined im
+                im2 = Image.open(pics[1].fname)
+                if orientation > 1:
+                    im = self.__orientate_image(im, orientation)
+                if pics[1].orientation > 1:
+                    im2 = self.__orientate_image(im2, pics[1].orientation)
+                im = self.__create_image_pair(im, im2)
+                orientation = 1
             (w, h) = im.size
             max_dimension = MAX_SIZE # TODO changing MAX_SIZE causes serious crash on linux laptop!
             if not self.__auto_resize: # turned off for 4K display - will cause issues on RPi before v4
@@ -103,20 +144,8 @@ class ViewerDisplay:
                 im = im.resize((max_dimension, int(h * max_dimension / w)), resample=Image.BICUBIC)
             elif h > max_dimension:
                 im = im.resize((int(w * max_dimension / h), max_dimension), resample=Image.BICUBIC)
-            if pic.orientation == 2:
-                im = im.transpose(Image.FLIP_LEFT_RIGHT)
-            elif pic.orientation == 3:
-                im = im.transpose(Image.ROTATE_180) # rotations are clockwise
-            elif pic.orientation == 4:
-                im = im.transpose(Image.FLIP_TOP_BOTTOM)
-            elif pic.orientation == 5:
-                im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_270)
-            elif pic.orientation == 6:
-                im = im.transpose(Image.ROTATE_270)
-            elif pic.orientation == 7:
-                im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_90)
-            elif pic.orientation == 8:
-                im = im.transpose(Image.ROTATE_90)
+            if orientation != 1:
+                im = self.__orientate_image(im, orientation)
             if self.__blur_edges and size is not None:
                 wh_rat = (size[0] * im.size[1]) / (size[1] * im.size[0])
                 if abs(wh_rat - 1.0) > 0.01: # make a blurred background
@@ -145,7 +174,7 @@ class ViewerDisplay:
             #tex = pi3d.Texture(im, blend=True, m_repeat=True, automatic_resize=config.AUTO_RESIZE,
             #                    mipmap=config.AUTO_RESIZE, free_after_load=True) # poss try this if still some artifacts with full resolution
         except Exception as e:
-            self.__logger.warning("Can't create tex from file: \"%s\"", filename)
+            self.__logger.warning("Can't create tex from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
             self.__logger.warning("Cause: %s", e.args[1])
             tex = None
         return tex
@@ -160,7 +189,7 @@ class ViewerDisplay:
         if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
             if (self.__show_text & 1) == 1: # name
                 info_strings.append(self.__sanitize_string(pic.fname))
-            if (self.__show_text & 2) == 2: # date
+            if (self.__show_text & 2) == 2 and pic.fdt is not None: # date
                 info_strings.append(pic.fdt)
             if (self.__show_text & 4) == 4 and pic.location is not None: # location
                 info_strings.append(pic.location) #TODO need to sanitize and check longer than 0 for real
@@ -168,7 +197,6 @@ class ViewerDisplay:
                 info_strings.append(self.__sanitize_string(os.path.basename(os.path.dirname(pic.fname))))
             if paused:
                 info_strings.append("PAUSED")
-
             final_string = " • ".join(info_strings)
             self.__textblock.set_text(text_format=final_string, wrap=self.__text_width)
 
@@ -209,19 +237,19 @@ class ViewerDisplay:
         self.__text_bkg.set_draw_details(back_shader, [text_bkg_tex])
 
 
-    def slideshow_is_running(self, pic=None, time_delay = 200.0, fade_time = 10.0, paused=False):
+    def slideshow_is_running(self, pics=None, time_delay = 200.0, fade_time = 10.0, paused=False):
         tm = time.time()
-        if pic is not None:
+        if pics is not None:
             self.__sbg = self.__sfg
             self.__sfg = None
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
-            self.__sfg = self.__tex_load(pic, (self.__display.width, self.__display.height))
+            self.__sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             self.__alpha = 0.0
             self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
             # set the file name as the description
             if self.__show_text_tm > 0.0:
-                self.__make_text(pic, paused)
+                self.__make_text(pics[0], paused) #TODO only uses text for left of pair
                 self.__text.regen()
             else: # could have a NO IMAGES selected and being drawn
                 self.__textblock.set_text(text_format="{}".format(" "))
