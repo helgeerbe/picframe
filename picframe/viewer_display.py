@@ -1,6 +1,6 @@
 # for development
 import sys
-sys.path.insert(1, "/home/patrick/python/pi3d")
+sys.path.insert(1, "/home/herbe/dev/pi3d")
 import pi3d
 from pi3d.Texture import MAX_SIZE
 import math
@@ -37,7 +37,7 @@ class ViewerDisplay:
         self.__edge_alpha = config['edge_alpha']
         self.__fps = config['fps']
         self.__background = config['background']
-        self.__blend_type = {"blend":0.0, "burn":1.0, "bump":2.0}[config['blend_type']]
+        self.__blend_type = config['blend_type']
         self.__font_file = os.path.expanduser(config['font_file'])
         self.__shader = os.path.expanduser(config['shader'])
         self.__show_text_tm = config['show_text_tm']
@@ -209,7 +209,7 @@ class ViewerDisplay:
 
     def slideshow_start(self):
         self.__display = pi3d.Display.create(x=0, y=0, frames_per_second=self.__fps,
-              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background)
+              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background, use_glx=True) # ToDo initialise correctly
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)

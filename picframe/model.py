@@ -4,6 +4,7 @@ import time
 import logging
 import random
 import json
+import locale
 from picframe.get_image_meta import GetImageMeta
 from picframe.geo_reverse import GeoReverse
 
@@ -22,13 +23,13 @@ DEFAULT_CONFIG = {
         'show_text_fm': '%b %d, %Y',
         'show_text_tm': 20.0,
         'show_text_sz': 40,
-        'show_text': 14,
+        'show_text': "name location",
         'text_width': 90,
         'load_geoloc': True,
         'fit': False, 
         'auto_resize': True,
         'kenburns': False,
-        'test_key': 'test_value'
+        'codepoints': '1234567890AÄÀBCÇDÈÉÊEFGHIÍJKLMNÑOÓÖPQRSTUÚÙÜVWXYZ., _-/abcdefghijklmnñopqrstuvwxyzáéèêàçíóúäöüß' # limit to 49 ie 7x7 grid_size'
     }, 
     'model': {
         'pic_dir': '~/Pictures', 
@@ -236,6 +237,7 @@ class Model:
     def __get_image_attr(self, file_path_name):
         orientation = 1
         image_attr_list = {}
+        size = None
         try:
             exifs = GetImageMeta(file_path_name)
             orientation = exifs.get_orientation()
@@ -296,6 +298,8 @@ class Model:
             self.__file_index = 0
 
         found = False
+        pic = None
+        pics = None
         for _ in range(0, self.__number_of_files):
             (fname, mtime) = self.__file_list[self.__file_index]
             mtime = round(mtime, 2) # save space in cache
@@ -318,7 +322,7 @@ class Model:
                 pic.dt = dt
                 pic.fdt = time.strftime(self.get_viewer_config()['show_text_fm'], time.localtime(dt))
                 self.__file_list_cache[pic.fname] = pic
-                file_path = self.get_model_config()['file_list_cache']
+                file_path = os.path.expanduser(self.get_model_config()['file_list_cache'])
                 with open(file_path, 'a+') as f:
                     f.write(json.dumps(pic, default=lambda o : o.__dict__) + "\n")
             if self.get_model_config()['portrait_pairs'] and pic.shown_with is not None:
