@@ -92,6 +92,10 @@ class ViewerDisplay:
         except:
             return None
 
+    def reset_name_tm(self):
+        # only extend i.e. if after initial fade in
+        self.__name_tm = max(self.__name_tm, time.time() + self.__show_text_tm)
+
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
     def __create_image_pair(self, im1, im2):
