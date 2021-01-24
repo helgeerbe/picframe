@@ -32,4 +32,5 @@ void main(void) {
     float ffact = dot(light, texf);
     gl_FragColor = mix(texb * (1.0 + a * (ffact - 1.0)), texf, clamp(2.0 * a - 1.0, 0.0, 1.0));
   }
+  gl_FragColor.rgb *= unif[18][1]; // brightness passed in Shape.unif[55] 0.0 to 1.0
 }

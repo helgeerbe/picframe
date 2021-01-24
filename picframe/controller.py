@@ -48,22 +48,22 @@ class Controller:
         will show the actual image as long paused is not set to false.
         """
         return self.__paused
-    
+
     @paused.setter
     def paused(self, val:bool):
         self.__paused = val
-    
+
     def next(self):
         self.__next_tm = 0.0
 
     def back(self):
-        self.__model.set_next_file_to_privious_file()
+        self.__model.set_next_file_to_previous_file()
         self.__next_tm = 0.0
 
     @property
     def date_from(self):
         return self.__date_from
-    
+
     @date_from.setter
     def date_from(self, val):
               self.__date_from = val
@@ -71,7 +71,7 @@ class Controller:
     @property
     def date_to(self):
         return self.__date_to
-    
+
     @date_to.setter
     def date_to(self, val):
         self.__date_to = val
@@ -88,22 +88,19 @@ class Controller:
                 fade_time = self.__model.fade_time
 
             tm = time.time()
-            next_file = None
-            orientation = 1
+            pic = None
             if not self.paused and tm > self.__next_tm:
                 self.__next_tm = tm + self.__model.time_delay
-                next_file, orientation, image_attr = self.__model.get_next_file(self.date_from, self.date_to)
-                self.publish_sensors(next_file, image_attr)
-                
+                pic = self.__model.get_next_file(self.date_from, self.date_to)
+                self.publish_sensors(pic.fname, pic.image_attr)
             if self.__viewer.is_in_transition() == False: # safe to do long running tasks
                 if tm > next_check_tm:
                     self.__model.check_for_file_changes()
                     next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
-            
-            if self.__viewer.slideshow_is_running(next_file, orientation, time_delay, fade_time) == False:
+            if self.__viewer.slideshow_is_running(pic, time_delay, fade_time, self.__paused, ) == False:
                 break
 
-    
+
     def start(self):
         try:
             device_id = self.__model.get_mqtt_config()['device_id']
