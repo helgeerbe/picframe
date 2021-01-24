@@ -46,7 +46,8 @@ DEFAULT_CONFIG = {
         'key_list': [['tourism','amenity','isolated_dwelling'],['suburb','village'],['city','county'],['region','state','province'],['country']],
         'geo_key': 'this_needs_to@be_changed',  # use your email address
         'geo_file': './geo_locations.txt', #TODO sqlite alternative
-        'file_list_cache': './file_list_cache.txt' #TODO sqlite altenative
+        'file_list_cache': './file_list_cache.txt', #TODO sqlite altenative
+        'portrait_pairs': False
     },
     'mqtt': {
         'server': '', 
@@ -57,7 +58,7 @@ DEFAULT_CONFIG = {
         'device_id': 'picframe'                                 # unique id of device. change if there is more than one picture frame
     }
 }
-EXTENSIONS = ['.png','.jpg','.jpeg'] # can add to these
+EXTENSIONS = ['.png','.jpg','.jpeg'] # can add to these TODO process heif files
 
 
 class Pic:
@@ -75,9 +76,6 @@ class Pic:
         self.shown_with = shown_with # set to pic_num of image this was paired with
         self.image_attr = image_attr
         self.location = None # use to pass to viewer but don't save in cache TODO check if this is best method
-        # TODO this could be made JSON saveable by subclassing from dict and using
-        # json.dumps(pic, default=lambda o : o.__dict__)
-        # then deserialized pic = Pic(**json.loads(jsonpic))
 
 
 class Model:
@@ -119,6 +117,8 @@ class Model:
                         continue
                     pic = Pic(**json.loads(line))
                     self.__file_list_cache[pic.fname] = pic
+        if model_config['portrait_pairs']:
+            self.__set_shown_with()
 
 
     def get_viewer_config(self):
@@ -174,11 +174,11 @@ class Model:
         subdir_list = next(os.walk(pic_dir))[1]
         subdir_list.insert(0,root)
         return actual_dir, subdir_list
-    
+
     @property
     def shuffle(self):
         return self.__config['model']['shuffle']
-    
+
     @shuffle.setter
     def shuffle(self, val:bool):
         self.__config['model']['shuffle'] = val
@@ -186,12 +186,28 @@ class Model:
             self.__shuffle_files()
         else:
             self.__sort_files()
-    
+
+    def __set_shown_with(self):
+        for (_, pic) in self.__file_list_cache.items(): # first clear existing ones
+            pic.shown_with = None
+        for i in range(self.__number_of_files - 1): # up to second to last
+            fname = self.__file_list[i][0]
+            if fname in self.__file_list_cache:
+                pic = self.__file_list_cache[fname]
+                if pic.aspect < 1.0 and pic.shown_with is None:
+                    for j in range(i + 1, self.__number_of_files): # start on next
+                        other_fname = self.__file_list[j][0]
+                        if other_fname in self.__file_list_cache:
+                            other_pic = self.__file_list_cache[other_fname]
+                            if other_pic.aspect < 1.0 and other_pic.shown_with is None:
+                                other_pic.shown_with = i
+                                break # inner loop. just select one other picture
+
     def check_for_file_changes(self):
     # check modification time of pic_dir and its sub folders
         update = False
         pic_dir = os.path.expanduser(self.get_model_config()['pic_dir'])
-        sub_dir = self.get_model_config()['subdirectory']
+        sub_dir = self.subdirectory
         picture_dir = os.path.join(pic_dir, sub_dir)
         for root, _, _ in os.walk(picture_dir):
             mod_tm = os.stat(root).st_mtime
@@ -236,7 +252,7 @@ class Model:
 
     def __get_files(self):
         self.__file_list = []
-        picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.get_model_config()['subdirectory'])
+        picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.subdirectory)
         for root, _dirnames, filenames in os.walk(picture_dir):
             mod_tm = os.stat(root).st_mtime # time of alteration in a directory
             if mod_tm > self.__last_file_change:
@@ -245,9 +261,8 @@ class Model:
                 ext = os.path.splitext(filename)[1].lower()
                 if ext in EXTENSIONS and not '.AppleDouble' in root and not filename.startswith('.'):
                     file_path_name = os.path.join(root, filename)
-                    # dt = self.__get_image_date(file_path_name)
                     # __file_list just holds file_path and mdate
-                    self.__file_list.append([file_path_name, os.path.getmtime(file_path_name)])
+                    self.__file_list.append([file_path_name, round(os.path.getmtime(file_path_name),2)])
         if len(self.__file_list) == 0:
             img = os.path.expanduser(self.get_model_config()['no_files_img'])
             mtime = os.path.getmtime(img)
@@ -264,11 +279,14 @@ class Model:
         self.__reload_files = False
 
     def set_next_file_to_previous_file(self):
-        self.__file_index = (self.__file_index - 2) % self.get_number_of_files()
+        self.__file_index = (self.__file_index - 2) % self.__number_of_files
 
     def get_next_file(self, date_from = None, date_to = None):
+        # returns a tuple of (pic, None) or (pic, paired_pic) in case
         if self.__reload_files == True:
             self.__get_files()
+            if self.get_model_config()['portrait_pairs']:
+                self.__set_shown_with()
 
         if self.__file_index == self.__number_of_files:
             self.__num_run_through += 1
@@ -278,7 +296,7 @@ class Model:
             self.__file_index = 0
 
         found = False
-        for _ in range(0,self.get_number_of_files()):
+        for _ in range(0, self.__number_of_files):
             (fname, mtime) = self.__file_list[self.__file_index]
             mtime = round(mtime, 2) # save space in cache
             if fname in self.__file_list_cache: #check cache first TODO use sqlite db
@@ -303,27 +321,39 @@ class Model:
                 file_path = self.get_model_config()['file_list_cache']
                 with open(file_path, 'a+') as f:
                     f.write(json.dumps(pic, default=lambda o : o.__dict__) + "\n")
+            if self.get_model_config()['portrait_pairs'] and pic.shown_with is not None:
+                self.__file_index = (self.__file_index + 1) % self.__number_of_files
+                continue # only show this image with selection of left hand half
             if date_from is not None:
                 if pic.dt < date_from:
-                    self.__file_index = (self.__file_index + 1) % self.get_number_of_files()
+                    self.__file_index = (self.__file_index + 1) % self.__number_of_files
                     continue
             if date_to is not None:
                 if pic.dt > date_to:
-                    self.__file_index = (self.__file_index + 1) % self.get_number_of_files()
+                    self.__file_index = (self.__file_index + 1) % self.__number_of_files
                     continue
             found = True
             #TODO check on mechanism for getting geo location description. At moment wait until pic has been selected
             if self.__load_geoloc and pic.lat is not None and pic.lon is not None:
                 pic.location = self.__geo_reverse.get_address(pic.lat, pic.lon)
+            if self.get_model_config()['portrait_pairs']: # pic.shown_with must be None to get here. Find pair
+                paired_pic = None
+                for other_pic in self.__file_list_cache.values():
+                    if other_pic.shown_with == self.__file_index:
+                        paired_pic = other_pic
+                        break
+                pics = (pic, paired_pic)
+            else:
+                pics = (pic, None)
             break
         if not found: #TODO to get here requires every image to have exif extracted
             file = os.path.expanduser(self.get_model_config()['no_files_img'])
-            return Pic(fname=file) # don't do exif lookup on no_files_img
+            return (Pic(fname=file), None) # don't do exif lookup on no_files_img
         self.__file_index  += 1
         self.__logger.info('Next file in list: %s', pic.fname)
         self.__logger.debug('Image attributes: %s', pic.image_attr)
-        return pic
-        
+        return pics #now a tuple
+
 
     def __shuffle_files(self):
         self.__file_list.sort(key=lambda x: x[1]) # will be later files last

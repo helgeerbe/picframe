@@ -2,11 +2,13 @@ import os
 import json
 import urllib.request
 import locale
+import logging
 
 URL = "https://nominatim.openstreetmap.org/reverse?format=geojson&lat={}&lon={}&zoom={}&email={}&accept-language={}"
 
 class GeoReverse:
     def __init__(self, geo_key, file_path, zoom=18, key_list=None):
+        self.__logger = logging.getLogger("geo_reverse.GeoReverse")
         self.__geo_key = geo_key
         self.__zoom = zoom
         self.__key_list = key_list
@@ -49,5 +51,5 @@ class GeoReverse:
                         f.write("{}={}\n".format(lat_lon, formatted_address))
                     return formatted_address
             except Exception as e:
-                print(e) #TODO debugging
+                self.__logger.error(e)
                 return "Location Not Available"

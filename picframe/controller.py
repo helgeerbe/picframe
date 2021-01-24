@@ -88,16 +88,16 @@ class Controller:
                 fade_time = self.__model.fade_time
 
             tm = time.time()
-            pic = None
+            pics = None #get_next_file returns a tuple of two in case paired portraits have been specified
             if not self.paused and tm > self.__next_tm:
                 self.__next_tm = tm + self.__model.time_delay
-                pic = self.__model.get_next_file(self.date_from, self.date_to)
-                self.publish_sensors(pic.fname, pic.image_attr)
+                pics = self.__model.get_next_file(self.date_from, self.date_to)
+                self.publish_sensors(pics[0].fname, pics[0].image_attr)
             if self.__viewer.is_in_transition() == False: # safe to do long running tasks
                 if tm > next_check_tm:
                     self.__model.check_for_file_changes()
                     next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
-            if self.__viewer.slideshow_is_running(pic, time_delay, fade_time, self.__paused, ) == False:
+            if self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused) == False:
                 break
 
 
