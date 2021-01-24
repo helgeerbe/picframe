@@ -15,7 +15,7 @@ class GetImageMeta:
                 self.__tags = exifread.process_file(fh, details=False)
         except OSError as e:
             self.__logger.warning("Can't open file: \"%s\"", filename)
-            self.__logger.warning("Cause: %s", e.args[1])
+            self.__logger.warning("Cause: %s", e)
             raise
 
     def has_exif(self):

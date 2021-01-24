@@ -230,7 +230,7 @@ class Model:
                 dt = time.mktime(time.strptime(val['EXIF DateTimeOriginal'], '%Y:%m:%d %H:%M:%S'))
         except OSError as e:
             self.__logger.warning("Can't extract exif data from file: \"%s\"", file_path_name)
-            self.__logger.warning("Cause: %s", e.args[1])
+            self.__logger.warning("Cause: %s", e)
         return round(dt, 2) # 10ms saves storing lots of decimal places!
 
     def __get_image_attr(self, file_path_name):
@@ -247,7 +247,7 @@ class Model:
                     image_attr_list.update(exifs.get_exif(exif))
         except OSError as e:
             self.__logger.warning("Can't extract exif data from file: \"%s\"", file_path_name)
-            self.__logger.warning("Cause: %s", e.args[1])
+            self.__logger.warning("Cause: %s", e)
         return size, orientation, image_attr_list
 
     def __get_files(self):
