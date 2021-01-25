@@ -272,6 +272,7 @@ class Controller:
             if msg == "ON":
                 self.paused = True
                 client.publish(state_topic, "ON", retain=True)
+                self.__viewer.reset_name_tm()
             elif msg == "OFF":
                 self.paused = False
                 client.publish(state_topic, "OFF", retain=True)
@@ -281,13 +282,15 @@ class Controller:
             if msg == "ON":
                 client.publish(state_topic, "OFF", retain=True)
                 self.back()
+                self.__viewer.reset_name_tm()
         # next buttons
         elif message.topic == switch_topic_head + "_next/set":
             state_topic = switch_topic_head + "_next/state"
             if msg == "ON":
                 client.publish(state_topic, "OFF", retain=True)
                 self.next()
-        # next buttons
+                self.__viewer.reset_name_tm()
+        # change subdirectory
         elif message.topic == device_id + "/subdirectory":
             self.__logger.info("Recieved subdirectory: %s", msg)
             self.__model.subdirectory = msg

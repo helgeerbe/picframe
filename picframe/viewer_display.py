@@ -1,6 +1,6 @@
 # for development
 import sys
-sys.path.insert(1, "/home/patrick/python/pi3d")
+sys.path.insert(1, "/home/pi/pi3d")
 import pi3d
 from pi3d.Texture import MAX_SIZE
 import math
@@ -92,6 +92,10 @@ class ViewerDisplay:
         except:
             return None
 
+    def reset_name_tm(self):
+        # only extend i.e. if after initial fade in
+        self.__name_tm = max(self.__name_tm, time.time() + self.__show_text_tm)
+
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
     def __create_image_pair(self, im1, im2):
@@ -175,7 +179,7 @@ class ViewerDisplay:
             #                    mipmap=config.AUTO_RESIZE, free_after_load=True) # poss try this if still some artifacts with full resolution
         except Exception as e:
             self.__logger.warning("Can't create tex from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
-            self.__logger.warning("Cause: %s", e.args[1])
+            self.__logger.warning("Cause: %s", e)
             tex = None
         return tex
 
@@ -244,7 +248,9 @@ class ViewerDisplay:
             self.__sfg = None
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
-            self.__sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
+            new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
+            if new_sfg is not None: # this is a possible return value which needs to be caught
+                self.__sfg = new_sfg
             self.__alpha = 0.0
             self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
             # set the file name as the description
