@@ -37,7 +37,7 @@ class ViewerDisplay:
         self.__edge_alpha = config['edge_alpha']
         self.__fps = config['fps']
         self.__background = config['background']
-        self.__blend_type = config['blend_type']
+        self.__blend_type = {"blend":0.0, "burn":1.0, "bump":2.0}[config['blend_type']]
         self.__font_file = os.path.expanduser(config['font_file'])
         self.__shader = os.path.expanduser(config['shader'])
         self.__show_text_tm = config['show_text_tm']
@@ -305,8 +305,6 @@ class ViewerDisplay:
             dt = (self.__show_text_tm - self.__name_tm + tm + 0.1) / self.__show_text_tm
             ramp_pt = max(4.0, self.__show_text_tm / 4.0)
             alpha = max(0.0, min(1.0, ramp_pt * (self.__alpha- abs(1.0 - 2.0 * dt)))) # cap text alpha at image alpha
-            if alpha > 0.9 and alpha < 0.95:
-                self.__logger.warning("dt {:.2f}, alpha {:.2f}".format(dt, alpha))
             self.__textblock.colouring.set_colour(alpha=alpha)
             self.__text.regen()
             self.__text_bkg.set_alpha(alpha)

@@ -5,7 +5,7 @@ viewer:
   edge_alpha: 0.5                         # default=0.5, background colour at edge. 1.0 would show reflection of image
   fps: 20.0                               # default=20.0
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
-  blend_type: 0.0                         # default="blend", choices={"blend":0.0, "burn":1.0, "bump":2.0}, type of blend the shader can do"
+  blend_type: "blend"                     # default="blend", choices={"blend", "burn", "bump"}, type of blend the shader can do"
   font_file: "~/.local/picframe/data/fonts/NotoSans-Regular.ttf"
   shader: "~/.local/picframe/data/shaders/blend_new"
   show_text_fm: '%b %d, %Y'
