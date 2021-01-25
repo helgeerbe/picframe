@@ -9,12 +9,10 @@ viewer:
   font_file: "~/.local/picframe/data/fonts/NotoSans-Regular.ttf"
   shader: "~/.local/picframe/data/shaders/blend_new"
   show_text_fm: '%b %d, %Y'
-  show_text_tm: 20.0
+  show_text_tm: 20.0                      # default=0.0, time to show text over image with file name
   show_text_sz: 40
-  show_text: "name location"
-  text_width: 90
-  load_geoloc: True
-  show_names_tm: 0.0                      # default=0.0, time to show text over image with file name
+  show_text: "name date folder location"
+  text_width: 30
   fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
   auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4. 
                                           # You should ensure your images are the correct size for the display")
@@ -42,7 +40,7 @@ model:
   load_geoloc: True
   locale: 'en_US.utf8'
   key_list: [['tourism','amenity','isolated_dwelling'],['suburb','village'],['city','county'],['region','state','province'],['country']]
-  geo_key: 'this_needs_to@be_changed'       # use your email address
+  geo_key: 'this_needs_to@be_changed'            # use your email address
   geo_file: '~/.local/picframe/data/geo_locations.txt'           #TODO sqlite alternative
   file_list_cache: '~/.local/picframe/data/file_list_cache.txt'  #TODO sqlite altenative
   portrait_pairs: False

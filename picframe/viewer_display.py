@@ -92,6 +92,10 @@ class ViewerDisplay:
         except:
             return None
 
+    def reset_name_tm(self):
+        # only extend i.e. if after initial fade in
+        self.__name_tm = max(self.__name_tm, time.time() + self.__show_text_tm)
+        
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
     def __create_image_pair(self, im1, im2):
@@ -233,7 +237,7 @@ class ViewerDisplay:
         text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, free_after_load=True)
 
         back_shader = pi3d.Shader("uv_flat")
-        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-self.__display.height // 2 + bkg_ht // 2, z=4.0)
+        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-int(self.__display.height) // 2 + bkg_ht // 2, z=4.0)
         self.__text_bkg.set_draw_details(back_shader, [text_bkg_tex])
 
 

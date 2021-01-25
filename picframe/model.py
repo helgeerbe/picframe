@@ -25,7 +25,6 @@ DEFAULT_CONFIG = {
         'show_text_sz': 40,
         'show_text': "name location",
         'text_width': 90,
-        'load_geoloc': True,
         'fit': False, 
         'auto_resize': True,
         'kenburns': False,
@@ -46,8 +45,8 @@ DEFAULT_CONFIG = {
         'locale': 'en_US.utf8',
         'key_list': [['tourism','amenity','isolated_dwelling'],['suburb','village'],['city','county'],['region','state','province'],['country']],
         'geo_key': 'this_needs_to@be_changed',  # use your email address
-        'geo_file': './geo_locations.txt', #TODO sqlite alternative
-        'file_list_cache': './file_list_cache.txt', #TODO sqlite altenative
+        'geo_file': '~/.local/picframe/data/geo_locations.txt', #TODO sqlite alternative
+        'file_list_cache': '~/.local/picframe/data/file_list_cache.txt', #TODO sqlite altenative
         'portrait_pairs': False
     },
     'mqtt': {
@@ -268,7 +267,6 @@ class Model:
         if len(self.__file_list) == 0:
             img = os.path.expanduser(self.get_model_config()['no_files_img'])
             mtime = os.path.getmtime(img)
-            dt = self.__get_image_date(img)
             self.__file_list.append([img, mtime])
         else: 
             if self.get_model_config()['shuffle']:
