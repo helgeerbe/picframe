@@ -30,9 +30,10 @@ class GetImageMeta:
         return None
 
     def __convert_to_degress(self, value):
-        d = float(value.values[0].num) / float(value.values[0].den)
-        m = float(value.values[1].num) / float(value.values[1].den)
-        s = float(value.values[2].num) / float(value.values[2].den)
+        (deg, min, sec) = value.values
+        d = float(deg.num) / float(deg.den if deg.den > 0 else 1) #TODO better catching?
+        m = float(min.num) / float(min.den if min.den > 0 else 1)
+        s = float(sec.num) / float(sec.den if sec.den > 0 else 1)
         return d + (m / 60.0) + (s / 3600.0)
         
     def get_locaction(self):
@@ -47,11 +48,12 @@ class GetImageMeta:
 
         if gps_latitude and gps_latitude_ref and gps_longitude and gps_longitude_ref:
             lat = self.__convert_to_degress(gps_latitude)
-            if gps_latitude_ref.values[0] != 'N':
+            if len(gps_latitude_ref.values) > 0 and gps_latitude_ref.values[0] == 'S':
+                # assume zero length string means N
                 lat = 0 - lat
             gps["latitude"] = lat
             lon = self.__convert_to_degress(gps_longitude)
-            if gps_longitude_ref.values[0] != 'E':
+            if len(gps_longitude_ref.values) and gps_longitude_ref.values[0] == 'W':
                 lon = 0 - lon
             gps["longitude"] = lon
         return gps
