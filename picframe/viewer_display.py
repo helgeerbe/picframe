@@ -305,11 +305,14 @@ class ViewerDisplay:
             dt = (self.__show_text_tm - self.__name_tm + tm + 0.1) / self.__show_text_tm
             ramp_pt = max(4.0, self.__show_text_tm / 4.0)
             alpha = max(0.0, min(1.0, ramp_pt * (self.__alpha- abs(1.0 - 2.0 * dt)))) # cap text alpha at image alpha
+            if alpha > 0.9 and alpha < 0.95:
+                self.__logger.warning("dt {:.2f}, alpha {:.2f}".format(dt, alpha))
             self.__textblock.colouring.set_colour(alpha=alpha)
             self.__text.regen()
             self.__text_bkg.set_alpha(alpha)
             if len(self.__textblock.text_format.strip()) > 0: #only draw background if text there
                 self.__text_bkg.draw()
+
 
         self.__text.draw()
         return self.__display.loop_running()
