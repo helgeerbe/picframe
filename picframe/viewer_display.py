@@ -54,6 +54,10 @@ class ViewerDisplay:
             self.__blur_edges = False
         if self.__blur_zoom < 1.0:
             self.__blur_zoom = 1.0
+        self.__display_x = int(config['display_x'])
+        self.__display_y = int(config['display_y'])
+        self.__display_w = None if config['display_w'] is None else int(config['display_w'])
+        self.__display_h = None if config['display_h'] is None else int(config['display_h'])
         self.__codepoints = config['codepoints']
         self.__alpha = 0.0 # alpha - proportion front image to back
         self.__delta_alpha = 1.0
@@ -92,9 +96,18 @@ class ViewerDisplay:
         except:
             return None
 
+    def toggle_text(self, val):
+        if val == 0:
+            self.__show_text = 0
+        else:
+            self.__show_text ^= val
+
     def reset_name_tm(self):
         # only extend i.e. if after initial fade in
         self.__name_tm = max(self.__name_tm, time.time() + self.__show_text_tm)
+
+    def set_brightness(self, val):
+        self.__slide.unif[55] = val # take immediate effect
 
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
@@ -212,7 +225,8 @@ class ViewerDisplay:
         return self.__in_transition
 
     def slideshow_start(self):
-        self.__display = pi3d.Display.create(x=0, y=0, frames_per_second=self.__fps,
+        self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
+              w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
               display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background)
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
@@ -244,8 +258,7 @@ class ViewerDisplay:
     def slideshow_is_running(self, pics=None, time_delay = 200.0, fade_time = 10.0, paused=False):
         tm = time.time()
         if pics is not None:
-            self.__sbg = self.__sfg
-            self.__sfg = None
+            self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))

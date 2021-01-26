@@ -128,7 +128,7 @@ class Controller:
         except Exception as e:
             self.__logger.info("MQTT stopping failed because of: {}".format(e))
         self.__viewer.slideshow_stop()
-    
+
     def on_connect(self, client, userdata, flags, rc):
         if rc != 0:
             self.__logger.warning("Can't connect with mqtt broker. Reason = {0}".format(rc))   
@@ -164,6 +164,54 @@ class Controller:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(device_id + "/time_delay", qos=0)
 
+        # send delete sensor configuration 
+        config_topic = sensor_topic_head + "_delete/config"
+        config_payload = '{"name":"' + device_id + '_delete", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.delete}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_delete", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/delete", qos=0)
+
+        # send text_on sensor configuration 
+        config_topic = sensor_topic_head + "_text_on/config"
+        config_payload = '{"name":"' + device_id + '_text_on", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.text_on}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_text_on", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/text_on", qos=0)
+
+        # send date_on sensor configuration 
+        config_topic = sensor_topic_head + "_date_on/config"
+        config_payload = '{"name":"' + device_id + '_date_on", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.date_on}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_date_on", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/date_on", qos=0)
+
+        # send location_on sensor configuration 
+        config_topic = sensor_topic_head + "_location_on/config"
+        config_payload = '{"name":"' + device_id + '_location_on", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.location_on}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_location_on", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/location_on", qos=0)
+
+        # send directory_on sensor configuration 
+        config_topic = sensor_topic_head + "_directory_on/config"
+        config_payload = '{"name":"' + device_id + '_directory_on", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.directory_on}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_directory_on", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/directory_on", qos=0)
+
+        # send text_off sensor configuration 
+        config_topic = sensor_topic_head + "_text_off/config"
+        config_payload = '{"name":"' + device_id + '_text_off", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.text_off}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_text_off", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/text_off", qos=0)
+
+        # send text_refresh sensor configuration 
+        config_topic = sensor_topic_head + "_text_refresh/config"
+        config_payload = '{"name":"' + device_id + '_text_refresh", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.text_refresh}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_text_refresh", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/text_refresh", qos=0)
+
+        # send brightness sensor configuration 
+        config_topic = sensor_topic_head + "_brightness/config"
+        config_payload = '{"name":"' + device_id + '_brightness", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.brightness}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_brightness", "dev":{"ids":["' + device_id + '"]}}'
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(device_id + "/brightness", qos=0)
+
         # send fade_time sensor configuration 
         config_topic = sensor_topic_head + "_fade_time/config"
         config_payload = '{"name":"' + device_id + '_fade_time", "icon":"mdi:image-size-select-large", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.fade_time}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_fade_time", "dev":{"ids":["' + device_id + '"]}}'
@@ -174,7 +222,7 @@ class Controller:
         config_topic = sensor_topic_head + "_image_counter/config"
         config_payload = '{"name":"' + device_id + '_image_counter", "icon":"mdi:camera-burst", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.image_counter}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_ic", "dev":{"ids":["' + device_id + '"]}}'
         client.publish(config_topic, config_payload, qos=0, retain=True)
-        
+
         # send  image sensor configuration
         config_topic = sensor_topic_head + "_image/config"
         attributes_topic = sensor_topic_head + "_image/attributes"
@@ -187,7 +235,7 @@ class Controller:
         config_payload = '{"name":"' + device_id + '_dir", "icon":"mdi:folder-multiple-image", "state_topic":"' + state_topic + '",  "value_template": "{{ value_json.dir}}", "json_attributes_topic":"' + attributes_topic + '","avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_dir", "dev":{"ids":["' + device_id + '"]}}'
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(device_id + "/subdirectory", qos=0)
-        
+
         # send display switch configuration  and display state
         config_topic = switch_topic_head + "_display/config"
         command_topic = switch_topic_head + "_display/set"
@@ -199,7 +247,7 @@ class Controller:
             client.publish(state_topic, "ON", qos=0, retain=True)
         else :
             client.publish(state_topic, "OFF", qos=0, retain=True)
-        
+
         # send shuffle switch configuration  and shuffle state
         config_topic = switch_topic_head + "_shuffle/config"
         command_topic = switch_topic_head + "_shuffle/set"
@@ -211,7 +259,7 @@ class Controller:
             client.publish(state_topic, "ON", qos=0, retain=True)
         else :
             client.publish(state_topic, "OFF", qos=0, retain=True)
-        
+
         # send paused switch configuration and paused state
         config_topic = switch_topic_head + "_paused/config"
         command_topic = switch_topic_head + "_paused/set"
@@ -223,7 +271,7 @@ class Controller:
             client.publish(state_topic, "ON", qos=0, retain=True)
         else :
             client.publish(state_topic, "OFF", qos=0, retain=True)
-        
+
         # send back switch configuration  and back state
         config_topic = switch_topic_head + "_back/config"
         command_topic = switch_topic_head + "_back/set"
@@ -310,14 +358,51 @@ class Controller:
             self.__logger.info("Recieved fade_time: %s", msg)
             self.__model.fade_time = float(msg)
             self.__next_tm = 0
-        # fade_time
+        # time_delay
         elif message.topic == device_id + "/time_delay":
             self.__logger.info("Recieved time_delay: %s", msg)
             self.__model.time_delay = float(msg)
             self.__next_tm = 0
-            
-            
-    
+        # delete
+        elif message.topic == device_id + "/delete":
+            self.__logger.info("Recieved delete: %s", msg)
+            self.__model.delete_file()
+            self.__next_tm = 0
+        # text_on
+        elif message.topic == device_id + "/text_on":
+            self.__logger.info("Recieved text_on")
+            self.__viewer.toggle_text(1) # bit mask
+            self.__viewer.reset_name_tm()
+        # date_on
+        elif message.topic == device_id + "/date_on":
+            self.__logger.info("Recieved date_on")
+            self.__viewer.toggle_text(2) # bit mask
+            self.__viewer.reset_name_tm()
+        # location_on
+        elif message.topic == device_id + "/location_on":
+            self.__logger.info("Recieved location_on")
+            self.__viewer.toggle_text(4) # bit mask
+            self.__viewer.reset_name_tm()
+        # directory_on
+        elif message.topic == device_id + "/directory_on":
+            self.__logger.info("Recieved directory_on")
+            self.__viewer.toggle_text(8) # bit mask
+            self.__viewer.reset_name_tm()
+        # text_off
+        elif message.topic == device_id + "/text_off":
+            self.__logger.info("Recieved text_off")
+            self.__viewer.toggle_text(0)
+            self.__viewer.reset_name_tm()
+        # text_refresh
+        elif message.topic == device_id + "/text_refresh":
+            self.__logger.info("Recieved text_refresh")
+            self.__viewer.reset_name_tm()
+        # brightness
+        elif message.topic == device_id + "/brightness":
+            self.__logger.info("Recieved brightness: %s", msg)
+            self.__viewer.set_brightness(float(msg))
+
+
     def publish_sensors(self, image, image_attr):
         device_id = self.__model.get_mqtt_config()['device_id']
         topic_head =  "homeassistant/sensor/" + device_id
@@ -343,7 +428,6 @@ class Controller:
         # fade_time
         state_payload["fade_time"] = self.__model.fade_time
 
-        
         # send last will and testament
         available_topic = switch_topic_head + "/available"
         self.__client.publish(available_topic, "online", qos=0, retain=True)
@@ -355,4 +439,3 @@ class Controller:
         self.__client.publish(attributes_topic, json.dumps(dir_attr), qos=0, retain=False)
         self.__logger.info("Send state: %s", state_payload)
         self.__client.publish(state_topic, json.dumps(state_payload), qos=0, retain=False)
-        

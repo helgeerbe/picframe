@@ -28,6 +28,10 @@ DEFAULT_CONFIG = {
         'fit': False, 
         'auto_resize': True,
         'kenburns': False,
+        'display_x': 0,
+        'display_y': 0,
+        'display_w': None,
+        'display_h': None,
         'test_key': 'test_value'
     }, 
     'model': {

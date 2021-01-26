@@ -17,6 +17,11 @@ viewer:
   auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4
                                           # You should ensure your images are the correct size for the display
   kenburns: False                         # default=False, will set fit->False and blur_edges->False
+  display_x: 0                            # offset from left of screen (can be negative)
+  display_y: 0                            # offset from top of screen (can be negative)
+  display_w: null                         # width of display surface (null->None will use max returned by hardware)
+  display_h: null                         # height of display surface
+
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
 
 
