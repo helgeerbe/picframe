@@ -102,8 +102,10 @@ class ViewerDisplay:
         else:
             self.__show_text ^= val
 
-    def reset_name_tm(self):
+    def reset_name_tm(self, pic=None, paused=None):
         # only extend i.e. if after initial fade in
+        if pic is not None and paused is not None: # text needs to be refreshed
+            self.__make_text(pic, paused)
         self.__name_tm = max(self.__name_tm, time.time() + self.__show_text_tm)
 
     def set_brightness(self, val):
@@ -202,6 +204,7 @@ class ViewerDisplay:
         return name
 
     def __make_text(self, pic, paused):
+        # pic is just left hand pic if pics tuple has two portraits
         info_strings = []
         if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
             if (self.__show_text & 1) == 1: # name
@@ -218,8 +221,9 @@ class ViewerDisplay:
             self.__textblock.set_text(text_format=final_string, wrap=self.__text_width)
 
             last_ch = len(final_string)
-            adj_y = self.__text.locations[:last_ch,1].min() + self.__display.height // 2 # y pos of last char rel to bottom of screen
-            self.__textblock.set_position(y = (self.__textblock.y - adj_y + self.__show_text_sz))
+            if last_ch > 0:
+                adj_y = self.__text.locations[:last_ch,1].min() + self.__display.height // 2 # y pos of last char rel to bottom of screen
+                self.__textblock.set_position(y = (self.__textblock.y - adj_y + self.__show_text_sz))
 
     def is_in_transition(self):
         return self.__in_transition

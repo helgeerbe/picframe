@@ -295,6 +295,8 @@ class Controller:
         device_id = self.__model.get_mqtt_config()['device_id']
         msg = message.payload.decode("utf-8") 
         switch_topic_head = "homeassistant/switch/" + device_id
+        # these are needed if the text display is changed:
+        pic = self.__model.get_current_pics()[0]
 
         # display
         if message.topic == switch_topic_head + "_display/set":
@@ -320,7 +322,7 @@ class Controller:
             if msg == "ON":
                 self.paused = True
                 client.publish(state_topic, "ON", retain=True)
-                self.__viewer.reset_name_tm()
+                self.__viewer.reset_name_tm(pic, self.paused)
             elif msg == "OFF":
                 self.paused = False
                 client.publish(state_topic, "OFF", retain=True)
@@ -367,36 +369,37 @@ class Controller:
         elif message.topic == device_id + "/delete":
             self.__logger.info("Recieved delete: %s", msg)
             self.__model.delete_file()
+            self.back() # needed to avoid skipping one as record has been deleted from model.__file_list
             self.__next_tm = 0
         # text_on
         elif message.topic == device_id + "/text_on":
             self.__logger.info("Recieved text_on")
             self.__viewer.toggle_text(1) # bit mask
-            self.__viewer.reset_name_tm()
+            self.__viewer.reset_name_tm(pic, self.paused)
         # date_on
         elif message.topic == device_id + "/date_on":
             self.__logger.info("Recieved date_on")
             self.__viewer.toggle_text(2) # bit mask
-            self.__viewer.reset_name_tm()
+            self.__viewer.reset_name_tm(pic, self.paused)
         # location_on
         elif message.topic == device_id + "/location_on":
             self.__logger.info("Recieved location_on")
             self.__viewer.toggle_text(4) # bit mask
-            self.__viewer.reset_name_tm()
+            self.__viewer.reset_name_tm(pic, self.paused)
         # directory_on
         elif message.topic == device_id + "/directory_on":
             self.__logger.info("Recieved directory_on")
             self.__viewer.toggle_text(8) # bit mask
-            self.__viewer.reset_name_tm()
+            self.__viewer.reset_name_tm(pic, self.paused)
         # text_off
         elif message.topic == device_id + "/text_off":
             self.__logger.info("Recieved text_off")
             self.__viewer.toggle_text(0)
-            self.__viewer.reset_name_tm()
+            self.__viewer.reset_name_tm(pic, self.paused)
         # text_refresh
         elif message.topic == device_id + "/text_refresh":
             self.__logger.info("Recieved text_refresh")
-            self.__viewer.reset_name_tm()
+            self.__viewer.reset_name_tm(pic, self.paused)
         # brightness
         elif message.topic == device_id + "/brightness":
             self.__logger.info("Recieved brightness: %s", msg)

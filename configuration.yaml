@@ -6,8 +6,8 @@ viewer:
   fps: 20.0                               # default=20.0
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
   blend_type: "blend"                     # default="blend", choices={"blend":0.0, "burn":1.0, "bump":2.0}, type of blend the shader can do
-  font_file: "data/fonts/NotoSans-Regular.ttf"
-  shader: "data/shaders/blend_new"
+  font_file: "/home/pi/picture_frame/data/fonts/NotoSans-Regular.ttf"
+  shader: "/home/pi/picture_frame/data/shaders/blend_new"
   show_text_fm: "%b %d, %Y"               # default "%b %d, %Y", format to show date over the image
   show_text_tm: 8.0                       # default=0.0, time to show text over image with file name
   show_text_sz: 40                        # default=90, text character size
@@ -26,8 +26,8 @@ viewer:
 
 
 model:
-  pic_dir: "/home/patrick/Pictures"       # default="~/Pictures", root folder for images
-  no_files_img: "data/no_pictures.jpg"    # default="PictureFrame2020img.jpg", image to show if none selected
+  pic_dir: "/home/pi/Pictures"       # default="~/Pictures", root folder for images
+  no_files_img: "/home/pi/picture_frame/data/no_pictures.jpg"    # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                  # default="", subdir of pic_dir - can be changed by MQTT"
   check_dir_tm: 60.0                      # default=60.0, time in seconds between checking if the image directory has changed
   recent_n: 3                             # default=3, when shuffling the keep n most recent ones to play before the rest
@@ -44,7 +44,6 @@ model:
     'EXIF DateTimeOriginal', 
     'Image Model']
   load_geoloc: True                       # get location information from open street map
-  load_geoloc: True
   locale: 'en_GB'
   key_list: [
     ['tourism','amenity','isolated_dwelling'],
@@ -53,13 +52,14 @@ model:
     ['region','state','province'],
     ['country']]
   geo_key: 'patrick@eldwick.org.uk'       # use your email address
-  geo_file: './geo_locations.txt'         #TODO sqlite alternative
-  file_list_cache: './file_list_cache.txt' #TODO sqlite altenative
+  geo_file: '/home/pi/picture_frame/geo_locations.txt'         #TODO sqlite alternative
+  file_list_cache: '/home/pi/picture_frame/file_list_cache.txt' #TODO sqlite altenative
   portrait_pairs: True                    # portrait images should be scaled and shown in pairs
+  deleted_pictures: '/home/pi/picture_frame/DeletedPictures' # move deleted pictures here
 
 mqtt:
   server: "192.168.0.235"                 # No defaults for server
-  port: 1883                              # derfault=8883 for tls, 1883 else (tls must be "" then !!!!!)
+  port: 1883                              # default=8883 for tls, 1883 else (tls must be "" then !!!!!)
   login: ""                               # your mqtt user
   password: ""                            # password for mqtt user
   tls: ""                                 # filename including path to your ca.crt. If not used, must be set to "" !!!!
