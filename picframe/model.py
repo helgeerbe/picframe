@@ -287,6 +287,12 @@ class Model:
 
     def set_next_file_to_previous_file(self):
         self.__file_index = (self.__file_index - 2) % self.__number_of_files
+        if self.get_model_config()['portrait_pairs']:
+            for _ in range(0, self.__number_of_files):
+                (fname, mtime) = self.__file_list[self.__file_index]
+                if fname in self.__file_list_cache and self.__file_list_cache[fname].shown_with is not None:
+                    self.__file_index = (self.__file_index - 1) % self.__number_of_files
+                    continue
 
     def get_next_file(self, date_from = None, date_to = None):
         # returns a tuple of (pic, None) or (pic, paired_pic) in case
@@ -382,6 +388,7 @@ class Model:
                 self.__file_list.pop(i)
                 self.__number_of_files -= 1
                 break
+        self.__set_shown_with()
 
     def __shuffle_files(self):
         self.__file_list.sort(key=lambda x: x[1]) # will be later files last

@@ -12,19 +12,19 @@ import numpy as np
 from PIL import Image, ImageFilter
 from picframe.get_image_meta import GetImageMeta
 
+# utility functions with no dependency on ViewerDisplay properties
+def txt_to_bit(txt):
+    txt_map = {"name":1, "date":2, "location":4, "directory":8}
+    if txt in txt_map:
+        return txt_map[txt]
+    return 0
 
 def parse_show_text(txt):
-    # utility function with no dependency on ViewerDisplay properties
     show_text = 0
     txt = txt.lower()
-    if "name" in txt:
-        show_text |= 1
-    if "date" in txt:
-        show_text |= 2
-    if "location" in txt:
-        show_text |= 4
-    if "folder" in txt:
-        show_text |= 8
+    for txt_key in ("name", "date", "location", "directory"):
+        if txt_key in txt:
+            show_text |= txt_to_bit(txt_key)
     return show_text
 
 class ViewerDisplay:
@@ -96,11 +96,19 @@ class ViewerDisplay:
         except:
             return None
 
-    def toggle_text(self, val):
-        if val == 0:
-            self.__show_text = 0
+    def set_show_text(self, txt_key=None, val="ON"):
+        if txt_key is None:
+            self.__show_text = 0 # no arguments signals turning all off
         else:
-            self.__show_text ^= val
+            bit = txt_to_bit(txt_key) # convert field name to relevant bit 1,2,4,8,16 etc
+            if val == "ON":
+                self.__show_text |= bit # turn it on
+            else: #TODO anything else ok to turn it off?
+                bits = 65535 ^ bit
+                self.__show_text &= bits # turn it off
+
+    def text_is_on(self, txt_key):
+        return self.__show_text & txt_to_bit(txt_key)
 
     def reset_name_tm(self, pic=None, paused=None):
         # only extend i.e. if after initial fade in
@@ -217,13 +225,13 @@ class ViewerDisplay:
                 info_strings.append(self.__sanitize_string(os.path.basename(os.path.dirname(pic.fname))))
             if paused:
                 info_strings.append("PAUSED")
-            final_string = " • ".join(info_strings)
-            self.__textblock.set_text(text_format=final_string, wrap=self.__text_width)
+        final_string = " • ".join(info_strings)
+        self.__textblock.set_text(text_format=final_string, wrap=self.__text_width)
 
-            last_ch = len(final_string)
-            if last_ch > 0:
-                adj_y = self.__text.locations[:last_ch,1].min() + self.__display.height // 2 # y pos of last char rel to bottom of screen
-                self.__textblock.set_position(y = (self.__textblock.y - adj_y + self.__show_text_sz))
+        last_ch = len(final_string)
+        if last_ch > 0:
+            adj_y = self.__text.locations[:last_ch,1].min() + self.__display.height // 2 # y pos of last char rel to bottom of screen
+            self.__textblock.set_position(y = (self.__textblock.y - adj_y + self.__show_text_sz))
 
     def is_in_transition(self):
         return self.__in_transition

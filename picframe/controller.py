@@ -38,7 +38,7 @@ class Controller:
         self.__model = model
         self.__viewer = viewer
         self.__paused = False
-        self.__next_tm = 0.0
+        self.__next_tm = 0
         self.__date_from = time.mktime((1970, 1, 1, 0, 0, 0, 0, 0, 0))
         self.__date_to = time.mktime((2038, 1, 1, 0, 0, 0, 0, 0, 0))
 
@@ -54,11 +54,11 @@ class Controller:
         self.__paused = val
 
     def next(self):
-        self.__next_tm = 0.0
+        self.__next_tm = 0
 
     def back(self):
         self.__model.set_next_file_to_previous_file()
-        self.__next_tm = 0.0
+        self.__next_tm = 0
 
     @property
     def date_from(self):
@@ -164,48 +164,6 @@ class Controller:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(device_id + "/time_delay", qos=0)
 
-        # send delete sensor configuration 
-        config_topic = sensor_topic_head + "_delete/config"
-        config_payload = '{"name":"' + device_id + '_delete", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.delete}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_delete", "dev":{"ids":["' + device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(device_id + "/delete", qos=0)
-
-        # send text_on sensor configuration 
-        config_topic = sensor_topic_head + "_text_on/config"
-        config_payload = '{"name":"' + device_id + '_text_on", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.text_on}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_text_on", "dev":{"ids":["' + device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(device_id + "/text_on", qos=0)
-
-        # send date_on sensor configuration 
-        config_topic = sensor_topic_head + "_date_on/config"
-        config_payload = '{"name":"' + device_id + '_date_on", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.date_on}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_date_on", "dev":{"ids":["' + device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(device_id + "/date_on", qos=0)
-
-        # send location_on sensor configuration 
-        config_topic = sensor_topic_head + "_location_on/config"
-        config_payload = '{"name":"' + device_id + '_location_on", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.location_on}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_location_on", "dev":{"ids":["' + device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(device_id + "/location_on", qos=0)
-
-        # send directory_on sensor configuration 
-        config_topic = sensor_topic_head + "_directory_on/config"
-        config_payload = '{"name":"' + device_id + '_directory_on", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.directory_on}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_directory_on", "dev":{"ids":["' + device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(device_id + "/directory_on", qos=0)
-
-        # send text_off sensor configuration 
-        config_topic = sensor_topic_head + "_text_off/config"
-        config_payload = '{"name":"' + device_id + '_text_off", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.text_off}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_text_off", "dev":{"ids":["' + device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(device_id + "/text_off", qos=0)
-
-        # send text_refresh sensor configuration 
-        config_topic = sensor_topic_head + "_text_refresh/config"
-        config_payload = '{"name":"' + device_id + '_text_refresh", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.text_refresh}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_text_refresh", "dev":{"ids":["' + device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(device_id + "/text_refresh", qos=0)
-
         # send brightness sensor configuration 
         config_topic = sensor_topic_head + "_brightness/config"
         config_payload = '{"name":"' + device_id + '_brightness", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.brightness}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + device_id + '_brightness", "dev":{"ids":["' + device_id + '"]}}'
@@ -236,60 +194,41 @@ class Controller:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(device_id + "/subdirectory", qos=0)
 
-        # send display switch configuration  and display state
-        config_topic = switch_topic_head + "_display/config"
-        command_topic = switch_topic_head + "_display/set"
-        state_topic = switch_topic_head + "_display/state"
-        config_payload = '{"name":"' + device_id + '_display", "icon":"mdi:panorama", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_disp", "dev":{"ids":["' + device_id + '"], "name":"' + device_id + '", "mdl":"Picture Frame", "sw":"' + __version__ + '", "mf":"erbehome"}}'
+        self.__setup_switch(client, switch_topic_head, device_id, "_text_refresh", "mdi:image-plus", available_topic)
+        self.__setup_switch(client, switch_topic_head, device_id, "_delete", "mdi:image-minus", available_topic)
+        self.__setup_switch(client, switch_topic_head, device_id, "_name_toggle", "mdi:image-plus", available_topic,
+                            self.__viewer.text_is_on("name"))
+        self.__setup_switch(client, switch_topic_head, device_id, "_date_toggle", "mdi:image-plus", available_topic,
+                            self.__viewer.text_is_on("date"))
+        self.__setup_switch(client, switch_topic_head, device_id, "_location_toggle", "mdi:image-plus", available_topic,
+                            self.__viewer.text_is_on("location"))
+        self.__setup_switch(client, switch_topic_head, device_id, "_directory_toggle", "mdi:image-plus", available_topic,
+                            self.__viewer.text_is_on("directory"))
+        self.__setup_switch(client, switch_topic_head, device_id, "_text_off", "mdi:image-plus", available_topic)
+        self.__setup_switch(client, switch_topic_head, device_id, "_display", "mdi:panorama", available_topic,
+                            self.__viewer.display_is_on)
+        self.__setup_switch(client, switch_topic_head, device_id, "_shuffle", "mdi:shuffle-variant", available_topic,
+                            self.__model.shuffle)
+        self.__setup_switch(client, switch_topic_head, device_id, "_paused", "mdi:pause", available_topic,
+                            self.paused)
+        self.__setup_switch(client, switch_topic_head, device_id, "_back", "mdi:skip-previous", available_topic)
+        self.__setup_switch(client, switch_topic_head, device_id, "_next", "mdi:skip-next", available_topic)
+
+    def __setup_switch(self, client, switch_topic_head, device_id, topic, icon,
+                       available_topic, is_on=False):
+        config_topic = switch_topic_head + topic + "/config"
+        command_topic = switch_topic_head + topic + "/set"
+        state_topic = switch_topic_head + topic + "/state"
+        config_payload = json.dumps({"name": device_id + "_next",
+                                     "icon": icon,
+                                     "command_topic": command_topic,
+                                     "state_topic": state_topic,
+                                     "avty_t": available_topic,
+                                     "uniq_id": device_id + topic,
+                                     "dev": {"ids": [device_id]}})
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
-        if self.__viewer.display_is_on == True:
-            client.publish(state_topic, "ON", qos=0, retain=True)
-        else :
-            client.publish(state_topic, "OFF", qos=0, retain=True)
-
-        # send shuffle switch configuration  and shuffle state
-        config_topic = switch_topic_head + "_shuffle/config"
-        command_topic = switch_topic_head + "_shuffle/set"
-        state_topic = switch_topic_head + "_shuffle/state"
-        config_payload = '{"name":"' + device_id + '_shuffle", "icon":"mdi:shuffle-variant", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_shuf", "dev":{"ids":["' + device_id + '"]}}'
-        client.subscribe(command_topic , qos=0)
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        if self.__model.shuffle == True:
-            client.publish(state_topic, "ON", qos=0, retain=True)
-        else :
-            client.publish(state_topic, "OFF", qos=0, retain=True)
-
-        # send paused switch configuration and paused state
-        config_topic = switch_topic_head + "_paused/config"
-        command_topic = switch_topic_head + "_paused/set"
-        state_topic = switch_topic_head + "_paused/state"
-        config_payload = '{"name":"' + device_id + '_paused", "icon":"mdi:pause", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_paused", "dev":{"ids":["' + device_id + '"]}}'
-        client.subscribe(command_topic , qos=0)
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        if self.paused == True:
-            client.publish(state_topic, "ON", qos=0, retain=True)
-        else :
-            client.publish(state_topic, "OFF", qos=0, retain=True)
-
-        # send back switch configuration  and back state
-        config_topic = switch_topic_head + "_back/config"
-        command_topic = switch_topic_head + "_back/set"
-        state_topic = switch_topic_head + "_back/state"
-        config_payload = '{"name":"' + device_id + '_back", "icon":"mdi:skip-previous", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_back", "dev":{"ids":["' + device_id + '"]}}'
-        client.subscribe(command_topic , qos=0)
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.publish(state_topic, "OFF", qos=0, retain=True)
-
-        # send next switch configuration  and next state
-        config_topic = switch_topic_head + "_next/config"
-        command_topic = switch_topic_head + "_next/set"
-        state_topic = switch_topic_head + "_next/state"
-        config_payload = '{"name":"' + device_id + '_next", "icon":"mdi:skip-next", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_next", "dev":{"ids":["' + device_id + '"]}}'
-        client.subscribe(command_topic , qos=0)
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.publish(state_topic, "OFF", qos=0, retain=True)
-
+        client.publish(state_topic, "ON" if is_on else "OFF", qos=0, retain=True)
 
     def on_message(self, client, userdata, message):
         device_id = self.__model.get_mqtt_config()['device_id']
@@ -340,6 +279,57 @@ class Controller:
                 client.publish(state_topic, "OFF", retain=True)
                 self.next()
                 self.__viewer.reset_name_tm()
+        # delete
+        elif message.topic == switch_topic_head + "_delete/set":
+            state_topic = switch_topic_head + "_delete/state"
+            if msg == "ON":
+                client.publish(state_topic, "OFF", retain=True)
+                self.__model.delete_file()
+                self.back() # TODO check needed to avoid skipping one as record has been deleted from model.__file_list
+                self.__next_tm = 0
+                #TODO rebuild portait pairs as numbers don't match
+        # name toggle
+        elif message.topic == switch_topic_head + "_name_toggle/set":
+            state_topic = switch_topic_head + "_name_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__viewer.set_show_text("name", msg)
+                client.publish(state_topic, "OFF" if msg == "ON" else "ON", retain=True)
+                self.__viewer.reset_name_tm(pic, self.paused)
+        # date_on
+        elif message.topic == switch_topic_head + "_date_toggle/set":
+            state_topic = switch_topic_head + "_date_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__viewer.set_show_text("date", msg)
+                client.publish(state_topic, msg, retain=True)
+                self.__viewer.reset_name_tm(pic, self.paused)
+        # location_on
+        elif message.topic == switch_topic_head + "_location_toggle/set":
+            state_topic = switch_topic_head + "_location_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__viewer.set_show_text("location", msg)
+                client.publish(state_topic, msg, retain=True)
+                self.__viewer.reset_name_tm(pic, self.paused)
+        # directory_on
+        elif message.topic == switch_topic_head + "_directory_toggle/set":
+            state_topic = switch_topic_head + "_directory_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__viewer.set_show_text("directory", msg)
+                client.publish(state_topic, msg, retain=True)
+                self.__viewer.reset_name_tm(pic, self.paused)
+        # text_off
+        elif message.topic == switch_topic_head + "_text_off/set":
+            state_topic = switch_topic_head + "_text_off/state"
+            if msg == "ON":
+                self.__viewer.set_show_text()
+                client.publish(state_topic, "OFF", retain=True)
+                self.__viewer.reset_name_tm(pic, self.paused)
+        # text_refresh
+        elif message.topic == switch_topic_head + "_text_refresh/set":
+            state_topic = switch_topic_head + "_text_refresh/state"
+            if msg == "ON":
+                client.publish(state_topic, "OFF", retain=True)
+                self.__viewer.reset_name_tm(pic, self.paused)
+
         # change subdirectory
         elif message.topic == device_id + "/subdirectory":
             self.__logger.info("Recieved subdirectory: %s", msg)
@@ -365,41 +355,6 @@ class Controller:
             self.__logger.info("Recieved time_delay: %s", msg)
             self.__model.time_delay = float(msg)
             self.__next_tm = 0
-        # delete
-        elif message.topic == device_id + "/delete":
-            self.__logger.info("Recieved delete: %s", msg)
-            self.__model.delete_file()
-            self.back() # needed to avoid skipping one as record has been deleted from model.__file_list
-            self.__next_tm = 0
-        # text_on
-        elif message.topic == device_id + "/text_on":
-            self.__logger.info("Recieved text_on")
-            self.__viewer.toggle_text(1) # bit mask
-            self.__viewer.reset_name_tm(pic, self.paused)
-        # date_on
-        elif message.topic == device_id + "/date_on":
-            self.__logger.info("Recieved date_on")
-            self.__viewer.toggle_text(2) # bit mask
-            self.__viewer.reset_name_tm(pic, self.paused)
-        # location_on
-        elif message.topic == device_id + "/location_on":
-            self.__logger.info("Recieved location_on")
-            self.__viewer.toggle_text(4) # bit mask
-            self.__viewer.reset_name_tm(pic, self.paused)
-        # directory_on
-        elif message.topic == device_id + "/directory_on":
-            self.__logger.info("Recieved directory_on")
-            self.__viewer.toggle_text(8) # bit mask
-            self.__viewer.reset_name_tm(pic, self.paused)
-        # text_off
-        elif message.topic == device_id + "/text_off":
-            self.__logger.info("Recieved text_off")
-            self.__viewer.toggle_text(0)
-            self.__viewer.reset_name_tm(pic, self.paused)
-        # text_refresh
-        elif message.topic == device_id + "/text_refresh":
-            self.__logger.info("Recieved text_refresh")
-            self.__viewer.reset_name_tm(pic, self.paused)
         # brightness
         elif message.topic == device_id + "/brightness":
             self.__logger.info("Recieved brightness: %s", msg)
