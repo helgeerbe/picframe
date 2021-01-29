@@ -7,6 +7,10 @@ import json
 import os
 from picframe import __version__
 
+def make_date(txt):
+    dt = txt.replace('/',':').replace('-',':').replace(',',':').replace('.',':').split(':')
+    dt_tuple = tuple(int(i) for i in dt) #TODO catch badly formed dates?
+    return time.mktime(dt_tuple + (0, 0, 0, 0, 0, 0))
 
 class Controller:
     """Controller of picture_frame.
@@ -39,8 +43,8 @@ class Controller:
         self.__viewer = viewer
         self.__paused = False
         self.__next_tm = 0
-        self.__date_from = time.mktime((1970, 1, 1, 0, 0, 0, 0, 0, 0))
-        self.__date_to = time.mktime((2038, 1, 1, 0, 0, 0, 0, 0, 0))
+        self.__date_from = make_date('1970/1/1')
+        self.__date_to = make_date('2038/1/1')
 
     @property
     def paused(self):
@@ -237,6 +241,7 @@ class Controller:
         # these are needed if the text display is changed:
         pic = self.__model.get_current_pics()[0]
 
+        ###### switches ######
         # display
         if message.topic == switch_topic_head + "_display/set":
             state_topic = switch_topic_head + "_display/state"
@@ -330,6 +335,7 @@ class Controller:
                 client.publish(state_topic, "OFF", retain=True)
                 self.__viewer.reset_name_tm(pic, self.paused)
 
+        ##### values ########
         # change subdirectory
         elif message.topic == device_id + "/subdirectory":
             self.__logger.info("Recieved subdirectory: %s", msg)
@@ -338,12 +344,22 @@ class Controller:
         # date_from
         elif message.topic == device_id + "/date_from":
             self.__logger.info("Recieved date_from: %s", msg)
-            self.__date_from = float(msg)
+            try:
+                self.__date_from = float(msg)
+            except ValueError:
+                if len(msg) == 0:
+                    msg = '1970/1/1'
+                self.__date_from = make_date(msg)
             self.__next_tm = 0
         # date_to
         elif message.topic == device_id + "/date_to":
             self.__logger.info("Recieved date_to: %s", msg)
-            self.__date_to = float(msg) 
+            try:
+                self.__date_to = float(msg)
+            except ValueError:
+                if len(msg) == 0:
+                    msg = '2038/1/1'
+                self.__date_to = make_date(msg)
             self.__next_tm = 0
         # fade_time
         elif message.topic == device_id + "/fade_time":
