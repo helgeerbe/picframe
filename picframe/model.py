@@ -285,17 +285,19 @@ class Model:
         self.__num_run_through = 0
         self.__reload_files = False
 
-    def set_next_file_to_previous_file(self):
+    """def set_next_file_to_previous_file(self):
         self.__file_index = (self.__file_index - 2) % self.__number_of_files
         if self.get_model_config()['portrait_pairs']:
             for _ in range(0, self.__number_of_files):
                 (fname, mtime) = self.__file_list[self.__file_index]
                 if fname in self.__file_list_cache and self.__file_list_cache[fname].shown_with is not None:
                     self.__file_index = (self.__file_index - 1) % self.__number_of_files
-                    continue
+                    continue"""
 
-    def get_next_file(self, date_from = None, date_to = None):
+    def get_next_file(self, date_from = None, date_to = None, reverse=False):
         # returns a tuple of (pic, None) or (pic, paired_pic) in case
+        if reverse:
+            self.__file_index = (self.__file_index - 2) % self.__number_of_files
         if self.__reload_files == True:
             self.__get_files()
             if self.get_model_config()['portrait_pairs']:
@@ -334,17 +336,18 @@ class Model:
                 file_path = self.get_model_config()['file_list_cache']
                 with open(file_path, 'a+') as f:
                     f.write(json.dumps(pic, default=lambda o : o.__dict__) + "\n")
+             # use a flag - possibly more filters to add TODO do selection as sql query? ###############################
+            try_next = False
             if self.get_model_config()['portrait_pairs'] and pic.shown_with is not None:
-                self.__file_index = (self.__file_index + 1) % self.__number_of_files
+                try_next = True
+            if date_from is not None and pic.dt < date_from:
+                try_next = True
+            if date_to is not None and pic.dt > date_to:
+                try_next = True
+            if try_next: #
+                self.__file_index += 1 if not reverse else -1 # reverse makes it go backwards
+                self.__file_index = self.__file_index % self.__number_of_files
                 continue # only show this image with selection of left hand half
-            if date_from is not None:
-                if pic.dt < date_from:
-                    self.__file_index = (self.__file_index + 1) % self.__number_of_files
-                    continue
-            if date_to is not None:
-                if pic.dt > date_to:
-                    self.__file_index = (self.__file_index + 1) % self.__number_of_files
-                    continue
             found = True
             #TODO check on mechanism for getting geo location description. At moment wait until pic has been selected
             if self.__load_geoloc and pic.lat is not None and pic.lon is not None:
@@ -362,7 +365,8 @@ class Model:
         if not found: #TODO to get here requires every image to have exif extracted
             file = os.path.expanduser(self.get_model_config()['no_files_img'])
             return (Pic(fname=file), None) # don't do exif lookup on no_files_img
-        self.__file_index  += 1
+        if not reverse:
+            self.__file_index  += 1
         self.__logger.info('Next file in list: %s', pic.fname)
         self.__logger.debug('Image attributes: %s', pic.image_attr)
         self.__current_pics = pics

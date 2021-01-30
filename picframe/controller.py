@@ -61,7 +61,8 @@ class Controller:
         self.__next_tm = 0
 
     def back(self):
-        self.__model.set_next_file_to_previous_file()
+        #self.__model.set_next_file_to_previous_file()
+        self.__model.get_next_file(self.date_from, self.date_to, reverse=True)
         self.__next_tm = 0
 
     @property

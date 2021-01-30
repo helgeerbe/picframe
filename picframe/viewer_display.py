@@ -197,7 +197,7 @@ class ViewerDisplay:
                                         round(0.5 * (im_b.size[1] - im.size[1]))))
                     im = im_b # have to do this as paste applies in place
             tex = pi3d.Texture(im, blend=True, m_repeat=True, automatic_resize=self.__auto_resize,
-                                free_after_load=True)
+                                mipmap=False, free_after_load=True)
             #tex = pi3d.Texture(im, blend=True, m_repeat=True, automatic_resize=config.AUTO_RESIZE,
             #                    mipmap=config.AUTO_RESIZE, free_after_load=True) # poss try this if still some artifacts with full resolution
         except Exception as e:
@@ -260,7 +260,7 @@ class ViewerDisplay:
         bkg_ht = self.__display.height // 3
         text_bkg_array = np.zeros((bkg_ht, 1, 4), dtype=np.uint8)
         text_bkg_array[:,:,3] = np.linspace(0, 170, bkg_ht).reshape(-1, 1)
-        text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, free_after_load=True)
+        text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
 
         back_shader = pi3d.Shader("uv_flat")
         self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-self.__display.height // 2 + bkg_ht // 2, z=4.0)
