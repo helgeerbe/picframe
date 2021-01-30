@@ -28,7 +28,12 @@ DEFAULT_CONFIG = {
         'fit': False, 
         'auto_resize': True,
         'kenburns': False,
-        'codepoints': '1234567890AÄÀBCÇDÈÉÊEFGHIÍJKLMNÑOÓÖPQRSTUÚÙÜVWXYZ., _-/abcdefghijklmnñopqrstuvwxyzáéèêàçíóúäöüß' # limit to 49 ie 7x7 grid_size'
+        'display_x': 0,
+        'display_y': 0,
+        'display_w': None,
+        'display_h': None,
+        'test_key': 'test_value',
+        'codepoints': '1234567890AÄÀBCÇDÈÉÊEFGHIÍJKLMNÑOÓÖPQRSTUÚÙÜVWXYZ., _-/abcdefghijklmnñopqrstuvwxyzáéèêàçíóúäöüß', # limit to 49 ie 7x7 grid_size'
     }, 
     'model': {
         'pic_dir': '~/Pictures', 
@@ -48,6 +53,7 @@ DEFAULT_CONFIG = {
         'geo_file': '~/.local/picframe/data/geo_locations.txt', #TODO sqlite alternative
         'file_list_cache': '~/.local/picframe/data/file_list_cache.txt', #TODO sqlite altenative
         'portrait_pairs': False
+        'deleted_pictures': '~/DeletedPictures',
     },
     'mqtt': {
         'server': '', 
@@ -55,7 +61,7 @@ DEFAULT_CONFIG = {
         'login': '', 
         'password': '', 
         'tls': '',
-        'device_id': 'picframe'                                 # unique id of device. change if there is more than one picture frame
+        'device_id': 'picframe',                                 # unique id of device. change if there is more than one picture frame
     }
 }
 EXTENSIONS = ['.png','.jpg','.jpeg'] # can add to these TODO process heif files
@@ -99,6 +105,7 @@ class Model:
         self.__number_of_files = 0
         self.__reload_files = False
         self.__file_index = 0
+        self.__current_pics = (None, None) # this hold a tuple of (pic, None) or two pic objects if portrait pairs
         self.__num_run_through = 0
         self.__get_files()
         model_config = self.get_model_config() # alias for brevity as used several times below
@@ -119,6 +126,7 @@ class Model:
                     self.__file_list_cache[pic.fname] = pic
         if model_config['portrait_pairs']:
             self.__set_shown_with()
+        self.__deleted_pictures = model_config['deleted_pictures']
 
 
     def get_viewer_config(self):
@@ -126,14 +134,14 @@ class Model:
 
     def get_model_config(self):
         return self.__config['model']
-    
+
     def get_mqtt_config(self):
         return self.__config['mqtt']
-    
+
     @property
     def fade_time(self):
         return self.__config['model']['fade_time']
-    
+
     @fade_time.setter
     def fade_time(self, time):
         self.__config['model']['fade_time'] = time
@@ -145,11 +153,11 @@ class Model:
     @time_delay.setter
     def time_delay(self, time):
         self.__config['model']['time_delay'] = time
-    
+
     @property
     def subdirectory(self):
         return self.__config['model']['subdirectory']
-    
+
     @subdirectory.setter
     def subdirectory(self, dir):
         pic_dir = self.get_model_config()['pic_dir']
@@ -164,7 +172,7 @@ class Model:
                 self.__config['model']['subdirectory'] = dir
             self.__logger.info("Set subdirectory to: %s", self.__config['model']['subdirectory'])
             self.__reload_files = True
-    
+
     def get_directory_list(self):
         pic_dir = os.path.expanduser(self.get_model_config()['pic_dir'])
         _, root = os.path.split(pic_dir)
@@ -280,6 +288,12 @@ class Model:
 
     def set_next_file_to_previous_file(self):
         self.__file_index = (self.__file_index - 2) % self.__number_of_files
+        if self.get_model_config()['portrait_pairs']:
+            for _ in range(0, self.__number_of_files):
+                (fname, mtime) = self.__file_list[self.__file_index]
+                if fname in self.__file_list_cache and self.__file_list_cache[fname].shown_with is not None:
+                    self.__file_index = (self.__file_index - 1) % self.__number_of_files
+                    continue
 
     def get_next_file(self, date_from = None, date_to = None):
         # returns a tuple of (pic, None) or (pic, paired_pic) in case
@@ -354,8 +368,30 @@ class Model:
         self.__file_index  += 1
         self.__logger.info('Next file in list: %s', pic.fname)
         self.__logger.debug('Image attributes: %s', pic.image_attr)
+        self.__current_pics = pics
         return pics #now a tuple
 
+    def get_current_pics(self):
+        return self.__current_pics
+
+    def delete_file(self):
+        # delete the current pic. If it's a portrait pair then only the left one will be deleted
+        pic = self.__current_pics[0]
+        if pic is None:
+            return None
+        f_to_delete = pic.fname
+        move_to_dir = os.path.expanduser(self.__deleted_pictures)
+        # TODO should these os system calls be inside a try block in case the file has been deleted after it started to show?
+        if not os.path.exists(move_to_dir):
+          os.system("sudo -u pi mkdir {}".format(move_to_dir)) # problems with ownership using python func
+        os.system("sudo mv '{}' '{}'".format(f_to_delete, move_to_dir)) # and with SMB drives
+        # find and delete record from __file_list
+        for i, file_rec in enumerate(self.__file_list):
+            if file_rec[0] == f_to_delete:
+                self.__file_list.pop(i)
+                self.__number_of_files -= 1
+                break
+        self.__set_shown_with()
 
     def __shuffle_files(self):
         self.__file_list.sort(key=lambda x: x[1]) # will be later files last
