@@ -12,19 +12,19 @@ import numpy as np
 from PIL import Image, ImageFilter
 from picframe.get_image_meta import GetImageMeta
 
+# utility functions with no dependency on ViewerDisplay properties
+def txt_to_bit(txt):
+    txt_map = {"name":1, "date":2, "location":4, "directory":8}
+    if txt in txt_map:
+        return txt_map[txt]
+    return 0
 
 def parse_show_text(txt):
-    # utility function with no dependency on ViewerDisplay properties
     show_text = 0
     txt = txt.lower()
-    if "name" in txt:
-        show_text |= 1
-    if "date" in txt:
-        show_text |= 2
-    if "location" in txt:
-        show_text |= 4
-    if "folder" in txt:
-        show_text |= 8
+    for txt_key in ("name", "date", "location", "directory"):
+        if txt_key in txt:
+            show_text |= txt_to_bit(txt_key)
     return show_text
 
 class ViewerDisplay:
@@ -54,6 +54,10 @@ class ViewerDisplay:
             self.__blur_edges = False
         if self.__blur_zoom < 1.0:
             self.__blur_zoom = 1.0
+        self.__display_x = int(config['display_x'])
+        self.__display_y = int(config['display_y'])
+        self.__display_w = None if config['display_w'] is None else int(config['display_w'])
+        self.__display_h = None if config['display_h'] is None else int(config['display_h'])
         self.__codepoints = config['codepoints']
         self.__alpha = 0.0 # alpha - proportion front image to back
         self.__delta_alpha = 1.0
@@ -92,9 +96,28 @@ class ViewerDisplay:
         except:
             return None
 
-    def reset_name_tm(self):
+    def set_show_text(self, txt_key=None, val="ON"):
+        if txt_key is None:
+            self.__show_text = 0 # no arguments signals turning all off
+        else:
+            bit = txt_to_bit(txt_key) # convert field name to relevant bit 1,2,4,8,16 etc
+            if val == "ON":
+                self.__show_text |= bit # turn it on
+            else: #TODO anything else ok to turn it off?
+                bits = 65535 ^ bit
+                self.__show_text &= bits # turn it off
+
+    def text_is_on(self, txt_key):
+        return self.__show_text & txt_to_bit(txt_key)
+
+    def reset_name_tm(self, pic=None, paused=None):
         # only extend i.e. if after initial fade in
+        if pic is not None and paused is not None: # text needs to be refreshed
+            self.__make_text(pic, paused)
         self.__name_tm = max(self.__name_tm, time.time() + self.__show_text_tm)
+
+    def set_brightness(self, val):
+        self.__slide.unif[55] = val # take immediate effect
 
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
@@ -189,6 +212,7 @@ class ViewerDisplay:
         return name
 
     def __make_text(self, pic, paused):
+        # pic is just left hand pic if pics tuple has two portraits
         info_strings = []
         if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
             if (self.__show_text & 1) == 1: # name
@@ -201,10 +225,11 @@ class ViewerDisplay:
                 info_strings.append(self.__sanitize_string(os.path.basename(os.path.dirname(pic.fname))))
             if paused:
                 info_strings.append("PAUSED")
-            final_string = " • ".join(info_strings)
-            self.__textblock.set_text(text_format=final_string, wrap=self.__text_width)
+        final_string = " • ".join(info_strings)
+        self.__textblock.set_text(text_format=final_string, wrap=self.__text_width)
 
-            last_ch = len(final_string)
+        last_ch = len(final_string)
+        if last_ch > 0:
             adj_y = self.__text.locations[:last_ch,1].min() + self.__display.height // 2 # y pos of last char rel to bottom of screen
             self.__textblock.set_position(y = (self.__textblock.y - adj_y + self.__show_text_sz))
 
@@ -212,7 +237,8 @@ class ViewerDisplay:
         return self.__in_transition
 
     def slideshow_start(self):
-        self.__display = pi3d.Display.create(x=0, y=0, frames_per_second=self.__fps,
+        self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
+              w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
               display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background)
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
@@ -244,8 +270,7 @@ class ViewerDisplay:
     def slideshow_is_running(self, pics=None, time_delay = 200.0, fade_time = 10.0, paused=False):
         tm = time.time()
         if pics is not None:
-            self.__sbg = self.__sfg
-            self.__sfg = None
+            self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))

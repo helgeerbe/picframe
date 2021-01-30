@@ -29,7 +29,8 @@ class GeoReverse:
             return self.__geo_locations[lat_lon]
         else:
             try:
-                with urllib.request.urlopen(URL.format(lat / 10000.0, lon / 10000.0, self.__zoom, self.__geo_key, self.__language)) as req:
+                with urllib.request.urlopen(URL.format(lat / 10000.0, lon / 10000.0, self.__zoom, self.__geo_key, self.__language),
+                                            timeout=3.0) as req:
                         data = json.loads(req.read().decode())
                 adr = data['features'][0]['properties']['address']
                 # some experimentation might be needed to get a good set of alternatives in key_list
