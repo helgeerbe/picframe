@@ -5,8 +5,7 @@ import logging
 import random
 import json
 import locale
-from picframe.get_image_meta import GetImageMeta
-from picframe.geo_reverse import GeoReverse
+from picframe import get_image_meta, geo_reverse
 
 DEFAULT_CONFIGFILE = "~/.local/picframe/config/configuration.yaml"
 DEFAULT_CONFIG = {
@@ -32,6 +31,7 @@ DEFAULT_CONFIG = {
         'display_y': 0,
         'display_w': None,
         'display_h': None,
+        'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
         'codepoints': '1234567890AÄÀBCÇDÈÉÊEFGHIÍJKLMNÑOÓÖPQRSTUÚÙÜVWXYZ., _-/abcdefghijklmnñopqrstuvwxyzáéèêàçíóúäöüß', # limit to 49 ie 7x7 grid_size'
     }, 
@@ -52,10 +52,11 @@ DEFAULT_CONFIG = {
         'geo_key': 'this_needs_to@be_changed',  # use your email address
         'geo_file': '~/.local/picframe/data/geo_locations.txt', #TODO sqlite alternative
         'file_list_cache': '~/.local/picframe/data/file_list_cache.txt', #TODO sqlite altenative
-        'portrait_pairs': False
+        'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
     },
     'mqtt': {
+        'use_mqtt': False,                          # Set tue true, to enable mqtt  
         'server': '', 
         'port': 8883, 
         'login': '', 
@@ -114,7 +115,7 @@ class Model:
         except:
             self.__logger.error("error trying to set locale to {}".format(model_config['locale']))
         self.__load_geoloc = model_config['load_geoloc']
-        self.__geo_reverse = GeoReverse(model_config['geo_key'], model_config['geo_file'], key_list=self.get_model_config()['key_list'])
+        self.__geo_reverse = geo_reverse.GeoReverse(model_config['geo_key'], model_config['geo_file'], key_list=self.get_model_config()['key_list'])
         file_path = model_config['file_list_cache']
         self.__file_list_cache = {}
         if os.path.isfile(file_path):
@@ -232,7 +233,7 @@ class Model:
         file_path_name = os.path.expanduser(file_path_name)
         dt = os.path.getmtime(file_path_name) # use file last modified date as default
         try:
-            exifs = GetImageMeta(file_path_name)
+            exifs = get_image_meta.GetImageMeta(file_path_name)
             val = exifs.get_exif('EXIF DateTimeOriginal')
             if val['EXIF DateTimeOriginal'] != None:
                 dt = time.mktime(time.strptime(val['EXIF DateTimeOriginal'], '%Y:%m:%d %H:%M:%S'))
@@ -246,7 +247,7 @@ class Model:
         image_attr_list = {}
         size = None
         try:
-            exifs = GetImageMeta(file_path_name)
+            exifs = get_image_meta.GetImageMeta(file_path_name)
             orientation = exifs.get_orientation()
             size = exifs.get_size()
             for exif in self.get_model_config()['image_attr']:

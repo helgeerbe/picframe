@@ -16,8 +16,16 @@ def main():
         m = model.Model()
     v = viewer_display.ViewerDisplay(m.get_viewer_config())
     c = controller.Controller(m, v)
+    mqtt_config = m.get_mqtt_config()
+    mqtt = None
+    if mqtt_config['use_mqtt'] == True:
+        from picframe import interface_mqtt
+        mqtt = interface_mqtt.InterfaceMQTT(c, mqtt_config)
+        mqtt.start()
     c.start()
     c.loop()
+    if mqtt_config['use_mqtt'] == True:
+       mqtt.stop() 
     c.stop()
     
     

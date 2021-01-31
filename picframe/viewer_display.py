@@ -10,7 +10,6 @@ import logging
 import os
 import numpy as np
 from PIL import Image, ImageFilter
-from picframe.get_image_meta import GetImageMeta
 
 # utility functions with no dependency on ViewerDisplay properties
 def txt_to_bit(txt):
@@ -58,6 +57,7 @@ class ViewerDisplay:
         self.__display_y = int(config['display_y'])
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
+        self.__use_glx = config['use_glx']
         self.__codepoints = config['codepoints']
         self.__alpha = 0.0 # alpha - proportion front image to back
         self.__delta_alpha = 1.0
@@ -239,7 +239,7 @@ class ViewerDisplay:
     def slideshow_start(self):
         self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
               w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
-              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background, use_glx=True) # TODO make use_glx a configurable item
+              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background, use_glx=self.__use_glx) 
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)

@@ -25,6 +25,7 @@ viewer:
   display_y: 0                            # offset from top of screen (can be negative)
   display_w: null                         # width of display surface (null->None will use max returned by hardware)
   display_h: null                         # height of display surface
+  use_glx: False                          # default=False. Set to True on linux with xserver running
 
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
  
@@ -60,7 +61,8 @@ model:
   file_list_cache: '~/.local/picframe/data/file_list_cache.txt'  #TODO sqlite altenative
   portrait_pairs: False
 
-mqtt:                                     
+mqtt:
+  use_mqtt: False                         # default=False. Set True true, to enable mqtt          
   server: "your_mqtt_broker"              # No defaults for server
   port: 8883                              # derfault=8883 for tls, 1883 else (tls must be "" then !!!!!)
   login: "name"                           # your mqtt user
