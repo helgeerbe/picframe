@@ -126,41 +126,42 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(self.__device_id + "/subdirectory", qos=0)
 
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_text_refresh", "mdi:image-plus", available_topic)
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_delete", "mdi:image-minus", available_topic)
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_name_toggle", "mdi:image-plus", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:image-plus", available_topic)
+        self.__setup_switch(client, switch_topic_head, "_delete", "mdi:image-minus", available_topic)
+        self.__setup_switch(client, switch_topic_head, "_name_toggle", "mdi:image-plus", available_topic,
                             self.__controller.text_is_on("name"))
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_date_toggle", "mdi:image-plus", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_date_toggle", "mdi:image-plus", available_topic,
                             self.__controller.text_is_on("date"))
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_location_toggle", "mdi:image-plus", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_location_toggle", "mdi:image-plus", available_topic,
                             self.__controller.text_is_on("location"))
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_directory_toggle", "mdi:image-plus", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_directory_toggle", "mdi:image-plus", available_topic,
                             self.__controller.text_is_on("directory"))
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_text_off", "mdi:image-plus", available_topic)
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_display", "mdi:panorama", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_text_off", "mdi:image-plus", available_topic)
+        self.__setup_switch(client, switch_topic_head, "_display", "mdi:panorama", available_topic,
                             self.__controller.display_is_on)
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_shuffle", "mdi:shuffle-variant", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_shuffle", "mdi:shuffle-variant", available_topic,
                             self.__controller.shuffle)
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_paused", "mdi:pause", available_topic,
-                            self.paused)
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_back", "mdi:skip-previous", available_topic)
-        self.__setup_switch(client, switch_topic_head, self.__device_id, "_next", "mdi:skip-next", available_topic)
+        self.__setup_switch(client, switch_topic_head, "_paused", "mdi:pause", available_topic,
+                            self.__controller.paused)
+        self.__setup_switch(client, switch_topic_head, "_back", "mdi:skip-previous", available_topic)
+        self.__setup_switch(client, switch_topic_head, "_next", "mdi:skip-next", available_topic)
 
     def __setup_switch(self, client, switch_topic_head, topic, icon,
                        available_topic, is_on=False):
         config_topic = switch_topic_head + topic + "/config"
         command_topic = switch_topic_head + topic + "/set"
         state_topic = switch_topic_head + topic + "/state"
-        config_payload = json.dumps({"name": self.__device_id + "_next",
+        config_payload = json.dumps({"name": self.__device_id + topic,
                                      "icon": icon,
                                      "command_topic": command_topic,
                                      "state_topic": state_topic,
                                      "avty_t": available_topic,
-                                     "uniq_id": self.__device_id + topic,
+                                     "uniq_id": self.__device_id,
                                      "dev": {"ids": [self.__device_id]}})
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.publish(state_topic, "ON" if is_on else "OFF", qos=0, retain=True)
+
 
     def on_message(self, client, userdata, message):
         msg = message.payload.decode("utf-8") 

@@ -33,7 +33,6 @@ class GeoReverse:
                 with urllib.request.urlopen(URL.format(lat / 10000.0, lon / 10000.0, self.__zoom, self.__geo_key, self.__language),
                                             timeout=3.0) as req:
                         data = json.loads(req.read().decode())
-                self.__logger.debug('time for get_address %s', time.time() - start)
                 adr = data['features'][0]['properties']['address']
                 # some experimentation might be needed to get a good set of alternatives in key_list
                 formatted_address = ""
