@@ -43,7 +43,7 @@ class Controller:
         self.__next_tm = 0
         self.__date_from = make_date('1970/1/1')
         self.__date_to = make_date('2038/1/1')
-        self.publish_state = None
+        self.publish_state = lambda x, y: None
 
     @property
     def paused(self):
@@ -68,7 +68,7 @@ class Controller:
         self.__next_tm = 0
         self.__viewer.reset_name_tm()
     
-    def back(self):
+    def delete(self):
         self.__model.delete_file()
         self.back() # TODO check needed to avoid skipping one as record has been deleted from model.__file_list
         self.__next_tm = 0
@@ -155,12 +155,17 @@ class Controller:
     def time_delay(self, time):
         self.__model.time_delay = float(time)
         self.__next_tm = 0
+
+    @property
+    def brightness(self):
+        return self.__viewer.get_brightness()
+    
+    @brightness.setter
+    def brightness(self, val):
+        self.__viewer.set_brightness(float(val))
     
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
-    
-    def set_brightness(self, val):
-        self.__viewer.set_brightness(float(val))
     
     def get_number_of_files(self):
         return self.__model.get_number_of_files()
@@ -185,8 +190,7 @@ class Controller:
             if not self.paused and tm > self.__next_tm:
                 self.__next_tm = tm + self.__model.time_delay
                 pics = self.__model.get_next_file(self.date_from, self.date_to)
-                if self.publish_state != None:
-                    self.publish_state(pics[0].fname, pics[0].image_attr)
+                self.publish_state(pics[0].fname, pics[0].image_attr)
             if self.__viewer.is_in_transition() == False: # safe to do long running tasks
                 if tm > next_check_tm:
                     self.__model.check_for_file_changes()

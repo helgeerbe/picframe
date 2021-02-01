@@ -291,7 +291,7 @@ class Model:
         self.__file_index = (self.__file_index - 2) % self.__number_of_files
         if self.get_model_config()['portrait_pairs']:
             for _ in range(0, self.__number_of_files):
-                (fname, mtime) = self.__file_list[self.__file_index]
+                (fname, _) = self.__file_list[self.__file_index]
                 if fname in self.__file_list_cache and self.__file_list_cache[fname].shown_with is not None:
                     self.__file_index = (self.__file_index - 1) % self.__number_of_files
                     continue
@@ -384,8 +384,8 @@ class Model:
         move_to_dir = os.path.expanduser(self.__deleted_pictures)
         # TODO should these os system calls be inside a try block in case the file has been deleted after it started to show?
         if not os.path.exists(move_to_dir):
-          os.system("sudo -u pi mkdir {}".format(move_to_dir)) # problems with ownership using python func
-        os.system("sudo mv '{}' '{}'".format(f_to_delete, move_to_dir)) # and with SMB drives
+          os.system("mkdir {}".format(move_to_dir)) # problems with ownership using python func
+        os.system("mv '{}' '{}'".format(f_to_delete, move_to_dir)) # and with SMB drives
         # find and delete record from __file_list
         for i, file_rec in enumerate(self.__file_list):
             if file_rec[0] == f_to_delete:

@@ -98,7 +98,7 @@ class InterfaceMQTT:
 
         # send brightness sensor configuration 
         config_topic = sensor_topic_head + "_brightness/config"
-        config_payload = '{"name":"' + self.__device_id + '_brightness", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.brightness}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_brightness", "dev":{"ids":["' + self.__device_id + '"]}}'
+        config_payload = '{"name":"' + self.__device_id + '_brightness", "icon":"mdi:brightness-6", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.brightness}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_brightness", "dev":{"ids":["' + self.__device_id + '"]}}'
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(self.__device_id + "/brightness", qos=0)
 
@@ -126,17 +126,17 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(self.__device_id + "/subdirectory", qos=0)
 
-        self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:image-plus", available_topic)
-        self.__setup_switch(client, switch_topic_head, "_delete", "mdi:image-minus", available_topic)
-        self.__setup_switch(client, switch_topic_head, "_name_toggle", "mdi:image-plus", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic)
+        self.__setup_switch(client, switch_topic_head, "_delete", "mdi:delete", available_topic)
+        self.__setup_switch(client, switch_topic_head, "_name_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("name"))
-        self.__setup_switch(client, switch_topic_head, "_date_toggle", "mdi:image-plus", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_date_toggle", "mdi:calendar-today", available_topic,
                             self.__controller.text_is_on("date"))
-        self.__setup_switch(client, switch_topic_head, "_location_toggle", "mdi:image-plus", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_location_toggle", "mdi:crosshairs-gps", available_topic,
                             self.__controller.text_is_on("location"))
-        self.__setup_switch(client, switch_topic_head, "_directory_toggle", "mdi:image-plus", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_directory_toggle", "mdi:folder", available_topic,
                             self.__controller.text_is_on("directory"))
-        self.__setup_switch(client, switch_topic_head, "_text_off", "mdi:image-plus", available_topic)
+        self.__setup_switch(client, switch_topic_head, "_text_off", "mdi:badge-account-horizontal-outline", available_topic)
         self.__setup_switch(client, switch_topic_head, "_display", "mdi:panorama", available_topic,
                             self.__controller.display_is_on)
         self.__setup_switch(client, switch_topic_head, "_shuffle", "mdi:shuffle-variant", available_topic,
@@ -167,6 +167,18 @@ class InterfaceMQTT:
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.publish(state_topic, "ON" if is_on else "OFF", qos=0, retain=True)
+
+        # send display switch configuration  and display state
+        # config_topic = switch_topic_head + "_display/config"
+        # command_topic = switch_topic_head + "_display/set"
+        # state_topic = switch_topic_head + "_display/state"
+        # config_payload = '{"name":"' + device_id + '_display", "icon":"mdi:panorama", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_disp", "dev":{"ids":["' + device_id + '"], "name":"' + device_id + '", "mdl":"Picture Frame", "sw":"' + __version__ + '", "mf":"erbehome"}}'
+        # client.subscribe(command_topic , qos=0)
+        # client.publish(config_topic, config_payload, qos=0, retain=True)
+        # if self.__viewer.display_is_on == True:
+        #     client.publish(state_topic, "ON", qos=0, retain=True)
+        # else :
+        #     client.publish(state_topic, "OFF", qos=0, retain=True)
 
 
     def on_message(self, client, userdata, message):
@@ -280,7 +292,7 @@ class InterfaceMQTT:
         # brightness
         elif message.topic == self.__device_id + "/brightness":
             self.__logger.info("Recieved brightness: %s", msg)
-            self.__viewer.set_brightness(float(msg))
+            self.__controller.brightness = float(msg)
 
 
     def publish_state(self, image, image_attr):
@@ -306,6 +318,8 @@ class InterfaceMQTT:
         state_payload["time_delay"] = self.__controller.time_delay
         # fade_time
         state_payload["fade_time"] = self.__controller.fade_time
+        # brightness
+        state_payload["brightness"] = self.__controller.brightness
 
         # send last will and testament
         available_topic = switch_topic_head + "/available"

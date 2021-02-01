@@ -119,6 +119,9 @@ class ViewerDisplay:
     def set_brightness(self, val):
         self.__slide.unif[55] = val # take immediate effect
 
+    def get_brightness(self):
+        return self.__slide.unif[55]  
+
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
     def __create_image_pair(self, im1, im2):
