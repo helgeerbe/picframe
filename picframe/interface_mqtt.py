@@ -156,8 +156,14 @@ class InterfaceMQTT:
                                      "command_topic": command_topic,
                                      "state_topic": state_topic,
                                      "avty_t": available_topic,
-                                     "uniq_id": self.__device_id,
-                                     "dev": {"ids": [self.__device_id]}})
+                                     "uniq_id": self.__device_id + topic,
+                                     "dev": {
+                                        "ids": [self.__device_id], 
+                                        "name": self.__device_id, 
+                                        "mdl": "Picture Frame", 
+                                        "sw": __version__, 
+                                        "mf": "pi3d picture frame project"}})
+      
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.publish(state_topic, "ON" if is_on else "OFF", qos=0, retain=True)
