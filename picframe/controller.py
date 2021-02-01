@@ -163,7 +163,7 @@ class Controller:
         self.__viewer.set_brightness(float(val))
     
     def get_number_of_files(self):
-        self.__model.get_number_of_files()
+        return self.__model.get_number_of_files()
     
     def get_directory_list(self):
         actual_dir, dir_list = self.__model.get_directory_list()
