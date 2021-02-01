@@ -1,5 +1,6 @@
 configuration.yaml
 oldcode/
+docs/diagrams/out/
 
 #ide settings
 .vscode/

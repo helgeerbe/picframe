@@ -4,8 +4,8 @@ import time
 import logging
 import random
 import json
-from picframe.get_image_meta import GetImageMeta
-from picframe.geo_reverse import GeoReverse
+import locale
+from picframe import get_image_meta, geo_reverse
 
 DEFAULT_CONFIGFILE = "~/.local/picframe/config/configuration.yaml"
 DEFAULT_CONFIG = {
@@ -22,9 +22,8 @@ DEFAULT_CONFIG = {
         'show_text_fm': '%b %d, %Y',
         'show_text_tm': 20.0,
         'show_text_sz': 40,
-        'show_text': 14,
+        'show_text': "name location",
         'text_width': 90,
-        'load_geoloc': True,
         'fit': False, 
         'auto_resize': True,
         'kenburns': False,
@@ -32,7 +31,9 @@ DEFAULT_CONFIG = {
         'display_y': 0,
         'display_w': None,
         'display_h': None,
+        'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
+        'codepoints': '1234567890AÄÀBCÇDÈÉÊEFGHIÍJKLMNÑOÓÖPQRSTUÚÙÜVWXYZ., _-/abcdefghijklmnñopqrstuvwxyzáéèêàçíóúäöüß', # limit to 49 ie 7x7 grid_size'
     }, 
     'model': {
         'pic_dir': '~/Pictures', 
@@ -49,12 +50,13 @@ DEFAULT_CONFIG = {
         'locale': 'en_US.utf8',
         'key_list': [['tourism','amenity','isolated_dwelling'],['suburb','village'],['city','county'],['region','state','province'],['country']],
         'geo_key': 'this_needs_to@be_changed',  # use your email address
-        'geo_file': './geo_locations.txt', #TODO sqlite alternative
-        'file_list_cache': './file_list_cache.txt', #TODO sqlite altenative
+        'geo_file': '~/.local/picframe/data/geo_locations.txt', #TODO sqlite alternative
+        'file_list_cache': '~/.local/picframe/data/file_list_cache.txt', #TODO sqlite altenative
         'portrait_pairs': False,
-        'deleted_pictures': '/home/pi/picture_frame/DeletedPictures',
+        'deleted_pictures': '~/DeletedPictures',
     },
     'mqtt': {
+        'use_mqtt': False,                          # Set tue true, to enable mqtt  
         'server': '', 
         'port': 8883, 
         'login': '', 
@@ -113,7 +115,7 @@ class Model:
         except:
             self.__logger.error("error trying to set locale to {}".format(model_config['locale']))
         self.__load_geoloc = model_config['load_geoloc']
-        self.__geo_reverse = GeoReverse(model_config['geo_key'], model_config['geo_file'], key_list=self.get_model_config()['key_list'])
+        self.__geo_reverse = geo_reverse.GeoReverse(model_config['geo_key'], model_config['geo_file'], key_list=self.get_model_config()['key_list'])
         file_path = model_config['file_list_cache']
         self.__file_list_cache = {}
         if os.path.isfile(file_path):
@@ -231,7 +233,7 @@ class Model:
         file_path_name = os.path.expanduser(file_path_name)
         dt = os.path.getmtime(file_path_name) # use file last modified date as default
         try:
-            exifs = GetImageMeta(file_path_name)
+            exifs = get_image_meta.GetImageMeta(file_path_name)
             val = exifs.get_exif('EXIF DateTimeOriginal')
             if val['EXIF DateTimeOriginal'] != None:
                 dt = time.mktime(time.strptime(val['EXIF DateTimeOriginal'], '%Y:%m:%d %H:%M:%S'))
@@ -243,8 +245,9 @@ class Model:
     def __get_image_attr(self, file_path_name):
         orientation = 1
         image_attr_list = {}
+        size = None
         try:
-            exifs = GetImageMeta(file_path_name)
+            exifs = get_image_meta.GetImageMeta(file_path_name)
             orientation = exifs.get_orientation()
             size = exifs.get_size()
             for exif in self.get_model_config()['image_attr']:
@@ -273,7 +276,6 @@ class Model:
         if len(self.__file_list) == 0:
             img = os.path.expanduser(self.get_model_config()['no_files_img'])
             mtime = os.path.getmtime(img)
-            dt = self.__get_image_date(img)
             self.__file_list.append([img, mtime])
         else: 
             if self.get_model_config()['shuffle']:
@@ -289,7 +291,7 @@ class Model:
         self.__file_index = (self.__file_index - 2) % self.__number_of_files
         if self.get_model_config()['portrait_pairs']:
             for _ in range(0, self.__number_of_files):
-                (fname, mtime) = self.__file_list[self.__file_index]
+                (fname, _) = self.__file_list[self.__file_index]
                 if fname in self.__file_list_cache and self.__file_list_cache[fname].shown_with is not None:
                     self.__file_index = (self.__file_index - 1) % self.__number_of_files
                     continue
@@ -309,6 +311,8 @@ class Model:
             self.__file_index = 0
 
         found = False
+        pic = None
+        pics = None
         for _ in range(0, self.__number_of_files):
             (fname, mtime) = self.__file_list[self.__file_index]
             mtime = round(mtime, 2) # save space in cache
@@ -331,7 +335,7 @@ class Model:
                 pic.dt = dt
                 pic.fdt = time.strftime(self.get_viewer_config()['show_text_fm'], time.localtime(dt))
                 self.__file_list_cache[pic.fname] = pic
-                file_path = self.get_model_config()['file_list_cache']
+                file_path = os.path.expanduser(self.get_model_config()['file_list_cache'])
                 with open(file_path, 'a+') as f:
                     f.write(json.dumps(pic, default=lambda o : o.__dict__) + "\n")
             if self.get_model_config()['portrait_pairs'] and pic.shown_with is not None:
@@ -380,8 +384,8 @@ class Model:
         move_to_dir = os.path.expanduser(self.__deleted_pictures)
         # TODO should these os system calls be inside a try block in case the file has been deleted after it started to show?
         if not os.path.exists(move_to_dir):
-          os.system("sudo -u pi mkdir {}".format(move_to_dir)) # problems with ownership using python func
-        os.system("sudo mv '{}' '{}'".format(f_to_delete, move_to_dir)) # and with SMB drives
+          os.system("mkdir {}".format(move_to_dir)) # problems with ownership using python func
+        os.system("mv '{}' '{}'".format(f_to_delete, move_to_dir)) # and with SMB drives
         # find and delete record from __file_list
         for i, file_rec in enumerate(self.__file_list):
             if file_rec[0] == f_to_delete:
