@@ -1,6 +1,6 @@
 # for development
 import sys
-sys.path.insert(1, "/home/pi/pi3d")
+sys.path.insert(1, "/home/herbe/dev/pi3d")
 import pi3d
 from pi3d.Texture import MAX_SIZE
 import math
@@ -10,7 +10,6 @@ import logging
 import os
 import numpy as np
 from PIL import Image, ImageFilter
-from picframe.get_image_meta import GetImageMeta
 
 # utility functions with no dependency on ViewerDisplay properties
 def txt_to_bit(txt):
@@ -58,6 +57,7 @@ class ViewerDisplay:
         self.__display_y = int(config['display_y'])
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
+        self.__use_glx = config['use_glx']
         self.__codepoints = config['codepoints']
         self.__alpha = 0.0 # alpha - proportion front image to back
         self.__delta_alpha = 1.0
@@ -118,6 +118,9 @@ class ViewerDisplay:
 
     def set_brightness(self, val):
         self.__slide.unif[55] = val # take immediate effect
+
+    def get_brightness(self):
+        return self.__slide.unif[55]  
 
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
@@ -239,7 +242,7 @@ class ViewerDisplay:
     def slideshow_start(self):
         self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
               w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
-              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background)
+              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background, use_glx=self.__use_glx) 
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
@@ -263,7 +266,7 @@ class ViewerDisplay:
         text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
 
         back_shader = pi3d.Shader("uv_flat")
-        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-self.__display.height // 2 + bkg_ht // 2, z=4.0)
+        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-int(self.__display.height) // 2 + bkg_ht // 2, z=4.0)
         self.__text_bkg.set_draw_details(back_shader, [text_bkg_tex])
 
 
@@ -336,6 +339,7 @@ class ViewerDisplay:
             self.__text_bkg.set_alpha(alpha)
             if len(self.__textblock.text_format.strip()) > 0: #only draw background if text there
                 self.__text_bkg.draw()
+
 
         self.__text.draw()
         return self.__display.loop_running()

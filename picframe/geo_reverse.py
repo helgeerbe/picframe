@@ -3,6 +3,7 @@ import json
 import urllib.request
 import locale
 import logging
+import time
 
 URL = "https://nominatim.openstreetmap.org/reverse?format=geojson&lat={}&lon={}&zoom={}&email={}&accept-language={}"
 
@@ -12,7 +13,7 @@ class GeoReverse:
         self.__geo_key = geo_key
         self.__zoom = zoom
         self.__key_list = key_list
-        self.__file_path = file_path
+        self.__file_path = os.path.expanduser(file_path)
         self.__geo_locations = {}
         if os.path.isfile(file_path):
             with open(file_path) as f:

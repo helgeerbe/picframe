@@ -5,17 +5,33 @@ viewer:
   edge_alpha: 0.5                         # default=0.5, background colour at edge. 1.0 would show reflection of image
   fps: 20.0                               # default=20.0
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
-  blend_type: 0.0                         # default="blend", choices={"blend":0.0, "burn":1.0, "bump":2.0}, type of blend the shader can do"
+  blend_type: "blend"                     # default="blend", choices={"blend", "burn", "bump"}, type of blend the shader can do"
   font_file: "~/.local/picframe/data/fonts/NotoSans-Regular.ttf"
   shader: "~/.local/picframe/data/shaders/blend_new"
-  show_names_tm: 0.0                      # default=0.0, time to show text over image with file name
+  show_text_fm: '%b %d, %Y'               # default "%b %d, %Y", format to show date over the image
+  show_text_tm: 20.0                      # default=0.0, time to show text over image with file name
+  show_text_sz: 40                        # default=90, text character size
+  show_text: "name date folder location"  # default="date folder location", show text, include combination of words: name, date, location
+  text_width: 30                          # width to wrap
   fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
   auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4. 
                                           # You should ensure your images are the correct size for the display")
   kenburns: False                         # default=False, will set fit->False and blur_edges->False"
-  
+  display_x: 0                            # offset from left of screen (can be negative)
+  display_y: 0                            # offset from top of screen (can be negative)
+  display_w: null                         # width of display surface (null->None will use max returned by hardware)
+  display_h: null                         # height of display surface
+  display_x: 0                            # offset from left of screen (can be negative)
+  display_y: 0                            # offset from top of screen (can be negative)
+  display_w: null                         # width of display surface (null->None will use max returned by hardware)
+  display_h: null                         # height of display surface
+  use_glx: False                          # default=False. Set to True on linux with xserver running
+
+  codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
+ 
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
+  deleted_pictures: '~/DeletedPictures' # move deleted pictures here
   no_files_img: "~/.local/picframe/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   check_dir_tm: 60.0                      # default=60.0, time in seconds between checking if the image directory has changed
@@ -32,8 +48,21 @@ model:
     'EXIF FocalLength', 
     'EXIF DateTimeOriginal', 
     'Image Model']
+  load_geoloc: True                       # get location information from open street map
+  locale: 'en_US.utf8'                    # "locale -a" shows the installed locales which could used
+  key_list: [
+    ['tourism','amenity','isolated_dwelling'],
+    ['suburb','village'],
+    ['city','county'],
+    ['region','state','province'],
+    ['country']]
+  geo_key: 'this_needs_to@be_changed'            # use your email address
+  geo_file: '~/.local/picframe/data/geo_locations.txt'           #TODO sqlite alternative
+  file_list_cache: '~/.local/picframe/data/file_list_cache.txt'  #TODO sqlite altenative
+  portrait_pairs: False
 
-mqtt:                                     
+mqtt:
+  use_mqtt: False                         # default=False. Set True true, to enable mqtt          
   server: "your_mqtt_broker"              # No defaults for server
   port: 8883                              # derfault=8883 for tls, 1883 else (tls must be "" then !!!!!)
   login: "name"                           # your mqtt user
