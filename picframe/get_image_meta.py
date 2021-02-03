@@ -35,8 +35,8 @@ class GetImageMeta:
         m = float(min.num) / float(min.den if min.den > 0 else 1)
         s = float(sec.num) / float(sec.den if sec.den > 0 else 1)
         return d + (m / 60.0) + (s / 3600.0)
-        
-    def get_locaction(self):
+
+    def get_location(self):
         gps = {"latitude": None, "longitude": None}
         lat = None
         lon = None
@@ -66,15 +66,16 @@ class GetImageMeta:
             return 1
 
     def get_exif(self, key):
-        exif = {}
         val = self.__get_if_exist(key)
         if val:
             if key == 'EXIF FNumber':
-                val = val.values[0].num / val.values[0].den
+                val = round(val.values[0].num / val.values[0].den, 1)
             else:
                 val = val.printable
-        exif[key] = val
-        return exif
+        return val
 
     def get_size(self):
-        return Image.open(self.__filename).size
+        try: # corrupt image file might crash app
+            return Image.open(self.__filename).size
+        except:
+            return (0, 0)

@@ -6,7 +6,7 @@ from picframe import model, viewer_display, controller
 
 
 
-def main(): 
+def main():
     logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
     logger = logging.getLogger("picture_frame.py")
     logger.info('starting %s', sys.argv)
@@ -27,8 +27,7 @@ def main():
     if mqtt_config['use_mqtt'] == True:
        mqtt.stop() 
     c.stop()
-    
-    
+
 
 if __name__=="__main__": 
     main() 

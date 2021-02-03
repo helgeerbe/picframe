@@ -1,6 +1,6 @@
 # for development
 import sys
-sys.path.insert(1, "/home/herbe/dev/pi3d")
+sys.path.insert(1, "/home/patrick/python/pi3d")
 import pi3d
 from pi3d.Texture import MAX_SIZE
 import math
@@ -122,15 +122,30 @@ class ViewerDisplay:
     def get_brightness(self):
         return self.__slide.unif[55]  
 
+    def __check_heif_then_open(self, fname):
+        ext = os.path.splitext(fname)[1].lower()
+        if ext in ('.heif','.heic'):
+            try:
+                import pyheif
+
+                heif_file = pyheif.read(fname)
+                image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
+                                        "raw", heif_file.mode, heif_file.stride)
+                return image
+            except:
+                self.__logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
+        else:
+            return Image.open(fname)
+
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
     def __create_image_pair(self, im1, im2):
         sep = 8 # separation between the images
         # scale widest image to same width as narrower to avoid drastic cropping on mismatched images
         if im1.width > im2.width:
-            im1 = im1.resize((im2.width, int(im1.height * im2.width / im1.width)))
+            im1 = im1.resize((im2.width, int(im1.height * im2.width / im1.width)), resample=Image.BICUBIC)
         else:
-            im2 = im2.resize((im1.width, int(im2.height * im1.width / im2.width)))
+            im2 = im2.resize((im1.width, int(im2.height * im1.width / im2.width)), resample=Image.BICUBIC)
         dst = Image.new('RGB', (im1.width + im2.width + sep, min(im1.height, im2.height)))
         dst.paste(im1, (0, 0))
         dst.paste(im2, (im1.width + sep, 0))
@@ -155,11 +170,11 @@ class ViewerDisplay:
 
     def __tex_load(self, pics, size=None):
         try:
-            im = Image.open(pics[0].fname)
+            im = self.__check_heif_then_open(pics[0].fname)
             orientation = pics[0].orientation
             if pics[1] is not None: #i.e portrait pair
                 # generate combined im
-                im2 = Image.open(pics[1].fname)
+                im2 = self.__check_heif_then_open(pics[1].fname)
                 if orientation > 1:
                     im = self.__orientate_image(im, orientation)
                 if pics[1].orientation > 1:
@@ -200,7 +215,7 @@ class ViewerDisplay:
                                         round(0.5 * (im_b.size[1] - im.size[1]))))
                     im = im_b # have to do this as paste applies in place
             tex = pi3d.Texture(im, blend=True, m_repeat=True, automatic_resize=self.__auto_resize,
-                                mipmap=False, free_after_load=True)
+                                free_after_load=True)
             #tex = pi3d.Texture(im, blend=True, m_repeat=True, automatic_resize=config.AUTO_RESIZE,
             #                    mipmap=config.AUTO_RESIZE, free_after_load=True) # poss try this if still some artifacts with full resolution
         except Exception as e:
@@ -220,8 +235,9 @@ class ViewerDisplay:
         if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
             if (self.__show_text & 1) == 1: # name
                 info_strings.append(self.__sanitize_string(pic.fname))
-            if (self.__show_text & 2) == 2 and pic.fdt is not None: # date
-                info_strings.append(pic.fdt)
+            if (self.__show_text & 2) == 2 and pic.exif_datetime > 0: # date
+                fdt = time.strftime(self.__show_text_fm, time.localtime(pic.exif_datetime))
+                info_strings.append(fdt)
             if (self.__show_text & 4) == 4 and pic.location is not None: # location
                 info_strings.append(pic.location) #TODO need to sanitize and check longer than 0 for real
             if (self.__show_text & 8) == 8: # folder
@@ -319,12 +335,14 @@ class ViewerDisplay:
             self.__slide.unif[49] = self.__ystep * t_factor
 
         if self.__alpha < 1.0: # transition is happening
-            self.__in_transition = True
             self.__alpha += self.__delta_alpha
             if self.__alpha > 1.0:
                 self.__alpha = 1.0
             self.__slide.unif[44] = self.__alpha * self.__alpha * (3.0 - 2.0 * self.__alpha)
-        else: # no transition effect safe to resuffle etc
+
+        if (self.__next_tm - tm) < 5.0 or self.__alpha < 1.0:
+            self.__in_transition = True # set __in_transition True a few seconds *before* end of previous slide
+        else: # no transition effect safe to update database, resuffle etc
             self.__in_transition = False
 
         self.__slide.draw()
