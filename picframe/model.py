@@ -223,7 +223,7 @@ class Model:
                 self.__num_run_through = 0
                 self.__shuffle_files()
             self.__file_index = 0
-        if self.__number_of_files == 0: # TODO if no selection show no images image
+        if self.__number_of_files == 0:
             pic = Pic(self.get_model_config()['no_files_image'], 0, 0)
             paired_pic = None
         else:

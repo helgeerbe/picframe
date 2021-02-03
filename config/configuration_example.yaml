@@ -57,8 +57,7 @@ model:
     ['region','state','province'],
     ['country']]
   geo_key: 'this_needs_to@be_changed'            # use your email address
-  geo_file: '~/.local/picframe/data/geo_locations.txt'           #TODO sqlite alternative
-  file_list_cache: '~/.local/picframe/data/file_list_cache.txt'  #TODO sqlite altenative
+  db_file: '~/.local/picframe/data/pictureframe.db3' # database used by picture frame
   portrait_pairs: False
 
 mqtt:

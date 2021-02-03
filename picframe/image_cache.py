@@ -226,7 +226,7 @@ class ImageCache:
             if not found or found['last_modified'] < mod_tm:
                 out_of_date_folders.append(dir)
                 insert_data.append([mod_tm, dir])
-                break
+                break # TODO stop after one append to speed up start but not needed later
 
         if len(insert_data):
             self.__db.executemany(sql_insert, insert_data)

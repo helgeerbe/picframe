@@ -72,7 +72,6 @@ class Controller:
         self.__model.delete_file()
         self.back() # TODO check needed to avoid skipping one as record has been deleted from model.__file_list
         self.__next_tm = 0
-        #TODO rebuild portait pairs as numbers don't match
 
     def set_show_text(self, txt_key=None, val="ON"):
         self.__viewer.set_show_text(txt_key, val)
