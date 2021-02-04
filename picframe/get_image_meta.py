@@ -16,7 +16,10 @@ class GetImageMeta:
         except OSError as e:
             self.__logger.warning("Can't open file: \"%s\"", filename)
             self.__logger.warning("Cause: %s", e)
-            raise
+            #raise # the system should be able to withstand files being moved etc without crashing
+        except Exception as e:
+            self.__logger.warning("exifread doesn't manage well and gives AttributeError for heif files %s -> %s",
+                                  filename, e)
 
     def has_exif(self):
         if self.__tags == {}:

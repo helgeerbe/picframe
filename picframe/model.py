@@ -129,6 +129,7 @@ class Model:
                                                     self.__geo_reverse,
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
+        self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
 
 
     def get_viewer_config(self):
@@ -224,7 +225,7 @@ class Model:
                 self.__shuffle_files()
             self.__file_index = 0
         if self.__number_of_files == 0:
-            pic = Pic(self.get_model_config()['no_files_image'], 0, 0)
+            pic = Pic(self.__no_files_img, 0, 0)
             paired_pic = None
         else:
             file_ids = self.__file_list[self.__file_index]
