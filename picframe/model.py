@@ -66,7 +66,7 @@ DEFAULT_CONFIG = {
 }
 
 
-class Pic: #TODO could this be done more elegantly with namedtuple, also are default values used
+class Pic: #TODO could this be done more elegantly with namedtuple
 
     def __init__(self, fname, last_modified, file_id, orientation=1, exif_datetime=0,
                  f_number=0, exposure_time=None, iso=0, focal_length=None,
