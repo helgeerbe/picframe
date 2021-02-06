@@ -29,6 +29,7 @@ class ImageCache:
 
         self.__keep_looping = True
         self.__pause_looping = False
+        self.__first_run = True # used to speed up very first update_cache
         t = threading.Thread(target=self.__loop)
         t.start()
 
@@ -226,7 +227,9 @@ class ImageCache:
             if not found or found['last_modified'] < mod_tm:
                 out_of_date_folders.append(dir)
                 insert_data.append([mod_tm, dir])
-                break # TODO stop after one append to speed up start but not needed later
+                if self.__first_run:
+                    self.__first_run = False
+                    break # stop after one directory, just on initial run
 
         if len(insert_data):
             self.__db.executemany(sql_insert, insert_data)
