@@ -116,7 +116,7 @@ class Model:
         self.__file_index = 0 # pointer to next position in __file_list
         self.__current_pics = (None, None) # this hold a tuple of (pic, None) or two pic objects if portrait pairs
         self.__num_run_through = 0
-        #self.__get_files()
+
         model_config = self.get_model_config() # alias for brevity as used several times below
         try:
             locale.setlocale(locale.LC_TIME, model_config['locale'])
@@ -130,7 +130,7 @@ class Model:
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
-
+        self.__where_clauses = {} # these will be modified by controller
 
     def get_viewer_config(self):
         return self.__config['viewer']
@@ -187,10 +187,18 @@ class Model:
     @shuffle.setter
     def shuffle(self, val:bool):
         self.__config['model']['shuffle'] = val #TODO should this be altered in config?
-        if val == True:
-            self.__shuffle_files()
-        else:
-            self.__sort_files()
+        #if val == True:
+        #    self.__shuffle_files()
+        #else:
+        #    self.__sort_files()
+        self.__reload_files = True
+
+    def set_where_clause(self, key, value=None):
+        # value must be a string for later join()
+        if (value is None or len(value) == 0) and key in self.__where_clauses:
+            self.__where_clauses.pop(key)
+            return
+        self.__where_clauses[key] = value
 
     def pause_looping(self, val):
         self.__image_cache.pause_looping(val)
@@ -211,18 +219,19 @@ class Model:
     def set_next_file_to_previous_file(self):
         self.__file_index = (self.__file_index - 2) % self.__number_of_files
 
-    def get_next_file(self, date_from=None, date_to=None, reverse=False):
+    def get_next_file(self):
         if self.__reload_files:
             for i in range(5): # give image_cache chance on first load if a large directory
-                self.__get_files(date_from, date_to)
+                self.__get_files()
                 if self.__number_of_files > 0:
                     break
                 time.sleep(2.0)
         if self.__file_index == self.__number_of_files:
             self.__num_run_through += 1
-            if self.__num_run_through >= self.get_model_config()['reshuffle_num']:
-                self.__num_run_through = 0
-                self.__shuffle_files()
+            if self.shuffle and self.__num_run_through >= self.get_model_config()['reshuffle_num']:
+                #self.__num_run_through = 0
+                #self.__shuffle_files()
+                self.__reload_files = True
             self.__file_index = 0
         if self.__number_of_files == 0:
             pic = Pic(self.__no_files_img, 0, 0)
@@ -262,30 +271,36 @@ class Model:
                 self.__number_of_files -= 1
                 break
 
-    def __get_files(self, date_from, date_to): #TODO make selection and ordering more general
+    def __get_files(self):
         where_list = []
         if self.subdirectory != "":
             picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.subdirectory)
             where_list.append("fname LIKE '{}/%'".format(picture_dir)) # TODO / on end to stop 'test' also selecting test1 test2 etc
-        if date_from is not None:
-            where_list.append("exif_datetime >= {}".format(date_from))
-        if date_to is not None:
-            where_list.append("exif_datetime <= {}".format(date_to))
+        where_list.extend(self.__where_clauses.values())
 
         if len(where_list) > 0:
             where_clause = " AND ".join(where_list)
         else:
             where_clause = "1"
 
-        sort_clause = "exif_datetime ASC" # TODO alternative orders but compatible with showing most recent first?
+        sort_list = []
+        recent_n = self.get_model_config()["recent_n"]
+        if recent_n > 0:
+            sort_list.append("last_modified < {:.0f}".format(time.time() - 3600 * 24 * recent_n))
 
-        self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
         if self.shuffle:
-            self.__shuffle_files() # randomise but keep most recent n first.
+            sort_list.append("RANDOM()")
+        else:
+            sort_list.append("exif_datetime ASC")
+        sort_clause = ",".join(sort_list)
+
+        print(where_clause, sort_clause)
+        self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
         self.__number_of_files = len(self.__file_list)
         self.__file_index = 0
         self.__num_run_through = 0
         self.__reload_files = False
+        print(self.__number_of_files)
 
     def __shuffle_files(self):
         #self.__file_list.sort(key=lambda x: x[1]) # will be later files last
