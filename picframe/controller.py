@@ -43,6 +43,8 @@ class Controller:
         self.__next_tm = 0
         self.__date_from = make_date('1970/1/1')
         self.__date_to = make_date('2038/1/1')
+        self.__where_clauses = {}
+        self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
 
     @property
@@ -102,8 +104,12 @@ class Controller:
             self.__date_from = float(val)
         except ValueError:
             if len(val) == 0:
-                val = '1970/1/1'
-            self.__date_from = make_date(val)
+                str_val = '1970/1/1'
+            self.__date_from = make_date(str_val)
+        if len(val) > 0:
+            self.__model.set_where_clause('date_from', "exif_datetime > {:.0f}".format(self.__date_from))
+        else:
+            self.__model.set_where_clause('date_from') # remove from where_clause
         self.__model.force_reload()
         self.__next_tm = 0
 
@@ -117,8 +123,12 @@ class Controller:
             self.__date_to = float(val)
         except ValueError:
             if len(val) == 0:
-                val = '2038/1/1'
-            self.__date_to = make_date(val)
+                str_val = '2038/1/1'
+            self.__date_to = make_date(str_val)
+        if len(val) > 0:
+            self.__model.set_where_clause('date_to', "exif_datetime < {:.0f}".format(self.__date_to))
+        else:
+            self.__model.set_where_clause('date_to') # remove from where_clause
         self.__model.force_reload()
         self.__next_tm = 0
 
@@ -136,9 +146,9 @@ class Controller:
 
     @shuffle.setter
     def shuffle(self, val:bool):
-        self.__model.shuffle = bool
-        if val == True:
-            self.__viewer.reset_name_tm()
+        self.__model.shuffle = val
+        self.__model.force_reload()
+        self.__next_tm = 0
 
     @property
     def fade_time(self):
@@ -166,6 +176,20 @@ class Controller:
     def brightness(self, val):
         self.__viewer.set_brightness(float(val))
 
+    @property
+    def location_filter(self):
+        return self.__location_filter
+
+    @location_filter.setter
+    def location_filter(self, val):
+        self.__location_filter = val
+        if len(val) > 0:
+            self.__model.set_where_clause('location_filter', "location LIKE '%{}%'".format(val))
+        else:
+            self.__model.set_where_clause('location_filter') # remove from where_clause
+        self.__model.force_reload()
+        self.__next_tm = 0
+
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
 
@@ -191,7 +215,7 @@ class Controller:
             pics = None #get_next_file returns a tuple of two in case paired portraits have been specified
             if not self.paused and tm > self.__next_tm:
                 self.__next_tm = tm + self.__model.time_delay
-                pics = self.__model.get_next_file(self.date_from, self.date_to)
+                pics = self.__model.get_next_file()
                 image_attr = {}
                 for key in self.__model.get_model_config()['image_attr']:
                     if key == 'PICFRAME GPS':

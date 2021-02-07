@@ -60,7 +60,7 @@ class ImageCache:
         self.__purge_missing_files_and_folders()
 
         t1 = time.time()
-        self.__logger.debug("Total: ", t1 - t0)
+        self.__logger.debug("Total: %.2f", t1 - t0)
 
         self.__db.commit()
 
