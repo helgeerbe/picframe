@@ -46,6 +46,7 @@ class Controller:
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
+        self.__keep_looping = True
 
     @property
     def paused(self):
@@ -201,8 +202,8 @@ class Controller:
         return actual_dir, dir_list
 
     def loop(self): #TODO exit loop gracefully and call image_cache.stop()
-        next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
-        while True:
+        #next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
+        while self.__keep_looping:
 
             if self.__next_tm == 0:
                 time_delay = 1 # must not be 0
@@ -237,3 +238,5 @@ class Controller:
 
     def stop(self):
         self.__viewer.slideshow_stop()
+        self.__keep_looping = False
+        self.__model.stop_image_chache() # close db tidily

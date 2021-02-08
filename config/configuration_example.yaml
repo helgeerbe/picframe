@@ -6,13 +6,13 @@ viewer:
   fps: 20.0                               # default=20.0
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
   blend_type: "blend"                     # default="blend", choices={"blend", "burn", "bump"}, type of blend the shader can do"
-  font_file: "~/.local/picframe/data/fonts/NotoSans-Regular.ttf"
-  shader: "~/.local/picframe/data/shaders/blend_new"
+  font_file: "~pi/.local/picframe/data/fonts/NotoSans-Regular.ttf"
+  shader: "~pi/.local/picframe/data/shaders/blend_new"
   show_text_fm: '%b %d, %Y'               # default "%b %d, %Y", format to show date over the image
   show_text_tm: 20.0                      # default=0.0, time to show text over image with file name
   show_text_sz: 40                        # default=90, text character size
   show_text: "name date folder location"  # default="date folder location", show text, include combination of words: name, date, location
-  text_width: 30                          # width to wrap
+  text_width: 70                          # width to wrap
   fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
   auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4. 
                                           # You should ensure your images are the correct size for the display")
@@ -30,12 +30,12 @@ viewer:
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
  
 model:
-  pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
-  deleted_pictures: '~/DeletedPictures' # move deleted pictures here
-  no_files_img: "~/.local/picframe/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
+  pic_dir: "~pi/Pictures"                   # default="~/Pictures", root folder for images
+  deleted_pictures: '~pi/DeletedPictures' # move deleted pictures here
+  no_files_img: "~pi/.local/picframe/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
-  check_dir_tm: 60.0                      # default=60.0, time in seconds between checking if the image directory has changed
-  recent_n: 3                             # default=3, when shuffling the keep n most recent ones to play before the rest
+  #check_dir_tm: 60.0                      # not used
+  recent_n: 7                             # default=7 (days), when shuffling file change date more recent than this number of days play before the rest
   reshuffle_num: 1                        # default=1, times through before reshuffling
   time_delay: 200.0                       # default=200.0, time between consecutive slide starts - can be changed by MQTT
   fade_time: 10.0                         # default=10.0, change time during which slides overlap - can be changed by MQTT"
@@ -57,7 +57,7 @@ model:
     ['region','state','province'],
     ['country']]
   geo_key: 'this_needs_to@be_changed'            # use your email address
-  db_file: '~/.local/picframe/data/pictureframe.db3' # database used by picture frame
+  db_file: '~pi/.local/picframe/data/pictureframe.db3' # database used by picture frame
   portrait_pairs: False
 
 mqtt:

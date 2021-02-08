@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
         'pic_dir': '~/Pictures', 
         'no_files_img': '~/.local/picframe/data/no_pictures.jpg',
         'subdirectory': '', 
-        'check_dir_tm': 60.0, 
+        #'check_dir_tm': 60.0, 
         'recent_n': 3, 
         'reshuffle_num': 1, 
         'time_delay': 200.0, 
@@ -202,6 +202,9 @@ class Model:
 
     def pause_looping(self, val):
         self.__image_cache.pause_looping(val)
+
+    def stop_image_chache(self):
+        self.__image_cache.stop()
 
     def get_directory_list(self):
         pic_dir = os.path.expanduser(self.get_model_config()['pic_dir'])

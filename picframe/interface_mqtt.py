@@ -125,6 +125,8 @@ class InterfaceMQTT:
         self.__setup_switch(client, switch_topic_head, "_back", "mdi:skip-previous", available_topic)
         self.__setup_switch(client, switch_topic_head, "_next", "mdi:skip-next", available_topic)
 
+        client.subscribe(self.__device_id + "/stop", qos=0) # close down without killing!
+
     def __setup_sensor(self, client, sensor_topic_head, topic, icon, available_topic):
         config_topic = sensor_topic_head + "_" + topic + "/config"
         name = self.__device_id + "_" + topic
@@ -290,6 +292,9 @@ class InterfaceMQTT:
             self.__logger.info("Recieved location filter: %s", msg)
             self.__controller.location_filter = msg
 
+        # stop loops and end program
+        elif message.topic == self.__device_id + "/stop":
+            self.__controller.stop()
 
     def publish_state(self, image, image_attr):
         topic_head =  "homeassistant/sensor/" + self.__device_id
