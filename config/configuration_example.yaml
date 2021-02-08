@@ -6,8 +6,8 @@ viewer:
   fps: 20.0                               # default=20.0
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
   blend_type: "blend"                     # default="blend", choices={"blend", "burn", "bump"}, type of blend the shader can do"
-  font_file: "~pi/.local/picframe/data/fonts/NotoSans-Regular.ttf"
-  shader: "~pi/.local/picframe/data/shaders/blend_new"
+  font_file: "~/.local/picframe/data/fonts/NotoSans-Regular.ttf"
+  shader: "~/.local/picframe/data/shaders/blend_new"
   show_text_fm: '%b %d, %Y'               # default "%b %d, %Y", format to show date over the image
   show_text_tm: 20.0                      # default=0.0, time to show text over image with file name
   show_text_sz: 40                        # default=90, text character size
@@ -30,9 +30,9 @@ viewer:
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
  
 model:
-  pic_dir: "~pi/Pictures"                   # default="~/Pictures", root folder for images
-  deleted_pictures: '~pi/DeletedPictures' # move deleted pictures here
-  no_files_img: "~pi/.local/picframe/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
+  pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
+  deleted_pictures: '~/DeletedPictures' # move deleted pictures here
+  no_files_img: "~/.local/picframe/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   #check_dir_tm: 60.0                      # not used
   recent_n: 7                             # default=7 (days), when shuffling file change date more recent than this number of days play before the rest
@@ -57,7 +57,7 @@ model:
     ['region','state','province'],
     ['country']]
   geo_key: 'this_needs_to@be_changed'            # use your email address
-  db_file: '~pi/.local/picframe/data/pictureframe.db3' # database used by picture frame
+  db_file: '~/.local/picframe/data/pictureframe.db3' # database used by picture frame
   portrait_pairs: False
 
 mqtt:
