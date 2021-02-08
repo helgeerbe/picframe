@@ -322,17 +322,19 @@ class ViewerDisplay:
             self.__slide.unif[os1] = (wh_rat - 1.0) * 0.5
             self.__slide.unif[os2] = 0.0
             if self.__kenburns:
-                self.__xstep, self.__ystep = (self.__slide.unif[i] * 2.0 / time_delay for i in (48, 49))
+                self.__xstep, self.__ystep = (self.__slide.unif[i] * 2.0 / (time_delay - fade_time) for i in (48, 49))
                 self.__slide.unif[48] = 0.0
                 self.__slide.unif[49] = 0.0
-                self.__kb_up = not self.__kb_up
+                #self.__kb_up = not self.__kb_up # just go in one direction
 
-        if self.__kenburns:
-            t_factor = self.__next_tm - tm
-            if self.__kb_up:
-                t_factor = time_delay - t_factor
-            self.__slide.unif[48] = self.__xstep * t_factor
-            self.__slide.unif[49] = self.__ystep * t_factor
+        if self.__kenburns and self.__alpha >= 1.0:
+            t_factor = time_delay - fade_time - self.__next_tm + tm
+            #t_factor = self.__next_tm - tm
+            #if self.__kb_up:
+            #    t_factor = time_delay - t_factor
+            # add exponentially smoothed tweening in case of timing delays etc. to avoid 'jumps'
+            self.__slide.unif[48] = self.__slide.unif[48] * 0.95 + self.__xstep * t_factor * 0.05
+            self.__slide.unif[49] = self.__slide.unif[49] * 0.95 + self.__ystep * t_factor * 0.05
 
         if self.__alpha < 1.0: # transition is happening
             self.__alpha += self.__delta_alpha

@@ -46,6 +46,7 @@ class Controller:
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
+        self.__keep_looping = True
 
     @property
     def paused(self):
@@ -165,6 +166,9 @@ class Controller:
 
     @time_delay.setter
     def time_delay(self, time):
+        # might break it if too quick
+        if time < 5.0:
+            time = 5.0
         self.__model.time_delay = float(time)
         self.__next_tm = 0
 
@@ -201,15 +205,15 @@ class Controller:
         return actual_dir, dir_list
 
     def loop(self): #TODO exit loop gracefully and call image_cache.stop()
-        next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
-        while True:
+        #next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
+        while self.__keep_looping:
 
-            if self.__next_tm == 0:
-                time_delay = 1 # must not be 0
-                fade_time = 1 # must not be 0
-            else:
-                time_delay = self.__model.time_delay
-                fade_time = self.__model.fade_time
+            #if self.__next_tm == 0: #TODO double check why these were set when next_tm == 0
+            #    time_delay = 1 # must not be 0
+            #    fade_time = 1 # must not be 0
+            #else:
+            time_delay = self.__model.time_delay
+            fade_time = self.__model.fade_time
 
             tm = time.time()
             pics = None #get_next_file returns a tuple of two in case paired portraits have been specified
@@ -237,3 +241,5 @@ class Controller:
 
     def stop(self):
         self.__viewer.slideshow_stop()
+        self.__keep_looping = False
+        self.__model.stop_image_chache() # close db tidily
