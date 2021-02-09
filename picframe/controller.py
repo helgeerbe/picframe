@@ -106,7 +106,7 @@ class Controller:
         except ValueError:
             if len(val) == 0:
                 str_val = '1970/1/1'
-            self.__date_from = make_date(str_val)
+                self.__date_from = make_date(str_val)
         if len(val) > 0:
             self.__model.set_where_clause('date_from', "exif_datetime > {:.0f}".format(self.__date_from))
         else:
@@ -125,7 +125,7 @@ class Controller:
         except ValueError:
             if len(val) == 0:
                 str_val = '2038/1/1'
-            self.__date_to = make_date(str_val)
+                self.__date_to = make_date(str_val)
         if len(val) > 0:
             self.__model.set_where_clause('date_to', "exif_datetime < {:.0f}".format(self.__date_to))
         else:
