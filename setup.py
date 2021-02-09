@@ -31,7 +31,8 @@ setup(name='picframe',
         'ExifRead',
         'pi3d',
         'PyYAML',
-        'paho-mqtt'
+        'paho-mqtt',
+        'pyheif'
       ],
       data_files=[
         ('picframe/config', ['config/configuration_example.yaml']),
