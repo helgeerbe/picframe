@@ -1,6 +1,6 @@
 # for development
 import sys
-sys.path.insert(1, "/home/pi/pi3d")
+sys.path.insert(1, "/home/pi/pi3d") #TODO just for debugging when not properly installed
 import pi3d
 from pi3d.Texture import MAX_SIZE
 import math
@@ -10,7 +10,6 @@ import logging
 import os
 import numpy as np
 from PIL import Image, ImageFilter
-from picframe.get_image_meta import GetImageMeta
 
 # utility functions with no dependency on ViewerDisplay properties
 def txt_to_bit(txt):
@@ -58,6 +57,7 @@ class ViewerDisplay:
         self.__display_y = int(config['display_y'])
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
+        self.__use_glx = config['use_glx']
         self.__codepoints = config['codepoints']
         self.__alpha = 0.0 # alpha - proportion front image to back
         self.__delta_alpha = 1.0
@@ -119,15 +119,33 @@ class ViewerDisplay:
     def set_brightness(self, val):
         self.__slide.unif[55] = val # take immediate effect
 
+    def get_brightness(self):
+        return self.__slide.unif[55]  
+
+    def __check_heif_then_open(self, fname):
+        ext = os.path.splitext(fname)[1].lower()
+        if ext in ('.heif','.heic'):
+            try:
+                import pyheif
+
+                heif_file = pyheif.read(fname)
+                image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
+                                        "raw", heif_file.mode, heif_file.stride)
+                return image
+            except:
+                self.__logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
+        else:
+            return Image.open(fname)
+
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
     def __create_image_pair(self, im1, im2):
         sep = 8 # separation between the images
         # scale widest image to same width as narrower to avoid drastic cropping on mismatched images
         if im1.width > im2.width:
-            im1 = im1.resize((im2.width, int(im1.height * im2.width / im1.width)))
+            im1 = im1.resize((im2.width, int(im1.height * im2.width / im1.width)), resample=Image.BICUBIC)
         else:
-            im2 = im2.resize((im1.width, int(im2.height * im1.width / im2.width)))
+            im2 = im2.resize((im1.width, int(im2.height * im1.width / im2.width)), resample=Image.BICUBIC)
         dst = Image.new('RGB', (im1.width + im2.width + sep, min(im1.height, im2.height)))
         dst.paste(im1, (0, 0))
         dst.paste(im2, (im1.width + sep, 0))
@@ -152,11 +170,11 @@ class ViewerDisplay:
 
     def __tex_load(self, pics, size=None):
         try:
-            im = Image.open(pics[0].fname)
+            im = self.__check_heif_then_open(pics[0].fname)
             orientation = pics[0].orientation
             if pics[1] is not None: #i.e portrait pair
                 # generate combined im
-                im2 = Image.open(pics[1].fname)
+                im2 = self.__check_heif_then_open(pics[1].fname)
                 if orientation > 1:
                     im = self.__orientate_image(im, orientation)
                 if pics[1].orientation > 1:
@@ -217,8 +235,9 @@ class ViewerDisplay:
         if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
             if (self.__show_text & 1) == 1: # name
                 info_strings.append(self.__sanitize_string(pic.fname))
-            if (self.__show_text & 2) == 2 and pic.fdt is not None: # date
-                info_strings.append(pic.fdt)
+            if (self.__show_text & 2) == 2 and pic.exif_datetime > 0: # date
+                fdt = time.strftime(self.__show_text_fm, time.localtime(pic.exif_datetime))
+                info_strings.append(fdt)
             if (self.__show_text & 4) == 4 and pic.location is not None: # location
                 info_strings.append(pic.location) #TODO need to sanitize and check longer than 0 for real
             if (self.__show_text & 8) == 8: # folder
@@ -239,7 +258,7 @@ class ViewerDisplay:
     def slideshow_start(self):
         self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
               w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
-              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background)
+              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background, use_glx=self.__use_glx) 
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
@@ -260,10 +279,10 @@ class ViewerDisplay:
         bkg_ht = self.__display.height // 3
         text_bkg_array = np.zeros((bkg_ht, 1, 4), dtype=np.uint8)
         text_bkg_array[:,:,3] = np.linspace(0, 170, bkg_ht).reshape(-1, 1)
-        text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, free_after_load=True)
+        text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
 
         back_shader = pi3d.Shader("uv_flat")
-        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-self.__display.height // 2 + bkg_ht // 2, z=4.0)
+        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-int(self.__display.height) // 2 + bkg_ht // 2, z=4.0)
         self.__text_bkg.set_draw_details(back_shader, [text_bkg_tex])
 
 
@@ -303,25 +322,29 @@ class ViewerDisplay:
             self.__slide.unif[os1] = (wh_rat - 1.0) * 0.5
             self.__slide.unif[os2] = 0.0
             if self.__kenburns:
-                self.__xstep, self.__ystep = (self.__slide.unif[i] * 2.0 / time_delay for i in (48, 49))
+                self.__xstep, self.__ystep = (self.__slide.unif[i] * 2.0 / (time_delay - fade_time) for i in (48, 49))
                 self.__slide.unif[48] = 0.0
                 self.__slide.unif[49] = 0.0
-                self.__kb_up = not self.__kb_up
+                #self.__kb_up = not self.__kb_up # just go in one direction
 
-        if self.__kenburns:
-            t_factor = self.__next_tm - tm
-            if self.__kb_up:
-                t_factor = time_delay - t_factor
-            self.__slide.unif[48] = self.__xstep * t_factor
-            self.__slide.unif[49] = self.__ystep * t_factor
+        if self.__kenburns and self.__alpha >= 1.0:
+            t_factor = time_delay - fade_time - self.__next_tm + tm
+            #t_factor = self.__next_tm - tm
+            #if self.__kb_up:
+            #    t_factor = time_delay - t_factor
+            # add exponentially smoothed tweening in case of timing delays etc. to avoid 'jumps'
+            self.__slide.unif[48] = self.__slide.unif[48] * 0.95 + self.__xstep * t_factor * 0.05
+            self.__slide.unif[49] = self.__slide.unif[49] * 0.95 + self.__ystep * t_factor * 0.05
 
         if self.__alpha < 1.0: # transition is happening
-            self.__in_transition = True
             self.__alpha += self.__delta_alpha
             if self.__alpha > 1.0:
                 self.__alpha = 1.0
             self.__slide.unif[44] = self.__alpha * self.__alpha * (3.0 - 2.0 * self.__alpha)
-        else: # no transition effect safe to resuffle etc
+
+        if (self.__next_tm - tm) < 5.0 or self.__alpha < 1.0:
+            self.__in_transition = True # set __in_transition True a few seconds *before* end of previous slide
+        else: # no transition effect safe to update database, resuffle etc
             self.__in_transition = False
 
         self.__slide.draw()
@@ -336,6 +359,7 @@ class ViewerDisplay:
             self.__text_bkg.set_alpha(alpha)
             if len(self.__textblock.text_format.strip()) > 0: #only draw background if text there
                 self.__text_bkg.draw()
+
 
         self.__text.draw()
         return self.__display.loop_running()
