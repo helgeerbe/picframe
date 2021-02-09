@@ -1,8 +1,11 @@
 """Keyboard interface of picture_frame."""
 
 import logging
-from pynput import keyboard
-from picframe import __version__
+import sys
+import threading
+import time
+sys.path.insert(1,'/home/herbe/dev/pi3d')
+import pi3d
 
 
 class InterfaceKbd:
@@ -25,24 +28,21 @@ class InterfaceKbd:
         self.__logger = logging.getLogger("interface_kbd.InterfaceKbd")
         self.__logger.info('creating an instance of InterfaceKbd')
         self.__controller = controller
-        listener = keyboard.Listener(
-        on_press=self.on_press,
-        on_release=self.on_release)
-        listener.start()
+        self.__keyboard = pi3d.Keyboard()
+        self.__keep_looping = True
+        t = threading.Thread(target=self.__loop)
+        t.start()
 
-    def on_press(self, key):
-        try:
-            print('alphanumeric key {0} pressed'.format(
-                key.char))
-        except AttributeError:
-            print('special key {0} pressed'.format(
-                key))
-
-    def on_release(self, key):
-        print('{0} released'.format(
-            key))
-        if key == keyboard.Key.esc:
-            self.__controller.stop()
-            # Stop listener
-            return False
+    def __loop(self):
+        while self.__keep_looping:
+            key = self.__keyboard.read()
+            if key == 27:
+                self.__keep_looping = False
+            elif key == ord('a'):
+                self.__controller.back()
+            elif key == ord('d'):
+                self.__controller.next()
+            time.sleep(0.025)
+        self.__keyboard.close() # contains references to Display instance
+        self.__controller.stop()
     
