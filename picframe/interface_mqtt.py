@@ -78,35 +78,13 @@ class InterfaceMQTT:
         # state_topic for all picframe sensors
         state_topic = sensor_topic_head + "/state"
 
-        # send date_from sensor configuration 
-        config_topic = sensor_topic_head + "_date_from/config"
-        config_payload = '{"name":"' + self.__device_id + '_date_from", "icon":"mdi:calendar-arrow-left", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.date_from}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_date_from", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(self.__device_id + "/date_from", qos=0)
-
-        # send date_to sensor configuration 
-        config_topic = sensor_topic_head + "_date_to/config"
-        config_payload = '{"name":"' + self.__device_id + '_date_to", "icon":"mdi:calendar-arrow-right", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.date_to}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_date_to", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(self.__device_id + "/date_to", qos=0)
-
-        # send time_delay sensor configuration 
-        config_topic = sensor_topic_head + "_time_delay/config"
-        config_payload = '{"name":"' + self.__device_id + '_time_delay", "icon":"mdi:image-plus", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.time_delay}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_time_delay", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(self.__device_id + "/time_delay", qos=0)
-
-        # send brightness sensor configuration 
-        config_topic = sensor_topic_head + "_brightness/config"
-        config_payload = '{"name":"' + self.__device_id + '_brightness", "icon":"mdi:brightness-6", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.brightness}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_brightness", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(self.__device_id + "/brightness", qos=0)
-
-        # send fade_time sensor configuration 
-        config_topic = sensor_topic_head + "_fade_time/config"
-        config_payload = '{"name":"' + self.__device_id + '_fade_time", "icon":"mdi:image-size-select-large", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.fade_time}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_fade_time", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(self.__device_id + "/fade_time", qos=0)
+        ## sensors
+        self.__setup_sensor(client, sensor_topic_head, "date_from", "mdi:calendar-arrow-left", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "date_to", "mdi:calendar-arrow-right", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "time_delay", "mdi:image-plus", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "brightness", "mdi:brightness-6", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "fade_time", "mdi:image-size-select-large", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:folder-multiple-image", available_topic)
 
         # send image counter sensor configuration 
         config_topic = sensor_topic_head + "_image_counter/config"
@@ -126,6 +104,7 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(self.__device_id + "/subdirectory", qos=0)
 
+        ## switches
         self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic)
         self.__setup_switch(client, switch_topic_head, "_delete", "mdi:delete", available_topic)
         self.__setup_switch(client, switch_topic_head, "_name_toggle", "mdi:subtitles", available_topic,
@@ -145,6 +124,21 @@ class InterfaceMQTT:
                             self.__controller.paused)
         self.__setup_switch(client, switch_topic_head, "_back", "mdi:skip-previous", available_topic)
         self.__setup_switch(client, switch_topic_head, "_next", "mdi:skip-next", available_topic)
+
+        client.subscribe(self.__device_id + "/stop", qos=0) # close down without killing!
+
+    def __setup_sensor(self, client, sensor_topic_head, topic, icon, available_topic):
+        config_topic = sensor_topic_head + "_" + topic + "/config"
+        name = self.__device_id + "_" + topic
+        config_payload = json.dumps({"name": name,
+                                     "icon": icon,
+                                     "state_topic": sensor_topic_head + "/state",
+                                     "value_template": "{{ value_json.date_from}}",
+                                     "avty_t": available_topic,
+                                     "uniq_id": name,
+                                     "dev":{"ids":[self.__device_id]}})
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(self.__device_id + "/" + topic, qos=0)
 
     def __setup_switch(self, client, switch_topic_head, topic, icon,
                        available_topic, is_on=False):
@@ -293,7 +287,14 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/brightness":
             self.__logger.info("Recieved brightness: %s", msg)
             self.__controller.brightness = float(msg)
+        # location filter
+        elif message.topic == self.__device_id + "/location_filter":
+            self.__logger.info("Recieved location filter: %s", msg)
+            self.__controller.location_filter = msg
 
+        # stop loops and end program
+        elif message.topic == self.__device_id + "/stop":
+            self.__controller.stop()
 
     def publish_state(self, image, image_attr):
         topic_head =  "homeassistant/sensor/" + self.__device_id

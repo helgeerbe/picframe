@@ -43,7 +43,10 @@ class Controller:
         self.__next_tm = 0
         self.__date_from = make_date('1970/1/1')
         self.__date_to = make_date('2038/1/1')
+        self.__where_clauses = {}
+        self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
+        self.__keep_looping = True
 
     @property
     def paused(self):
@@ -67,22 +70,21 @@ class Controller:
         self.__model.set_next_file_to_previous_file()
         self.__next_tm = 0
         self.__viewer.reset_name_tm()
-    
+
     def delete(self):
         self.__model.delete_file()
         self.back() # TODO check needed to avoid skipping one as record has been deleted from model.__file_list
         self.__next_tm = 0
-        #TODO rebuild portait pairs as numbers don't match
-    
+
     def set_show_text(self, txt_key=None, val="ON"):
         self.__viewer.set_show_text(txt_key, val)
         pic = self.__model.get_current_pics()[0]
         self.__viewer.reset_name_tm(pic, self.paused)
-    
+
     def refresh_show_text(self):
         pic = self.__model.get_current_pics()[0]
         self.__viewer.reset_name_tm(pic, self.paused)
-    
+
     @property
     def subdirectory(self):
         return self.__model.subdirectory
@@ -90,6 +92,7 @@ class Controller:
     @subdirectory.setter
     def subdirectory(self, dir):
         self.__model.subdirectory = dir
+        self.__model.force_reload()
         self.__next_tm = 0
 
     @property
@@ -102,8 +105,13 @@ class Controller:
             self.__date_from = float(val)
         except ValueError:
             if len(val) == 0:
-                val = '1970/1/1'
-            self.__date_from = make_date(val)
+                str_val = '1970/1/1'
+            self.__date_from = make_date(str_val)
+        if len(val) > 0:
+            self.__model.set_where_clause('date_from', "exif_datetime > {:.0f}".format(self.__date_from))
+        else:
+            self.__model.set_where_clause('date_from') # remove from where_clause
+        self.__model.force_reload()
         self.__next_tm = 0
 
     @property
@@ -116,8 +124,13 @@ class Controller:
             self.__date_to = float(val)
         except ValueError:
             if len(val) == 0:
-                val = '2038/1/1'
-            self.__date_to = make_date(val)
+                str_val = '2038/1/1'
+            self.__date_to = make_date(str_val)
+        if len(val) > 0:
+            self.__model.set_where_clause('date_to', "exif_datetime < {:.0f}".format(self.__date_to))
+        else:
+            self.__model.set_where_clause('date_to') # remove from where_clause
+        self.__model.force_reload()
         self.__next_tm = 0
 
     @property
@@ -134,10 +147,10 @@ class Controller:
 
     @shuffle.setter
     def shuffle(self, val:bool):
-        self.__model.shuffle = bool
-        if val == True:
-            self.__viewer.reset_name_tm()
-    
+        self.__model.shuffle = val
+        self.__model.force_reload()
+        self.__next_tm = 0
+
     @property
     def fade_time(self):
         return self.__model.fade_time
@@ -150,57 +163,83 @@ class Controller:
     @property
     def time_delay(self):
         return self.__model.time_delay
-    
+
     @time_delay.setter
     def time_delay(self, time):
+        # might break it if too quick
+        if time < 5.0:
+            time = 5.0
         self.__model.time_delay = float(time)
         self.__next_tm = 0
 
     @property
     def brightness(self):
         return self.__viewer.get_brightness()
-    
+
     @brightness.setter
     def brightness(self, val):
         self.__viewer.set_brightness(float(val))
-    
+
+    @property
+    def location_filter(self):
+        return self.__location_filter
+
+    @location_filter.setter
+    def location_filter(self, val):
+        self.__location_filter = val
+        if len(val) > 0:
+            self.__model.set_where_clause('location_filter', "location LIKE '%{}%'".format(val))
+        else:
+            self.__model.set_where_clause('location_filter') # remove from where_clause
+        self.__model.force_reload()
+        self.__next_tm = 0
+
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
-    
+
     def get_number_of_files(self):
         return self.__model.get_number_of_files()
-    
+
     def get_directory_list(self):
         actual_dir, dir_list = self.__model.get_directory_list()
         return actual_dir, dir_list
 
-    def loop(self):
-        next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
-        while True:
+    def loop(self): #TODO exit loop gracefully and call image_cache.stop()
+        #next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
+        while self.__keep_looping:
 
-            if self.__next_tm == 0:
-                time_delay = 1 # must not be 0
-                fade_time = 1 # must not be 0
-            else:
-                time_delay = self.__model.time_delay
-                fade_time = self.__model.fade_time
+            #if self.__next_tm == 0: #TODO double check why these were set when next_tm == 0
+            #    time_delay = 1 # must not be 0
+            #    fade_time = 1 # must not be 0
+            #else:
+            time_delay = self.__model.time_delay
+            fade_time = self.__model.fade_time
 
             tm = time.time()
             pics = None #get_next_file returns a tuple of two in case paired portraits have been specified
             if not self.paused and tm > self.__next_tm:
                 self.__next_tm = tm + self.__model.time_delay
-                pics = self.__model.get_next_file(self.date_from, self.date_to)
-                self.publish_state(pics[0].fname, pics[0].image_attr)
+                pics = self.__model.get_next_file()
+                image_attr = {}
+                for key in self.__model.get_model_config()['image_attr']:
+                    if key == 'PICFRAME GPS':
+                        image_attr[key] = {'latitude': pics[0].latitude,
+                                           'longitude': pics[0].longitude}
+                    else:
+                        field_name = self.__model.EXIF_TO_FIELD[key]
+                        image_attr[key] = pics[0].__dict__[field_name] #TODO nicer using namedtuple for Pic
+                self.publish_state(pics[0].fname, image_attr)
             if self.__viewer.is_in_transition() == False: # safe to do long running tasks
-                if tm > next_check_tm:
-                    self.__model.check_for_file_changes()
-                    next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
+                self.__model.pause_looping(True)
+            else:
+                self.__model.pause_looping(False) #TODO only need to set this once rather than every loop
             if self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused) == False:
                 break
-
 
     def start(self):
         self.__viewer.slideshow_start()
 
     def stop(self):
         self.__viewer.slideshow_stop()
+        self.__keep_looping = False
+        self.__model.stop_image_chache() # close db tidily
