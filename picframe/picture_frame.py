@@ -2,7 +2,7 @@ import logging
 import sys
 
 
-from picframe import model, viewer_display, controller
+from picframe import model, viewer_display, controller, interface_kbd
 
 
 
@@ -16,6 +16,7 @@ def main():
         m = model.Model()
     v = viewer_display.ViewerDisplay(m.get_viewer_config())
     c = controller.Controller(m, v)
+    interface_kbd.InterfaceKbd(c)
     mqtt_config = m.get_mqtt_config()
     mqtt = None
     if mqtt_config['use_mqtt'] == True:
