@@ -291,7 +291,7 @@ class ViewerDisplay:
         if pics is not None:
             self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
             self.__next_tm = tm + time_delay
-            self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
+            self.__name_tm = tm + fade_time + float(self.__show_text_tm) # text starts after slide transition
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             if new_sfg is not None: # this is a possible return value which needs to be caught
                 self.__sfg = new_sfg
