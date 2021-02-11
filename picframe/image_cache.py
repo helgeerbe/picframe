@@ -336,6 +336,9 @@ class ImageCache:
         e['lens'] = exifs.get_exif('EXIF LensModel')
         val = exifs.get_exif('EXIF DateTimeOriginal')
         if val != None:
+            # Remove any subsecond portion of the DateTimeOriginal value. According to the spec, it's
+            # not valid here anyway (should be in SubSecTimeOriginal), but it does exist sometimes.
+            val = val.split('.', 1)[0]
             e['exif_datetime'] = time.mktime(time.strptime(val, '%Y:%m:%d %H:%M:%S'))
         else:
             e['exif_datetime'] = os.path.getmtime(file_path_name)
