@@ -30,6 +30,7 @@ class ImageCache:
         self.__keep_looping = True
         self.__pause_looping = False
         self.__first_run = True # used to speed up very first update_cache
+        self.__modified_files = set() # hold the modified file list centrally to allow piecemeal processing
         t = threading.Thread(target=self.__loop)
         t.start()
 
@@ -53,9 +54,9 @@ class ImageCache:
         # update the db with info for any added or modified folders since last db refresh
         modified_folders = self.__update_modified_folders()
         # update the db with info for any added or modified files since the last db refresh
-        modified_files = self.__update_modified_files(modified_folders)
+        self.__modified_files.update(self.__update_modified_files(modified_folders))
         # update the meta data for any added or modified files since the last db refresh
-        self.__update_meta_data(modified_files)
+        self.__update_meta_data()
         # remove any files or folders from the db that are no longer on disk
         self.__purge_missing_files_and_folders()
 
@@ -266,16 +267,23 @@ class ImageCache:
         ques = ', '.join('?' * len(dict.keys()))
         return 'INSERT OR REPLACE INTO meta(file_id, {0}) VALUES((SELECT file_id from all_data where fname = ?), {1})'.format(columns, ques)
 
-    def __update_meta_data(self, modified_files):
+    def __update_meta_data(self):
         sql_insert = None
         insert_data = []
-        for file in modified_files:
-            meta = self.__get_exif_info(file)
-            if sql_insert == None:
-                sql_insert = self.__get_meta_sql_from_dict(meta)
-            vals = list(meta.values())
-            vals.insert(0, file)
-            insert_data.append(vals)
+        if self.__first_run:
+            num_to_do = 5
+        else:
+            num_to_do = 100
+        for _ in range(num_to_do):
+            if len(self.__modified_files) > 0:
+                file = self.__modified_files.pop()
+                meta = self.__get_exif_info(file)
+                if sql_insert == None:
+                    sql_insert = self.__get_meta_sql_from_dict(meta)
+                vals = list(meta.values())
+                vals.insert(0, file)
+                insert_data.append(vals)
+                self.__first_run = False
 
         if len(insert_data):
             self.__db.executemany(sql_insert, insert_data)
