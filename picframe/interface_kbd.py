@@ -4,7 +4,7 @@ import logging
 import sys
 import threading
 import time
-sys.path.insert(1,'/home/herbe/dev/pi3d')
+#sys.path.insert(1,'/home/herbe/dev/pi3d')
 import pi3d
 
 

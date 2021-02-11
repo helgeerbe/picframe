@@ -7,7 +7,7 @@ from picframe import model, viewer_display, controller, interface_kbd
 
 
 def main():
-    logging.basicConfig(stream=sys.stdout, level=logging.WARNING)
+    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     logger = logging.getLogger("picture_frame.py")
     logger.info('starting %s', sys.argv)
     if len(sys.argv) > 1:
