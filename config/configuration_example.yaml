@@ -55,6 +55,8 @@ model:
   geo_key: 'this_needs_to@be_changed'            # use your email address
   db_file: '~/.local/picframe/data/pictureframe.db3' # database used by picture frame
   portrait_pairs: False
+  log_level: 'WARNING'                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
+  use_kbd: True                         # default=False, just for debug or console start. Crashing when started with systemd
 
 mqtt:
   use_mqtt: False                         # default=False. Set True true, to enable mqtt          

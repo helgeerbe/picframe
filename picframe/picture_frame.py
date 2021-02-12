@@ -14,10 +14,12 @@ def main():
         m = model.Model(sys.argv[1])
     else:
         m = model.Model()
+    
     v = viewer_display.ViewerDisplay(m.get_viewer_config())
     c = controller.Controller(m, v)
     c.start()
-    interface_kbd.InterfaceKbd(c) # TODO make kbd failsafe
+    if m.get_model_config()['use_kbd'] == True:
+        interface_kbd.InterfaceKbd(c) # TODO make kbd failsafe
     mqtt_config = m.get_mqtt_config()
     mqtt = None
     if mqtt_config['use_mqtt'] == True:

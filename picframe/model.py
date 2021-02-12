@@ -53,6 +53,8 @@ DEFAULT_CONFIG = {
         'db_file': '~/.local/picframe/data/pictureframe.db3',
         'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
+        'log_level': 'WARNING',
+        'use_kbd': False,
     },
     'mqtt': {
         'use_mqtt': False,                          # Set tue true, to enable mqtt  
@@ -110,6 +112,7 @@ class Model:
                 self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
                 self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
+        self.__logger.setLevel(self.get_model_config()['log_level'])
         self.__file_list = [] # this is now a list of tuples i.e (file_id1,) or (file_id1, file_id2)
         self.__number_of_files = 0 # this is shortcut for len(__file_list)
         self.__reload_files = True
