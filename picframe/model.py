@@ -297,13 +297,11 @@ class Model:
             sort_list.append("exif_datetime ASC")
         sort_clause = ",".join(sort_list)
 
-        print(where_clause, sort_clause)
         self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
         self.__number_of_files = len(self.__file_list)
         self.__file_index = 0
         self.__num_run_through = 0
         self.__reload_files = False
-        print(self.__number_of_files)
 
     def __shuffle_files(self):
         #self.__file_list.sort(key=lambda x: x[1]) # will be later files last
