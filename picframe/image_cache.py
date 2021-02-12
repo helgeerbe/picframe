@@ -29,7 +29,6 @@ class ImageCache:
 
         self.__keep_looping = True
         self.__pause_looping = False
-        self.__first_run = True # used to speed up very first update_cache
         self.__modified_files = set() # hold the modified file list centrally to allow piecemeal processing
         t = threading.Thread(target=self.__loop)
         t.start()
@@ -37,7 +36,7 @@ class ImageCache:
     def __loop(self):
         while self.__keep_looping:
             if not self.__pause_looping:
-                self.update_cache()
+                self.update_cache() # TODO change max_runtime_seconds after first run?
                 time.sleep(2.0)
             time.sleep(0.01)
         self.__db.commit() # close after update_cache finished for last time
@@ -49,20 +48,23 @@ class ImageCache:
     def stop(self):
         self.__keep_looping = False
 
-    def update_cache(self):
+    def update_cache(self, max_runtime_seconds=2.0):
         t0 = time.time()
         # update the db with info for any added or modified folders since last db refresh
         modified_folders = self.__update_modified_folders()
+        folder_tm = time.time()
         # update the db with info for any added or modified files since the last db refresh
         self.__modified_files.update(self.__update_modified_files(modified_folders))
+        file_tm = time.time()
         # update the meta data for any added or modified files since the last db refresh
-        self.__update_meta_data()
+        self.__update_meta_data(stop_time=t0 + max_runtime_seconds)
+        exif_tm = time.time()
         # remove any files or folders from the db that are no longer on disk
         self.__purge_missing_files_and_folders()
 
         t1 = time.time()
-        self.__logger.debug("Total: %.2f", t1 - t0)
-
+        self.__logger.info("Total: %.2f, folders: %.3f files: %.3f exif: %.3f",
+                                t1 - t0, folder_tm - t0, file_tm - folder_tm, exif_tm - file_tm)
         self.__db.commit()
 
     def query_cache(self, where_clause, sort_clause = 'exif_datetime ASC'):
@@ -167,13 +169,31 @@ class ImageCache:
         # Combine all important data in a single view for easy accesss
         # Although we can't control the layout of the view when using 'meta.*', we want it
         # all and that seems better than enumerating (and maintaining) each column here.
+        # TODO in order for file_id to be file.file_id and not meta.file_id which might be null
+        # all the the columns have to be explicitly listed. This could be fixed by
+        # self.__modified_files being a set of tuples (file_id, fname) then __update_meta_data()
+        # wouldn't need the sub select to get the file_id from all_data
         sql_all_data_view = """
             CREATE VIEW IF NOT EXISTS all_data
             AS
             SELECT
                 folder.name || "/" || file.basename || "." || file.extension AS fname,
                 file.last_modified,
-                meta.*,
+                file.file_id,
+                meta.orientation,
+                meta.exif_datetime,
+                meta.f_number,
+                meta.exposure_time,
+                meta.iso,
+                meta.focal_length,
+                meta.make,
+                meta.model,
+                meta.lens,
+                meta.rating,
+                meta.latitude,
+                meta.longitude,
+                meta.width,
+                meta.height,
                 meta.height > meta.width as is_portrait,
                 location.description as location
             FROM file
@@ -228,9 +248,6 @@ class ImageCache:
             if not found or found['last_modified'] < mod_tm:
                 out_of_date_folders.append(dir)
                 insert_data.append([mod_tm, dir])
-                if self.__first_run:
-                    self.__first_run = False
-                    break # stop after one directory, just on initial run
 
         if len(insert_data):
             self.__db.executemany(sql_insert, insert_data)
@@ -267,24 +284,19 @@ class ImageCache:
         ques = ', '.join('?' * len(dict.keys()))
         return 'INSERT OR REPLACE INTO meta(file_id, {0}) VALUES((SELECT file_id from all_data where fname = ?), {1})'.format(columns, ques)
 
-    def __update_meta_data(self):
+    def __update_meta_data(self, stop_time):
         sql_insert = None
         insert_data = []
-        if self.__first_run:
-            num_to_do = 5
-        else:
-            num_to_do = 100
-        for _ in range(num_to_do):
-            if len(self.__modified_files) > 0:
-                file = self.__modified_files.pop()
-                meta = self.__get_exif_info(file)
-                if sql_insert == None:
-                    sql_insert = self.__get_meta_sql_from_dict(meta)
-                vals = list(meta.values())
-                vals.insert(0, file)
-                insert_data.append(vals)
-                self.__first_run = False
-
+        while self.__modified_files: # returns False if nothing left in it
+            file = self.__modified_files.pop()
+            meta = self.__get_exif_info(file)
+            if sql_insert == None:
+                sql_insert = self.__get_meta_sql_from_dict(meta)
+            vals = list(meta.values())
+            vals.insert(0, file)
+            insert_data.append(vals)
+            if time.time() > stop_time:
+                break
         if len(insert_data):
             self.__db.executemany(sql_insert, insert_data)
 
