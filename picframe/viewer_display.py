@@ -264,7 +264,7 @@ class ViewerDisplay:
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
         self.__slide.set_shader(shader)
         self.__slide.unif[47] = self.__edge_alpha
-        self.__slide.unif[54] = self.__blend_type
+        self.__slide.unif[54] = float(self.__blend_type)
         self.__slide.unif[55] = 1.0 #brightness
         # PointText and TextBlock. If SHOW_NAMES_TM <= 0 then this is just used for no images message
         grid_size = math.ceil(len(self.__codepoints) ** 0.5)

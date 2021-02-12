@@ -16,7 +16,7 @@ DEFAULT_CONFIG = {
         'edge_alpha': 0.5, 
         'fps': 20.0, 
         'background': [0.2, 0.2, 0.3, 1.0],  
-        'blend_type': 0.0, # {"blend":0.0, "burn":1.0, "bump":2.0}
+        'blend_type': "blend", # {"blend":0.0, "burn":1.0, "bump":2.0}
         'font_file': '~/.local/picframe/data/fonts/NotoSans-Regular.ttf', 
         'shader': '~/.local/picframe/data/shaders/blend_new', 
         'show_text_fm': '%b %d, %Y',

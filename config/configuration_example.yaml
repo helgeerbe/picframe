@@ -21,10 +21,6 @@ viewer:
   display_y: 0                            # offset from top of screen (can be negative)
   display_w: null                         # width of display surface (null->None will use max returned by hardware)
   display_h: null                         # height of display surface
-  display_x: 0                            # offset from left of screen (can be negative)
-  display_y: 0                            # offset from top of screen (can be negative)
-  display_w: null                         # width of display surface (null->None will use max returned by hardware)
-  display_h: null                         # height of display surface
   use_glx: False                          # default=False. Set to True on linux with xserver running
 
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
