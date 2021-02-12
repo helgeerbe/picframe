@@ -4,7 +4,9 @@ import logging
 import sys
 import threading
 import time
-#sys.path.insert(1,'/home/herbe/dev/pi3d')
+import psutil
+import os
+sys.path.insert(1,'/home/pi/dev/pi3d')
 import pi3d
 
 
@@ -28,10 +30,15 @@ class InterfaceKbd:
         self.__logger = logging.getLogger("interface_kbd.InterfaceKbd")
         self.__logger.info('creating an instance of InterfaceKbd')
         self.__controller = controller
-        self.__keyboard = pi3d.Keyboard()
-        self.__keep_looping = True
-        t = threading.Thread(target=self.__loop)
-        t.start()
+        ppid = psutil.Process(os.getpid()).ppid()
+        if  ppid == 1: # systemd will always have a PID of 1, so check if the parent PID is 1
+            self.__logger.info('Runnung as systemd service. Ignoring keyboard.')
+        else:
+            self.__logger.info("Parent PID is %s:", ppid)
+            self.__keyboard = pi3d.Keyboard()
+            self.__keep_looping = True
+            t = threading.Thread(target=self.__loop)
+            t.start()
 
     def __loop(self):
         while self.__keep_looping:
@@ -42,6 +49,11 @@ class InterfaceKbd:
                 self.__controller.back()
             elif key == ord('d'):
                 self.__controller.next()
+            elif key == ord('l'):
+                if self.__controller.text_is_on("location"):
+                    self.__controller.set_show_text("location", "OFF")
+                else:
+                    self.__controller.set_show_text("location", "ON")
             time.sleep(0.025)
         self.__keyboard.close() # contains references to Display instance
         self.__controller.stop()

@@ -1,6 +1,6 @@
 # for development
 import sys
-#sys.path.insert(1, "/home/osboxes/dev/pi3d") #TODO just for debugging when not properly installed
+#sys.path.insert(1, "/home/pi/dev/pi3d") #TODO just for debugging when not properly installed
 import pi3d
 from pi3d.Texture import MAX_SIZE
 import math
@@ -245,7 +245,7 @@ class ViewerDisplay:
             if paused:
                 info_strings.append("PAUSED")
         final_string = " • ".join(info_strings)
-        self.__textblock.set_text(text_format=final_string, wrap=self.__text_width)
+        self.__textblock.set_text(text_format=final_string, size=self.__text_width)
 
         last_ch = len(final_string)
         if last_ch > 0:

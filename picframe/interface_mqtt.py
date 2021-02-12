@@ -162,19 +162,6 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.publish(state_topic, "ON" if is_on else "OFF", qos=0, retain=True)
 
-        # send display switch configuration  and display state
-        # config_topic = switch_topic_head + "_display/config"
-        # command_topic = switch_topic_head + "_display/set"
-        # state_topic = switch_topic_head + "_display/state"
-        # config_payload = '{"name":"' + device_id + '_display", "icon":"mdi:panorama", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_disp", "dev":{"ids":["' + device_id + '"], "name":"' + device_id + '", "mdl":"Picture Frame", "sw":"' + __version__ + '", "mf":"erbehome"}}'
-        # client.subscribe(command_topic , qos=0)
-        # client.publish(config_topic, config_payload, qos=0, retain=True)
-        # if self.__viewer.display_is_on == True:
-        #     client.publish(state_topic, "ON", qos=0, retain=True)
-        # else :
-        #     client.publish(state_topic, "OFF", qos=0, retain=True)
-
-
     def on_message(self, client, userdata, message):
         msg = message.payload.decode("utf-8") 
         switch_topic_head = "homeassistant/switch/" + self.__device_id
