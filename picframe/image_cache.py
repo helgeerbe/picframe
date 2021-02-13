@@ -18,6 +18,7 @@ class ImageCache:
                      'EXIF LensModel': 'lens',
                      'EXIF DateTimeOriginal': 'exif_datetime'}
 
+
     def __init__(self, picture_dir, db_file, geo_reverse, portrait_pairs=False):
         self.__modified_folders = []
         self.__modified_files = []
@@ -31,10 +32,10 @@ class ImageCache:
 
         self.__keep_looping = True
         self.__pause_looping = False
-        self.__first_run = True # used to speed up very first update_cache
 
         t = threading.Thread(target=self.__loop)
         t.start()
+
 
     def __loop(self):
         while self.__keep_looping:
@@ -45,11 +46,14 @@ class ImageCache:
         self.__db.commit() # close after update_cache finished for last time
         self.__db.close()
 
+
     def pause_looping(self, value):
         self.__pause_looping = value
 
+
     def stop(self):
         self.__keep_looping = False
+
 
     def update_cache(self, max_runtime_seconds = 10.0):
         """Update the cache database with new and/or modified files
@@ -62,7 +66,7 @@ class ImageCache:
         time_start = time.time()
         time_end = time_start + max_runtime_seconds
 
-        # If the current collection of udpate files is empty, check for disk-based changes
+        # If the current collection of updated files is empty, check for disk-based changes
         if not self.__modified_files:
             self.__logger.debug('No unprocessed files in memory, checking disk')
             self.__modified_folders = self.__get_modified_folders()
@@ -78,6 +82,7 @@ class ImageCache:
         # If we've process all files in the current collection, update the cached folder mod times
         if not self.__modified_files:
             self.__update_folder_modtimes(self.__modified_folders)
+            self.__modified_folders.clear()
 
         # Commit the current set of changes
         self.__db.commit()
@@ -118,6 +123,7 @@ class ImageCache:
                         elem += pair_list.pop(0)
                     newlist.append(elem)
             return newlist
+
 
     def get_file_info(self, file_id):
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
@@ -233,6 +239,7 @@ class ImageCache:
 
         return db
 
+
     def __get_modified_folders(self):
         out_of_date_folders = []
         sql_select = "SELECT * FROM folder WHERE name = ?"
@@ -242,6 +249,7 @@ class ImageCache:
             if not found or found['last_modified'] < mod_tm:
                 out_of_date_folders.append((dir, mod_tm))
         return out_of_date_folders
+
 
     def __get_modified_files(self, modified_folders):
         out_of_date_files = []
@@ -276,6 +284,7 @@ class ImageCache:
         self.__db.execute(folder_insert, (dir,))
         self.__db.execute(file_insert, (dir, base, extension.lstrip("."), mod_tm))
         self.__db.execute(meta_insert, vals)
+
 
     def __update_folder_modtimes(self, folder_collection):
         update_data = []
@@ -313,6 +322,7 @@ class ImageCache:
         # remove matching records from the 'meta' table as well.
         if len(file_id_list):
             self.__db.executemany('DELETE FROM file WHERE file_id = ?', file_id_list)
+
 
     def __get_exif_info(self, file_path_name):
         exifs = get_image_meta.GetImageMeta(file_path_name)
@@ -353,6 +363,7 @@ class ImageCache:
         e['longitude'] = round(lon, 4) if lon is not None else lon
 
         return e
+
 
 # If being executed (instead of imported), kick it off...
 if __name__ == "__main__":
