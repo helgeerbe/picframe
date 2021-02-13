@@ -298,7 +298,7 @@ class ImageCache:
         columns = ', '.join(dict.keys())
         ques = ', '.join('?' * len(dict.keys()))
         return 'INSERT OR REPLACE INTO meta(file_id, {0}) VALUES((SELECT file_id from all_data where fname = ?), {1})'.format(columns, ques)
-
+      
 
     def __purge_missing_files_and_folders(self):
         # Find folders in the db that are no longer on disk
