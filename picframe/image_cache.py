@@ -18,9 +18,12 @@ class ImageCache:
                      'EXIF LensModel': 'lens',
                      'EXIF DateTimeOriginal': 'exif_datetime'}
 
+
     def __init__(self, picture_dir, db_file, geo_reverse, portrait_pairs=False):
+        self.__modified_folders = []
+        self.__modified_files = []
         self.__logger = logging.getLogger("image_cache.ImageCache")
-        self.__logger.debug('creating an instance of ImageCache')
+        self.__logger.debug('Creating an instance of ImageCache')
         self.__picture_dir = picture_dir
         self.__db_file = db_file
         self.__geo_reverse = geo_reverse
@@ -29,40 +32,65 @@ class ImageCache:
 
         self.__keep_looping = True
         self.__pause_looping = False
-        self.__first_run = True # used to speed up very first update_cache
+
         t = threading.Thread(target=self.__loop)
         t.start()
+
 
     def __loop(self):
         while self.__keep_looping:
             if not self.__pause_looping:
-                self.update_cache()
+                self.update_cache(2.0)
                 time.sleep(2.0)
             time.sleep(0.01)
         self.__db.commit() # close after update_cache finished for last time
         self.__db.close()
 
+
     def pause_looping(self, value):
         self.__pause_looping = value
+
 
     def stop(self):
         self.__keep_looping = False
 
-    def update_cache(self):
-        t0 = time.time()
-        # update the db with info for any added or modified folders since last db refresh
-        modified_folders = self.__update_modified_folders()
-        # update the db with info for any added or modified files since the last db refresh
-        modified_files = self.__update_modified_files(modified_folders)
-        # update the meta data for any added or modified files since the last db refresh
-        self.__update_meta_data(modified_files)
-        # remove any files or folders from the db that are no longer on disk
-        self.__purge_missing_files_and_folders()
 
-        t1 = time.time()
-        self.__logger.debug("Total: %.2f", t1 - t0)
+    def update_cache(self, max_runtime_seconds = 10.0):
+        """Update the cache database with new and/or modified files
 
+        Args:
+            max_runtime_seconds (float, optional): The maximum time (in seconds)
+               the function is allowed to run.
+        """
+        self.__logger.debug('Updating cache')
+        time_start = time.time()
+        time_end = time_start + max_runtime_seconds
+
+        # If the current collection of updated files is empty, check for disk-based changes
+        if not self.__modified_files:
+            self.__logger.debug('No unprocessed files in memory, checking disk')
+            self.__modified_folders = self.__get_modified_folders()
+            self.__modified_files = self.__get_modified_files(self.__modified_folders)
+            self.__logger.debug('Found {} new files on disk', len(self.__modified_files))
+
+        # While we have files to process and available time, process the next file
+        while self.__modified_files and time.time() < time_end:
+            file = self.__modified_files.pop(0)
+            self.__logger.debug('Inserting: ', file)
+            self.__insert_file(file)
+
+        # If we've process all files in the current collection, update the cached folder mod times
+        if not self.__modified_files:
+            self.__update_folder_modtimes(self.__modified_folders)
+            self.__modified_folders.clear()
+
+        # Commit the current set of changes
         self.__db.commit()
+
+        # If there's still time, remove any files or folders from the db that are no longer on disk
+        if time.time() < time_end:
+            self.__purge_missing_files_and_folders()
+
 
     def query_cache(self, where_clause, sort_clause = 'exif_datetime ASC'):
         cursor = self.__db.cursor()
@@ -95,6 +123,7 @@ class ImageCache:
                         elem += pair_list.pop(0)
                     newlist.append(elem)
             return newlist
+
 
     def get_file_info(self, file_id):
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
@@ -210,41 +239,22 @@ class ImageCache:
 
         return db
 
-    def __update_modified_folders(self):
+
+    def __get_modified_folders(self):
         out_of_date_folders = []
-        insert_data = []
         sql_select = "SELECT * FROM folder WHERE name = ?"
-        # Note, we must use INSERT OR IGNORE here, as INSERT OR REPLACE will modify
-        # the record id upon conflict. Since the id is linked in other tables/views
-        # it can't be allowed to change. We'll follow that up with an UPDATE, which
-        # should ensure that both new and updated records are handled correctly. Even
-        # though this is redundant in some cases, it seems to be the fastest method.
-        sql_insert = "INSERT OR IGNORE INTO folder(last_modified, name) VALUES(?, ?)"
-        sql_update = "UPDATE folder SET last_modified = ? WHERE name = ?"
         for dir in [d[0] for d in os.walk(self.__picture_dir)]:
             mod_tm = int(os.stat(dir).st_mtime)
             found = self.__db.execute(sql_select, (dir,)).fetchone()
             if not found or found['last_modified'] < mod_tm:
-                out_of_date_folders.append(dir)
-                insert_data.append([mod_tm, dir])
-                if self.__first_run:
-                    self.__first_run = False
-                    break # stop after one directory, just on initial run
-
-        if len(insert_data):
-            self.__db.executemany(sql_insert, insert_data)
-            self.__db.executemany(sql_update, insert_data)
-
+                out_of_date_folders.append((dir, mod_tm))
         return out_of_date_folders
 
-    def __update_modified_files(self, modified_folders):
+
+    def __get_modified_files(self, modified_folders):
         out_of_date_files = []
-        insert_data = []
-        # Here, we can get away with INSERT OR REPLACE as a change to the file's db id
-        # won't cause problems as the linked records will naturally be updated anyway.
         sql_select = "SELECT fname, last_modified FROM all_data WHERE fname = ?"
-        sql_update = "INSERT OR REPLACE INTO file(folder_id, basename, extension, last_modified) VALUES((SELECT folder_id from folder where name = ?), ?, ?, ?)"
-        for dir in modified_folders:
+        for dir,date in modified_folders:
             for file in os.listdir(dir):
                 base, extension = os.path.splitext(file)
                 if (extension.lower() in ImageCache.EXTENSIONS
@@ -254,31 +264,41 @@ class ImageCache:
                     found = self.__db.execute(sql_select, (full_file,)).fetchone()
                     if not found or found['last_modified'] < mod_tm:
                         out_of_date_files.append(full_file)
-                        insert_data.append([dir, base, extension.lstrip("."), mod_tm])
-
-        if len(insert_data):
-            self.__db.executemany(sql_update, insert_data)
-
         return out_of_date_files
+
+
+    def __insert_file(self, file):
+        file_insert = "INSERT OR REPLACE INTO file(folder_id, basename, extension, last_modified) VALUES((SELECT folder_id from folder where name = ?), ?, ?, ?)"
+        folder_insert = "INSERT OR IGNORE INTO folder(name) VALUES(?)"
+        mod_tm =  os.path.getmtime(file)
+        dir, file_only = os.path.split(file)
+        base, extension = os.path.splitext(file_only)
+
+        # Get the file's meta info and build the INSERT statement dynamically
+        meta = self.__get_exif_info(file)
+        meta_insert = self.__get_meta_sql_from_dict(meta)
+        vals = list(meta.values())
+        vals.insert(0, file)
+
+        # Insert this file's info into the folder, file, and meta tables
+        self.__db.execute(folder_insert, (dir,))
+        self.__db.execute(file_insert, (dir, base, extension.lstrip("."), mod_tm))
+        self.__db.execute(meta_insert, vals)
+
+
+    def __update_folder_modtimes(self, folder_collection):
+        update_data = []
+        sql = "UPDATE folder SET last_modified = ? WHERE name = ?"
+        for folder, modtime in folder_collection:
+            update_data.append((modtime, folder))
+        self.__db.executemany(sql, update_data)
+
 
     def __get_meta_sql_from_dict(self, dict):
         columns = ', '.join(dict.keys())
         ques = ', '.join('?' * len(dict.keys()))
         return 'INSERT OR REPLACE INTO meta(file_id, {0}) VALUES((SELECT file_id from all_data where fname = ?), {1})'.format(columns, ques)
-
-    def __update_meta_data(self, modified_files):
-        sql_insert = None
-        insert_data = []
-        for file in modified_files:
-            meta = self.__get_exif_info(file)
-            if sql_insert == None:
-                sql_insert = self.__get_meta_sql_from_dict(meta)
-            vals = list(meta.values())
-            vals.insert(0, file)
-            insert_data.append(vals)
-
-        if len(insert_data):
-            self.__db.executemany(sql_insert, insert_data)
+      
 
     def __purge_missing_files_and_folders(self):
         # Find folders in the db that are no longer on disk
@@ -302,6 +322,7 @@ class ImageCache:
         # remove matching records from the 'meta' table as well.
         if len(file_id_list):
             self.__db.executemany('DELETE FROM file WHERE file_id = ?', file_id_list)
+
 
     def __get_exif_info(self, file_path_name):
         exifs = get_image_meta.GetImageMeta(file_path_name)
@@ -328,6 +349,9 @@ class ImageCache:
         e['lens'] = exifs.get_exif('EXIF LensModel')
         val = exifs.get_exif('EXIF DateTimeOriginal')
         if val != None:
+            # Remove any subsecond portion of the DateTimeOriginal value. According to the spec, it's
+            # not valid here anyway (should be in SubSecTimeOriginal), but it does exist sometimes.
+            val = val.split('.', 1)[0]
             e['exif_datetime'] = time.mktime(time.strptime(val, '%Y:%m:%d %H:%M:%S'))
         else:
             e['exif_datetime'] = os.path.getmtime(file_path_name)
@@ -340,9 +364,10 @@ class ImageCache:
 
         return e
 
+
 # If being executed (instead of imported), kick it off...
 if __name__ == "__main__":
-    cache = ImageCache(picture_dir='/home/pi/Pictures')
-    cache.update_cache()
+    cache = ImageCache(picture_dir='/home/pi/Pictures', db_file='/home/pi/db.db3', geo_reverse=None)
+    #cache.update_cache()
     # items = cache.query_cache("make like '%google%'", "exif_datetime asc")
     #info = cache.get_file_info(12)

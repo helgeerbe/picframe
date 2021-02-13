@@ -31,7 +31,7 @@ class ViewerDisplay:
     def __init__(self, config):
         self.__logger = logging.getLogger("viewer_display.ViewerDisplay")
         self.__blur_amount = config['blur_amount']
-        self.__blur_zoom = config['blur_zoom']  
+        self.__blur_zoom = config['blur_zoom']
         self.__blur_edges = config['blur_edges']
         self.__edge_alpha = config['edge_alpha']
         self.__fps = config['fps']
@@ -91,7 +91,7 @@ class ViewerDisplay:
         try: # vcgencmd only applies to raspberry pi
             cmd = ["vcgencmd", "display_power", "0"]
             if on_off == True:
-                cmd = ["vcgencmd", "display_power", "1"]   
+                cmd = ["vcgencmd", "display_power", "1"]
             subprocess.call(cmd)
         except:
             return None
@@ -120,7 +120,7 @@ class ViewerDisplay:
         self.__slide.unif[55] = val # take immediate effect
 
     def get_brightness(self):
-        return self.__slide.unif[55]  
+        return self.__slide.unif[55]
 
     def __check_heif_then_open(self, fname):
         ext = os.path.splitext(fname)[1].lower()
@@ -159,11 +159,11 @@ class ViewerDisplay:
         elif orientation == 4:
             im = im.transpose(Image.FLIP_TOP_BOTTOM)
         elif orientation == 5:
-            im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_270)
+            im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_90)
         elif orientation == 6:
             im = im.transpose(Image.ROTATE_270)
         elif orientation == 7:
-            im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_90)
+            im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_270)
         elif orientation == 8:
             im = im.transpose(Image.ROTATE_90)
         return im
@@ -258,7 +258,7 @@ class ViewerDisplay:
     def slideshow_start(self):
         self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
               w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
-              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background, use_glx=self.__use_glx) 
+              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR, background=self.__background, use_glx=self.__use_glx)
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
@@ -273,7 +273,7 @@ class ViewerDisplay:
         self.__text = pi3d.PointText(font, camera, max_chars=200, point_size=50)
         self.__textblock = pi3d.TextBlock(x=-int(self.__display.width) * 0.5 + 50, y=-int(self.__display.height) * 0.4,
                                 z=0.1, rot=0.0, char_count=199,
-                                text_format="{}".format(" "), size=0.99, 
+                                text_format="{}".format(" "), size=0.99,
                                 spacing="F", space=0.02, colour=(1.0, 1.0, 1.0, 1.0))
         self.__text.add_text_block(self.__textblock)
         bkg_ht = self.__display.height // 3
