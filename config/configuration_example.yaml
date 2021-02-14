@@ -36,8 +36,9 @@ model:
   time_delay: 200.0                       # default=200.0, time between consecutive slide starts - can be changed by MQTT
   fade_time: 10.0                         # default=10.0, change time during which slides overlap - can be changed by MQTT"
   shuffle: True                           # default=True, shuffle on reloading image files - can be changed by MQTT"
-  image_attr: [                           # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat
-    'PICFRAME GPS', 
+  image_attr: [                           # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat, 'PICFRAME LOCATION' is special to retrieve geo reverse (load_geoloc hast to be True)
+    'PICFRAME GPS',               
+    'PICFRAME LOCATION',
     'EXIF FNumber', 
     'EXIF ExposureTime', 
     'EXIF ISOSpeedRatings', 
