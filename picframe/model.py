@@ -112,7 +112,7 @@ class Model:
                 self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
                 self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
-        self.__logger.setLevel(self.get_model_config()['log_level'])
+        logging.getLogger().setLevel(self.get_model_config()['log_level']) # set root logger
         self.__file_list = [] # this is now a list of tuples i.e (file_id1,) or (file_id1, file_id2)
         self.__number_of_files = 0 # this is shortcut for len(__file_list)
         self.__reload_files = True
