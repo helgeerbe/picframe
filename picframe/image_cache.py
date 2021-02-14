@@ -40,7 +40,7 @@ class ImageCache:
     def __loop(self):
         while self.__keep_looping:
             if not self.__pause_looping:
-                self.update_cache(2.0)
+                self.update_cache()
                 time.sleep(2.0)
             time.sleep(0.01)
         self.__db.commit() # close after update_cache finished for last time
@@ -55,16 +55,11 @@ class ImageCache:
         self.__keep_looping = False
 
 
-    def update_cache(self, max_runtime_seconds = 10.0):
+    def update_cache(self):
         """Update the cache database with new and/or modified files
-
-        Args:
-            max_runtime_seconds (float, optional): The maximum time (in seconds)
-               the function is allowed to run.
         """
+
         self.__logger.debug('Updating cache')
-        time_start = time.time()
-        time_end = time_start + max_runtime_seconds
 
         # If the current collection of updated files is empty, check for disk-based changes
         if not self.__modified_files:
@@ -73,8 +68,8 @@ class ImageCache:
             self.__modified_files = self.__get_modified_files(self.__modified_folders)
             self.__logger.debug('Found {} new files on disk', len(self.__modified_files))
 
-        # While we have files to process and available time, process the next file
-        while self.__modified_files and time.time() < time_end:
+        # While we have files to process and looping isn't paused
+        while self.__modified_files and not self.__pause_looping:
             file = self.__modified_files.pop(0)
             self.__logger.debug('Inserting: ', file)
             self.__insert_file(file)
@@ -87,8 +82,8 @@ class ImageCache:
         # Commit the current set of changes
         self.__db.commit()
 
-        # If there's still time, remove any files or folders from the db that are no longer on disk
-        if time.time() < time_end:
+        # If looping is still not paused, remove any files or folders from the db that are no longer on disk
+        if not self.__pause_looping:
             self.__purge_missing_files_and_folders()
 
 
