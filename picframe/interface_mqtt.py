@@ -212,12 +212,12 @@ class InterfaceMQTT:
             if msg == "ON":
                 client.publish(state_topic, "OFF", retain=True)
                 self.__controller.delete()
-        # name toggle
+        # name on
         elif message.topic == switch_topic_head + "_name_toggle/set":
             state_topic = switch_topic_head + "_name_toggle/state"
             if msg in ("ON", "OFF"):
                 self.__controller.set_show_text("name", msg)
-                client.publish(state_topic, "OFF" if msg == "ON" else "ON", retain=True)
+                client.publish(state_topic, msg, retain=True)
         # date_on
         elif message.topic == switch_topic_head + "_date_toggle/set":
             state_topic = switch_topic_head + "_date_toggle/state"
@@ -241,6 +241,14 @@ class InterfaceMQTT:
             state_topic = switch_topic_head + "_text_off/state"
             if msg == "ON":
                 self.__controller.set_show_text()
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_directory_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_location_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_date_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_name_toggle/state"
                 client.publish(state_topic, "OFF", retain=True)
         # text_refresh
         elif message.topic == switch_topic_head + "_text_refresh/set":
