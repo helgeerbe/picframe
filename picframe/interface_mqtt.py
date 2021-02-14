@@ -85,24 +85,9 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "brightness", "mdi:brightness-6", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "fade_time", "mdi:image-size-select-large", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:folder-multiple-image", available_topic)
-
-        # send image counter sensor configuration 
-        config_topic = sensor_topic_head + "_image_counter/config"
-        config_payload = '{"name":"' + self.__device_id + '_image_counter", "icon":"mdi:camera-burst", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.image_counter}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_ic", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-
-        # send  image sensor configuration
-        config_topic = sensor_topic_head + "_image/config"
-        attributes_topic = sensor_topic_head + "_image/attributes"
-        config_payload = '{"name":"' + self.__device_id + '_image", "icon":"mdi:file-image", "state_topic":"' + state_topic + '",  "value_template": "{{ value_json.image}}", "json_attributes_topic":"' + attributes_topic + '","avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_fn", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-
-        # send  directory sensor configuration
-        config_topic = sensor_topic_head + "_dir/config"
-        attributes_topic = sensor_topic_head + "_dir/attributes"
-        config_payload = '{"name":"' + self.__device_id + '_dir", "icon":"mdi:folder-multiple-image", "state_topic":"' + state_topic + '",  "value_template": "{{ value_json.dir}}", "json_attributes_topic":"' + attributes_topic + '","avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_dir", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(self.__device_id + "/subdirectory", qos=0)
+        self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True)
+        self.__setup_sensor(client, sensor_topic_head, "dir", "mdi:folder-multiple-image", available_topic, has_attributes=True)
 
         ## switches
         self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic)
@@ -127,13 +112,23 @@ class InterfaceMQTT:
 
         client.subscribe(self.__device_id + "/stop", qos=0) # close down without killing!
 
-    def __setup_sensor(self, client, sensor_topic_head, topic, icon, available_topic):
+    def __setup_sensor(self, client, sensor_topic_head, topic, icon, available_topic, has_attributes=False):
         config_topic = sensor_topic_head + "_" + topic + "/config"
         name = self.__device_id + "_" + topic
-        config_payload = json.dumps({"name": name,
+        if has_attributes == True:
+            config_payload = json.dumps({"name": name,
                                      "icon": icon,
                                      "state_topic": sensor_topic_head + "/state",
-                                     "value_template": "{{ value_json.date_from}}",
+                                     "value_template": "{{ value_json." + topic + "}}",
+                                     "avty_t": available_topic,
+                                     "json_attributes_topic": sensor_topic_head + "_" + topic + "/attributes",
+                                     "uniq_id": name,
+                                     "dev":{"ids":[self.__device_id]}})
+        else:
+            config_payload = json.dumps({"name": name,
+                                     "icon": icon,
+                                     "state_topic": sensor_topic_head + "/state",
+                                     "value_template": "{{ value_json." + topic + "}}",
                                      "avty_t": available_topic,
                                      "uniq_id": name,
                                      "dev":{"ids":[self.__device_id]}})
