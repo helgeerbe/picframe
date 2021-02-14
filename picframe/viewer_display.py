@@ -120,7 +120,7 @@ class ViewerDisplay:
         self.__slide.unif[55] = val # take immediate effect
 
     def get_brightness(self):
-        return self.__slide.unif[55]
+        return float("{:.2f}".format(self.__slide.unif[55])) # TODO There seems to be a rounding issue. set 0.77 get 0.7699999809265137
 
     def __check_heif_then_open(self, fname):
         ext = os.path.splitext(fname)[1].lower()
