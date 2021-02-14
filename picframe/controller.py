@@ -219,8 +219,8 @@ class Controller:
                 image_attr = {}
                 for key in self.__model.get_model_config()['image_attr']:
                     if key == 'PICFRAME GPS':
-                        image_attr[key] = {'latitude': pics[0].latitude,
-                                           'longitude': pics[0].longitude}
+                        image_attr['latitude'] = pics[0].latitude
+                        image_attr['longitude'] = pics[0].longitude
                     else:
                         field_name = self.__model.EXIF_TO_FIELD[key]
                         image_attr[key] = pics[0].__dict__[field_name] #TODO nicer using namedtuple for Pic

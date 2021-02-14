@@ -318,6 +318,7 @@ class InterfaceMQTT:
 
         #pulish sensors
         attributes_topic = topic_head + "_image/attributes"
+        self.__logger.debug("Send image attributes: %s", image_attr)
         self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
         attributes_topic = topic_head + "_dir/attributes"
         self.__client.publish(attributes_topic, json.dumps(dir_attr), qos=0, retain=False)
