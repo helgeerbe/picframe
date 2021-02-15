@@ -87,7 +87,7 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:folder-multiple-image", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True)
-        self.__setup_sensor(client, sensor_topic_head, "dir", "mdi:folder-multiple-image", available_topic, has_attributes=True)
+        self.__setup_sensor(client, sensor_topic_head, "directory", "mdi:folder-multiple-image", available_topic, has_attributes=True)
 
         ## switches
         self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic)
@@ -254,7 +254,7 @@ class InterfaceMQTT:
 
         ##### values ########
         # change subdirectory
-        elif message.topic == self.__device_id + "/subdirectory":
+        elif message.topic == self.__device_id + "/directory":
             self.__logger.info("Recieved subdirectory: %s", msg)
             self.__controller.subdirectory = msg
         # date_from
@@ -293,7 +293,7 @@ class InterfaceMQTT:
         state_payload = {}
         # directory sensor
         actual_dir, dir_list = self.__controller.get_directory_list()
-        state_payload["dir"] = actual_dir
+        state_payload["directory"] = actual_dir
         dir_attr = {}
         dir_attr['directories'] = dir_list
         # image counter sensor
@@ -320,7 +320,7 @@ class InterfaceMQTT:
         attributes_topic = topic_head + "_image/attributes"
         self.__logger.debug("Send image attributes: %s", image_attr)
         self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
-        attributes_topic = topic_head + "_dir/attributes"
+        attributes_topic = topic_head + "_directory/attributes"
         self.__client.publish(attributes_topic, json.dumps(dir_attr), qos=0, retain=False)
         self.__logger.info("Send state: %s", state_payload)
         self.__client.publish(state_topic, json.dumps(state_payload), qos=0, retain=False)
