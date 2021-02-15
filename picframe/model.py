@@ -223,7 +223,7 @@ class Model:
         self.__reload_files = True
 
     def set_next_file_to_previous_file(self):
-        self.__file_index = (self.__file_index - 2) % self.__number_of_files
+        self.__file_index = (self.__file_index - 2) % self.__number_of_files # TODO deleting last image results in ZeroDivisionError
 
     def get_next_file(self):
         if self.__reload_files:
@@ -280,7 +280,7 @@ class Model:
     def __get_files(self):
         where_list = []
         if self.subdirectory != "":
-            picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.subdirectory)
+            picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.subdirectory) # TODO catch, if subdirecotry does not exist
             where_list.append("fname LIKE '{}/%'".format(picture_dir)) # TODO / on end to stop 'test' also selecting test1 test2 etc
         where_list.extend(self.__where_clauses.values())
 
