@@ -1,6 +1,6 @@
 # for development
 import sys
-sys.path.insert(1, "/home/pi/pi3d") #TODO just for debugging when not properly installed
+sys.path.insert(1, "/home/pi/dev/pi3d") #TODO just for debugging when not properly installed
 import pi3d
 from pi3d.Texture import MAX_SIZE
 import math
@@ -120,7 +120,7 @@ class ViewerDisplay:
         self.__slide.unif[55] = val # take immediate effect
 
     def get_brightness(self):
-        return self.__slide.unif[55]
+        return float("{:.2f}".format(self.__slide.unif[55])) # TODO There seems to be a rounding issue. set 0.77 get 0.7699999809265137
 
     def __check_heif_then_open(self, fname):
         ext = os.path.splitext(fname)[1].lower()
@@ -264,7 +264,7 @@ class ViewerDisplay:
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
         self.__slide.set_shader(shader)
         self.__slide.unif[47] = self.__edge_alpha
-        self.__slide.unif[54] = self.__blend_type
+        self.__slide.unif[54] = float(self.__blend_type)
         self.__slide.unif[55] = 1.0 #brightness
         # PointText and TextBlock. If SHOW_NAMES_TM <= 0 then this is just used for no images message
         grid_size = math.ceil(len(self.__codepoints) ** 0.5)
@@ -291,7 +291,7 @@ class ViewerDisplay:
         if pics is not None:
             self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
             self.__next_tm = tm + time_delay
-            self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
+            self.__name_tm = tm + fade_time + float(self.__show_text_tm) # text starts after slide transition
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             if new_sfg is not None: # this is a possible return value which needs to be caught
                 self.__sfg = new_sfg

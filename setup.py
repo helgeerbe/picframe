@@ -29,9 +29,11 @@ setup(name='picframe',
       install_requires=[
         'Pillow',
         'ExifRead',
-        'pi3d',
+        'pi3d>=2.42',
         'PyYAML',
-        'paho-mqtt'
+        'paho-mqtt',
+#        'pyheif',
+        'numpy'
       ],
       data_files=[
         ('picframe/config', ['config/configuration_example.yaml']),

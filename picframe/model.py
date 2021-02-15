@@ -16,7 +16,7 @@ DEFAULT_CONFIG = {
         'edge_alpha': 0.5, 
         'fps': 20.0, 
         'background': [0.2, 0.2, 0.3, 1.0],  
-        'blend_type': 0.0, # {"blend":0.0, "burn":1.0, "bump":2.0}
+        'blend_type': "blend", # {"blend":0.0, "burn":1.0, "bump":2.0}
         'font_file': '~/.local/picframe/data/fonts/NotoSans-Regular.ttf', 
         'shader': '~/.local/picframe/data/shaders/blend_new', 
         'show_text_fm': '%b %d, %Y',
@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
         'display_h': None,
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
-        'codepoints': '1234567890AÄÀBCÇDÈÉÊEFGHIÍJKLMNÑOÓÖPQRSTUÚÙÜVWXYZ., _-/abcdefghijklmnñopqrstuvwxyzáéèêàçíóúäöüß', # limit to 49 ie 7x7 grid_size'
+        'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
     }, 
     'model': {
         'pic_dir': '~/Pictures', 
@@ -53,6 +53,8 @@ DEFAULT_CONFIG = {
         'db_file': '~/.local/picframe/data/pictureframe.db3',
         'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
+        'log_level': 'WARNING',
+        'use_kbd': False,
     },
     'mqtt': {
         'use_mqtt': False,                          # Set tue true, to enable mqtt  
@@ -110,6 +112,7 @@ class Model:
                 self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
                 self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
+        logging.getLogger().setLevel(self.get_model_config()['log_level']) # set root logger
         self.__file_list = [] # this is now a list of tuples i.e (file_id1,) or (file_id1, file_id2)
         self.__number_of_files = 0 # this is shortcut for len(__file_list)
         self.__reload_files = True
