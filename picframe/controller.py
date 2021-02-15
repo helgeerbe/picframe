@@ -43,6 +43,7 @@ class Controller:
         self.__next_tm = 0
         self.__date_from = make_date('1970/1/1')
         self.__date_to = make_date('2038/1/1')
+        self.__location_filter = ""
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
