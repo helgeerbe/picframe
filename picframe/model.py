@@ -73,7 +73,8 @@ class Pic: #TODO could this be done more elegantly with namedtuple
     def __init__(self, fname, last_modified, file_id, orientation=1, exif_datetime=0,
                  f_number=0, exposure_time=None, iso=0, focal_length=None,
                  make=None, model=None, lens=None, rating=None, latitude=None,
-                 longitude=None, width=0, height=0, is_portrait=0, location=None):
+                 longitude=None, width=0, height=0, is_portrait=0, location=None, title=None,
+                 caption=None, tags=None):
         self.fname = fname
         self.last_modified = last_modified
         self.file_id = file_id
@@ -93,6 +94,9 @@ class Pic: #TODO could this be done more elegantly with namedtuple
         self.height = height
         self.is_portrait = is_portrait
         self.location = location
+        self.tags=tags
+        self.caption=caption
+        self.title=title
 
 
 class Model:

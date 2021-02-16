@@ -3,6 +3,7 @@
 import exifread
 import logging
 from PIL import Image
+from iptcinfo3 import IPTCInfo
 
 class GetImageMeta:
 
@@ -12,7 +13,17 @@ class GetImageMeta:
         self.__filename = filename # in case no exif data in which case needed for size
         try:
             with open(filename, 'rb') as fh:
-                self.__tags = exifread.process_file(fh, details=False)
+                self.__tags = exifread.process_file(fh, details=False) 
+                iptc = IPTCInfo(fh) # TODO put IPTC read in separate function
+                if len(iptc['keywords']) > 0: 
+                    keywords =''
+                    for key in iptc['keywords']:
+                        keywords += key.decode('ascii')  + ','  # decode binary strings
+                self.__tags['IPTC Keywords'] = keywords
+                if len(iptc['caption/abstract']) > 0:  
+                    self.__tags['IPTC Caption/Abstract'] = iptc['caption/abstract'].decode('ascii')
+                if len(iptc['object name']) > 0:  
+                    self.__tags['IPTC Object Name'] = iptc['object name'].decode('ascii')
         except OSError as e:
             self.__logger.warning("Can't open file: \"%s\"", filename)
             self.__logger.warning("Cause: %s", e)
@@ -73,6 +84,8 @@ class GetImageMeta:
         if val:
             if key == 'EXIF FNumber':
                 val = round(val.values[0].num / val.values[0].den, 1)
+            elif key in ['IPTC Keywords',  'IPTC Caption/Abstract',  'IPTC Object Name']:
+                return val
             else:
                 val = val.printable
         return val
