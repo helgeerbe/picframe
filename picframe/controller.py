@@ -41,7 +41,7 @@ class Controller:
         self.__viewer = viewer
         self.__paused = False
         self.__next_tm = 0
-        self.__date_from = make_date('1970/1/1')
+        self.__date_from = make_date('1901/12/15') # TODO This seems to be the minimum date to be handled by date functions
         self.__date_to = make_date('2038/1/1')
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
