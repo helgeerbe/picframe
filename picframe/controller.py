@@ -190,6 +190,20 @@ class Controller:
         self.__model.force_reload()
         self.__next_tm = 0
 
+    @property
+    def tags_filter(self):
+        return self.__tags_filter
+    
+    @tags_filter.setter
+    def tags_filter(self, val):
+        self.__tags_filter = val
+        if len(val) > 0:
+            self.__model.set_where_clause('tags_filter', "tags LIKE '%{}%'".format(val))
+        else:
+            self.__model.set_where_clause('tags_filter') # remove from where_clause
+        self.__model.force_reload()
+        self.__next_tm = 0
+
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
 
