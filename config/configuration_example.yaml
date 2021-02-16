@@ -11,7 +11,7 @@ viewer:
   show_text_fm: '%b %d, %Y'               # default "%b %d, %Y", format to show date over the image
   show_text_tm: 20.0                      # default=0.0, time to show text over image with file name
   show_text_sz: 40                        # default=90, text character size
-  show_text: "name date folder location"  # default="date folder location", show text, include combination of words: name, date, location, folder
+  show_text: "title caption name date folder location"  # default="date folder location", show text, include combination of words: title, caption name, date, location, folder
   text_width: 70                          # width to wrap
   fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
   auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4. 
