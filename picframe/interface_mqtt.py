@@ -95,6 +95,10 @@ class InterfaceMQTT:
         self.__setup_switch(client, switch_topic_head, "_delete", "mdi:delete", available_topic)
         self.__setup_switch(client, switch_topic_head, "_name_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("name"))
+        self.__setup_switch(client, switch_topic_head, "_title_toggle", "mdi:subtitles", available_topic,
+                            self.__controller.text_is_on("title"))
+        self.__setup_switch(client, switch_topic_head, "_caption_toggle", "mdi:subtitles", available_topic,
+                            self.__controller.text_is_on("caption"))
         self.__setup_switch(client, switch_topic_head, "_date_toggle", "mdi:calendar-today", available_topic,
                             self.__controller.text_is_on("date"))
         self.__setup_switch(client, switch_topic_head, "_location_toggle", "mdi:crosshairs-gps", available_topic,
@@ -208,6 +212,18 @@ class InterfaceMQTT:
             if msg == "ON":
                 client.publish(state_topic, "OFF", retain=True)
                 self.__controller.delete()
+        # title on
+        elif message.topic == switch_topic_head + "_title_toggle/set":
+            state_topic = switch_topic_head + "_title_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__controller.set_show_text("title", msg)
+                client.publish(state_topic, msg, retain=True)
+        # caption on
+        elif message.topic == switch_topic_head + "_caption_toggle/set":
+            state_topic = switch_topic_head + "_caption_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__controller.set_show_text("caption", msg)
+                client.publish(state_topic, msg, retain=True)
         # name on
         elif message.topic == switch_topic_head + "_name_toggle/set":
             state_topic = switch_topic_head + "_name_toggle/state"
@@ -245,6 +261,10 @@ class InterfaceMQTT:
                 state_topic = switch_topic_head + "_date_toggle/state"
                 client.publish(state_topic, "OFF", retain=True)
                 state_topic = switch_topic_head + "_name_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_title_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_caption_toggle/state"
                 client.publish(state_topic, "OFF", retain=True)
         # text_refresh
         elif message.topic == switch_topic_head + "_text_refresh/set":
