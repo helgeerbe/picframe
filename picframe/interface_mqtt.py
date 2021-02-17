@@ -84,7 +84,8 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "time_delay", "mdi:image-plus", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "brightness", "mdi:brightness-6", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "fade_time", "mdi:image-size-select-large", available_topic)
-        self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:folder-multiple-image", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:map-search", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "tags_filter", "mdi:image-search", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True)
         self.__setup_sensor(client, sensor_topic_head, "directory", "mdi:folder-multiple-image", available_topic, has_attributes=True)
@@ -281,6 +282,10 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/location_filter":
             self.__logger.info("Recieved location filter: %s", msg)
             self.__controller.location_filter = msg
+        # tags filter
+        elif message.topic == self.__device_id + "/tags_filter":
+            self.__logger.info("Recieved tags filter: %s", msg)
+            self.__controller.tags_filter = msg
 
         # stop loops and end program
         elif message.topic == self.__device_id + "/stop":
@@ -311,6 +316,10 @@ class InterfaceMQTT:
         state_payload["fade_time"] = self.__controller.fade_time
         # brightness
         state_payload["brightness"] = self.__controller.brightness
+        # location_filter
+        state_payload["location_filter"] = self.__controller.location_filter
+        # tags_filter
+        state_payload["tags_filter"] = self.__controller.tags_filter
 
         # send last will and testament
         available_topic = switch_topic_head + "/available"

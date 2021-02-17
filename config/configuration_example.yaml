@@ -44,7 +44,10 @@ model:
     'EXIF ISOSpeedRatings', 
     'EXIF FocalLength', 
     'EXIF DateTimeOriginal', 
-    'Image Model']
+    'Image Model',
+    'IPTC Caption/Abstract',
+    'IPTC Object Name',
+    'IPTC Keywords']
   load_geoloc: True                       # get location information from open street map
   locale: 'en_US.utf8'                    # "locale -a" shows the installed locales which could used
   key_list: [

@@ -47,6 +47,8 @@ class Controller:
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
         self.__keep_looping = True
+        self.__location_filter = None
+        self.__tags_filter = None
 
     @property
     def paused(self):

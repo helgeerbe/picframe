@@ -11,19 +11,27 @@ class GetImageMeta:
         self.__logger = logging.getLogger("get_image_meta.GetImageMeta")
         self.__tags = {}
         self.__filename = filename # in case no exif data in which case needed for size
+        iptcinfo_logger = logging.getLogger('iptcinfo') # turn off useless log infos
+        iptcinfo_logger.setLevel(logging.ERROR)
         try:
             with open(filename, 'rb') as fh:
                 self.__tags = exifread.process_file(fh, details=False) 
-                iptc = IPTCInfo(fh) # TODO put IPTC read in separate function
-                if len(iptc['keywords']) > 0: 
+                iptc = IPTCInfo(fh, force=True, out_charset='utf-8') # TODO put IPTC read in separate function
+                # tags
+                val = iptc['keywords']
+                if val is not None and len(val) > 0: 
                     keywords =''
                     for key in iptc['keywords']:
-                        keywords += key.decode('ascii')  + ','  # decode binary strings
-                self.__tags['IPTC Keywords'] = keywords
-                if len(iptc['caption/abstract']) > 0:  
-                    self.__tags['IPTC Caption/Abstract'] = iptc['caption/abstract'].decode('ascii')
-                if len(iptc['object name']) > 0:  
-                    self.__tags['IPTC Object Name'] = iptc['object name'].decode('ascii')
+                        keywords += key.decode('utf-8')  + ','  # decode binary strings
+                    self.__tags['IPTC Keywords'] = keywords
+                # caption
+                val = iptc['caption/abstract']
+                if val is not None and len(val) > 0:  
+                    self.__tags['IPTC Caption/Abstract'] = iptc['caption/abstract'].decode('utf8')
+                # title
+                val = iptc['object name']
+                if val is not None and len(val) > 0:  
+                    self.__tags['IPTC Object Name'] = iptc['object name'].decode('utf-8')
         except OSError as e:
             self.__logger.warning("Can't open file: \"%s\"", filename)
             self.__logger.warning("Cause: %s", e)

@@ -233,9 +233,9 @@ class ViewerDisplay:
         # pic is just left hand pic if pics tuple has two portraits
         info_strings = []
         if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
-            if (self.__show_text & 1) == 1: # title
+            if (self.__show_text & 1) == 1 and pic.title is not None: # title
                 info_strings.append(self.__sanitize_string(pic.title))
-            if (self.__show_text & 2) == 2: # caption
+            if (self.__show_text & 2) == 2 and pic.caption is not None: # caption
                 info_strings.append(self.__sanitize_string(pic.caption))     
             if (self.__show_text & 4) == 4: # name
                 info_strings.append(self.__sanitize_string(pic.fname))
