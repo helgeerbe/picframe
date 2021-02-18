@@ -13,7 +13,7 @@ from PIL import Image, ImageFilter
 
 # utility functions with no dependency on ViewerDisplay properties
 def txt_to_bit(txt):
-    txt_map = {"name":1, "date":2, "location":4, "folder":8}
+    txt_map = {"title":1, "caption":2, "name":4, "date":8, "location":16, "folder":32}
     if txt in txt_map:
         return txt_map[txt]
     return 0
@@ -21,7 +21,7 @@ def txt_to_bit(txt):
 def parse_show_text(txt):
     show_text = 0
     txt = txt.lower()
-    for txt_key in ("name", "date", "location", "folder"):
+    for txt_key in ("title", "caption", "name", "date", "location", "folder"):
         if txt_key in txt:
             show_text |= txt_to_bit(txt_key)
     return show_text
@@ -233,14 +233,18 @@ class ViewerDisplay:
         # pic is just left hand pic if pics tuple has two portraits
         info_strings = []
         if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
-            if (self.__show_text & 1) == 1: # name
+            if (self.__show_text & 1) == 1 and pic.title is not None: # title
+                info_strings.append(self.__sanitize_string(pic.title))
+            if (self.__show_text & 2) == 2 and pic.caption is not None: # caption
+                info_strings.append(self.__sanitize_string(pic.caption))     
+            if (self.__show_text & 4) == 4: # name
                 info_strings.append(self.__sanitize_string(pic.fname))
-            if (self.__show_text & 2) == 2 and pic.exif_datetime > 0: # date
+            if (self.__show_text & 8) == 8 and pic.exif_datetime > 0: # date
                 fdt = time.strftime(self.__show_text_fm, time.localtime(pic.exif_datetime))
                 info_strings.append(fdt)
-            if (self.__show_text & 4) == 4 and pic.location is not None: # location
+            if (self.__show_text & 16) == 16 and pic.location is not None: # location
                 info_strings.append(pic.location) #TODO need to sanitize and check longer than 0 for real
-            if (self.__show_text & 8) == 8: # folder
+            if (self.__show_text & 32) == 32: # folder
                 info_strings.append(self.__sanitize_string(os.path.basename(os.path.dirname(pic.fname))))
             if paused:
                 info_strings.append("PAUSED")

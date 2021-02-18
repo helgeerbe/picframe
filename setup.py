@@ -32,7 +32,7 @@ setup(name='picframe',
         'pi3d>=2.42',
         'PyYAML',
         'paho-mqtt',
-#        'pyheif',
+        'IPTCInfo3',
         'numpy'
       ],
       data_files=[

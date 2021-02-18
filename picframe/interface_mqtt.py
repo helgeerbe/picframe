@@ -84,16 +84,21 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "time_delay", "mdi:image-plus", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "brightness", "mdi:brightness-6", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "fade_time", "mdi:image-size-select-large", available_topic)
-        self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:folder-multiple-image", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:map-search", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "tags_filter", "mdi:image-search", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True)
-        self.__setup_sensor(client, sensor_topic_head, "dir", "mdi:folder-multiple-image", available_topic, has_attributes=True)
+        self.__setup_sensor(client, sensor_topic_head, "directory", "mdi:folder-multiple-image", available_topic, has_attributes=True)
 
         ## switches
         self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic)
         self.__setup_switch(client, switch_topic_head, "_delete", "mdi:delete", available_topic)
         self.__setup_switch(client, switch_topic_head, "_name_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("name"))
+        self.__setup_switch(client, switch_topic_head, "_title_toggle", "mdi:subtitles", available_topic,
+                            self.__controller.text_is_on("title"))
+        self.__setup_switch(client, switch_topic_head, "_caption_toggle", "mdi:subtitles", available_topic,
+                            self.__controller.text_is_on("caption"))
         self.__setup_switch(client, switch_topic_head, "_date_toggle", "mdi:calendar-today", available_topic,
                             self.__controller.text_is_on("date"))
         self.__setup_switch(client, switch_topic_head, "_location_toggle", "mdi:crosshairs-gps", available_topic,
@@ -207,6 +212,18 @@ class InterfaceMQTT:
             if msg == "ON":
                 client.publish(state_topic, "OFF", retain=True)
                 self.__controller.delete()
+        # title on
+        elif message.topic == switch_topic_head + "_title_toggle/set":
+            state_topic = switch_topic_head + "_title_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__controller.set_show_text("title", msg)
+                client.publish(state_topic, msg, retain=True)
+        # caption on
+        elif message.topic == switch_topic_head + "_caption_toggle/set":
+            state_topic = switch_topic_head + "_caption_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__controller.set_show_text("caption", msg)
+                client.publish(state_topic, msg, retain=True)
         # name on
         elif message.topic == switch_topic_head + "_name_toggle/set":
             state_topic = switch_topic_head + "_name_toggle/state"
@@ -245,6 +262,10 @@ class InterfaceMQTT:
                 client.publish(state_topic, "OFF", retain=True)
                 state_topic = switch_topic_head + "_name_toggle/state"
                 client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_title_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_caption_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
         # text_refresh
         elif message.topic == switch_topic_head + "_text_refresh/set":
             state_topic = switch_topic_head + "_text_refresh/state"
@@ -254,7 +275,7 @@ class InterfaceMQTT:
 
         ##### values ########
         # change subdirectory
-        elif message.topic == self.__device_id + "/subdirectory":
+        elif message.topic == self.__device_id + "/directory":
             self.__logger.info("Recieved subdirectory: %s", msg)
             self.__controller.subdirectory = msg
         # date_from
@@ -281,6 +302,10 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/location_filter":
             self.__logger.info("Recieved location filter: %s", msg)
             self.__controller.location_filter = msg
+        # tags filter
+        elif message.topic == self.__device_id + "/tags_filter":
+            self.__logger.info("Recieved tags filter: %s", msg)
+            self.__controller.tags_filter = msg
 
         # stop loops and end program
         elif message.topic == self.__device_id + "/stop":
@@ -293,7 +318,7 @@ class InterfaceMQTT:
         state_payload = {}
         # directory sensor
         actual_dir, dir_list = self.__controller.get_directory_list()
-        state_payload["dir"] = actual_dir
+        state_payload["directory"] = actual_dir
         dir_attr = {}
         dir_attr['directories'] = dir_list
         # image counter sensor
@@ -311,6 +336,10 @@ class InterfaceMQTT:
         state_payload["fade_time"] = self.__controller.fade_time
         # brightness
         state_payload["brightness"] = self.__controller.brightness
+        # location_filter
+        state_payload["location_filter"] = self.__controller.location_filter
+        # tags_filter
+        state_payload["tags_filter"] = self.__controller.tags_filter
 
         # send last will and testament
         available_topic = switch_topic_head + "/available"
@@ -320,7 +349,7 @@ class InterfaceMQTT:
         attributes_topic = topic_head + "_image/attributes"
         self.__logger.debug("Send image attributes: %s", image_attr)
         self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
-        attributes_topic = topic_head + "_dir/attributes"
+        attributes_topic = topic_head + "_directory/attributes"
         self.__client.publish(attributes_topic, json.dumps(dir_attr), qos=0, retain=False)
         self.__logger.info("Send state: %s", state_payload)
         self.__client.publish(state_topic, json.dumps(state_payload), qos=0, retain=False)

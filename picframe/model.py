@@ -73,7 +73,8 @@ class Pic: #TODO could this be done more elegantly with namedtuple
     def __init__(self, fname, last_modified, file_id, orientation=1, exif_datetime=0,
                  f_number=0, exposure_time=None, iso=0, focal_length=None,
                  make=None, model=None, lens=None, rating=None, latitude=None,
-                 longitude=None, width=0, height=0, is_portrait=0, location=None):
+                 longitude=None, width=0, height=0, is_portrait=0, location=None, title=None,
+                 caption=None, tags=None):
         self.fname = fname
         self.last_modified = last_modified
         self.file_id = file_id
@@ -93,6 +94,9 @@ class Pic: #TODO could this be done more elegantly with namedtuple
         self.height = height
         self.is_portrait = is_portrait
         self.location = location
+        self.tags=tags
+        self.caption=caption
+        self.title=title
 
 
 class Model:
@@ -223,7 +227,7 @@ class Model:
         self.__reload_files = True
 
     def set_next_file_to_previous_file(self):
-        self.__file_index = (self.__file_index - 2) % self.__number_of_files
+        self.__file_index = (self.__file_index - 2) % self.__number_of_files # TODO deleting last image results in ZeroDivisionError
 
     def get_next_file(self):
         if self.__reload_files:
@@ -280,7 +284,7 @@ class Model:
     def __get_files(self):
         where_list = []
         if self.subdirectory != "":
-            picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.subdirectory)
+            picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.subdirectory) # TODO catch, if subdirecotry does not exist
             where_list.append("fname LIKE '{}/%'".format(picture_dir)) # TODO / on end to stop 'test' also selecting test1 test2 etc
         where_list.extend(self.__where_clauses.values())
 

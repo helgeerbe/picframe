@@ -41,13 +41,15 @@ class Controller:
         self.__viewer = viewer
         self.__paused = False
         self.__next_tm = 0
-        self.__date_from = make_date('1970/1/1')
+        self.__date_from = make_date('1901/12/15') # TODO This seems to be the minimum date to be handled by date functions
         self.__date_to = make_date('2038/1/1')
         self.__location_filter = ""
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
         self.__keep_looping = True
+        self.__location_filter = None
+        self.__tags_filter = None
 
     @property
     def paused(self):
@@ -191,6 +193,20 @@ class Controller:
             self.__model.set_where_clause('location_filter', "location LIKE '%{}%'".format(val))
         else:
             self.__model.set_where_clause('location_filter') # remove from where_clause
+        self.__model.force_reload()
+        self.__next_tm = 0
+
+    @property
+    def tags_filter(self):
+        return self.__tags_filter
+    
+    @tags_filter.setter
+    def tags_filter(self, val):
+        self.__tags_filter = val
+        if len(val) > 0:
+            self.__model.set_where_clause('tags_filter', "tags LIKE '%{}%'".format(val))
+        else:
+            self.__model.set_where_clause('tags_filter') # remove from where_clause
         self.__model.force_reload()
         self.__next_tm = 0
 
