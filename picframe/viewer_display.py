@@ -13,7 +13,7 @@ from PIL import Image, ImageFilter
 
 # utility functions with no dependency on ViewerDisplay properties
 def txt_to_bit(txt):
-    txt_map = {"title":1, "caption":2, "name":4, "date":8, "location":16, "directory":32}
+    txt_map = {"title":1, "caption":2, "name":4, "date":8, "location":16, "folder":32}
     if txt in txt_map:
         return txt_map[txt]
     return 0
@@ -21,7 +21,7 @@ def txt_to_bit(txt):
 def parse_show_text(txt):
     show_text = 0
     txt = txt.lower()
-    for txt_key in ("title", "caption", "name", "date", "location", "directory"):
+    for txt_key in ("title", "caption", "name", "date", "location", "folder"):
         if txt_key in txt:
             show_text |= txt_to_bit(txt_key)
     return show_text

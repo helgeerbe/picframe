@@ -43,6 +43,7 @@ class Controller:
         self.__next_tm = 0
         self.__date_from = make_date('1901/12/15') # TODO This seems to be the minimum date to be handled by date functions
         self.__date_to = make_date('2038/1/1')
+        self.__location_filter = ""
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
@@ -79,6 +80,8 @@ class Controller:
         self.__next_tm = 0
 
     def set_show_text(self, txt_key=None, val="ON"):
+        if val is True: # allow to be called with boolean from httpserver
+            val = "ON"
         self.__viewer.set_show_text(txt_key, val)
         pic = self.__model.get_current_pics()[0]
         self.__viewer.reset_name_tm(pic, self.paused)
@@ -164,10 +167,11 @@ class Controller:
 
     @time_delay.setter
     def time_delay(self, time):
+        time = float(time) # convert string before comparison
         # might break it if too quick
         if time < 5.0:
             time = 5.0
-        self.__model.time_delay = float(time)
+        self.__model.time_delay = time
         self.__next_tm = 0
 
     @property
@@ -257,3 +261,4 @@ class Controller:
         self.__viewer.slideshow_stop()
         self.__keep_looping = False
         self.__model.stop_image_chache() # close db tidily
+        # TODO segmentation fault on closing on some setups.
