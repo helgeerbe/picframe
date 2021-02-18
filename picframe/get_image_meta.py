@@ -20,6 +20,7 @@ class GetImageMeta:
         except Exception as e:
             self.__logger.warning("exifread doesn't manage well and gives AttributeError for heif files %s -> %s",
                                   filename, e)
+        self.__do_iptc_keywords()
 
     def __do_iptc_keywords(self):
         try:
