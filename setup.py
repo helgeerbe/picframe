@@ -41,6 +41,7 @@ setup(name='picframe',
         ('picframe/data/shaders', glob('data/shaders/*')),
         ('picframe/data', glob('data/*.jpg')),
         ('picframe/examples', glob('examples/*')),
+        ('picframe/html', glob('html/*')),
       ],
       entry_points = {
         'console_scripts': ['picture_frame=picframe.picture_frame:main']
