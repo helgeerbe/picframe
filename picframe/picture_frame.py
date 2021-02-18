@@ -2,7 +2,7 @@ import logging
 import sys
 
 
-from picframe import model, viewer_display, controller, interface_kbd
+from picframe import model, viewer_display, controller, interface_kbd, interface_http
 
 
 
@@ -26,6 +26,7 @@ def main():
         from picframe import interface_mqtt
         mqtt = interface_mqtt.InterfaceMQTT(c, mqtt_config)
         mqtt.start()
+    server = interface_http.InterfaceHttp(c, "/home/pi/dev/picture_frame/html") #or wherever - should be in configuration.yaml
     c.loop()
     if mqtt_config['use_mqtt'] == True:
        mqtt.stop() 
