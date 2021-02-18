@@ -1,8 +1,8 @@
 import logging
 import sys
+import argparse
 
-
-from picframe import model, viewer_display, controller, interface_kbd, interface_http
+from picframe import model, viewer_display, controller, interface_kbd, interface_http, __version__
 
 
 
@@ -10,8 +10,24 @@ def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     logger = logging.getLogger("picture_frame.py")
     logger.info('starting %s', sys.argv)
-    if len(sys.argv) > 1:
-        m = model.Model(sys.argv[1])
+
+    
+    parser = argparse.ArgumentParser()
+    group = parser.add_mutually_exclusive_group()
+    group.add_argument("-i", "--initialize", help="creates standard file structure for picture_frame in current directory",
+                        action="store_true")
+    group.add_argument("-v", "--version", help="print version information",
+                        action="store_true")
+    group.add_argument("configfile", nargs='?', help="/path/to/configuration.yaml")
+    args = parser.parse_args()
+    if args.initialize:
+        print("initialize turned on")
+        return
+    elif args.version:
+        print("picture_frame version: ", __version__) # TODO Dump required modules and their versions
+        return
+    elif args.configfile:
+        m = model.Model(args.configfile)
     else:
         m = model.Model()
     
