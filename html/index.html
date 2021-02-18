@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
+    <meta name="viewport" content="width=device-width, inital-scale=1"/>
+</head>
+    <body onload="setStyle(); createSpans(); refreshData();">
+        <script type="text/javascript">
+            /* widths to use for spans. Other slots in the array could be used for other
+             things...
+            */
+            const TYPES = {"bool":[5,], "text":[15,], "date":[7,], "number":[5,], "action":[5,]};
+
+            /* this is used to render the ids on this page.
+             fn is a method of controller
+             underscores will be replaced by spaces but it's also possible to use
+             an alternative "desc":"..." field
+            */
+            const ids = {
+                "back": {type:"action", fn:"back={}", val:false},
+                "next": {type:"action", fn:"next={}", val:false},
+                "paused": {type:"bool", fn:"setter", val:false},
+                "display_is_on": {type:"bool", fn:"setter", val:false},
+                "shuffle": {type:"bool", fn:"setter", val:false},
+                "text_name": {type:"bool", fn:"set_show_text={\"txt_key\":\"name\",\"val\":$val}", val:false},
+                "text_date": {type:"bool", fn:"set_show_text={\"txt_key\":\"date\",\"val\":$val}", val:false},
+                "text_folder": {type:"bool", fn:"set_show_text={\"txt_key\":\"folder\",\"val\":$val}", val:false},
+                "text_location": {type:"bool", fn:"set_show_text={\"txt_key\":\"location\",\"val\":$val}", val:false},
+                "clear_text": {type:"action", fn:"set_show_text={}", val:false},
+                "refresh_show_text": {type:"action", fn:"refresh_show_text={}", val:false},
+
+                "date_from": {type:"date", fn:"setter", val:0},
+                "date_to": {type:"date", fn:"setter", val:0},
+                "fade_time": {type:"number", fn:"setter", val:0},
+                "time_delay": {type:"number", fn:"setter", val:0},
+                "brightness": {type:"number", fn:"setter", val:0},
+                "subdirectory": {type:"text", fn:"setter", val:""},
+                "location_filter": {type:"text", fn:"setter", val:""},
+                "delete": {type:"action", fn:"delete={}", val:false},
+                "stop": {type:"action", fn:"stop={}", val:false},
+                };
+        </script>
+        <script type="text/javascript" src="pf_functions.js"></script>
+        <h1>Simple Picture Frame page</h1>
+        <div id="spans">
+        </div>
+        <button onclick="uploadValues()">UPDATE</button>
+    </body>
+</html>
