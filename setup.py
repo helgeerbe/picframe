@@ -26,6 +26,7 @@ setup(name='picframe',
       author_email='helge@erbehome.de',
       license='MIT',
       packages=find_packages(exclude=("test", "oldcode")),
+      package_data={'': ['config/configuration.yaml']},
       install_requires=[
         'Pillow',
         'ExifRead',

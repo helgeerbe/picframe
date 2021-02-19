@@ -4,8 +4,6 @@ import argparse
 
 from picframe import model, viewer_display, controller, interface_kbd, interface_http, __version__
 
-
-
 def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
     logger = logging.getLogger("picture_frame.py")
@@ -22,6 +20,9 @@ def main():
     args = parser.parse_args()
     if args.initialize:
         print("initialize turned on")
+        pkgdir = sys.modules['picframe'].__path__[0]
+        fullpath = os.path.join(pkgdir, 'html')
+        #shutil.copy(fullpath, os.getcwd())
         return
     elif args.version:
         print("picture_frame version: ", __version__) # TODO Dump required modules and their versions
