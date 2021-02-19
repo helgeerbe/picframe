@@ -1,8 +1,14 @@
 import logging
 import sys
 import argparse
+import os
+import shutil
 
 from picframe import model, viewer_display, controller, interface_kbd, interface_http, __version__
+
+def copy_files(pkgdir, target):
+    fullpath = os.path.join(pkgdir,  target)
+    shutil.copytree(fullpath,  os.getcwd() + '/picture_frame/' + target)
 
 def main():
     logging.basicConfig(stream=sys.stdout, level=logging.INFO)
@@ -17,12 +23,16 @@ def main():
     group.add_argument("-v", "--version", help="print version information",
                         action="store_true")
     group.add_argument("configfile", nargs='?', help="/path/to/configuration.yaml")
+    parser.add_argument("-w", "--webserver", help="start local webserver",
+                        action="store_true")
     args = parser.parse_args()
     if args.initialize:
-        print("initialize turned on")
         pkgdir = sys.modules['picframe'].__path__[0]
-        fullpath = os.path.join(pkgdir, 'html')
-        #shutil.copy(fullpath, os.getcwd())
+        copy_files(pkgdir, 'html')
+        copy_files(pkgdir, 'config')
+        copy_files(pkgdir, 'examples')
+        copy_files(pkgdir, 'data')
+        print('created ./picture_frame')
         return
     elif args.version:
         print("picture_frame version: ", __version__) # TODO Dump required modules and their versions
@@ -43,7 +53,8 @@ def main():
         from picframe import interface_mqtt
         mqtt = interface_mqtt.InterfaceMQTT(c, mqtt_config)
         mqtt.start()
-    server = interface_http.InterfaceHttp(c, "/home/pi/dev/picture_frame/html") #or wherever - should be in configuration.yaml
+    if args.webserver:
+        server = interface_http.InterfaceHttp(c, "/home/pi/dev/picture_frame/html") #or wherever - should be in configuration.yaml
     c.loop()
     if mqtt_config['use_mqtt'] == True:
        mqtt.stop() 

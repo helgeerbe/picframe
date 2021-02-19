@@ -3,9 +3,9 @@ from glob import glob
 import versioneer
 
 # read the contents of your README file
-from os import path
-this_directory = path.abspath(path.dirname(__file__))
-with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+import os
+this_directory = os.path.abspath(os.path.dirname(__file__))
+with open(os.path.join(this_directory, 'README.md'), encoding='utf-8') as f:
     long_description = f.read()
 
 setup(name='picframe',
@@ -25,8 +25,12 @@ setup(name='picframe',
       author='Helge Erbe',
       author_email='helge@erbehome.de',
       license='MIT',
-      packages=find_packages(exclude=("test", "oldcode")),
-      package_data={'': ['config/configuration.yaml']},
+      packages=find_packages(exclude=("test")),
+      package_data={ '': [
+        'data/*', 'data/**/*', 
+        'config/*', 'config/**/*', 
+        'html/*', 'html/**/*',
+        'examples/*', 'examples/**/*']},
       install_requires=[
         'Pillow',
         'ExifRead',
@@ -35,14 +39,6 @@ setup(name='picframe',
         'paho-mqtt',
         'IPTCInfo3',
         'numpy'
-      ],
-      data_files=[
-        ('picframe/config', ['config/configuration_example.yaml']),
-        ('picframe/data/fonts', glob('data/fonts/*')),
-        ('picframe/data/shaders', glob('data/shaders/*')),
-        ('picframe/data', glob('data/*.jpg')),
-        ('picframe/examples', glob('examples/*')),
-        ('picframe/html', glob('html/*')),
       ],
       entry_points = {
         'console_scripts': ['picture_frame=picframe.picture_frame:main']
