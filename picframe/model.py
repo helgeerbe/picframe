@@ -202,8 +202,9 @@ class Model:
 
     def set_where_clause(self, key, value=None):
         # value must be a string for later join()
-        if (value is None or len(value) == 0) and key in self.__where_clauses:
-            self.__where_clauses.pop(key)
+        if (value is None or len(value) == 0):
+            if key in self.__where_clauses:
+                self.__where_clauses.pop(key)
             return
         self.__where_clauses[key] = value
 
