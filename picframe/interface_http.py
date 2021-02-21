@@ -25,7 +25,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     html_page = path_split[0].strip("/")
                 else:
                     html_page = "index.html"
-                page = os.path.join(self.server._html_path, html_page)
+                page = os.path.expanduser(os.path.join(self.server._html_path, html_page))
                 if os.path.isfile(page):
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html')
