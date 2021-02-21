@@ -109,7 +109,7 @@ class InterfaceHttp(HTTPServer):
         self._logger = logging.getLogger("simple_server.InterfaceHttp")
         self._logger.info("creating an instance of InterfaceHttp")
         self._controller = controller
-        self._html_path = html_path
+        self._html_path = os.path.expanduser(html_path)
         self._setters = ["paused", "subdirectory", "date_from", "date_to",
                          "display_is_on", "shuffle", "fade_time", "time_delay",
                          "brightness", "location_filter"] #TODO can this be done with dir() and getattr() to avoid hard coding?
