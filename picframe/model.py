@@ -7,7 +7,7 @@ import json
 import locale
 from picframe import geo_reverse, image_cache
 
-DEFAULT_CONFIGFILE = "~/.local/picframe/config/configuration.yaml"
+DEFAULT_CONFIGFILE = "~/picture_frame/config/configuration.yaml"
 DEFAULT_CONFIG = {
     'viewer': {
         'blur_amount': 12,
