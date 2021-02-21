@@ -84,31 +84,21 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "time_delay", "mdi:image-plus", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "brightness", "mdi:brightness-6", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "fade_time", "mdi:image-size-select-large", available_topic)
-        self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:folder-multiple-image", available_topic)
-
-        # send image counter sensor configuration 
-        config_topic = sensor_topic_head + "_image_counter/config"
-        config_payload = '{"name":"' + self.__device_id + '_image_counter", "icon":"mdi:camera-burst", "state_topic":"' + state_topic + '", "value_template": "{{ value_json.image_counter}}", "avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_ic", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-
-        # send  image sensor configuration
-        config_topic = sensor_topic_head + "_image/config"
-        attributes_topic = sensor_topic_head + "_image/attributes"
-        config_payload = '{"name":"' + self.__device_id + '_image", "icon":"mdi:file-image", "state_topic":"' + state_topic + '",  "value_template": "{{ value_json.image}}", "json_attributes_topic":"' + attributes_topic + '","avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_fn", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-
-        # send  directory sensor configuration
-        config_topic = sensor_topic_head + "_dir/config"
-        attributes_topic = sensor_topic_head + "_dir/attributes"
-        config_payload = '{"name":"' + self.__device_id + '_dir", "icon":"mdi:folder-multiple-image", "state_topic":"' + state_topic + '",  "value_template": "{{ value_json.dir}}", "json_attributes_topic":"' + attributes_topic + '","avty_t":"' + available_topic + '",  "uniq_id":"' + self.__device_id + '_dir", "dev":{"ids":["' + self.__device_id + '"]}}'
-        client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(self.__device_id + "/subdirectory", qos=0)
+        self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:map-search", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "tags_filter", "mdi:image-search", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic)
+        self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True)
+        self.__setup_sensor(client, sensor_topic_head, "directory", "mdi:folder-multiple-image", available_topic, has_attributes=True)
 
         ## switches
         self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic)
         self.__setup_switch(client, switch_topic_head, "_delete", "mdi:delete", available_topic)
         self.__setup_switch(client, switch_topic_head, "_name_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("name"))
+        self.__setup_switch(client, switch_topic_head, "_title_toggle", "mdi:subtitles", available_topic,
+                            self.__controller.text_is_on("title"))
+        self.__setup_switch(client, switch_topic_head, "_caption_toggle", "mdi:subtitles", available_topic,
+                            self.__controller.text_is_on("caption"))
         self.__setup_switch(client, switch_topic_head, "_date_toggle", "mdi:calendar-today", available_topic,
                             self.__controller.text_is_on("date"))
         self.__setup_switch(client, switch_topic_head, "_location_toggle", "mdi:crosshairs-gps", available_topic,
@@ -127,13 +117,23 @@ class InterfaceMQTT:
 
         client.subscribe(self.__device_id + "/stop", qos=0) # close down without killing!
 
-    def __setup_sensor(self, client, sensor_topic_head, topic, icon, available_topic):
+    def __setup_sensor(self, client, sensor_topic_head, topic, icon, available_topic, has_attributes=False):
         config_topic = sensor_topic_head + "_" + topic + "/config"
         name = self.__device_id + "_" + topic
-        config_payload = json.dumps({"name": name,
+        if has_attributes == True:
+            config_payload = json.dumps({"name": name,
                                      "icon": icon,
                                      "state_topic": sensor_topic_head + "/state",
-                                     "value_template": "{{ value_json.date_from}}",
+                                     "value_template": "{{ value_json." + topic + "}}",
+                                     "avty_t": available_topic,
+                                     "json_attributes_topic": sensor_topic_head + "_" + topic + "/attributes",
+                                     "uniq_id": name,
+                                     "dev":{"ids":[self.__device_id]}})
+        else:
+            config_payload = json.dumps({"name": name,
+                                     "icon": icon,
+                                     "state_topic": sensor_topic_head + "/state",
+                                     "value_template": "{{ value_json." + topic + "}}",
                                      "avty_t": available_topic,
                                      "uniq_id": name,
                                      "dev":{"ids":[self.__device_id]}})
@@ -161,19 +161,6 @@ class InterfaceMQTT:
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.publish(state_topic, "ON" if is_on else "OFF", qos=0, retain=True)
-
-        # send display switch configuration  and display state
-        # config_topic = switch_topic_head + "_display/config"
-        # command_topic = switch_topic_head + "_display/set"
-        # state_topic = switch_topic_head + "_display/state"
-        # config_payload = '{"name":"' + device_id + '_display", "icon":"mdi:panorama", "command_topic":"' + command_topic + '", "state_topic":"' + state_topic + '", "avty_t":"' + available_topic + '", "uniq_id":"' + device_id + '_disp", "dev":{"ids":["' + device_id + '"], "name":"' + device_id + '", "mdl":"Picture Frame", "sw":"' + __version__ + '", "mf":"erbehome"}}'
-        # client.subscribe(command_topic , qos=0)
-        # client.publish(config_topic, config_payload, qos=0, retain=True)
-        # if self.__viewer.display_is_on == True:
-        #     client.publish(state_topic, "ON", qos=0, retain=True)
-        # else :
-        #     client.publish(state_topic, "OFF", qos=0, retain=True)
-
 
     def on_message(self, client, userdata, message):
         msg = message.payload.decode("utf-8") 
@@ -225,12 +212,24 @@ class InterfaceMQTT:
             if msg == "ON":
                 client.publish(state_topic, "OFF", retain=True)
                 self.__controller.delete()
-        # name toggle
+        # title on
+        elif message.topic == switch_topic_head + "_title_toggle/set":
+            state_topic = switch_topic_head + "_title_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__controller.set_show_text("title", msg)
+                client.publish(state_topic, msg, retain=True)
+        # caption on
+        elif message.topic == switch_topic_head + "_caption_toggle/set":
+            state_topic = switch_topic_head + "_caption_toggle/state"
+            if msg in ("ON", "OFF"):
+                self.__controller.set_show_text("caption", msg)
+                client.publish(state_topic, msg, retain=True)
+        # name on
         elif message.topic == switch_topic_head + "_name_toggle/set":
             state_topic = switch_topic_head + "_name_toggle/state"
             if msg in ("ON", "OFF"):
                 self.__controller.set_show_text("name", msg)
-                client.publish(state_topic, "OFF" if msg == "ON" else "ON", retain=True)
+                client.publish(state_topic, msg, retain=True)
         # date_on
         elif message.topic == switch_topic_head + "_date_toggle/set":
             state_topic = switch_topic_head + "_date_toggle/state"
@@ -255,6 +254,18 @@ class InterfaceMQTT:
             if msg == "ON":
                 self.__controller.set_show_text()
                 client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_directory_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_location_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_date_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_name_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_title_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
+                state_topic = switch_topic_head + "_caption_toggle/state"
+                client.publish(state_topic, "OFF", retain=True)
         # text_refresh
         elif message.topic == switch_topic_head + "_text_refresh/set":
             state_topic = switch_topic_head + "_text_refresh/state"
@@ -264,7 +275,7 @@ class InterfaceMQTT:
 
         ##### values ########
         # change subdirectory
-        elif message.topic == self.__device_id + "/subdirectory":
+        elif message.topic == self.__device_id + "/directory":
             self.__logger.info("Recieved subdirectory: %s", msg)
             self.__controller.subdirectory = msg
         # date_from
@@ -291,6 +302,10 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/location_filter":
             self.__logger.info("Recieved location filter: %s", msg)
             self.__controller.location_filter = msg
+        # tags filter
+        elif message.topic == self.__device_id + "/tags_filter":
+            self.__logger.info("Recieved tags filter: %s", msg)
+            self.__controller.tags_filter = msg
 
         # stop loops and end program
         elif message.topic == self.__device_id + "/stop":
@@ -303,7 +318,7 @@ class InterfaceMQTT:
         state_payload = {}
         # directory sensor
         actual_dir, dir_list = self.__controller.get_directory_list()
-        state_payload["dir"] = actual_dir
+        state_payload["directory"] = actual_dir
         dir_attr = {}
         dir_attr['directories'] = dir_list
         # image counter sensor
@@ -321,6 +336,10 @@ class InterfaceMQTT:
         state_payload["fade_time"] = self.__controller.fade_time
         # brightness
         state_payload["brightness"] = self.__controller.brightness
+        # location_filter
+        state_payload["location_filter"] = self.__controller.location_filter
+        # tags_filter
+        state_payload["tags_filter"] = self.__controller.tags_filter
 
         # send last will and testament
         available_topic = switch_topic_head + "/available"
@@ -328,8 +347,9 @@ class InterfaceMQTT:
 
         #pulish sensors
         attributes_topic = topic_head + "_image/attributes"
+        self.__logger.debug("Send image attributes: %s", image_attr)
         self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
-        attributes_topic = topic_head + "_dir/attributes"
+        attributes_topic = topic_head + "_directory/attributes"
         self.__client.publish(attributes_topic, json.dumps(dir_attr), qos=0, retain=False)
         self.__logger.info("Send state: %s", state_payload)
         self.__client.publish(state_topic, json.dumps(state_payload), qos=0, retain=False)

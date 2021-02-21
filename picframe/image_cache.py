@@ -16,7 +16,10 @@ class ImageCache:
                      'EXIF FocalLength': 'focal_length',
                      'EXIF Rating': 'rating',
                      'EXIF LensModel': 'lens',
-                     'EXIF DateTimeOriginal': 'exif_datetime'}
+                     'EXIF DateTimeOriginal': 'exif_datetime',
+                     'IPTC Keywords': 'tags',
+                     'IPTC Caption/Abstract': 'caption',
+                     'IPTC Object Name': 'title'}
 
 
     def __init__(self, picture_dir, db_file, geo_reverse, portrait_pairs=False):
@@ -172,7 +175,10 @@ class ImageCache:
                 latitude REAL,
                 longitude REAL,
                 width INTEGER DEFAULT 0 NOT NULL,
-                height INTEGER DEFAULT 0 NOT NULL
+                height INTEGER DEFAULT 0 NOT NULL,
+                title TEXT,
+                caption TEXT,
+                tags TEXT
             )"""
 
         sql_meta_index = """
@@ -356,6 +362,12 @@ class ImageCache:
         lon = gps['longitude']
         e['latitude'] = round(lat, 4) if lat is not None else lat #TODO sqlite requires (None,) to insert NULL
         e['longitude'] = round(lon, 4) if lon is not None else lon
+
+        #IPTC
+        e['tags'] = exifs.get_exif('IPTC Keywords')
+        e['title'] = exifs.get_exif('IPTC Object Name')
+        e['caption'] = exifs.get_exif('IPTC Caption/Abstract')
+        
 
         return e
 

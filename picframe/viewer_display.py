@@ -1,6 +1,6 @@
 # for development
 import sys
-sys.path.insert(1, "/home/pi/pi3d") #TODO just for debugging when not properly installed
+sys.path.insert(1, "/home/pi/dev/pi3d") #TODO just for debugging when not properly installed
 import pi3d
 from pi3d.Texture import MAX_SIZE
 import math
@@ -13,7 +13,7 @@ from PIL import Image, ImageFilter
 
 # utility functions with no dependency on ViewerDisplay properties
 def txt_to_bit(txt):
-    txt_map = {"name":1, "date":2, "location":4, "directory":8}
+    txt_map = {"title":1, "caption":2, "name":4, "date":8, "location":16, "folder":32}
     if txt in txt_map:
         return txt_map[txt]
     return 0
@@ -21,7 +21,7 @@ def txt_to_bit(txt):
 def parse_show_text(txt):
     show_text = 0
     txt = txt.lower()
-    for txt_key in ("name", "date", "location", "directory"):
+    for txt_key in ("title", "caption", "name", "date", "location", "folder"):
         if txt_key in txt:
             show_text |= txt_to_bit(txt_key)
     return show_text
@@ -120,7 +120,7 @@ class ViewerDisplay:
         self.__slide.unif[55] = val # take immediate effect
 
     def get_brightness(self):
-        return self.__slide.unif[55]
+        return float("{:.2f}".format(self.__slide.unif[55])) # TODO There seems to be a rounding issue. set 0.77 get 0.7699999809265137
 
     def __check_heif_then_open(self, fname):
         ext = os.path.splitext(fname)[1].lower()
@@ -233,14 +233,18 @@ class ViewerDisplay:
         # pic is just left hand pic if pics tuple has two portraits
         info_strings = []
         if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
-            if (self.__show_text & 1) == 1: # name
+            if (self.__show_text & 1) == 1 and pic.title is not None: # title
+                info_strings.append(self.__sanitize_string(pic.title))
+            if (self.__show_text & 2) == 2 and pic.caption is not None: # caption
+                info_strings.append(self.__sanitize_string(pic.caption))     
+            if (self.__show_text & 4) == 4: # name
                 info_strings.append(self.__sanitize_string(pic.fname))
-            if (self.__show_text & 2) == 2 and pic.exif_datetime > 0: # date
+            if (self.__show_text & 8) == 8 and pic.exif_datetime > 0: # date
                 fdt = time.strftime(self.__show_text_fm, time.localtime(pic.exif_datetime))
                 info_strings.append(fdt)
-            if (self.__show_text & 4) == 4 and pic.location is not None: # location
+            if (self.__show_text & 16) == 16 and pic.location is not None: # location
                 info_strings.append(pic.location) #TODO need to sanitize and check longer than 0 for real
-            if (self.__show_text & 8) == 8: # folder
+            if (self.__show_text & 32) == 32: # folder
                 info_strings.append(self.__sanitize_string(os.path.basename(os.path.dirname(pic.fname))))
             if paused:
                 info_strings.append("PAUSED")
@@ -264,7 +268,7 @@ class ViewerDisplay:
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
         self.__slide.set_shader(shader)
         self.__slide.unif[47] = self.__edge_alpha
-        self.__slide.unif[54] = self.__blend_type
+        self.__slide.unif[54] = float(self.__blend_type)
         self.__slide.unif[55] = 1.0 #brightness
         # PointText and TextBlock. If SHOW_NAMES_TM <= 0 then this is just used for no images message
         grid_size = math.ceil(len(self.__codepoints) ** 0.5)
@@ -291,7 +295,7 @@ class ViewerDisplay:
         if pics is not None:
             self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
             self.__next_tm = tm + time_delay
-            self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
+            self.__name_tm = tm + fade_time + float(self.__show_text_tm) # text starts after slide transition
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             if new_sfg is not None: # this is a possible return value which needs to be caught
                 self.__sfg = new_sfg

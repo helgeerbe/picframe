@@ -16,7 +16,7 @@ DEFAULT_CONFIG = {
         'edge_alpha': 0.5, 
         'fps': 20.0, 
         'background': [0.2, 0.2, 0.3, 1.0],  
-        'blend_type': 0.0, # {"blend":0.0, "burn":1.0, "bump":2.0}
+        'blend_type': "blend", # {"blend":0.0, "burn":1.0, "bump":2.0}
         'font_file': '~/.local/picframe/data/fonts/NotoSans-Regular.ttf', 
         'shader': '~/.local/picframe/data/shaders/blend_new', 
         'show_text_fm': '%b %d, %Y',
@@ -33,7 +33,7 @@ DEFAULT_CONFIG = {
         'display_h': None,
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
-        'codepoints': '1234567890AÄÀBCÇDÈÉÊEFGHIÍJKLMNÑOÓÖPQRSTUÚÙÜVWXYZ., _-/abcdefghijklmnñopqrstuvwxyzáéèêàçíóúäöüß', # limit to 49 ie 7x7 grid_size'
+        'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
     }, 
     'model': {
         'pic_dir': '~/Pictures', 
@@ -53,6 +53,8 @@ DEFAULT_CONFIG = {
         'db_file': '~/.local/picframe/data/pictureframe.db3',
         'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
+        'log_level': 'WARNING',
+        'use_kbd': False,
     },
     'mqtt': {
         'use_mqtt': False,                          # Set tue true, to enable mqtt  
@@ -62,6 +64,11 @@ DEFAULT_CONFIG = {
         'password': '', 
         'tls': '',
         'device_id': 'picframe',                                 # unique id of device. change if there is more than one picture frame
+    },
+    'http': {
+        'use_http': False,
+        'path': '~/.local/picframe/html',
+        'port': 80,
     }
 }
 
@@ -71,7 +78,8 @@ class Pic: #TODO could this be done more elegantly with namedtuple
     def __init__(self, fname, last_modified, file_id, orientation=1, exif_datetime=0,
                  f_number=0, exposure_time=None, iso=0, focal_length=None,
                  make=None, model=None, lens=None, rating=None, latitude=None,
-                 longitude=None, width=0, height=0, is_portrait=0, location=None):
+                 longitude=None, width=0, height=0, is_portrait=0, location=None, title=None,
+                 caption=None, tags=None):
         self.fname = fname
         self.last_modified = last_modified
         self.file_id = file_id
@@ -91,6 +99,9 @@ class Pic: #TODO could this be done more elegantly with namedtuple
         self.height = height
         self.is_portrait = is_portrait
         self.location = location
+        self.tags=tags
+        self.caption=caption
+        self.title=title
 
 
 class Model:
@@ -105,11 +116,12 @@ class Model:
         with open(configfile, 'r') as stream:
             try:
                 conf = yaml.safe_load(stream)
-                for section in ['viewer', 'model', 'mqtt']:
+                for section in ['viewer', 'model', 'mqtt', 'http']:
                     self.__config[section] = {**DEFAULT_CONFIG[section], **conf[section]}
                 self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
                 self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
+        logging.getLogger().setLevel(self.get_model_config()['log_level']) # set root logger
         self.__file_list = [] # this is now a list of tuples i.e (file_id1,) or (file_id1, file_id2)
         self.__number_of_files = 0 # this is shortcut for len(__file_list)
         self.__reload_files = True
@@ -140,6 +152,9 @@ class Model:
 
     def get_mqtt_config(self):
         return self.__config['mqtt']
+
+    def get_http_config(self):
+        return self.__config['http']
 
     @property
     def fade_time(self):
@@ -195,8 +210,9 @@ class Model:
 
     def set_where_clause(self, key, value=None):
         # value must be a string for later join()
-        if (value is None or len(value) == 0) and key in self.__where_clauses:
-            self.__where_clauses.pop(key)
+        if (value is None or len(value) == 0):
+            if key in self.__where_clauses:
+                self.__where_clauses.pop(key)
             return
         self.__where_clauses[key] = value
 
@@ -220,7 +236,7 @@ class Model:
         self.__reload_files = True
 
     def set_next_file_to_previous_file(self):
-        self.__file_index = (self.__file_index - 2) % self.__number_of_files
+        self.__file_index = (self.__file_index - 2) % self.__number_of_files # TODO deleting last image results in ZeroDivisionError
 
     def get_next_file(self):
         if self.__reload_files:
@@ -277,7 +293,7 @@ class Model:
     def __get_files(self):
         where_list = []
         if self.subdirectory != "":
-            picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.subdirectory)
+            picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.subdirectory) # TODO catch, if subdirecotry does not exist
             where_list.append("fname LIKE '{}/%'".format(picture_dir)) # TODO / on end to stop 'test' also selecting test1 test2 etc
         where_list.extend(self.__where_clauses.values())
 

@@ -41,12 +41,15 @@ class Controller:
         self.__viewer = viewer
         self.__paused = False
         self.__next_tm = 0
-        self.__date_from = make_date('1970/1/1')
+        self.__date_from = make_date('1901/12/15') # TODO This seems to be the minimum date to be handled by date functions
         self.__date_to = make_date('2038/1/1')
+        self.__location_filter = ""
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
         self.__keep_looping = True
+        self.__location_filter = ''
+        self.__tags_filter = ''
 
     @property
     def paused(self):
@@ -77,6 +80,8 @@ class Controller:
         self.__next_tm = 0
 
     def set_show_text(self, txt_key=None, val="ON"):
+        if val is True: # allow to be called with boolean from httpserver
+            val = "ON"
         self.__viewer.set_show_text(txt_key, val)
         pic = self.__model.get_current_pics()[0]
         self.__viewer.reset_name_tm(pic, self.paused)
@@ -162,10 +167,11 @@ class Controller:
 
     @time_delay.setter
     def time_delay(self, time):
+        time = float(time) # convert string before comparison
         # might break it if too quick
         if time < 5.0:
             time = 5.0
-        self.__model.time_delay = float(time)
+        self.__model.time_delay = time
         self.__next_tm = 0
 
     @property
@@ -187,6 +193,20 @@ class Controller:
             self.__model.set_where_clause('location_filter', "location LIKE '%{}%'".format(val))
         else:
             self.__model.set_where_clause('location_filter') # remove from where_clause
+        self.__model.force_reload()
+        self.__next_tm = 0
+
+    @property
+    def tags_filter(self):
+        return self.__tags_filter
+    
+    @tags_filter.setter
+    def tags_filter(self, val):
+        self.__tags_filter = val
+        if len(val) > 0:
+            self.__model.set_where_clause('tags_filter', "tags LIKE '%{}%'".format(val))
+        else:
+            self.__model.set_where_clause('tags_filter') # remove from where_clause
         self.__model.force_reload()
         self.__next_tm = 0
 
@@ -219,8 +239,10 @@ class Controller:
                 image_attr = {}
                 for key in self.__model.get_model_config()['image_attr']:
                     if key == 'PICFRAME GPS':
-                        image_attr[key] = {'latitude': pics[0].latitude,
-                                           'longitude': pics[0].longitude}
+                        image_attr['latitude'] = pics[0].latitude
+                        image_attr['longitude'] = pics[0].longitude
+                    elif key == 'PICFRAME LOCATION':
+                        image_attr['location'] = pics[0].location
                     else:
                         field_name = self.__model.EXIF_TO_FIELD[key]
                         image_attr[key] = pics[0].__dict__[field_name] #TODO nicer using namedtuple for Pic
@@ -239,3 +261,4 @@ class Controller:
         self.__viewer.slideshow_stop()
         self.__keep_looping = False
         self.__model.stop_image_chache() # close db tidily
+        # TODO segmentation fault on closing on some setups.
