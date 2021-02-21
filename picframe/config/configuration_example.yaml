@@ -60,7 +60,7 @@ model:
   db_file: '~/.local/picframe/data/pictureframe.db3' # database used by picture frame
   portrait_pairs: False
   log_level: 'WARNING'                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
-  use_kbd: True                         # default=False, just for debug or console start. Crashing when started with systemd
+  use_kbd: False                          # default=False, just for debug or console start. Crashing when started with systemd
 
 mqtt:
   use_mqtt: False                         # default=False. Set True true, to enable mqtt          
@@ -70,3 +70,8 @@ mqtt:
   password: "your_password"               # password for mqtt user
   tls: "/path/to/your/ca.crt"             # filename including path to your ca.crt. If not used, must be set to "" !!!!
   device_id: 'picframe'                   # default='picframe' unique id of device. change if there is more than one picture frame
+
+http:
+  use_http: False                         # default=False. Set True to enable http NB THIS SERVER IS FOR LOCAL NETWORK AND SHOULD NOT BE EXPOSED TO EXTERNAL ACCESS
+  path: "~/.local/picframe/html"          # path to where html files are located
+  port: 9000                              # port used to serve pages by http server < 1024 requires root which is *bad* idea

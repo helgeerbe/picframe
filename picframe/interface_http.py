@@ -19,9 +19,13 @@ class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         try:
             path_split = self.path.split("?")
-            # TODO make default to _html_path/index.html if no page entered?
-            if path_split[0] != "/": # serve static page from html_path...
-                page = os.path.join(self.server._html_path, path_split[0].strip("/"))
+            page_ok = False
+            if len(path_split) == 1:
+                if path_split[0] != "/": # serve static page from html_path...
+                    html_page = path_split[0].strip("/")
+                else:
+                    html_page = "index.html"
+                page = os.path.join(self.server._html_path, html_page)
                 if os.path.isfile(page):
                     self.send_response(200)
                     self.send_header('Content-type', 'text/html')
@@ -32,7 +36,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                         page_bytes = f.read()
                         self.wfile.write(page_bytes)
                     self.connection.close()
-            elif len(path_split) == 2: # server type request - get or set info
+                    page_ok = True
+            else: # server type request - get or set info
                 start_time = time.time()
                 message = {}
                 self.send_response(200)
@@ -64,11 +69,12 @@ class RequestHandler(BaseHTTPRequestHandler):
 
                     self.wfile.write(bytes(json.dumps(message), "utf8"))
                     self.connection.close()
+                    page_ok = True
 
                 self.server._logger.info(message)
                 self.server._logger.debug("request finished in:  %s seconds" %
                               (time.time() - start_time))
-            else:
+            if not page_ok:
                 self.send_response(404)
                 self.connection.close()
         except Exception as e:
@@ -113,12 +119,8 @@ class InterfaceHttp(HTTPServer):
 
     def __loop(self):
         while self.__keep_looping:
-            if not self._controller:
-                print("here0")
             self.handle_request()
             time.sleep(0.1)
-        print("here2", self._controller)
 
     def stop(self):
-        print("here1")
         self.__keep_looping = False
