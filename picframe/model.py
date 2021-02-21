@@ -64,6 +64,11 @@ DEFAULT_CONFIG = {
         'password': '', 
         'tls': '',
         'device_id': 'picframe',                                 # unique id of device. change if there is more than one picture frame
+    },
+    'http': {
+        'use_http': False,
+        'path': '~/.local/picframe/html',
+        'port': 80,
     }
 }
 
@@ -111,7 +116,7 @@ class Model:
         with open(configfile, 'r') as stream:
             try:
                 conf = yaml.safe_load(stream)
-                for section in ['viewer', 'model', 'mqtt']:
+                for section in ['viewer', 'model', 'mqtt', 'http']:
                     self.__config[section] = {**DEFAULT_CONFIG[section], **conf[section]}
                 self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
@@ -147,6 +152,9 @@ class Model:
 
     def get_mqtt_config(self):
         return self.__config['mqtt']
+
+    def get_http_config(self):
+        return self.__config['http']
 
     @property
     def fade_time(self):
