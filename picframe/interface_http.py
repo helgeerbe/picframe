@@ -13,6 +13,7 @@ except ImportError:
     from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer #py2
     import urlparse
 
+EXTENSIONS = [".jpg", ".jpeg", ".png", ".heif", ".heic"]
 
 class RequestHandler(BaseHTTPRequestHandler):
 
@@ -20,15 +21,22 @@ class RequestHandler(BaseHTTPRequestHandler):
         try:
             path_split = self.path.split("?")
             page_ok = False
-            if len(path_split) == 1:
+            if len(path_split) == 1: # i.e. no ? - just serve index.html or image
                 if path_split[0] != "/": # serve static page from html_path...
                     html_page = path_split[0].strip("/")
                 else:
                     html_page = "index.html"
-                page = os.path.join(self.server._html_path, html_page)
+                _, extension = os.path.splitext(html_page)
+                if extension.lower() in EXTENSIONS:
+                    page = os.path.join("/", html_page) #images have to be abs path
+                    content_type = "image" #TODO send MIME subtypes?
+                else:
+                    page = os.path.join(self.server._html_path, html_page)
+                    content_type = "text/html"
+                page = urlparse.unquote(page)
                 if os.path.isfile(page):
                     self.send_response(200)
-                    self.send_header('Content-type', 'text/html')
+                    self.send_header('Content-type', content_type)
                     #TODO check if html or js - in which case application/javascript
                     # really should filter out attempts to render all other file types (jpg etc?)
                     self.end_headers()
