@@ -17,8 +17,8 @@ DEFAULT_CONFIG = {
         'fps': 20.0, 
         'background': [0.2, 0.2, 0.3, 1.0],  
         'blend_type': "blend", # {"blend":0.0, "burn":1.0, "bump":2.0}
-        'font_file': '~/picture_frame/data/fonts/NotoSans-Regular.ttf', 
-        'shader': '~/picture_frame/data/shaders/blend_new', 
+        'font_file': '~/.local/picframe/data/fonts/NotoSans-Regular.ttf', 
+        'shader': '~/.local/picframe/data/shaders/blend_new', 
         'show_text_fm': '%b %d, %Y',
         'show_text_tm': 20.0,
         'show_text_sz': 40,
@@ -37,8 +37,9 @@ DEFAULT_CONFIG = {
     }, 
     'model': {
         'pic_dir': '~/Pictures', 
-        'no_files_img': '~/picture_framee/data/no_pictures.jpg',
+        'no_files_img': '~/.local/picframe/data/no_pictures.jpg',
         'subdirectory': '', 
+        #'check_dir_tm': 60.0, 
         'recent_n': 3, 
         'reshuffle_num': 1, 
         'time_delay': 200.0, 
@@ -49,7 +50,7 @@ DEFAULT_CONFIG = {
         'locale': 'en_US.utf8',
         'key_list': [['tourism','amenity','isolated_dwelling'],['suburb','village'],['city','county'],['region','state','province'],['country']],
         'geo_key': 'this_needs_to@be_changed',  # use your email address
-        'db_file': '~/picture_frame/data/pictureframe.db3',
+        'db_file': '~/.local/picframe/data/pictureframe.db3',
         'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
         'log_level': 'WARNING',
@@ -66,8 +67,8 @@ DEFAULT_CONFIG = {
     },
     'http': {
         'use_http': False,
-        'path': '~/picture_frame/html',
-        'port': 9000,
+        'path': '~/.local/picframe/html',
+        'port': 80,
     }
 }
 
