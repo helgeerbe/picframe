@@ -33,7 +33,7 @@ viewer:
   auto_outer_mat_color: True              # default=True, True automatically picks an outer mat color based on the image. False uses 'outer_mat_color' value.
   auto_inner_mat_color: True              # default=True, True automatically colors the inner mat using a darker shade of 'outer_mat_color'. False uses 'inner_mat_color' value.
   auto_select_mat_type: True              # default=False, True randomly selects a mat type for each image. False uses 'mat_type' value.
-  mat_resource_folder: '/home/pi/.local/picframe/data' # Folder containing mat image files
+  mat_resource_folder: '~/.local/picframe/data' # Folder containing mat image files
 
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
 

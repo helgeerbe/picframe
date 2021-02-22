@@ -46,7 +46,7 @@ class ViewerDisplay:
         self.__auto_outer_mat_color = config['auto_outer_mat_color']
         self.__auto_inner_mat_color = config['auto_inner_mat_color']
         self.__auto_select_mat_type = config['auto_select_mat_type']
-        self.__mat_resource_folder = config['mat_resource_folder']
+        self.__mat_resource_folder = os.path.expanduser(config['mat_resource_folder'])
 
         self.__fps = config['fps']
         self.__background = config['background']
