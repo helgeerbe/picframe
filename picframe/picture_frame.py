@@ -2,14 +2,14 @@ import logging
 import sys
 import argparse
 import os
-import shutil
+from distutils.dir_util import copy_tree
 
 from picframe import model, viewer_display, controller, interface_kbd, interface_http, __version__
 
 def copy_files(pkgdir, dest, target):
     try:
         fullpath = os.path.join(pkgdir,  target)
-        shutil.copytree(fullpath,  dest + '/picture_frame/' + target, dirs_exist_ok=True)
+        copy_tree(fullpath,  dest + '/picture_frame/' + target)
     except:
         raise
 
