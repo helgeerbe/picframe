@@ -36,7 +36,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 else:
                     html_page = "index.html"
                 _, extension = os.path.splitext(html_page)
-                if extension.lower() in EXTENSIONS:
+                if extension.lower() in EXTENSIONS: # TODO .heif, .heic is not supported by browsers. Implement convert to .jpg 
                     # load only images that are located in the actual seleced path
                     page = self._pic_dir
                     if self._controller.subdirectory != '':
