@@ -220,6 +220,10 @@ class Controller:
         actual_dir, dir_list = self.__model.get_directory_list()
         return actual_dir, dir_list
 
+    def get_current_path(self):
+        (pic, _) = self.__model.get_current_pics()
+        return pic.fname
+
     def loop(self): #TODO exit loop gracefully and call image_cache.stop()
         #next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
         while self.__keep_looping:
