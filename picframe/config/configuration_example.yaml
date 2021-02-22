@@ -6,8 +6,8 @@ viewer:
   fps: 20.0                               # default=20.0
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
   blend_type: "blend"                     # default="blend", choices={"blend", "burn", "bump"}, type of blend the shader can do"
-  font_file: "~/.local/picframe/data/fonts/NotoSans-Regular.ttf"
-  shader: "~/.local/picframe/data/shaders/blend_new"
+  font_file: "~/picture_frame/data/fonts/NotoSans-Regular.ttf"
+  shader: "~/picture_frame/data/shaders/blend_new"
   show_text_fm: '%b %d, %Y'               # default "%b %d, %Y", format to show date over the image
   show_text_tm: 20.0                      # default=0.0, time to show text over image with file name
   show_text_sz: 40                        # default=90, text character size
@@ -33,16 +33,15 @@ viewer:
   auto_outer_mat_color: True              # default=True, True automatically picks an outer mat color based on the image. False uses 'outer_mat_color' value.
   auto_inner_mat_color: True              # default=True, True automatically colors the inner mat using a darker shade of 'outer_mat_color'. False uses 'inner_mat_color' value.
   auto_select_mat_type: True              # default=False, True randomly selects a mat type for each image. False uses 'mat_type' value.
-  mat_resource_folder: '/home/pi/.local/picframe/data' # Folder containing mat image files
+  mat_resource_folder: '~/.local/picframe/data' # Folder containing mat image files
 
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
 
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
   deleted_pictures: '~/DeletedPictures' # move deleted pictures here
-  no_files_img: "~/.local/picframe/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
+  no_files_img: "~/picture_frame/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
-  #check_dir_tm: 60.0                      # not used
   recent_n: 7                             # default=7 (days), when shuffling file change date more recent than this number of days play before the rest
   reshuffle_num: 1                        # default=1, times through before reshuffling
   time_delay: 200.0                       # default=200.0, time between consecutive slide starts - can be changed by MQTT
@@ -69,7 +68,7 @@ model:
     ['region','state','province'],
     ['country']]
   geo_key: 'this_needs_to@be_changed'            # use your email address
-  db_file: '~/.local/picframe/data/pictureframe.db3' # database used by picture frame
+  db_file: '~/picture_frame/data/pictureframe.db3' # database used by picture frame
   portrait_pairs: False
   log_level: 'WARNING'                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
   use_kbd: False                          # default=False, just for debug or console start. Crashing when started with systemd
@@ -85,5 +84,5 @@ mqtt:
 
 http:
   use_http: False                         # default=False. Set True to enable http NB THIS SERVER IS FOR LOCAL NETWORK AND SHOULD NOT BE EXPOSED TO EXTERNAL ACCESS
-  path: "~/.local/picframe/html"          # path to where html files are located
+  path: "~/picture_frame/html"            # path to where html files are located
   port: 9000                              # port used to serve pages by http server < 1024 requires root which is *bad* idea
