@@ -10,6 +10,7 @@ import logging
 import os
 import numpy as np
 from PIL import Image, ImageFilter
+from picframe import mat_image
 
 # utility functions with no dependency on ViewerDisplay properties
 def txt_to_bit(txt):
@@ -34,6 +35,19 @@ class ViewerDisplay:
         self.__blur_zoom = config['blur_zoom']
         self.__blur_edges = config['blur_edges']
         self.__edge_alpha = config['edge_alpha']
+
+        self.__mat_images = config['mat_images']
+        self.__mat_type = config['mat_type']
+        self.__outer_mat_color = config['outer_mat_color']
+        self.__inner_mat_color = config['inner_mat_color']
+        self.__outer_mat_border = config['outer_mat_border']
+        self.__inner_mat_border = config['inner_mat_border']
+        self.__use_mat_texture = config['use_mat_texture']
+        self.__auto_outer_mat_color = config['auto_outer_mat_color']
+        self.__auto_inner_mat_color = config['auto_inner_mat_color']
+        self.__auto_select_mat_type = config['auto_select_mat_type']
+        self.__mat_resource_folder = os.path.expanduser(config['mat_resource_folder'])
+
         self.__fps = config['fps']
         self.__background = config['background']
         self.__blend_type = {"blend":0.0, "burn":1.0, "bump":2.0}[config['blend_type']]
@@ -73,6 +87,7 @@ class ViewerDisplay:
         self.__next_tm = 0.0
         self.__name_tm = 0.0
         self.__in_transition = False
+        self.__matter = None
 
     @property
     def display_is_on(self):
@@ -169,18 +184,40 @@ class ViewerDisplay:
         return im
 
     def __tex_load(self, pics, size=None):
+        if self.__mat_images and self.__matter == None:
+            self.__matter = mat_image.MatImage(
+                display_size = (self.__display.width , self.__display.height),
+                resource_folder=self.__mat_resource_folder,
+                mat_type = self.__mat_type,
+                outer_mat_color = self.__outer_mat_color,
+                inner_mat_color = self.__inner_mat_color,
+                outer_mat_border = self.__outer_mat_border,
+                inner_mat_border = self.__inner_mat_border,
+                use_mat_texture = self.__use_mat_texture,
+                auto_outer_mat_color = self.__auto_outer_mat_color,
+                auto_inner_mat_color = self.__auto_inner_mat_color,
+                auto_select_mat_type = self.__auto_select_mat_type)
+
         try:
-            im = self.__check_heif_then_open(pics[0].fname)
-            orientation = pics[0].orientation
-            if pics[1] is not None: #i.e portrait pair
-                # generate combined im
+            # Load the image(s) and correct their orientation if necessary
+            if pics[0]:
+                im = self.__check_heif_then_open(pics[0].fname)
+                if pics[0].orientation != 1:
+                     im = self.__orientate_image(im, pics[0].orientation)
+            if pics[1]:
                 im2 = self.__check_heif_then_open(pics[1].fname)
-                if orientation > 1:
-                    im = self.__orientate_image(im, orientation)
-                if pics[1].orientation > 1:
-                    im2 = self.__orientate_image(im2, pics[1].orientation)
-                im = self.__create_image_pair(im, im2)
-                orientation = 1
+                if pics[1].orientation != 1:
+                     im2 = self.__orientate_image(im2, pics[1].orientation)
+
+            if self.__mat_images:
+                if not pics[1]:
+                    im = self.__matter.mat_image((im,))
+                else:
+                    im = self.__matter.mat_image((im, im2))
+            else:
+                if pics[1]: #i.e portrait pair
+                    im = self.__create_image_pair(im, im2)
+
             (w, h) = im.size
             max_dimension = MAX_SIZE # TODO changing MAX_SIZE causes serious crash on linux laptop!
             if not self.__auto_resize: # turned off for 4K display - will cause issues on RPi before v4
@@ -189,8 +226,6 @@ class ViewerDisplay:
                 im = im.resize((max_dimension, int(h * max_dimension / w)), resample=Image.BICUBIC)
             elif h > max_dimension:
                 im = im.resize((int(w * max_dimension / h), max_dimension), resample=Image.BICUBIC)
-            if orientation != 1:
-                im = self.__orientate_image(im, orientation)
             if self.__blur_edges and size is not None:
                 wh_rat = (size[0] * im.size[1]) / (size[1] * im.size[0])
                 if abs(wh_rat - 1.0) > 0.01: # make a blurred background
@@ -222,6 +257,7 @@ class ViewerDisplay:
             self.__logger.warning("Can't create tex from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
             self.__logger.warning("Cause: %s", e)
             tex = None
+            raise
         return tex
 
     def __sanitize_string(self, path_name):
@@ -236,7 +272,7 @@ class ViewerDisplay:
             if (self.__show_text & 1) == 1 and pic.title is not None: # title
                 info_strings.append(self.__sanitize_string(pic.title))
             if (self.__show_text & 2) == 2 and pic.caption is not None: # caption
-                info_strings.append(self.__sanitize_string(pic.caption))     
+                info_strings.append(self.__sanitize_string(pic.caption))
             if (self.__show_text & 4) == 4: # name
                 info_strings.append(self.__sanitize_string(pic.fname))
             if (self.__show_text & 8) == 8 and pic.exif_datetime > 0: # date

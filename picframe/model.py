@@ -11,12 +11,13 @@ DEFAULT_CONFIGFILE = "~/picture_frame/config/configuration.yaml"
 DEFAULT_CONFIG = {
     'viewer': {
         'blur_amount': 12,
-        'blur_zoom': 1.0,  
-        'blur_edges': False, 
-        'edge_alpha': 0.5, 
-        'fps': 20.0, 
-        'background': [0.2, 0.2, 0.3, 1.0],  
+        'blur_zoom': 1.0,
+        'blur_edges': False,
+        'edge_alpha': 0.5,
+        'fps': 20.0,
+        'background': [0.2, 0.2, 0.3, 1.0],
         'blend_type': "blend", # {"blend":0.0, "burn":1.0, "bump":2.0}
+
         'font_file': '~/picture_frame/data/fonts/NotoSans-Regular.ttf', 
         'shader': '~/picture_frame/data/shaders/blend_new', 
         'show_text_fm': '%b %d, %Y',
@@ -24,7 +25,7 @@ DEFAULT_CONFIG = {
         'show_text_sz': 40,
         'show_text': "name location",
         'text_width': 90,
-        'fit': False, 
+        'fit': False,
         'auto_resize': True,
         'kenburns': False,
         'display_x': 0,
@@ -33,11 +34,23 @@ DEFAULT_CONFIG = {
         'display_h': None,
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
+        'mat_images': True,
+        'mat_type': None,
+        'outer_mat_color': None,
+        'inner_mat_color': None,
+        'outer_mat_border': 75,
+        'inner_mat_border': 40,
+        'use_mat_texture': True,
+        'auto_outer_mat_color': True,
+        'auto_inner_mat_color': True,
+        'auto_select_mat_type': True,
+        'mat_resource_folder': '/home/pi/.local/picframe/data',
         'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
-    }, 
+    },
     'model': {
+
         'pic_dir': '~/Pictures', 
-        'no_files_img': '~/picture_framee/data/no_pictures.jpg',
+        'no_files_img': '~/picture_frame/data/no_pictures.jpg',
         'subdirectory': '', 
         'recent_n': 3, 
         'reshuffle_num': 1, 
@@ -56,11 +69,11 @@ DEFAULT_CONFIG = {
         'use_kbd': False,
     },
     'mqtt': {
-        'use_mqtt': False,                          # Set tue true, to enable mqtt  
-        'server': '', 
-        'port': 8883, 
-        'login': '', 
-        'password': '', 
+        'use_mqtt': False,                          # Set tue true, to enable mqtt
+        'server': '',
+        'port': 8883,
+        'login': '',
+        'password': '',
         'tls': '',
         'device_id': 'picframe',                                 # unique id of device. change if there is more than one picture frame
     },
@@ -117,6 +130,7 @@ class Model:
                 conf = yaml.safe_load(stream)
                 for section in ['viewer', 'model', 'mqtt', 'http']:
                     self.__config[section] = {**DEFAULT_CONFIG[section], **conf[section]}
+
                 self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
                 self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
@@ -166,7 +180,7 @@ class Model:
     @property
     def time_delay(self):
         return self.__config['model']['time_delay']
-    
+
     @time_delay.setter
     def time_delay(self, time):
         self.__config['model']['time_delay'] = time

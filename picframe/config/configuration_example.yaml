@@ -14,7 +14,7 @@ viewer:
   show_text: "title caption name date folder location"  # default="date folder location", show text, include combination of words: title, caption name, date, location, folder
   text_width: 70                          # width to wrap
   fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
-  auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4. 
+  auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4.
                                           # You should ensure your images are the correct size for the display")
   kenburns: False                         # default=False, will set fit->False and blur_edges->False"
   display_x: 0                            # offset from left of screen (can be negative)
@@ -23,8 +23,20 @@ viewer:
   display_h: null                         # height of display surface
   use_glx: False                          # default=False. Set to True on linux with xserver running
 
+  mat_images: True                        # default=True, Display images on an automatically generated background mat. False, no automatic image matting.
+  mat_type: None                          # default=None, The mat type. One of 'float', 'float_polaroid', 'single_bevel', 'double_bevel', or 'double_flat' (see auto_select_mat_type)
+  outer_mat_color: None                   # default=None, Color of the outer mat as an RGB tuple (see auto_outer_mat_color)
+  inner_mat_color: None                   # default=None, Color of the inner mat as an RGB tuple (see auto_inner_mat_color)
+  outer_mat_border: 75                    # default=75, Minimum outer mat border in pixels
+  inner_mat_border: 40                    # default=40, Minimum inner mat border in pixels (for styles that use it)
+  use_mat_texture: True                   # default=True, True uses a mat texture. False creates a solid color mat
+  auto_outer_mat_color: True              # default=True, True automatically picks an outer mat color based on the image. False uses 'outer_mat_color' value.
+  auto_inner_mat_color: True              # default=True, True automatically colors the inner mat using a darker shade of 'outer_mat_color'. False uses 'inner_mat_color' value.
+  auto_select_mat_type: True              # default=False, True randomly selects a mat type for each image. False uses 'mat_type' value.
+  mat_resource_folder: '~/.local/picframe/data' # Folder containing mat image files
+
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
- 
+
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
   deleted_pictures: '~/DeletedPictures' # move deleted pictures here
@@ -36,13 +48,13 @@ model:
   fade_time: 10.0                         # default=10.0, change time during which slides overlap - can be changed by MQTT"
   shuffle: True                           # default=True, shuffle on reloading image files - can be changed by MQTT"
   image_attr: [                           # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat, 'PICFRAME LOCATION' is special to retrieve geo reverse (load_geoloc hast to be True)
-    'PICFRAME GPS',               
+    'PICFRAME GPS',
     'PICFRAME LOCATION',
-    'EXIF FNumber', 
-    'EXIF ExposureTime', 
-    'EXIF ISOSpeedRatings', 
-    'EXIF FocalLength', 
-    'EXIF DateTimeOriginal', 
+    'EXIF FNumber',
+    'EXIF ExposureTime',
+    'EXIF ISOSpeedRatings',
+    'EXIF FocalLength',
+    'EXIF DateTimeOriginal',
     'Image Model',
     'IPTC Caption/Abstract',
     'IPTC Object Name',
@@ -62,7 +74,7 @@ model:
   use_kbd: False                          # default=False, just for debug or console start. Crashing when started with systemd
 
 mqtt:
-  use_mqtt: False                         # default=False. Set True true, to enable mqtt          
+  use_mqtt: False                         # default=False. Set True true, to enable mqtt
   server: "your_mqtt_broker"              # No defaults for server
   port: 8883                              # derfault=8883 for tls, 1883 else (tls must be "" then !!!!!)
   login: "name"                           # your mqtt user
