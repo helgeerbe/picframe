@@ -38,7 +38,7 @@ class MatImage:
         self.__9patch_bevel = Ninepatch('{0}/9_patch_bevel.png'.format(resource_folder))
         self.__9patch_drop_shadow = Ninepatch('{0}/9_patch_drop_shadow.png'.format(resource_folder))
         self.__9patch_inner_shadow = Ninepatch('{0}/9_patch_inner_shadow.png'.format(resource_folder))
-        self.__9patch_highilght = Ninepatch('{0}/9_patch_highlight.png'.format(resource_folder))
+        self.__9patch_highlight = Ninepatch('{0}/9_patch_highlight.png'.format(resource_folder))
 
     # endregion Constructor
 
@@ -217,7 +217,7 @@ class MatImage:
             self.__add_image_outline(image, color2)
             image = ImageOps.expand(image, border_width)
             self.__add_image_outline(image, color, outline_width=border_width)
-            highlight = self.__9patch_highilght.render(image.width, image.height)
+            highlight = self.__9patch_highlight.render(image.width, image.height)
             image.paste(highlight, (0,0), highlight)
             image = self.__add_drop_shadow(image)
             final_images.append(image)

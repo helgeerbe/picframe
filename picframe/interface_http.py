@@ -31,7 +31,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if html_page == "current_image":
                     content_type = "image"
                     page = self.server._controller.get_current_path()
-                    print("here0", page)
                 elif extension.lower() in EXTENSIONS: # TODO .heif, .heic is not supported by browsers. Implement convert to .jpg 
                     # load only images that are located in the actual selected path
                     page = self.server._pic_dir
