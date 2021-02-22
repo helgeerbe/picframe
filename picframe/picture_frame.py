@@ -84,8 +84,9 @@ def main():
         mqtt.start()
 
     http_config = m.get_http_config()
+    model_config = m.get_model_config()
     if http_config['use_http']:
-        server = interface_http.InterfaceHttp(c, http_config['path'], http_config['port'])
+        server = interface_http.InterfaceHttp(c, http_config['path'], model_config['pic_dir'], model_config['no_files_img'], http_config['port'])
 
     c.loop()
     if mqtt_config['use_mqtt']:

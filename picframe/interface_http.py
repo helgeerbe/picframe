@@ -5,6 +5,7 @@ import os
 import logging
 import json
 import threading
+from functools import partial
 
 try:
     from http.server import BaseHTTPRequestHandler, HTTPServer #py3
@@ -17,6 +18,14 @@ EXTENSIONS = [".jpg", ".jpeg", ".png", ".heif", ".heic"]
 
 class RequestHandler(BaseHTTPRequestHandler):
 
+    def __init__(self, pic_dir, no_files_img, controller, *args, **kwargs):
+            self._pic_dir = pic_dir
+            self._no_files_img = no_files_img
+            self._controller = controller
+            # BaseHTTPRequestHandler calls do_GET **inside** __init__ !!!
+            # So we have to call super().__init__ after setting attributes.
+            super().__init__(*args, **kwargs)
+
     def do_GET(self):
         try:
             path_split = self.path.split("?")
@@ -28,7 +37,15 @@ class RequestHandler(BaseHTTPRequestHandler):
                     html_page = "index.html"
                 _, extension = os.path.splitext(html_page)
                 if extension.lower() in EXTENSIONS:
-                    page = os.path.join("/", html_page) #images have to be abs path
+                    # load only images that are located in the actual seleced path
+                    page = self._pic_dir
+                    if self._controller.subdirectory != '':
+                        page = os.path.join(page, self._controller.subdirectory)
+                    _, image = os.path.split(html_page)
+                    image = urlparse.unquote(image)
+                    page = os.path.join(page, image)
+                    if not os.path.isfile(page):
+                        page = self._no_files_img
                     content_type = "image" #TODO send MIME subtypes?
                 else:
                     page = os.path.join(self.server._html_path, html_page)
@@ -110,8 +127,9 @@ class RequestHandler(BaseHTTPRequestHandler):
 
 
 class InterfaceHttp(HTTPServer):
-    def __init__(self, controller, html_path, port=9000):
-        super(InterfaceHttp, self).__init__(("0.0.0.0", port), RequestHandler)
+    def __init__(self, controller, html_path, pic_dir, no_files_img, port=9000):
+        handler = partial(RequestHandler, os.path.expanduser(pic_dir), os.path.expanduser(no_files_img), controller)
+        super(InterfaceHttp, self).__init__(("0.0.0.0", port), handler)
         # NB name mangling throws a spanner in the works here!!!!!
         # *no* __dunders
         self._logger = logging.getLogger("simple_server.InterfaceHttp")
