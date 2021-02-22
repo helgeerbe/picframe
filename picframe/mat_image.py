@@ -14,7 +14,7 @@ class MatImage:
                 use_mat_texture = True, auto_outer_mat_color = True, auto_inner_mat_color = True,
                 auto_select_mat_type = False):
 
-        self.__mat_types = ['float', 'float_polaroid', 'single_bevel', 'double_bevel', 'double_flat']
+        self.__mat_types = ['float', 'float_polaroid', 'float_color_wrap', 'single_bevel', 'double_bevel', 'double_flat']
 
         # If a mat type wasn't specified, select the 1st one for safety
         if not mat_type or mat_type not in self.__mat_types:
@@ -38,6 +38,7 @@ class MatImage:
         self.__9patch_bevel = Ninepatch('{0}/9_patch_bevel.png'.format(resource_folder))
         self.__9patch_drop_shadow = Ninepatch('{0}/9_patch_drop_shadow.png'.format(resource_folder))
         self.__9patch_inner_shadow = Ninepatch('{0}/9_patch_inner_shadow.png'.format(resource_folder))
+        self.__9patch_highilght = Ninepatch('{0}/9_patch_highlight.png'.format(resource_folder))
 
     # endregion Constructor
 
@@ -155,6 +156,8 @@ class MatImage:
             image = self.__style_float(images)
         elif mat_type == 'float_polaroid':
             image = self.__style_float_polaroid(images)
+        elif mat_type == 'float_color_wrap':
+            image = self.__style_float_color_wrap(images)
         elif mat_type == 'single_bevel':
             image = self.__style_single_mat_bevel(images)
         elif mat_type == 'double_bevel':
@@ -195,6 +198,27 @@ class MatImage:
             self.__add_image_outline(image, self.outer_mat_color)
             image = ImageOps.expand(image, border_width)
             self.__add_image_outline(image, (210,210,210), outline_width=border_width)
+            image = self.__add_drop_shadow(image)
+            final_images.append(image)
+
+        return self.__layout_images(final_images)
+
+    def __style_float_color_wrap(self, images):
+        border_width = 18
+        pic_count = len(images)
+        pic_wid = (self.display_width / pic_count) - (((pic_count + 1) / pic_count) * self.outer_mat_border) - (border_width * 2)
+        pic_height = self.display_height - (self.outer_mat_border * 2) - (border_width * 2)
+
+        final_images = []
+        for image in images:
+            color = self.__get_darker_shade(self.outer_mat_color, 0.35)
+            color2 = self.__get_darker_shade(self.outer_mat_color, 0.2)
+            image = self.__scale_image(image, (pic_wid, pic_height))
+            self.__add_image_outline(image, color2)
+            image = ImageOps.expand(image, border_width)
+            self.__add_image_outline(image, color, outline_width=border_width)
+            highlight = self.__9patch_highilght.render(image.width, image.height)
+            image.paste(highlight, (0,0), highlight)
             image = self.__add_drop_shadow(image)
             final_images.append(image)
 
@@ -347,8 +371,8 @@ class MatImage:
 
     def __add_drop_shadow(self, image):
         shadow_offset = 15
-        shadow_image = self.__9patch_drop_shadow.render(image.width + shadow_offset, image.height + shadow_offset)
         mod_image = Image.new('RGBA', (image.width + shadow_offset, image.height + shadow_offset), (0,0,0,0))
+        shadow_image = self.__9patch_drop_shadow.render(mod_image.width, mod_image.height)
         mod_image.paste(shadow_image, (0,0), shadow_image)
         mod_image.paste(image, (0,0))
         return mod_image
