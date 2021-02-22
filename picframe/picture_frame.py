@@ -2,6 +2,7 @@ import logging
 import sys
 import argparse
 import os
+import ssl
 from distutils.dir_util import copy_tree
 
 from picframe import model, viewer_display, controller, interface_kbd, interface_http, __version__
@@ -59,7 +60,8 @@ def main():
             'yaml',
             'paho.mqtt',
             'iptcinfo3',
-            'numpy'
+            'numpy',
+            'Ninepatch'
         ]
         check_packages(required_packages)
         print("\nChecking optional packages......")
@@ -87,7 +89,12 @@ def main():
     model_config = m.get_model_config()
     if http_config['use_http']:
         server = interface_http.InterfaceHttp(c, http_config['path'], model_config['pic_dir'], model_config['no_files_img'], http_config['port'])
-
+        if http_config['use_ssl']:
+            server.socket = ssl.wrap_socket(
+                server.socket,
+                keyfile = http_config['keyfile'],
+                certfile = http_config['certfile'],
+                server_side=True)
     c.loop()
     if mqtt_config['use_mqtt']:
         mqtt.stop()

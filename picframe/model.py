@@ -81,6 +81,9 @@ DEFAULT_CONFIG = {
         'use_http': False,
         'path': '~/picture_frame/html',
         'port': 9000,
+        'use_ssl': False,
+        'keyfile': "/path/to/key.pem",
+        'certfile': "/path/to/fullchain.pem"
     }
 }
 
