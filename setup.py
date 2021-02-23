@@ -38,7 +38,8 @@ setup(name='picframe',
         'PyYAML',
         'paho-mqtt',
         'IPTCInfo3',
-        'numpy'
+        'numpy',
+        'ninepatch'
       ],
       entry_points = {
         'console_scripts': ['picture_frame=picframe.picture_frame:main']

@@ -33,15 +33,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                     page = self.server._controller.get_current_path()
                 elif extension.lower() in EXTENSIONS: # TODO .heif, .heic is not supported by browsers. Implement convert to .jpg 
                     # load only images that are located in the actual selected path
-                    page = self.server._pic_dir
-                    if self.server._controller.subdirectory != '':
-                        page = os.path.join(page, self.server._controller.subdirectory)
-                    _, image = os.path.split(html_page)
-                    image = urlparse.unquote(image)
-                    page = os.path.join(page, image)
-                    if not os.path.isfile(page):
-                        page = self.server._no_files_img
-                    content_type = "image" #TODO send MIME subtypes?
+                    content_type = "image"
+                    page = self.server._controller.get_current_path()
                 else:
                     page = os.path.join(self.server._html_path, html_page)
                     content_type = "text/html"

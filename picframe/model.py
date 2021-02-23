@@ -35,6 +35,7 @@ DEFAULT_CONFIG = {
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
         'mat_images': True,
+        'mat_portraits_only': False,
         'mat_type': None,
         'outer_mat_color': None,
         'inner_mat_color': None,
@@ -81,6 +82,9 @@ DEFAULT_CONFIG = {
         'use_http': False,
         'path': '~/picture_frame/html',
         'port': 9000,
+        'use_ssl': False,
+        'keyfile': "/path/to/key.pem",
+        'certfile': "/path/to/fullchain.pem"
     }
 }
 
