@@ -43,10 +43,7 @@ class ViewerDisplay:
         self.__outer_mat_border = config['outer_mat_border']
         self.__inner_mat_border = config['inner_mat_border']
         self.__use_mat_texture = config['use_mat_texture']
-        self.__auto_outer_mat_color = config['auto_outer_mat_color']
-        self.__auto_inner_mat_color = config['auto_inner_mat_color']
-        self.__auto_select_mat_type = config['auto_select_mat_type']
-        self.__mat_resource_folder = os.path.expanduser(config['mat_resource_folder'])
+        self.__mat_resource_folder = config['mat_resource_folder']
 
         self.__fps = config['fps']
         self.__background = config['background']
@@ -193,10 +190,7 @@ class ViewerDisplay:
                 inner_mat_color = self.__inner_mat_color,
                 outer_mat_border = self.__outer_mat_border,
                 inner_mat_border = self.__inner_mat_border,
-                use_mat_texture = self.__use_mat_texture,
-                auto_outer_mat_color = self.__auto_outer_mat_color,
-                auto_inner_mat_color = self.__auto_inner_mat_color,
-                auto_select_mat_type = self.__auto_select_mat_type)
+                use_mat_texture = self.__use_mat_texture)
 
         try:
             # Load the image(s) and correct their orientation if necessary
