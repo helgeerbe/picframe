@@ -37,6 +37,7 @@ class ViewerDisplay:
         self.__edge_alpha = config['edge_alpha']
 
         self.__mat_images = config['mat_images']
+        self.__mat_portraits_only = config['mat_portraits_only']
         self.__mat_type = config['mat_type']
         self.__outer_mat_color = config['outer_mat_color']
         self.__inner_mat_color = config['inner_mat_color']
@@ -209,7 +210,7 @@ class ViewerDisplay:
                 if pics[1].orientation != 1:
                      im2 = self.__orientate_image(im2, pics[1].orientation)
 
-            if self.__mat_images:
+            if self.__mat_images and (pics[0].is_portrait or not (pics[0].is_portrait or self.__mat_portraits_only)):
                 if not pics[1]:
                     im = self.__matter.mat_image((im,))
                 else:
