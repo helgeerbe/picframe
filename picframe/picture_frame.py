@@ -18,8 +18,11 @@ def check_packages (packages):
     for package in packages:
         try:
             if package == 'paho.mqtt':
-                import paho.mqtt;
+                import paho.mqtt
                 print(package, ': ',paho.mqtt.__version__)
+            elif package == 'ninepatch':
+                import ninepatch
+                print(package, ': installed, but no version info')
             else:
                 print(package, ': ',__import__(package).__version__)
         except ImportError:
@@ -61,7 +64,7 @@ def main():
             'paho.mqtt',
             'iptcinfo3',
             'numpy',
-            'Ninepatch'
+            'ninepatch'
         ]
         check_packages(required_packages)
         print("\nChecking optional packages......")
