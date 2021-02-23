@@ -3,6 +3,7 @@ from ninepatch import Ninepatch
 import numpy as np
 import random
 import logging
+import time
 
 class MatImage:
 
@@ -14,7 +15,7 @@ class MatImage:
                 use_mat_texture = True, auto_outer_mat_color = True, auto_inner_mat_color = True,
                 auto_select_mat_type = False):
 
-        self.__mat_types = ['float', 'float_polaroid', 'single_bevel', 'double_bevel', 'double_flat']
+        self.__mat_types = ['float', 'float_polaroid', 'float_color_wrap', 'single_bevel', 'double_bevel', 'double_flat']
 
         # If a mat type wasn't specified, select the 1st one for safety
         if not mat_type or mat_type not in self.__mat_types:
@@ -38,6 +39,7 @@ class MatImage:
         self.__9patch_bevel = Ninepatch('{0}/9_patch_bevel.png'.format(resource_folder))
         self.__9patch_drop_shadow = Ninepatch('{0}/9_patch_drop_shadow.png'.format(resource_folder))
         self.__9patch_inner_shadow = Ninepatch('{0}/9_patch_inner_shadow.png'.format(resource_folder))
+        self.__9patch_highlight = Ninepatch('{0}/9_patch_highlight.png'.format(resource_folder))
 
     # endregion Constructor
 
@@ -155,6 +157,8 @@ class MatImage:
             image = self.__style_float(images)
         elif mat_type == 'float_polaroid':
             image = self.__style_float_polaroid(images)
+        elif mat_type == 'float_color_wrap':
+            image = self.__style_float_color_wrap(images)
         elif mat_type == 'single_bevel':
             image = self.__style_single_mat_bevel(images)
         elif mat_type == 'double_bevel':
@@ -195,6 +199,27 @@ class MatImage:
             self.__add_image_outline(image, self.outer_mat_color)
             image = ImageOps.expand(image, border_width)
             self.__add_image_outline(image, (210,210,210), outline_width=border_width)
+            image = self.__add_drop_shadow(image)
+            final_images.append(image)
+
+        return self.__layout_images(final_images)
+
+    def __style_float_color_wrap(self, images):
+        border_width = 18
+        pic_count = len(images)
+        pic_wid = (self.display_width / pic_count) - (((pic_count + 1) / pic_count) * self.outer_mat_border) - (border_width * 2)
+        pic_height = self.display_height - (self.outer_mat_border * 2) - (border_width * 2)
+
+        final_images = []
+        for image in images:
+            color = self.__get_darker_shade(self.outer_mat_color, 0.35)
+            color2 = self.__get_darker_shade(self.outer_mat_color, 0.2)
+            image = self.__scale_image(image, (pic_wid, pic_height))
+            self.__add_image_outline(image, color2)
+            image = ImageOps.expand(image, border_width)
+            self.__add_image_outline(image, color, outline_width=border_width)
+            highlight = self.__9patch_highlight.render(image.width, image.height)
+            image.paste(highlight, (0,0), highlight)
             image = self.__add_drop_shadow(image)
             final_images.append(image)
 
@@ -268,11 +293,16 @@ class MatImage:
 
 
     def __get_outer_mat_color(self, image):
-        k = Kmeans(size=20)
+        """
+        k = Kmeans(size=100)
         colors = k.run(image)
-        return self.__get_least_gray_color(colors)
+        bc = self.__get_least_gray_color(colors)
+        """
+        k = KmeansNp(size=100)
+        colors = k.run(image)
+        return tuple(colors[0])
 
-
+    """
     def __get_least_gray_color(self, colors):
         dist = -1
         color = colors[0]
@@ -282,7 +312,7 @@ class MatImage:
                 dist = this_dist
                 color = this_color
         return tuple(map(int, color))
-
+    """
 
     def __get_darker_shade(self, rgb_color, fractional_percent = 0.5):
         return tuple(map(lambda c: int(c * fractional_percent), rgb_color))
@@ -347,8 +377,8 @@ class MatImage:
 
     def __add_drop_shadow(self, image):
         shadow_offset = 15
-        shadow_image = self.__9patch_drop_shadow.render(image.width + shadow_offset, image.height + shadow_offset)
         mod_image = Image.new('RGBA', (image.width + shadow_offset, image.height + shadow_offset), (0,0,0,0))
+        shadow_image = self.__9patch_drop_shadow.render(mod_image.width, mod_image.height)
         mod_image.paste(shadow_image, (0,0), shadow_image)
         mod_image.paste(image, (0,0))
         return mod_image
@@ -375,7 +405,7 @@ class MatImage:
     # endregion Helper functions
 
 # region Automatic Color Selection ----
-
+"""
 class Cluster(object):
 
     def __init__(self):
@@ -474,8 +504,45 @@ class Kmeans(object):
             return False
 
         return True
+"""
+class KmeansNp:
+    def __init__(self, k=3, max_iterations=5, min_distance=5.0, size=200):
+        self.k = k
+        self.max_iterations = max_iterations
+        self.min_distance = min_distance
+        self.size = (size, size)
+        self.n = size * size # flattened length of pixels
 
-# endregion Automatic Color Selection ----
+    def run(self, image):
+        image = image.resize(self.size)
+        im = np.array(image, dtype=np.float)[:,:,:3].reshape(self.n, 3) #NB need to use floats to avoid coercing to uint8 scrambling subtractions
+        centroids = im[np.random.choice(np.arange(self.n), self.k)]
+        old_centroids = centroids.copy()
+        for i in range(self.max_iterations):
+            im.shape = (1, self.n, 3) # add dimension to allow broadcasting
+            centroids.shape = (self.k, 1, 3) # ditto
+            dists = (((im - centroids) ** 2).sum(axis=2)) ** 0.5 # euclidean distance - manhattan might be fine and faster
+            ix = np.argmin(dists, axis=0) # indices of nearest centroid for each pixel
+            im.shape = (self.n, 3) # reduce dimensions for mean
+            centroids.shape = (self.k, 3) # ditto
+            counts = np.unique(ix, return_counts=True)[1] # count the number of each index
+            if len(counts) < self.k:
+                counts = np.append(counts, [0] * (self.k - len(counts)))
+            near_enough = True
+            for j in range(self.k): # write back average location of all nearest pixels
+                if counts[j] > 0:
+                    centroids[j] = im[ix == j].mean(axis=0)
+            movement = ((((centroids - old_centroids) ** 2).sum(axis=1)) ** 0.5).max()
+            if movement < self.min_distance:
+                break
+            old_centroids = centroids.copy()
+
+        c_max, c_min = centroids.max(axis=1), centroids.min(axis=1) # max, min for each centroid
+        #c_lum = 0.5 * (c_max + c_min)
+        #c_sat = (c_max - c_min) / (255.0 - np.abs(c_lum * 2.0 - 255.0)) # should check for lum == 255
+        c_sat = c_max - c_min # value used previously includes element of lum
+        ix_order = np.argsort(c_sat)[::-1] # indices to sorted values - reversed
+        return centroids[ix_order].astype(np.uint8)
 
 if __name__ == "__main__":
 
