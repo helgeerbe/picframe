@@ -10,22 +10,14 @@ class MatImage:
     # region Constructor
 
     def __init__(self, display_size, mat_type = None, outer_mat_color = None,
-                resource_folder='.',
-                inner_mat_color = None, outer_mat_border = 75, inner_mat_border = 40,
-                use_mat_texture = True, auto_outer_mat_color = True, auto_inner_mat_color = True,
-                auto_select_mat_type = False):
+                resource_folder='.', inner_mat_color = None, outer_mat_border = 75,
+                inner_mat_border = 40, use_mat_texture = True, auto_inner_mat_color = True):
 
         self.__mat_types = ['float', 'float_polaroid', 'float_color_wrap', 'single_bevel', 'double_bevel', 'double_flat']
-
-        # If a mat type wasn't specified, select the 1st one for safety
-        if not mat_type or mat_type not in self.__mat_types:
-            mat_type = self.__mat_types[0]
 
         self.__logger = logging.getLogger("mat_image.MatImage")
 
         self.auto_inner_mat_color = auto_inner_mat_color
-        self.auto_outer_mat_color = auto_outer_mat_color
-        self.auto_select_mat_type = auto_select_mat_type
         self.display_size = display_size
         self.inner_mat_border = inner_mat_border
         self.inner_mat_color = inner_mat_color
@@ -71,14 +63,6 @@ class MatImage:
         self.__outer_mat_border = val
 
     @property
-    def auto_select_mat_type(self):
-        return self.__auto_select_mat_type
-
-    @auto_select_mat_type.setter
-    def auto_select_mat_type(self, val):
-        self.__auto_select_mat_type = val
-
-    @property
     def inner_mat_border(self):
         return self.__inner_mat_border
 
@@ -103,28 +87,12 @@ class MatImage:
         self.__inner_mat_color = val
 
     @property
-    def auto_inner_mat_color(self):
-        return self.__auto_inner_mat_color
-
-    @auto_inner_mat_color.setter
-    def auto_inner_mat_color(self, val):
-        self.__auto_inner_mat_color = val
-
-    @property
-    def auto_outer_mat_color(self):
-        return self.__auto_outer_mat_color
-
-    @auto_outer_mat_color.setter
-    def auto_outer_mat_color(self, val):
-        self.__auto_outer_mat_color = val
-
-    @property
     def mat_type(self):
         return self.__mat_type
 
     @mat_type.setter
     def mat_type(self, val):
-        self.__mat_type = val
+        self.__mat_type = self.__get_mat_type_from_user_string(val)
 
     @property
     def mat_types(self):
@@ -144,14 +112,14 @@ class MatImage:
 
     def mat_image(self, images):
 
-        mat_type = self.mat_type
+        # Randomly pick a mat type from those specified by the User
+        mat_type = random.choice(self.mat_type)
 
-        if self.auto_select_mat_type:
-            mat_type = random.choice(self.__mat_types)
-
-        # If we're supposed to get the mat color automatically or a color wasn't specified, get one
-        if self.auto_outer_mat_color or not self.outer_mat_color:
-            self.outer_mat_color = self.__get_outer_mat_color(images[0])
+        # If a mat color wasn't specified, get one
+        if not self.outer_mat_color:
+            self.__outer_mat_color_save = self.__get_outer_mat_color(images[0])
+        else:
+            self.__outer_mat_color_save = tuple(self.outer_mat_color)
 
         if mat_type == 'float':
             image = self.__style_float(images)
@@ -181,7 +149,7 @@ class MatImage:
         final_images = []
         for image in images:
             image = self.__scale_image(image, (pic_wid, pic_height))
-            self.__add_image_outline(image, self.outer_mat_color, auto_adjust=True)
+            self.__add_image_outline(image, self.__outer_mat_color_save, auto_adjust=True)
             image = self.__add_drop_shadow(image)
             final_images.append(image)
 
@@ -196,7 +164,7 @@ class MatImage:
         final_images = []
         for image in images:
             image = self.__scale_image(image, (pic_wid, pic_height))
-            self.__add_image_outline(image, self.outer_mat_color)
+            self.__add_image_outline(image, self.__outer_mat_color_save)
             image = ImageOps.expand(image, border_width)
             self.__add_image_outline(image, (210,210,210), outline_width=border_width)
             image = self.__add_drop_shadow(image)
@@ -212,8 +180,8 @@ class MatImage:
 
         final_images = []
         for image in images:
-            color = self.__get_darker_shade(self.outer_mat_color, 0.35)
-            color2 = self.__get_darker_shade(self.outer_mat_color, 0.2)
+            color = self.__get_darker_shade(self.__outer_mat_color_save, 0.35)
+            color2 = self.__get_darker_shade(self.__outer_mat_color_save, 0.2)
             image = self.__scale_image(image, (pic_wid, pic_height))
             self.__add_image_outline(image, color2)
             image = ImageOps.expand(image, border_width)
@@ -268,7 +236,7 @@ class MatImage:
         final_images = []
         for image in images:
             image = self.__scale_image(image, (pic_wid, pic_height))
-            self.__add_image_outline(image, self.outer_mat_color)
+            self.__add_image_outline(image, self.__outer_mat_color_save)
             mat_size = (image.width + (self.inner_mat_border * 2), image.height + (self.inner_mat_border * 2))
             mat_image = self.__get_inner_mat(mat_size)
             mat_image = self.__add_inner_shadow(mat_image)
@@ -280,6 +248,23 @@ class MatImage:
     # endregion Matting styles
 
     # region Helper Methods
+
+    def __get_mat_type_from_user_string(self, mat_type_string):
+        if mat_type_string == None: mat_type_string = ''
+
+        final = []
+        mat_type_string = mat_type_string.replace(',', "") # remove commas from the string
+        for type in mat_type_string.split():
+            if type in self.mat_types:
+                final.append(type)
+            else:
+                self.__logger.debug('Skipping invalid mat type: ', type)
+
+        if not final:
+            self.__logger.debug('No valid mat types defined - using: ', self.mat_types)
+            final = self.mat_types
+
+        return final
 
     def __scale_image(self, image, size=None):
         if size == None:
@@ -294,7 +279,7 @@ class MatImage:
 
     def __get_outer_mat_color(self, image):
         k = KmeansNp(k=3, max_iterations=10, size=100)
-        colors = k.run(image, start_clusters)
+        colors = k.run(image)
         return tuple(colors[0])
 
 
@@ -327,11 +312,11 @@ class MatImage:
     def __get_inner_mat(self, size):
         w,h = size
 
-        # If we're supposed to get the mat color automatically or a color wasn't specified, get one
-        if self.auto_inner_mat_color or not self.inner_mat_color:
-            color = self.__get_darker_shade(self.outer_mat_color, 0.50)
+        # If the color wasn't specified, get one
+        if not self.inner_mat_color:
+            color = self.__get_darker_shade(self.__outer_mat_color_save, 0.50)
         else:
-            color = self.inner_mat_color
+            color = tuple(self.inner_mat_color)
 
         if self.use_mat_texture:
             mat = self.__get_colorized_mat(color)
@@ -380,7 +365,7 @@ class MatImage:
 
 
     def __layout_images(self, images):
-        mat_image = self.__get_colorized_mat(self.outer_mat_color)
+        mat_image = self.__get_colorized_mat(self.__outer_mat_color_save)
         total_wid = self.outer_mat_border * (len(images) + 1)
         for image in images:
             total_wid += image.width
