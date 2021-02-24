@@ -9,7 +9,7 @@ import subprocess
 import logging
 import os
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageFile
 from picframe import mat_image
 
 # utility functions with no dependency on ViewerDisplay properties
@@ -89,6 +89,7 @@ class ViewerDisplay:
         self.__name_tm = 0.0
         self.__in_transition = False
         self.__matter = None
+        ImageFile.LOAD_TRUNCATED_IMAGES = True # occasional damaged file hangs app
 
     @property
     def display_is_on(self):

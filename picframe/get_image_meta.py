@@ -46,7 +46,7 @@ class GetImageMeta:
                     self.__tags['IPTC Object Name'] = iptc['object name'].decode('utf-8')
         except Exception as e:
             self.__logger.warning("IPTC loading has failed - if you want to use this you will need to install iptcinfo3 %s -> %s",
-                                  filename, e)
+                                  self.__filename, e)
 
     def has_exif(self):
         if self.__tags == {}:
