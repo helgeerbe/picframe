@@ -496,7 +496,15 @@ class KmeansNp:
     def run(self, image, start_clusters=None):
         image = image.copy()
         image.thumbnail(self.size)
-        im = np.array(image, dtype=np.float)[:,:,:3].reshape(-1, 3) #NB need to use floats to avoid coercing to uint8 scrambling subtractions
+        im = np.array(image, dtype=np.float)[:,:,:3]
+        # following section can be used to give the clusters location as well as colour proximity
+        #(ix0, ix1) = np.indices(im.shape[:2]) # vert,horiz pixel locations
+        #ix0.shape = ix0.shape + (1,) # make same dim as im
+        #ix1.shape = ix1.shape + (1,) # make same dim as im
+        #im = np.append(im, ix0, axis=2) # TODO multiply by scale rel to rgb scale
+        #im = np.append(im, ix1, axis=2) # im now r,g,b,u,v
+        d = im.shape[-1] # 3 or 5 if u,v added
+        im = im.reshape(-1, d) #NB need to use floats to avoid coercing to uint8 scrambling subtractions
         n = len(im)
         if start_clusters is None:
             centroids = im[np.random.choice(np.arange(n), self.k)]
@@ -504,12 +512,12 @@ class KmeansNp:
             centroids = np.array(start_clusters, dtype=np.float)
         old_centroids = centroids.copy()
         for i in range(self.max_iterations):
-            im.shape = (1, n, 3) # add dimension to allow broadcasting
-            centroids.shape = (self.k, 1, 3) # ditto
+            im.shape = (1, n, d) # add dimension to allow broadcasting
+            centroids.shape = (self.k, 1, d) # ditto
             dists = (((im - centroids) ** 2).sum(axis=2)) ** 0.5 # euclidean distance - manhattan might be fine and faster
             ix = np.argmin(dists, axis=0) # indices of nearest centroid for each pixel
-            im.shape = (n, 3) # reduce dimensions for mean
-            centroids.shape = (self.k, 3) # ditto
+            im.shape = (n, d) # reduce dimensions for mean
+            centroids.shape = (self.k, d) # ditto
             counts = np.unique(ix, return_counts=True)[1] # count the number of each index
             to_keep = [] # discard any centroids with no pixels nearest to them
             for j in range(self.k): # write back average location of all nearest pixels
@@ -526,12 +534,12 @@ class KmeansNp:
                 break
             old_centroids = centroids.copy()
 
-        c_max, c_min = centroids.max(axis=1), centroids.min(axis=1) # max, min for each centroid
+        c_max, c_min = centroids[:,:3].max(axis=1), centroids[:,:3].min(axis=1) # max, min for each centroid
         #c_lum = 0.5 * (c_max + c_min)
         #c_sat = (c_max - c_min) / (255.0 - np.abs(c_lum * 2.0 - 255.0)) # should check for lum == 255
         c_sat = c_max - c_min # value used previously includes element of lum TODO bias more to lighter using (1.5 * c_max - c_min)
         ix_order = np.argsort(c_sat)[::-1] # indices to sorted values - reversed
-        return centroids[ix_order].astype(np.uint8)
+        return centroids[ix_order, :3].astype(np.uint8)
 
 if __name__ == "__main__":
 
