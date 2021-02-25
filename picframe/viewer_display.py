@@ -145,11 +145,16 @@ class ViewerDisplay:
                 heif_file = pyheif.read(fname)
                 image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
                                         "raw", heif_file.mode, heif_file.stride)
+                if image.mode not in ("RGB", "RGBA"):
+                    image = image.convert("RGB")
                 return image
             except:
                 self.__logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
         else:
-            return Image.open(fname)
+            image = Image.open(fname)
+            if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
+                image = image.convert("RGB")
+            return image
 
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
