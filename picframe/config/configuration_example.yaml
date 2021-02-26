@@ -24,12 +24,10 @@ viewer:
   use_glx: False                          # default=False. Set to True on linux with xserver running
 
   mat_images: True                        # default=True, Display images on an automatically generated background mat. False, no automatic image matting.
-
   mat_type: null                          # default=None, A string containing the mat types to choose from when matting images. It can consist of any or
                                           # all of 'float float_polaroid single_bevel double_bevel double_flat' (null or '' will use all mat types)
   outer_mat_color: null                   # default=null, Color of the outer mat as an RGB list. null will auto-select a reasonable color based on the image.
   inner_mat_color: null                   # default=null, Color of the inner mat as an RGB list. null will auto-select a reasonable color based on the image.
-
   outer_mat_border: 75                    # default=75, Minimum outer mat border in pixels
   inner_mat_border: 40                    # default=40, Minimum inner mat border in pixels (for styles that use it)
   use_mat_texture: True                   # default=True, True uses a mat texture. False creates a solid color mat
