@@ -10,22 +10,14 @@ class MatImage:
     # region Constructor
 
     def __init__(self, display_size, mat_type = None, outer_mat_color = None,
-                resource_folder='.',
-                inner_mat_color = None, outer_mat_border = 75, inner_mat_border = 40,
-                use_mat_texture = True, auto_outer_mat_color = True, auto_inner_mat_color = True,
-                auto_select_mat_type = False):
+                resource_folder='.', inner_mat_color = None, outer_mat_border = 75,
+                inner_mat_border = 40, use_mat_texture = True, auto_inner_mat_color = True):
 
         self.__mat_types = ['float', 'float_polaroid', 'float_color_wrap', 'single_bevel', 'double_bevel', 'double_flat']
-
-        # If a mat type wasn't specified, select the 1st one for safety
-        if not mat_type or mat_type not in self.__mat_types:
-            mat_type = self.__mat_types[0]
 
         self.__logger = logging.getLogger("mat_image.MatImage")
 
         self.auto_inner_mat_color = auto_inner_mat_color
-        self.auto_outer_mat_color = auto_outer_mat_color
-        self.auto_select_mat_type = auto_select_mat_type
         self.display_size = display_size
         self.inner_mat_border = inner_mat_border
         self.inner_mat_color = inner_mat_color
@@ -71,14 +63,6 @@ class MatImage:
         self.__outer_mat_border = val
 
     @property
-    def auto_select_mat_type(self):
-        return self.__auto_select_mat_type
-
-    @auto_select_mat_type.setter
-    def auto_select_mat_type(self, val):
-        self.__auto_select_mat_type = val
-
-    @property
     def inner_mat_border(self):
         return self.__inner_mat_border
 
@@ -103,28 +87,12 @@ class MatImage:
         self.__inner_mat_color = val
 
     @property
-    def auto_inner_mat_color(self):
-        return self.__auto_inner_mat_color
-
-    @auto_inner_mat_color.setter
-    def auto_inner_mat_color(self, val):
-        self.__auto_inner_mat_color = val
-
-    @property
-    def auto_outer_mat_color(self):
-        return self.__auto_outer_mat_color
-
-    @auto_outer_mat_color.setter
-    def auto_outer_mat_color(self, val):
-        self.__auto_outer_mat_color = val
-
-    @property
     def mat_type(self):
         return self.__mat_type
 
     @mat_type.setter
     def mat_type(self, val):
-        self.__mat_type = val
+        self.__mat_type = self.__get_mat_type_from_user_string(val)
 
     @property
     def mat_types(self):
@@ -144,14 +112,14 @@ class MatImage:
 
     def mat_image(self, images):
 
-        mat_type = self.mat_type
+        # Randomly pick a mat type from those specified by the User
+        mat_type = random.choice(self.mat_type)
 
-        if self.auto_select_mat_type:
-            mat_type = random.choice(self.__mat_types)
-
-        # If we're supposed to get the mat color automatically or a color wasn't specified, get one
-        if self.auto_outer_mat_color or not self.outer_mat_color:
-            self.outer_mat_color = self.__get_outer_mat_color(images[0])
+        # If a mat color wasn't specified, get one
+        if not self.outer_mat_color:
+            self.__outer_mat_color_save = self.__get_outer_mat_color(images[0])
+        else:
+            self.__outer_mat_color_save = tuple(self.outer_mat_color)
 
         if mat_type == 'float':
             image = self.__style_float(images)
@@ -181,7 +149,7 @@ class MatImage:
         final_images = []
         for image in images:
             image = self.__scale_image(image, (pic_wid, pic_height))
-            self.__add_image_outline(image, self.outer_mat_color, auto_adjust=True)
+            self.__add_image_outline(image, self.__outer_mat_color_save, auto_adjust=True)
             image = self.__add_drop_shadow(image)
             final_images.append(image)
 
@@ -196,7 +164,7 @@ class MatImage:
         final_images = []
         for image in images:
             image = self.__scale_image(image, (pic_wid, pic_height))
-            self.__add_image_outline(image, self.outer_mat_color)
+            self.__add_image_outline(image, self.__outer_mat_color_save)
             image = ImageOps.expand(image, border_width)
             self.__add_image_outline(image, (210,210,210), outline_width=border_width)
             image = self.__add_drop_shadow(image)
@@ -212,8 +180,8 @@ class MatImage:
 
         final_images = []
         for image in images:
-            color = self.__get_darker_shade(self.outer_mat_color, 0.35)
-            color2 = self.__get_darker_shade(self.outer_mat_color, 0.2)
+            color = self.__get_darker_shade(self.__outer_mat_color_save, 0.35)
+            color2 = self.__get_darker_shade(self.__outer_mat_color_save, 0.2)
             image = self.__scale_image(image, (pic_wid, pic_height))
             self.__add_image_outline(image, color2)
             image = ImageOps.expand(image, border_width)
@@ -268,7 +236,7 @@ class MatImage:
         final_images = []
         for image in images:
             image = self.__scale_image(image, (pic_wid, pic_height))
-            self.__add_image_outline(image, self.outer_mat_color)
+            self.__add_image_outline(image, self.__outer_mat_color_save)
             mat_size = (image.width + (self.inner_mat_border * 2), image.height + (self.inner_mat_border * 2))
             mat_image = self.__get_inner_mat(mat_size)
             mat_image = self.__add_inner_shadow(mat_image)
@@ -280,6 +248,23 @@ class MatImage:
     # endregion Matting styles
 
     # region Helper Methods
+
+    def __get_mat_type_from_user_string(self, mat_type_string):
+        if mat_type_string == None: mat_type_string = ''
+
+        final = []
+        mat_type_string = mat_type_string.replace(',', "") # remove commas from the string
+        for type in mat_type_string.split():
+            if type in self.mat_types:
+                final.append(type)
+            else:
+                self.__logger.debug('Skipping invalid mat type: ', type)
+
+        if not final:
+            self.__logger.debug('No valid mat types defined - using: ', self.mat_types)
+            final = self.mat_types
+
+        return final
 
     def __scale_image(self, image, size=None):
         if size == None:
@@ -293,17 +278,12 @@ class MatImage:
 
 
     def __get_outer_mat_color(self, image):
-        """
-        k = Kmeans(size=100)
-        colors = k.run(image)
-        bc = self.__get_least_gray_color(colors)
-        """
-        k = KmeansNp(size=100)
+        k = KmeansNp(k=3, max_iterations=10, size=100)
         colors = k.run(image)
         return tuple(colors[0])
 
-    """
-    def __get_least_gray_color(self, colors):
+
+    """def __get_least_gray_color(self, colors):
         dist = -1
         color = colors[0]
         for this_color in colors:
@@ -311,8 +291,8 @@ class MatImage:
             if this_dist > dist:
                 dist = this_dist
                 color = this_color
-        return tuple(map(int, color))
-    """
+        return tuple(map(int, color))"""
+
 
     def __get_darker_shade(self, rgb_color, fractional_percent = 0.5):
         return tuple(map(lambda c: int(c * fractional_percent), rgb_color))
@@ -332,11 +312,11 @@ class MatImage:
     def __get_inner_mat(self, size):
         w,h = size
 
-        # If we're supposed to get the mat color automatically or a color wasn't specified, get one
-        if self.auto_inner_mat_color or not self.inner_mat_color:
-            color = self.__get_darker_shade(self.outer_mat_color, 0.50)
+        # If the color wasn't specified, get one
+        if not self.inner_mat_color:
+            color = self.__get_darker_shade(self.__outer_mat_color_save, 0.50)
         else:
-            color = self.inner_mat_color
+            color = tuple(self.inner_mat_color)
 
         if self.use_mat_texture:
             mat = self.__get_colorized_mat(color)
@@ -385,7 +365,7 @@ class MatImage:
 
 
     def __layout_images(self, images):
-        mat_image = self.__get_colorized_mat(self.outer_mat_color)
+        mat_image = self.__get_colorized_mat(self.__outer_mat_color_save)
         total_wid = self.outer_mat_border * (len(images) + 1)
         for image in images:
             total_wid += image.width
@@ -405,8 +385,8 @@ class MatImage:
     # endregion Helper functions
 
 # region Automatic Color Selection ----
-"""
-class Cluster(object):
+
+"""class Cluster(object):
 
     def __init__(self):
         self.pixels = []
@@ -445,7 +425,7 @@ class Kmeans(object):
             image = image.convert('RGB') # JAG, some numpy manipulations here don't expect an Alpha channel
         self.image = image
 
-        self.pixels = np.array(image.getdata(), dtype=np.uint8)
+        self.pixels = np.array(image.getdata(), dtype=np.float)
 
         self.clusters = [None for i in range(self.k)]
         self.oldClusters = None
@@ -457,6 +437,7 @@ class Kmeans(object):
             self.clusters[idx].centroid = randomPixels[idx]
 
         iterations = 0
+        self.start_clusters = [c.centroid for c in self.clusters] # make copy
 
         while self.shouldExit(iterations) is False:
 
@@ -503,46 +484,62 @@ class Kmeans(object):
         if iterations <= self.max_iterations:
             return False
 
-        return True
-"""
+        return True"""
+
 class KmeansNp:
     def __init__(self, k=3, max_iterations=5, min_distance=5.0, size=200):
         self.k = k
         self.max_iterations = max_iterations
         self.min_distance = min_distance
         self.size = (size, size)
-        self.n = size * size # flattened length of pixels
 
-    def run(self, image):
-        image = image.resize(self.size)
-        im = np.array(image, dtype=np.float)[:,:,:3].reshape(self.n, 3) #NB need to use floats to avoid coercing to uint8 scrambling subtractions
-        centroids = im[np.random.choice(np.arange(self.n), self.k)]
+    def run(self, image, start_clusters=None):
+        image = image.copy()
+        image.thumbnail(self.size)
+        im = np.array(image, dtype=np.float)[:,:,:3]
+        # following section can be used to give the clusters location as well as colour proximity
+        #(ix0, ix1) = np.indices(im.shape[:2]) # vert,horiz pixel locations
+        #ix0.shape = ix0.shape + (1,) # make same dim as im
+        #ix1.shape = ix1.shape + (1,) # make same dim as im
+        #im = np.append(im, ix0, axis=2) # TODO multiply by scale rel to rgb scale
+        #im = np.append(im, ix1, axis=2) # im now r,g,b,u,v
+        d = im.shape[-1] # 3 or 5 if u,v added
+        im = im.reshape(-1, d) #NB need to use floats to avoid coercing to uint8 scrambling subtractions
+        n = len(im)
+        if start_clusters is None:
+            centroids = im[np.random.choice(np.arange(n), self.k)]
+        else:
+            centroids = np.array(start_clusters, dtype=np.float)
         old_centroids = centroids.copy()
         for i in range(self.max_iterations):
-            im.shape = (1, self.n, 3) # add dimension to allow broadcasting
-            centroids.shape = (self.k, 1, 3) # ditto
+            im.shape = (1, n, d) # add dimension to allow broadcasting
+            centroids.shape = (self.k, 1, d) # ditto
             dists = (((im - centroids) ** 2).sum(axis=2)) ** 0.5 # euclidean distance - manhattan might be fine and faster
             ix = np.argmin(dists, axis=0) # indices of nearest centroid for each pixel
-            im.shape = (self.n, 3) # reduce dimensions for mean
-            centroids.shape = (self.k, 3) # ditto
+            im.shape = (n, d) # reduce dimensions for mean
+            centroids.shape = (self.k, d) # ditto
             counts = np.unique(ix, return_counts=True)[1] # count the number of each index
-            if len(counts) < self.k:
-                counts = np.append(counts, [0] * (self.k - len(counts)))
-            near_enough = True
+            to_keep = [] # discard any centroids with no pixels nearest to them
             for j in range(self.k): # write back average location of all nearest pixels
-                if counts[j] > 0:
-                    centroids[j] = im[ix == j].mean(axis=0)
+                j_pixels = im[ix == j] # view into im where ix points to centroid j
+                if len(j_pixels) > 0: # error if try to get mean zero length array TODO remove groups with few pixels?
+                    centroids[j] = j_pixels.mean(axis=0)
+                    to_keep.append(j)
+            if len(to_keep) < len(centroids): # this will be relatively rare
+                for j in to_keep[::-1]: # delete in reverse order of index
+                    centroids = np.delete(centroids, j, axis=0)
+                    old_centroids = np.delete(old_centroids, j, axis=0)
             movement = ((((centroids - old_centroids) ** 2).sum(axis=1)) ** 0.5).max()
             if movement < self.min_distance:
                 break
             old_centroids = centroids.copy()
 
-        c_max, c_min = centroids.max(axis=1), centroids.min(axis=1) # max, min for each centroid
+        c_max, c_min = centroids[:,:3].max(axis=1), centroids[:,:3].min(axis=1) # max, min for each centroid
         #c_lum = 0.5 * (c_max + c_min)
         #c_sat = (c_max - c_min) / (255.0 - np.abs(c_lum * 2.0 - 255.0)) # should check for lum == 255
-        c_sat = c_max - c_min # value used previously includes element of lum
+        c_sat = c_max - c_min # value used previously includes element of lum TODO bias more to lighter using (1.5 * c_max - c_min)
         ix_order = np.argsort(c_sat)[::-1] # indices to sorted values - reversed
-        return centroids[ix_order].astype(np.uint8)
+        return centroids[ix_order, :3].astype(np.uint8)
 
 if __name__ == "__main__":
 

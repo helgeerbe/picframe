@@ -151,9 +151,11 @@ class Model:
             locale.setlocale(locale.LC_TIME, model_config['locale'])
         except:
             self.__logger.error("error trying to set locale to {}".format(model_config['locale']))
+        self.__pic_dir = os.path.expanduser(model_config['pic_dir'])
+        self.__subdirectory = os.path.expanduser(model_config['subdirectory'])
         self.__load_geoloc = model_config['load_geoloc']
         self.__geo_reverse = geo_reverse.GeoReverse(model_config['geo_key'], key_list=self.get_model_config()['key_list'])
-        self.__image_cache = image_cache.ImageCache(os.path.expanduser(model_config['pic_dir']),
+        self.__image_cache = image_cache.ImageCache(self.__pic_dir,
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
                                                     model_config['portrait_pairs'])
@@ -191,21 +193,20 @@ class Model:
 
     @property
     def subdirectory(self):
-        return self.__config['model']['subdirectory']
+        return self.__subdirectory
 
     @subdirectory.setter
     def subdirectory(self, dir):
-        pic_dir = self.get_model_config()['pic_dir']
-        _, root = os.path.split(pic_dir)
+        _, root = os.path.split(self.__pic_dir)
         actual_dir = root
         if self.subdirectory != '':
             actual_dir = self.subdirectory
         if actual_dir != dir:
             if root == dir:
-                self.__config['model']['subdirectory'] = '' #TODO should this be altered in config?
+                self.__subdirectory = ''
             else:
-                self.__config['model']['subdirectory'] = dir
-            self.__logger.info("Set subdirectory to: %s", self.__config['model']['subdirectory'])
+                self.__subdirectory = dir
+            self.__logger.info("Set subdirectory to: %s", self.__subdirectory)
             self.__reload_files = True
 
     @property
@@ -240,12 +241,11 @@ class Model:
         self.__image_cache.stop()
 
     def get_directory_list(self):
-        pic_dir = os.path.expanduser(self.get_model_config()['pic_dir'])
-        _, root = os.path.split(pic_dir)
+        _, root = os.path.split(self.__pic_dir)
         actual_dir = root
         if self.subdirectory != '':
             actual_dir = self.subdirectory
-        subdir_list = next(os.walk(pic_dir))[1]
+        subdir_list = next(os.walk(self.__pic_dir))[1]
         subdir_list.insert(0,root)
         return actual_dir, subdir_list
 
@@ -261,7 +261,7 @@ class Model:
                 self.__get_files()
                 if self.__number_of_files > 0:
                     break
-                time.sleep(2.0)
+                time.sleep(0.5)
         if self.__file_index == self.__number_of_files:
             self.__num_run_through += 1
             if self.shuffle and self.__num_run_through >= self.get_model_config()['reshuffle_num']:
@@ -310,7 +310,7 @@ class Model:
     def __get_files(self):
         where_list = []
         if self.subdirectory != "":
-            picture_dir = os.path.join(os.path.expanduser(self.get_model_config()['pic_dir']), self.subdirectory) # TODO catch, if subdirecotry does not exist
+            picture_dir = os.path.join(self.__pic_dir, self.subdirectory) # TODO catch, if subdirecotry does not exist
             where_list.append("fname LIKE '{}/%'".format(picture_dir)) # TODO / on end to stop 'test' also selecting test1 test2 etc
         where_list.extend(self.__where_clauses.values())
 
@@ -336,7 +336,7 @@ class Model:
         self.__num_run_through = 0
         self.__reload_files = False
 
-    def __shuffle_files(self):
+    """def __shuffle_files(self):
         #self.__file_list.sort(key=lambda x: x[1]) # will be later files last
         recent_n = self.get_model_config()['recent_n']
         temp_list_first = self.__file_list[-recent_n:]
@@ -347,4 +347,4 @@ class Model:
         self.__file_list = temp_list_first + temp_list_last
 
     def __sort_files(self):
-        self.__file_list.sort() # if not shuffled; sort by name
+        self.__file_list.sort() # if not shuffled; sort by name"""

@@ -6,7 +6,7 @@ import subprocess
 import logging
 import os
 import numpy as np
-from PIL import Image, ImageFilter
+from PIL import Image, ImageFilter, ImageFile
 from picframe import mat_image
 
 # utility functions with no dependency on ViewerDisplay properties
@@ -41,9 +41,6 @@ class ViewerDisplay:
         self.__outer_mat_border = config['outer_mat_border']
         self.__inner_mat_border = config['inner_mat_border']
         self.__use_mat_texture = config['use_mat_texture']
-        self.__auto_outer_mat_color = config['auto_outer_mat_color']
-        self.__auto_inner_mat_color = config['auto_inner_mat_color']
-        self.__auto_select_mat_type = config['auto_select_mat_type']
         self.__mat_resource_folder = os.path.expanduser(config['mat_resource_folder'])
 
         self.__fps = config['fps']
@@ -86,6 +83,7 @@ class ViewerDisplay:
         self.__name_tm = 0.0
         self.__in_transition = False
         self.__matter = None
+        ImageFile.LOAD_TRUNCATED_IMAGES = True # occasional damaged file hangs app
 
     @property
     def display_is_on(self):
@@ -144,11 +142,16 @@ class ViewerDisplay:
                 heif_file = pyheif.read(fname)
                 image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
                                         "raw", heif_file.mode, heif_file.stride)
+                if image.mode not in ("RGB", "RGBA"):
+                    image = image.convert("RGB")
                 return image
             except:
                 self.__logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
         else:
-            return Image.open(fname)
+            image = Image.open(fname)
+            if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
+                image = image.convert("RGB")
+            return image
 
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
@@ -191,10 +194,7 @@ class ViewerDisplay:
                 inner_mat_color = self.__inner_mat_color,
                 outer_mat_border = self.__outer_mat_border,
                 inner_mat_border = self.__inner_mat_border,
-                use_mat_texture = self.__use_mat_texture,
-                auto_outer_mat_color = self.__auto_outer_mat_color,
-                auto_inner_mat_color = self.__auto_inner_mat_color,
-                auto_select_mat_type = self.__auto_select_mat_type)
+                use_mat_texture = self.__use_mat_texture)
 
         try:
             # Load the image(s) and correct their orientation if necessary
