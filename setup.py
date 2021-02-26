@@ -21,16 +21,15 @@ setup(name='picframe',
         'Topic :: Multimedia :: Graphics :: Viewers',
       ],
       keywords='picframe viewer raspberry raspi homeassistant hass',
-      url='https://github.com/helgeerbe/picture_frame',
-      author='Helge Erbe',
+      url='https://github.com/helgeerbe/picframe',
+      author='Paddy Gaunt, Jeff Godfrey, Helge Erbe',
       author_email='helge@erbehome.de',
       license='MIT',
       packages=find_packages(exclude=("test")),
       package_data={ '': [
         'data/*', 'data/**/*', 
         'config/*', 'config/**/*', 
-        'html/*', 'html/**/*',
-        'examples/*', 'examples/**/*']},
+        'html/*', 'html/**/*']},
       install_requires=[
         'Pillow',
         'ExifRead',
@@ -42,7 +41,7 @@ setup(name='picframe',
         'ninepatch'
       ],
       entry_points = {
-        'console_scripts': ['picture_frame=picframe.picture_frame:main']
+        'console_scripts': ['picframe=picframe.start:main']
       },
       include_package_data=True,
       zip_safe=False)
