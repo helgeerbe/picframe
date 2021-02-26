@@ -35,6 +35,7 @@ DEFAULT_CONFIG = {
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
         'mat_images': True,
+        'mat_portraits_only': False,
         'mat_type': None,
         'outer_mat_color': None,
         'inner_mat_color': None,

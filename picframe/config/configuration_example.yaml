@@ -24,6 +24,11 @@ viewer:
   use_glx: False                          # default=False. Set to True on linux with xserver running
 
   mat_images: True                        # default=True, Display images on an automatically generated background mat. False, no automatic image matting.
+  mat_portraits_only: False               # default=False, use background mat only for portraits 
+  mat_type: None                          # default=None, The mat type. One of 'float', 'float_polaroid', 'float_color_wrap', 'single_bevel', 'double_bevel', or 'double_flat' (see auto_select_mat_type)
+  outer_mat_color: None                   # default=None, Color of the outer mat as an RGB tuple (see auto_outer_mat_color)
+  inner_mat_color: None                   # default=None, Color of the inner mat as an RGB tuple (see auto_inner_mat_color)
+
   mat_type: null                          # default=None, A string containing the mat types to choose from when matting images. It can consist of any or
                                           # all of 'float float_polaroid single_bevel double_bevel double_flat' (null or '' will use all mat types)
   outer_mat_color: null                   # default=null, Color of the outer mat as an RGB list. null will auto-select a reasonable color based on the image.
