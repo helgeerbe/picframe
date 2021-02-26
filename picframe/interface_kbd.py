@@ -1,10 +1,8 @@
 """Keyboard interface of picture_frame."""
 
 import logging
-import sys
 import threading
 import time
-sys.path.insert(1,'/home/pi/dev/pi3d')
 import pi3d
 
 

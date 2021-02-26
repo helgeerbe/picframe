@@ -1,6 +1,3 @@
-# for development
-import sys
-sys.path.insert(1, "/home/pi/dev/pi3d") #TODO just for debugging when not properly installed
 import pi3d
 from pi3d.Texture import MAX_SIZE
 import math
