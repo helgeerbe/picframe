@@ -47,7 +47,6 @@ def main():
         try: 
             copy_files(pkgdir, args.initialize, 'html')
             copy_files(pkgdir, args.initialize, 'config')
-            copy_files(pkgdir, args.initialize, 'examples')
             copy_files(pkgdir, args.initialize, 'data')
             print('created ',args.initialize,'/picframe')
         except Exception as e:

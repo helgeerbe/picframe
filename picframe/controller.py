@@ -1,4 +1,4 @@
-"""Controller of picture_frame."""
+"""Controller of picframe."""
 
 import logging
 import time
@@ -11,16 +11,16 @@ def make_date(txt):
     return time.mktime(dt_tuple + (0, 0, 0, 0, 0, 0))
 
 class Controller:
-    """Controller of picture_frame.
+    """Controller of picframe.
     
     This controller interacts via mqtt with the user to steer the image display.
 
     Attributes
     ----------
     model : Model 
-        model of picture_frame containing config and business logic
+        model of picframe containing config and business logic
     viewer : ViewerDisplay
-        viewer of picture_frame representing the display
+        viewer of picframe representing the display
    
 
     Methods

@@ -1,4 +1,4 @@
-"""Keyboard interface of picture_frame."""
+"""Keyboard interface of picframe."""
 
 import logging
 import threading
@@ -7,14 +7,14 @@ import pi3d
 
 
 class InterfaceKbd:
-    """Keyboard interface of picture_frame.
+    """Keyboard interface of picframe.
     
     This interface interacts via keyboard with the user to steer the image display.
 
     Attributes
     ----------
     controller : Controler 
-        Controller for picture_frame
+        Controller for picframe
    
 
     Methods

@@ -1,4 +1,4 @@
-"""MQTT interface of picture_frame."""
+"""MQTT interface of picframe."""
 
 import logging
 import time
@@ -9,14 +9,14 @@ from picframe import __version__
 
 
 class InterfaceMQTT:
-    """MQTT interface of picture_frame.
+    """MQTT interface of picframe.
     
     This interface interacts via mqtt with the user to steer the image display.
 
     Attributes
     ----------
     controller : Controler 
-        Controller for picture_frame
+        Controller for picframe
    
 
     Methods
@@ -154,9 +154,9 @@ class InterfaceMQTT:
                                      "dev": {
                                         "ids": [self.__device_id], 
                                         "name": self.__device_id, 
-                                        "mdl": "Picture Frame", 
+                                        "mdl": "PictureFrame", 
                                         "sw": __version__, 
-                                        "mf": "pi3d picture frame project"}})
+                                        "mf": "pi3d PictureFrame project"}})
       
         client.subscribe(command_topic , qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
