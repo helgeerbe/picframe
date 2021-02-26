@@ -35,17 +35,13 @@ DEFAULT_CONFIG = {
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
         'mat_images': True,
-        'mat_portraits_only': False,
         'mat_type': None,
         'outer_mat_color': None,
         'inner_mat_color': None,
         'outer_mat_border': 75,
         'inner_mat_border': 40,
         'use_mat_texture': True,
-        'auto_outer_mat_color': True,
-        'auto_inner_mat_color': True,
-        'auto_select_mat_type': True,
-        'mat_resource_folder': '/home/pi/.local/picframe/data',
+        'mat_resource_folder': '~/picframe/data/mat',
         'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
     },
     'model': {
