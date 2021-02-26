@@ -35,6 +35,7 @@ class ImageCache:
 
         self.__keep_looping = True
         self.__pause_looping = False
+        self.__shutdown_completed = False
 
         t = threading.Thread(target=self.__loop)
         t.start()
@@ -48,6 +49,7 @@ class ImageCache:
             time.sleep(0.01)
         self.__db.commit() # close after update_cache finished for last time
         self.__db.close()
+        self.__shutdown_completed = True
 
 
     def pause_looping(self, value):
@@ -56,6 +58,8 @@ class ImageCache:
 
     def stop(self):
         self.__keep_looping = False
+        while not self.__shutdown_completed:
+            time.sleep(0.05) # make function blocking to ensure staged shutdown
 
 
     def update_cache(self):

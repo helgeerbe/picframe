@@ -129,6 +129,7 @@ class InterfaceHttp(HTTPServer):
                          "display_is_on", "shuffle", "fade_time", "time_delay",
                          "brightness", "location_filter"] #TODO can this be done with dir() and getattr() to avoid hard coding?
         self.__keep_looping = True
+        self.__shutdown_completed = False
         t = threading.Thread(target=self.__loop)
         t.start()
 
@@ -136,6 +137,9 @@ class InterfaceHttp(HTTPServer):
         while self.__keep_looping:
             self.handle_request()
             time.sleep(0.1)
+        self.__shutdown_completed = True
 
     def stop(self):
         self.__keep_looping = False
+        while not self.__shutdown_completed:
+            time.sleep(0.05) # function blocking until loop stopped

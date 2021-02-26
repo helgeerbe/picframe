@@ -50,6 +50,7 @@ class Controller:
         self.__keep_looping = True
         self.__location_filter = ''
         self.__tags_filter = ''
+        self.__shutdown_complete = False
 
     @property
     def paused(self):
@@ -257,12 +258,14 @@ class Controller:
                 self.__model.pause_looping(False) #TODO only need to set this once rather than every loop
             if self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused) == False:
                 break
+        self.__shutdown_complete = True
 
     def start(self):
         self.__viewer.slideshow_start()
 
     def stop(self):
-        self.__viewer.slideshow_stop()
         self.__keep_looping = False
-        self.__model.stop_image_chache() # close db tidily
-        # TODO segmentation fault on closing on some setups.
+        while not self.__shutdown_complete:
+            time.sleep(0.05) # block until main loop has stopped
+        self.__model.stop_image_chache() # close db tidily (blocks till closed)
+        self.__viewer.slideshow_stop() # do this last
