@@ -22,7 +22,7 @@ class ImageCache:
                      'IPTC Object Name': 'title'}
 
 
-    def __init__(self, picture_dir, db_file, geo_reverse, portrait_pairs=False):
+    def __init__(self, picture_dir, db_file, geo_reverse, required_db_schema_version=1, portrait_pairs=False):
         self.__modified_folders = []
         self.__modified_files = []
         self.__logger = logging.getLogger("image_cache.ImageCache")
@@ -32,6 +32,7 @@ class ImageCache:
         self.__geo_reverse = geo_reverse
         self.__portrait_pairs = portrait_pairs #TODO have a function to turn this on and off?
         self.__db = self.__create_open_db(self.__db_file)
+        self.__update_schema(required_db_schema_version)
 
         self.__keep_looping = True
         self.__pause_looping = False
@@ -197,6 +198,11 @@ class ImageCache:
                 UNIQUE (latitude, longitude)
             )"""
 
+        sql_db_info_table = """
+            CREATE TABLE IF NOT EXISTS db_info (
+                schema_version INTEGER NOT NULL
+            )"""
+
         # Combine all important data in a single view for easy accesss
         # Although we can't control the layout of the view when using 'meta.*', we want it
         # all and that seems better than enumerating (and maintaining) each column here.
@@ -238,11 +244,29 @@ class ImageCache:
 
         db = sqlite3.connect(db_file, check_same_thread=False) # writing only done in loop thread, reading in this so should be safe
         db.row_factory = sqlite3.Row # make results accessible by field name
-        for item in (sql_folder_table, sql_file_table, sql_meta_table, sql_location_table,
-                    sql_meta_index, sql_all_data_view, sql_clean_file_trigger, sql_clean_meta_trigger):
+        for item in (sql_folder_table, sql_file_table, sql_meta_table, sql_location_table, sql_meta_index,
+                    sql_all_data_view, sql_db_info_table, sql_clean_file_trigger, sql_clean_meta_trigger):
             db.execute(item)
 
         return db
+
+
+    def __update_schema(self, required_db_schema_version):
+        sql_select = "SELECT schema_version from db_info"
+        schema_version = self.__db.execute(sql_select).fetchone()
+        schema_version = 1 if not schema_version else schema_version[0]
+
+        # DB is newer than the application. The User needs to upgrade...
+        if schema_version > required_db_schema_version:
+            raise ValueError("Database schema is newer than the application. Update the application.")
+
+        # Here, we need to update the db schema as necessary
+        if schema_version < required_db_schema_version:
+            pass
+
+        # Finally, update the schema version stamp
+        self.__db.execute('DELETE FROM db_info')
+        self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
 
 
     def __get_modified_folders(self):
@@ -303,7 +327,7 @@ class ImageCache:
         columns = ', '.join(dict.keys())
         ques = ', '.join('?' * len(dict.keys()))
         return 'INSERT OR REPLACE INTO meta(file_id, {0}) VALUES((SELECT file_id from all_data where fname = ?), {1})'.format(columns, ques)
-      
+
 
     def __purge_missing_files_and_folders(self):
         # Find folders in the db that are no longer on disk
@@ -371,7 +395,7 @@ class ImageCache:
         e['tags'] = exifs.get_exif('IPTC Keywords')
         e['title'] = exifs.get_exif('IPTC Object Name')
         e['caption'] = exifs.get_exif('IPTC Caption/Abstract')
-        
+
 
         return e
 

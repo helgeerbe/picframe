@@ -18,8 +18,8 @@ DEFAULT_CONFIG = {
         'background': [0.2, 0.2, 0.3, 1.0],
         'blend_type': "blend", # {"blend":0.0, "burn":1.0, "bump":2.0}
 
-        'font_file': '~/picframe/data/fonts/NotoSans-Regular.ttf', 
-        'shader': '~/picframe/data/shaders/blend_new', 
+        'font_file': '~/picframe/data/fonts/NotoSans-Regular.ttf',
+        'shader': '~/picframe/data/shaders/blend_new',
         'show_text_fm': '%b %d, %Y',
         'show_text_tm': 20.0,
         'show_text_sz': 40,
@@ -47,13 +47,13 @@ DEFAULT_CONFIG = {
     },
     'model': {
 
-        'pic_dir': '~/Pictures', 
+        'pic_dir': '~/Pictures',
         'no_files_img': '~/picframe/data/no_pictures.jpg',
-        'subdirectory': '', 
-        'recent_n': 3, 
-        'reshuffle_num': 1, 
-        'time_delay': 200.0, 
-        'fade_time': 10.0, 
+        'subdirectory': '',
+        'recent_n': 3,
+        'reshuffle_num': 1,
+        'time_delay': 200.0,
+        'fade_time': 10.0,
         'shuffle': True,
         'image_attr': ['PICFRAME GPS'],                          # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat
         'load_geoloc': True,
@@ -124,6 +124,7 @@ class Model:
         self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
+        self.__required_db_schema_version = 1
         configfile = os.path.expanduser(configfile)
         self.__logger.info("Open config file: %s:",configfile)
         with open(configfile, 'r') as stream:
@@ -155,6 +156,7 @@ class Model:
         self.__image_cache = image_cache.ImageCache(self.__pic_dir,
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
+                                                    self.__required_db_schema_version,
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
