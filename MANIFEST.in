@@ -1,5 +1,0 @@
-include config/configuration_example.yaml
-include picframe/_version.py
-include data/*
-include data/fonts/*
-include html/*
