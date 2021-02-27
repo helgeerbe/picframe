@@ -124,6 +124,7 @@ class Model:
         self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
+        self.__required_db_schema_version = 1
         configfile = os.path.expanduser(configfile)
         self.__logger.info("Open config file: %s:",configfile)
         with open(configfile, 'r') as stream:
@@ -155,6 +156,7 @@ class Model:
         self.__image_cache = image_cache.ImageCache(self.__pic_dir,
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
+                                                    self.__required_db_schema_version,
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
