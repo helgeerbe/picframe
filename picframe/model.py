@@ -7,7 +7,7 @@ import json
 import locale
 from picframe import geo_reverse, image_cache
 
-DEFAULT_CONFIGFILE = "~/picframe/config/configuration.yaml"
+DEFAULT_CONFIGFILE = "~/picframe_data/config/configuration.yaml"
 DEFAULT_CONFIG = {
     'viewer': {
         'blur_amount': 12,
@@ -18,8 +18,8 @@ DEFAULT_CONFIG = {
         'background': [0.2, 0.2, 0.3, 1.0],
         'blend_type': "blend", # {"blend":0.0, "burn":1.0, "bump":2.0}
 
-        'font_file': '~/picframe/data/fonts/NotoSans-Regular.ttf', 
-        'shader': '~/picframe/data/shaders/blend_new', 
+        'font_file': '~/picframe_data/data/fonts/NotoSans-Regular.ttf', 
+        'shader': '~/picframe_data/data/shaders/blend_new', 
         'show_text_fm': '%b %d, %Y',
         'show_text_tm': 20.0,
         'show_text_sz': 40,
@@ -42,13 +42,13 @@ DEFAULT_CONFIG = {
         'outer_mat_border': 75,
         'inner_mat_border': 40,
         'use_mat_texture': True,
-        'mat_resource_folder': '~/picframe/data/mat',
+        'mat_resource_folder': '~/picframe_data/data/mat',
         'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
     },
     'model': {
 
         'pic_dir': '~/Pictures', 
-        'no_files_img': '~/picframe/data/no_pictures.jpg',
+        'no_files_img': '~/picframe_data/data/no_pictures.jpg',
         'subdirectory': '', 
         'recent_n': 3, 
         'reshuffle_num': 1, 
@@ -60,7 +60,7 @@ DEFAULT_CONFIG = {
         'locale': 'en_US.utf8',
         'key_list': [['tourism','amenity','isolated_dwelling'],['suburb','village'],['city','county'],['region','state','province'],['country']],
         'geo_key': 'this_needs_to@be_changed',  # use your email address
-        'db_file': '~/picframe/data/pictureframe.db3',
+        'db_file': '~/picframe_data/data/pictureframe.db3',
         'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
         'log_level': 'WARNING',
@@ -77,7 +77,7 @@ DEFAULT_CONFIG = {
     },
     'http': {
         'use_http': False,
-        'path': '~/picframe/html',
+        'path': '~/picframe_data/html',
         'port': 9000,
         'use_ssl': False,
         'keyfile': "/path/to/key.pem",
