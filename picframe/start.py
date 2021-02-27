@@ -10,7 +10,7 @@ from picframe import model, viewer_display, controller, interface_kbd, interface
 def copy_files(pkgdir, dest, target):
     try:
         fullpath = os.path.join(pkgdir,  target)
-        copy_tree(fullpath,  dest + '/picframe/' + target)
+        copy_tree(fullpath,  dest + '/picframe_data/' + target)
     except:
         raise
 
