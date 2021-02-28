@@ -4,6 +4,8 @@ import logging
 import time
 import json
 import os
+import signal
+import sys
 
 def make_date(txt):
     dt = txt.replace('/',':').replace('-',':').replace(',',':').replace('.',':').split(':')
@@ -226,6 +228,9 @@ class Controller:
         return pic.fname
 
     def loop(self): #TODO exit loop gracefully and call image_cache.stop()
+        # catch ctrl-c
+        signal.signal(signal.SIGINT, self.__signal_handler)
+
         #next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
         while self.__keep_looping:
 
@@ -269,3 +274,8 @@ class Controller:
             time.sleep(0.05) # block until main loop has stopped
         self.__model.stop_image_chache() # close db tidily (blocks till closed)
         self.__viewer.slideshow_stop() # do this last
+    
+    def __signal_handler(self, sig, frame):
+        print('You pressed Ctrl-c!')
+        self.__shutdown_complete = True
+        self.stop()
