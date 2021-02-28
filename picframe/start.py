@@ -3,16 +3,59 @@ import sys
 import argparse
 import os
 import ssl
+import locale
 from distutils.dir_util import copy_tree
 
 from picframe import model, viewer_display, controller, interface_kbd, interface_http, __version__
 
+PICFRAME_DATA_DIR = 'picframe_data'
+
 def copy_files(pkgdir, dest, target):
     try:
         fullpath = os.path.join(pkgdir,  target)
-        copy_tree(fullpath,  dest + '/picframe/' + target)
+        destination = os.path.join(dest,  PICFRAME_DATA_DIR)
+        destination = os.path.join(destination,  target)
+        copy_tree(fullpath,  destination)
     except:
         raise
+
+def create_config(root):
+    fullpath_root = os.path.join(root,  PICFRAME_DATA_DIR)
+    fullpath = os.path.join(fullpath_root, 'config')
+    source = os.path.join(fullpath, 'configuration_example.yaml')
+    destination = os.path.join(fullpath, 'configuration.yaml')
+
+    try:
+        with open (source, "r") as file:
+            filedata = file.read()
+
+        print("This will configure ", destination)
+        print("To keep default, just hit enter")
+
+        # replace all paths with selected picframe_data path
+        filedata = filedata.replace("~/picframe_data", fullpath_root)
+        #pic_dir
+        pic_dir= input("Enter picture directory [~/Pictures]: ")
+        if pic_dir != "":
+            filedata = filedata.replace("~/Pictures", pic_dir)
+        #pic_dir
+        deleted_pictures = input("Enter picture directory [~/DeletedPictures]: ")
+        if deleted_pictures != "":
+            filedata = filedata.replace("~/DeletedPictures", deleted_pictures)
+        #locale
+        lan, enc = locale.getlocale()
+        if lan:
+            param = input("Enter locale [" + lan + "." + enc + "]: ") or (lan + "." + enc)
+        else:
+            param = input("Enter locale [en_US.utf8]: ") or "en_US.utf8"
+        filedata = filedata.replace("en_US.utf8", param)
+        
+        with open (destination, "w") as file:
+            file.write(filedata)
+    except:
+        raise
+    
+
 
 def check_packages (packages):
     for package in packages:
@@ -48,6 +91,7 @@ def main():
             copy_files(pkgdir, args.initialize, 'html')
             copy_files(pkgdir, args.initialize, 'config')
             copy_files(pkgdir, args.initialize, 'data')
+            create_config(args.initialize)
             print('created ',args.initialize,'/picframe')
         except Exception as e:
             print("Can't copy files to: ", args.initialize, ". Reason: ", e)

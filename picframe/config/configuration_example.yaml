@@ -6,11 +6,11 @@ viewer:
   fps: 20.0                               # default=20.0
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
   blend_type: "blend"                     # default="blend", choices={"blend", "burn", "bump"}, type of blend the shader can do"
-  font_file: "~/picframe/data/fonts/NotoSans-Regular.ttf"
-  shader: "~/picframe/data/shaders/blend_new"
+  font_file: "~/picframe_data/data/fonts/NotoSans-Regular.ttf"
+  shader: "~/picframe_data/data/shaders/blend_new"
   show_text_fm: '%b %d, %Y'               # default "%b %d, %Y", format to show date over the image
   show_text_tm: 20.0                      # default=0.0, time to show text over image with file name
-  show_text_sz: 40                        # default=90, text character size
+  show_text_sz: 40                        # default=40, text character size
   show_text: "title caption name date folder location"  # default="date folder location", show text, include combination of words: title, caption name, date, location, folder
   text_width: 70                          # width to wrap
   fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
@@ -23,27 +23,22 @@ viewer:
   display_h: null                         # height of display surface
   use_glx: False                          # default=False. Set to True on linux with xserver running
 
-  mat_images: True                        # default=True, Display images on an automatically generated background mat. False, no automatic image matting.
-  mat_portraits_only: False               # default=False, use background mat only for portraits 
-  mat_type: None                          # default=None, The mat type. One of 'float', 'float_polaroid', 'float_color_wrap', 'single_bevel', 'double_bevel', or 'double_flat' (see auto_select_mat_type)
-  outer_mat_color: None                   # default=None, Color of the outer mat as an RGB tuple (see auto_outer_mat_color)
-  inner_mat_color: None                   # default=None, Color of the inner mat as an RGB tuple (see auto_inner_mat_color)
-
-  mat_type: null                          # default=None, A string containing the mat types to choose from when matting images. It can consist of any or
+  mat_images: 0.01                        # default=0.01, True, automatically mat all images. False, don't automatically mat any images. Real value, auto-mat all images with aspect ratio difference > than value
+  mat_type: null                          # default=null, A string containing the mat types to choose from when matting images. It can consist of any or
                                           # all of 'float float_polaroid single_bevel double_bevel double_flat' (null or '' will use all mat types)
   outer_mat_color: null                   # default=null, Color of the outer mat as an RGB list. null will auto-select a reasonable color based on the image.
   inner_mat_color: null                   # default=null, Color of the inner mat as an RGB list. null will auto-select a reasonable color based on the image.
   outer_mat_border: 75                    # default=75, Minimum outer mat border in pixels
   inner_mat_border: 40                    # default=40, Minimum inner mat border in pixels (for styles that use it)
   use_mat_texture: True                   # default=True, True uses a mat texture. False creates a solid color mat
-  mat_resource_folder: '~/picframe/data/mat' # Folder containing mat image files
+  mat_resource_folder: '~/picframe_data/data/mat' # Folder containing mat image files
 
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
 
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
   deleted_pictures: '~/DeletedPictures'   # move deleted pictures here
-  no_files_img: "~/picframe/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
+  no_files_img: "~/picframe_data/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   recent_n: 7                             # default=7 (days), when shuffling file change date more recent than this number of days play before the rest
   reshuffle_num: 1                        # default=1, times through before reshuffling
@@ -71,7 +66,7 @@ model:
     ['region','state','province'],
     ['country']]
   geo_key: 'this_needs_to@be_changed'            # use your email address
-  db_file: '~/picframe/data/pictureframe.db3' # database used by picture frame
+  db_file: '~/picframe_data/data/pictureframe.db3' # database used by PictureFrame
   portrait_pairs: False
   log_level: 'WARNING'                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
   use_kbd: False                          # default=False, just for debug or console start. Crashing when started with systemd
@@ -79,15 +74,15 @@ model:
 mqtt:
   use_mqtt: False                         # default=False. Set True true, to enable mqtt
   server: "your_mqtt_broker"              # No defaults for server
-  port: 8883                              # derfault=8883 for tls, 1883 else (tls must be "" then !!!!!)
+  port: 8883                              # default=8883 for tls, 1883 else (tls must be "" then !!!!!)
   login: "name"                           # your mqtt user
   password: "your_password"               # password for mqtt user
   tls: "/path/to/your/ca.crt"             # filename including path to your ca.crt. If not used, must be set to "" !!!!
-  device_id: 'picframe'                   # default='picframe' unique id of device. change if there is more than one picture frame
+  device_id: 'picframe'                   # default='picframe' unique id of device. change if there is more than one PictureFrame
 
 http:
   use_http: False                         # default=False. Set True to enable http NB THIS SERVER IS FOR LOCAL NETWORK AND SHOULD NOT BE EXPOSED TO EXTERNAL ACCESS
-  path: "~/picframe/html"                 # path to where html files are located
+  path: "~/picframe_data/html"                 # path to where html files are located
   port: 9000                              # port used to serve pages by http server < 1024 requires root which is *bad* idea
   use_ssl: False
   keyfile: "path/to/key.pem"              # private-key
