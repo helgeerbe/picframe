@@ -44,7 +44,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 else:
                     html_page = "index.html"
                 _, extension = os.path.splitext(html_page)
-                if html_page == "current_image": #TODO unexpected if image name passed
+                if html_page == "current_image" or extension in EXTENSIONS:
+                    # NB homeassistant needs to pass url ending in an image extension
+                    # in order to trigger streaming whatever is the currently showing image
                     content_type = "image"
                     page = self.server._controller.get_current_path()
                     _, extension = os.path.splitext(page) # as current_image may be heic
