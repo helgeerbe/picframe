@@ -88,11 +88,12 @@ def main():
     if args.initialize:
         pkgdir = sys.modules['picframe'].__path__[0]
         try: 
-            copy_files(pkgdir, args.initialize, 'html')
-            copy_files(pkgdir, args.initialize, 'config')
-            copy_files(pkgdir, args.initialize, 'data')
-            create_config(args.initialize)
-            print('created ',args.initialize,'/picframe')
+            dest = os.path.abspath(os.path.expanduser(args.initialize))
+            copy_files(pkgdir, dest, 'html')
+            copy_files(pkgdir, dest, 'config')
+            copy_files(pkgdir, dest, 'data')
+            create_config(dest)
+            print('created ',dest,'/picframe')
         except Exception as e:
             print("Can't copy files to: ", args.initialize, ". Reason: ", e)
         return
