@@ -7,7 +7,7 @@ import json
 import locale
 from picframe import geo_reverse, image_cache
 
-DEFAULT_CONFIGFILE = "~/picframe/config/configuration.yaml"
+DEFAULT_CONFIGFILE = "~/picframe_data/config/configuration.yaml"
 DEFAULT_CONFIG = {
     'viewer': {
         'blur_amount': 12,
@@ -18,8 +18,8 @@ DEFAULT_CONFIG = {
         'background': [0.2, 0.2, 0.3, 1.0],
         'blend_type': "blend", # {"blend":0.0, "burn":1.0, "bump":2.0}
 
-        'font_file': '~/picframe/data/fonts/NotoSans-Regular.ttf', 
-        'shader': '~/picframe/data/shaders/blend_new', 
+        'font_file': '~/picframe_data/data/fonts/NotoSans-Regular.ttf',
+        'shader': '~/picframe_data/data/shaders/blend_new',
         'show_text_fm': '%b %d, %Y',
         'show_text_tm': 20.0,
         'show_text_sz': 40,
@@ -35,32 +35,31 @@ DEFAULT_CONFIG = {
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
         'mat_images': True,
-        'mat_portraits_only': False,
         'mat_type': None,
         'outer_mat_color': None,
         'inner_mat_color': None,
         'outer_mat_border': 75,
         'inner_mat_border': 40,
         'use_mat_texture': True,
-        'mat_resource_folder': '~/picframe/data/mat',
+        'mat_resource_folder': '~/picframe_data/data/mat',
         'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
     },
     'model': {
 
-        'pic_dir': '~/Pictures', 
-        'no_files_img': '~/picframe/data/no_pictures.jpg',
-        'subdirectory': '', 
-        'recent_n': 3, 
-        'reshuffle_num': 1, 
-        'time_delay': 200.0, 
-        'fade_time': 10.0, 
+        'pic_dir': '~/Pictures',
+        'no_files_img': '~/picframe_data/data/no_pictures.jpg',
+        'subdirectory': '',
+        'recent_n': 3,
+        'reshuffle_num': 1,
+        'time_delay': 200.0,
+        'fade_time': 10.0,
         'shuffle': True,
         'image_attr': ['PICFRAME GPS'],                          # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat
         'load_geoloc': True,
         'locale': 'en_US.utf8',
         'key_list': [['tourism','amenity','isolated_dwelling'],['suburb','village'],['city','county'],['region','state','province'],['country']],
         'geo_key': 'this_needs_to@be_changed',  # use your email address
-        'db_file': '~/picframe/data/pictureframe.db3',
+        'db_file': '~/picframe_data/data/pictureframe.db3',
         'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
         'log_level': 'WARNING',
@@ -77,7 +76,7 @@ DEFAULT_CONFIG = {
     },
     'http': {
         'use_http': False,
-        'path': '~/picframe/html',
+        'path': '~/picframe_data/html',
         'port': 9000,
         'use_ssl': False,
         'keyfile': "/path/to/key.pem",
@@ -124,6 +123,7 @@ class Model:
         self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
+        self.__required_db_schema_version = 1
         configfile = os.path.expanduser(configfile)
         self.__logger.info("Open config file: %s:",configfile)
         with open(configfile, 'r') as stream:
@@ -155,6 +155,7 @@ class Model:
         self.__image_cache = image_cache.ImageCache(self.__pic_dir,
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
+                                                    self.__required_db_schema_version,
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])

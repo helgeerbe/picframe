@@ -1,6 +1,0 @@
-sensor:
-  - platform: template
-    sensors:
-      picframe_image_date:
-        value_template: "{{ state_attr('sensor.picframe_image', 'EXIF DateTimeOriginal') | int | timestamp_custom('%d. %b. %Y %H:%M') }}"
-        friendly_name: "Datum"

@@ -33,8 +33,7 @@ class ViewerDisplay:
         self.__blur_edges = config['blur_edges']
         self.__edge_alpha = config['edge_alpha']
 
-        self.__mat_images = config['mat_images']
-        self.__mat_portraits_only = config['mat_portraits_only']
+        self.__mat_images, self.__mat_images_tol = self.__get_mat_image_control_values(config['mat_images'])
         self.__mat_type = config['mat_type']
         self.__outer_mat_color = config['outer_mat_color']
         self.__inner_mat_color = config['inner_mat_color']
@@ -133,6 +132,7 @@ class ViewerDisplay:
     def get_brightness(self):
         return float("{:.2f}".format(self.__slide.unif[55])) # TODO There seems to be a rounding issue. set 0.77 get 0.7699999809265137
 
+
     def __check_heif_then_open(self, fname):
         ext = os.path.splitext(fname)[1].lower()
         if ext in ('.heif','.heic'):
@@ -184,20 +184,49 @@ class ViewerDisplay:
             im = im.transpose(Image.ROTATE_90)
         return im
 
-    def __tex_load(self, pics, size=None):
-        if self.__mat_images and self.__matter == None:
-            self.__matter = mat_image.MatImage(
-                display_size = (self.__display.width , self.__display.height),
-                resource_folder=self.__mat_resource_folder,
-                mat_type = self.__mat_type,
-                outer_mat_color = self.__outer_mat_color,
-                inner_mat_color = self.__inner_mat_color,
-                outer_mat_border = self.__outer_mat_border,
-                inner_mat_border = self.__inner_mat_border,
-                use_mat_texture = self.__use_mat_texture)
 
+    def __get_mat_image_control_values(self, mat_images_value):
+        on = True
+        val = 0.01
+        org_val = str(mat_images_value).lower()
+        if org_val in ('true', 'yes', 'on'):
+            val = -1
+        elif org_val in ('false', 'no', 'off'):
+            on = False
+        else:
+            try:
+                val = float(org_val)
+            except:
+                self.__logger.warning("Invalid value for config option 'mat_images'. Using default.")
+        return(on, val)
+
+
+    def __get_aspect_diff(self, screen_size, image_size):
+        screen_aspect = screen_size[0] / screen_size[1]
+        image_aspect = image_size[0] / image_size[1]
+
+        if screen_aspect > image_aspect:
+            diff_aspect = 1 - (image_aspect / screen_aspect)
+        else:
+            diff_aspect = 1 - (screen_aspect / image_aspect)
+
+        return (screen_aspect, image_aspect, diff_aspect)
+
+
+    def __tex_load(self, pics, size=None):
         try:
-            # Load the image(s) and correct their orientation if necessary
+            if self.__mat_images and self.__matter == None:
+                self.__matter = mat_image.MatImage(
+                    display_size = (self.__display.width , self.__display.height),
+                    resource_folder=self.__mat_resource_folder,
+                    mat_type = self.__mat_type,
+                    outer_mat_color = self.__outer_mat_color,
+                    inner_mat_color = self.__inner_mat_color,
+                    outer_mat_border = self.__outer_mat_border,
+                    inner_mat_border = self.__inner_mat_border,
+                    use_mat_texture = self.__use_mat_texture)
+
+            # Load the image(s) and correct their orientation as necessary
             if pics[0]:
                 im = self.__check_heif_then_open(pics[0].fname)
                 if pics[0].orientation != 1:
@@ -207,7 +236,9 @@ class ViewerDisplay:
                 if pics[1].orientation != 1:
                      im2 = self.__orientate_image(im2, pics[1].orientation)
 
-            if self.__mat_images and (pics[0].is_portrait or not (pics[0].is_portrait or self.__mat_portraits_only)):
+            screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
+
+            if self.__mat_images and diff_aspect > self.__mat_images_tol:
                 if not pics[1]:
                     im = self.__matter.mat_image((im,))
                 else:
@@ -215,6 +246,8 @@ class ViewerDisplay:
             else:
                 if pics[1]: #i.e portrait pair
                     im = self.__create_image_pair(im, im2)
+
+
 
             (w, h) = im.size
             max_dimension = MAX_SIZE # TODO changing MAX_SIZE causes serious crash on linux laptop!
@@ -224,11 +257,13 @@ class ViewerDisplay:
                 im = im.resize((max_dimension, int(h * max_dimension / w)), resample=Image.BICUBIC)
             elif h > max_dimension:
                 im = im.resize((int(w * max_dimension / h), max_dimension), resample=Image.BICUBIC)
-            if self.__blur_edges and size is not None:
-                wh_rat = (size[0] * im.size[1]) / (size[1] * im.size[0])
-                if abs(wh_rat - 1.0) > 0.01: # make a blurred background
+
+            screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
+
+            if self.__blur_edges and size:
+                if diff_aspect > 0.01:
                     (sc_b, sc_f) = (size[1] / im.size[1], size[0] / im.size[0])
-                    if wh_rat > 1.0:
+                    if screen_aspect > image_aspect:
                         (sc_b, sc_f) = (sc_f, sc_b) # swap round
                     (w, h) =  (round(size[0] / sc_b / self.__blur_zoom), round(size[1] / sc_b / self.__blur_zoom))
                     (x, y) = (round(0.5 * (im.size[0] - w)), round(0.5 * (im.size[1] - h)))
