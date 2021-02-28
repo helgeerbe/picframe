@@ -13,6 +13,7 @@ viewer:
   show_text_sz: 40                        # default=40, text character size
   show_text: "title caption name date folder location"  # default="date folder location", show text, include combination of words: title, caption name, date, location, folder
   text_width: 70                          # width to wrap
+  text_justify: "L"                       # text justification L, C or R
   fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
   auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4.
                                           # You should ensure your images are the correct size for the display")

@@ -52,6 +52,7 @@ class ViewerDisplay:
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
         self.__text_width = config['text_width']
+        self.__text_justify = config['text_justify'].upper()
         self.__fit = config['fit']
         self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
@@ -319,16 +320,24 @@ class ViewerDisplay:
             if paused:
                 info_strings.append("PAUSED")
         final_string = " • ".join(info_strings)
+
+        block = self.__textblocks[side] # alias for brevity below
         if side == 0 and not pair:
             text_width = self.__text_width
+            c_rng = self.__display.width - 100 # range for x loc from L to R justified
+            x = int(c_rng * (block.justify - 0.5))
         else:
             text_width = int(self.__text_width * 0.5) - 5
-        block = self.__textblocks[side] # alias for brevity below
+            c_rng = self.__display.width * 0.5 - 100 # range for x loc from L to R justified
+            x = int(c_rng * (block.justify - 1) - 50) if side == 0 else int(c_rng * block.justify + 50)
         block.set_text(text_format=final_string, wrap=text_width)
-        num_ch = int(len(final_string))
-        if num_ch > 0:
-            adj_y = block.y + block.char_offsets[:num_ch,1].min() + self.__display.height // 2
-            block.set_position(y = (block.y - adj_y + self.__show_text_sz))
+        #TODO next few lines are a way to find which char will be drawn and the position of lowest
+        # char. This functionality could be placed in pi3d.TextBlock
+        block_uvs = block._text_manager.uv[block._buffer_index:(block._buffer_index + block.char_count),:]
+        ix = np.where((block_uvs[:,0] != 0.0) & (block_uvs[:,1] != 0.0))[0] # block_uvs is view into larger array held by text
+        if len(ix) > 0: # i.e. something will be drawn. ix is array of indices into char_offsets array to draw
+            adj_y = block.y + block.char_offsets[ix,1].min() + self.__display.height // 2
+            block.set_position(x=x, y=(block.y - adj_y + self.__show_text_sz))
 
     def is_in_transition(self):
         return self.__in_transition
@@ -348,14 +357,20 @@ class ViewerDisplay:
         grid_size = math.ceil(len(self.__codepoints) ** 0.5)
         font = pi3d.Font(self.__font_file, codepoints=self.__codepoints, grid_size=grid_size, shadow_radius=4.0,
                         shadow=(0,0,0,128))
-        self.__text = pi3d.PointText(font, camera, max_chars=400, point_size=50)
+        self.__text = pi3d.PointText(font, camera, max_chars=400, point_size=self.__show_text_sz)
         self.__textblocks = []
+        if self.__text_justify == 'C':
+            justify = 0.5
+        elif self.__text_justify == 'R':
+            justify = 1.0
+        else:
+            justify = 0.0
         for i in range(2):
-            x = -int(self.__display.width * 0.5) + 50 if i == 0 else 50
-            block = pi3d.TextBlock(x=x, y=-int(self.__display.height * 0.4),
+            # x position will now be recalculated for each make_text call
+            block = pi3d.TextBlock(x=0, y=-int(self.__display.height * 0.4),
                                 z=0.1, rot=0.0, char_count=199,
-                                text_format="{}".format(" "), size=0.99,
-                                spacing="F", space=0.02, colour=(1.0, 1.0, 1.0, 1.0))
+                                text_format="{}".format(" "), size=0.99, spacing="F",
+                                space=0.02, colour=(1.0, 1.0, 1.0, 1.0), justify=justify)
             self.__text.add_text_block(block)
             self.__textblocks.append(block)
         bkg_ht = self.__display.height // 3
