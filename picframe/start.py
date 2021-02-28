@@ -3,6 +3,7 @@ import sys
 import argparse
 import os
 import ssl
+import locale
 from distutils.dir_util import copy_tree
 
 from picframe import model, viewer_display, controller, interface_kbd, interface_http, __version__
@@ -41,7 +42,14 @@ def create_config(root):
         deleted_pictures = input("Enter picture directory [~/DeletedPictures]: ")
         if deleted_pictures != "":
             filedata = filedata.replace("~/DeletedPictures", deleted_pictures)
-
+        #locale
+        lan, enc = locale.getlocale()
+        if lan:
+            param = input("Enter locale [" + lan + "." + enc + "]: ") or (lan + "." + enc)
+        else:
+            param = input("Enter locale [en_US.utf8]: ") or "en_US.utf8"
+        filedata = filedata.replace("en_US.utf8", param)
+        
         with open (destination, "w") as file:
             file.write(filedata)
     except:
