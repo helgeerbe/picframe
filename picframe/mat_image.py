@@ -258,10 +258,10 @@ class MatImage:
             if type in self.mat_types:
                 final.append(type)
             else:
-                self.__logger.debug('Skipping invalid mat type: ', type)
+                self.__logger.debug('Skipping invalid mat type: %s', type)
 
         if not final:
-            self.__logger.debug('No valid mat types defined - using: ', self.mat_types)
+            self.__logger.debug('No valid mat types defined - using: %s', self.mat_types)
             final = self.mat_types
 
         return final
