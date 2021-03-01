@@ -87,12 +87,12 @@ class ImageCache:
             self.__update_folder_modtimes(self.__modified_folders)
             self.__modified_folders.clear()
 
-        # Commit the current set of changes
-        self.__db.commit()
-
         # If looping is still not paused, remove any files or folders from the db that are no longer on disk
         if not self.__pause_looping:
             self.__purge_missing_files_and_folders()
+
+        # Commit the current set of changes
+        self.__db.commit()
 
 
     def query_cache(self, where_clause, sort_clause = 'exif_datetime ASC'):
@@ -282,7 +282,7 @@ class ImageCache:
 
     def __get_modified_files(self, modified_folders):
         out_of_date_files = []
-        sql_select = "SELECT fname, last_modified FROM all_data WHERE fname = ?"
+        sql_select = "SELECT fname, last_modified FROM all_data WHERE fname = ? and last_modified >= ?"
         for dir,date in modified_folders:
             for file in os.listdir(dir):
                 base, extension = os.path.splitext(file)
@@ -290,8 +290,8 @@ class ImageCache:
                         and not '.AppleDouble' in dir and not file.startswith('.')): # have to filter out all the Apple junk
                     full_file = os.path.join(dir, file)
                     mod_tm =  os.path.getmtime(full_file)
-                    found = self.__db.execute(sql_select, (full_file,)).fetchone()
-                    if not found or found['last_modified'] < mod_tm:
+                    found = self.__db.execute(sql_select, (full_file,mod_tm)).fetchone()
+                    if not found:
                         out_of_date_files.append(full_file)
         return out_of_date_files
 
