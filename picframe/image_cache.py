@@ -131,10 +131,10 @@ class ImageCache:
     def get_file_info(self, file_id):
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
         row = self.__db.execute(sql).fetchone()
-        if row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
+        if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
-        return row
+        return row # NB if select fails (i.e. moved file) will return None
 
     def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
         location = self.__geo_reverse.get_address(lat, lon)

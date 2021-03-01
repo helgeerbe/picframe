@@ -384,6 +384,7 @@ class ViewerDisplay:
 
 
     def slideshow_is_running(self, pics=None, time_delay = 200.0, fade_time = 10.0, paused=False):
+        #skip_image = False # flag Controller.loop() to go to next image (i.e. __tex_load() returned None)
         tm = time.time()
         if pics is not None:
             self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
@@ -392,6 +393,8 @@ class ViewerDisplay:
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             if new_sfg is not None: # this is a possible return value which needs to be caught
                 self.__sfg = new_sfg
+            else:
+                return (True, False) #TODO test if OK to return early
             self.__alpha = 0.0
             self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
             # set the file name as the description
@@ -465,7 +468,7 @@ class ViewerDisplay:
 
 
         self.__text.draw()
-        return self.__display.loop_running()
+        return (self.__display.loop_running(), False) #skip_image)
 
     def slideshow_stop(self):
         self.__display.destroy()

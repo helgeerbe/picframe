@@ -273,9 +273,11 @@ class Model:
             paired_pic = None
         else:
             file_ids = self.__file_list[self.__file_index]
-            pic = Pic(**self.__image_cache.get_file_info(file_ids[0]))
+            pic_row = self.__image_cache.get_file_info(file_ids[0])
+            pic = Pic(**pic_row) if pic_row is not None else None
             if len(file_ids) == 2:
-                paired_pic = Pic(**self.__image_cache.get_file_info(file_ids[1]))
+                pic_row = self.__image_cache.get_file_info(file_ids[1])
+                paired_pic = Pic(**pic_row) if pic_row is not None else None
             else:
                 paired_pic = None
         self.__current_pics = (pic, paired_pic)
