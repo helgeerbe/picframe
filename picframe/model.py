@@ -25,6 +25,7 @@ DEFAULT_CONFIG = {
         'show_text_sz': 40,
         'show_text': "name location",
         'text_width': 90,
+        'text_justify': 'L',
         'fit': False,
         'auto_resize': True,
         'kenburns': False,

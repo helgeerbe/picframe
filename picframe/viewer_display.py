@@ -52,6 +52,7 @@ class ViewerDisplay:
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
         self.__text_width = config['text_width']
+        self.__text_justify = config['text_justify'].upper()
         self.__fit = config['fit']
         self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
@@ -74,7 +75,7 @@ class ViewerDisplay:
         self.__xstep = None
         self.__ystep = None
         self.__text = None
-        self.__textblock = None
+        self.__textblocks = None
         self.__text_bkg = None
         self.__sfg = None # slide for background
         self.__sbg = None # slide for foreground
@@ -298,10 +299,11 @@ class ViewerDisplay:
         name = ''.join([c for c in name if c in self.__codepoints])
         return name
 
-    def __make_text(self, pic, paused):
-        # pic is just left hand pic if pics tuple has two portraits
+    def __make_text(self, pic, paused, side=0, pair=False):
+        # if side 0 and pair False then this is a full width text and put into
+        # __textblocks[0] otherwise it is half width and put into __textblocks[position]
         info_strings = []
-        if self.__show_text > 0 or paused: #was SHOW_TEXT_TM > 0.0
+        if pic is not None and (self.__show_text > 0 or paused): #was SHOW_TEXT_TM > 0.0
             if (self.__show_text & 1) == 1 and pic.title is not None: # title
                 info_strings.append(self.__sanitize_string(pic.title))
             if (self.__show_text & 2) == 2 and pic.caption is not None: # caption
@@ -318,12 +320,24 @@ class ViewerDisplay:
             if paused:
                 info_strings.append("PAUSED")
         final_string = " • ".join(info_strings)
-        self.__textblock.set_text(text_format=final_string, wrap=self.__text_width)
 
-        last_ch = len(final_string)
-        if last_ch > 0:
-            adj_y = self.__text.locations[:last_ch,1].min() + self.__display.height // 2 # y pos of last char rel to bottom of screen
-            self.__textblock.set_position(y = (self.__textblock.y - adj_y + self.__show_text_sz))
+        block = self.__textblocks[side] # alias for brevity below
+        if side == 0 and not pair:
+            text_width = self.__text_width
+            c_rng = self.__display.width - 100 # range for x loc from L to R justified
+            x = int(c_rng * (block.justify - 0.5))
+        else:
+            text_width = int(self.__text_width * 0.5) - 5
+            c_rng = self.__display.width * 0.5 - 100 # range for x loc from L to R justified
+            x = int(c_rng * (block.justify - 1) - 50) if side == 0 else int(c_rng * block.justify + 50)
+        block.set_text(text_format=final_string, wrap=text_width)
+        #TODO next few lines are a way to find which char will be drawn and the position of lowest
+        # char. This functionality could be placed in pi3d.TextBlock
+        block_uvs = block._text_manager.uv[block._buffer_index:(block._buffer_index + block.char_count),:]
+        ix = np.where((block_uvs[:,0] != 0.0) & (block_uvs[:,1] != 0.0))[0] # block_uvs is view into larger array held by text
+        if len(ix) > 0: # i.e. something will be drawn. ix is array of indices into char_offsets array to draw
+            adj_y = block.y + block.char_offsets[ix,1].min() + self.__display.height // 2
+            block.set_position(x=x, y=(block.y - adj_y + self.__show_text_sz))
 
     def is_in_transition(self):
         return self.__in_transition
@@ -343,15 +357,25 @@ class ViewerDisplay:
         grid_size = math.ceil(len(self.__codepoints) ** 0.5)
         font = pi3d.Font(self.__font_file, codepoints=self.__codepoints, grid_size=grid_size, shadow_radius=4.0,
                         shadow=(0,0,0,128))
-        self.__text = pi3d.PointText(font, camera, max_chars=200, point_size=50)
-        self.__textblock = pi3d.TextBlock(x=-int(self.__display.width) * 0.5 + 50, y=-int(self.__display.height) * 0.4,
+        self.__text = pi3d.PointText(font, camera, max_chars=400, point_size=self.__show_text_sz)
+        self.__textblocks = []
+        if self.__text_justify == 'C':
+            justify = 0.5
+        elif self.__text_justify == 'R':
+            justify = 1.0
+        else:
+            justify = 0.0
+        for i in range(2):
+            # x position will now be recalculated for each make_text call
+            block = pi3d.TextBlock(x=0, y=-int(self.__display.height * 0.4),
                                 z=0.1, rot=0.0, char_count=199,
-                                text_format="{}".format(" "), size=0.99,
-                                spacing="F", space=0.02, colour=(1.0, 1.0, 1.0, 1.0))
-        self.__text.add_text_block(self.__textblock)
-        bkg_ht = self.__display.height // 3
+                                text_format="{}".format(" "), size=0.99, spacing="F",
+                                space=0.02, colour=(1.0, 1.0, 1.0, 1.0), justify=justify)
+            self.__text.add_text_block(block)
+            self.__textblocks.append(block)
+        bkg_ht = self.__display.height // 4
         text_bkg_array = np.zeros((bkg_ht, 1, 4), dtype=np.uint8)
-        text_bkg_array[:,:,3] = np.linspace(0, 170, bkg_ht).reshape(-1, 1)
+        text_bkg_array[:,:,3] = np.linspace(0, 120, bkg_ht).reshape(-1, 1)
         text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
 
         back_shader = pi3d.Shader("uv_flat")
@@ -372,11 +396,13 @@ class ViewerDisplay:
             self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
             # set the file name as the description
             if self.__show_text_tm > 0.0:
-                self.__make_text(pics[0], paused) #TODO only uses text for left of pair
+                for i, pic in enumerate(pics):
+                    self.__make_text(pic, paused, i, pics[1] is not None) # send even if pic is None to clear previous text
                 self.__text.regen()
             else: # could have a NO IMAGES selected and being drawn
-                self.__textblock.set_text(text_format="{}".format(" "))
-                self.__textblock.colouring.set_colour(alpha=0.0)
+                for block in self.__textblocks:
+                    block.set_text(text_format="{}".format(" "))
+                    block.colouring.set_colour(alpha=0.0)
                 self.__text.regen()
 
             if self.__sbg is None: # first time through
@@ -427,10 +453,14 @@ class ViewerDisplay:
             dt = (self.__show_text_tm - self.__name_tm + tm + 0.1) / self.__show_text_tm
             ramp_pt = max(4.0, self.__show_text_tm / 4.0)
             alpha = max(0.0, min(1.0, ramp_pt * (self.__alpha- abs(1.0 - 2.0 * dt)))) # cap text alpha at image alpha
-            self.__textblock.colouring.set_colour(alpha=alpha)
+            for block in self.__textblocks:
+                block.colouring.set_colour(alpha=alpha)
             self.__text.regen()
             self.__text_bkg.set_alpha(alpha)
-            if len(self.__textblock.text_format.strip()) > 0: #only draw background if text there
+            txt_len = 0
+            for block in self.__textblocks:
+                txt_len += len(block.text_format.strip())
+            if txt_len > 0: #only draw background if text there
                 self.__text_bkg.draw()
 
 

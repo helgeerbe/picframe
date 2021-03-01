@@ -16,6 +16,22 @@ except ImportError:
 
 EXTENSIONS = [".jpg", ".jpeg", ".png", ".heif", ".heic"]
 
+def heif_to_jpg(fname):
+    try:
+        import pyheif
+        from PIL import Image
+
+        heif_file = pyheif.read(fname)
+        image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
+                                "raw", heif_file.mode, heif_file.stride)
+        if image.mode not in ("RGB", "RGBA"):
+            image = image.convert("RGB")
+        image.save("/dev/shm/temp.jpg") # default 75% quality
+        return "/dev/shm/temp.jpg"
+    except:
+        self.__logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
+        return "" # this will not render as a page and will generate error TODO serve specific page with explicit error
+
 class RequestHandler(BaseHTTPRequestHandler):
 
     def do_GET(self):
@@ -28,13 +44,14 @@ class RequestHandler(BaseHTTPRequestHandler):
                 else:
                     html_page = "index.html"
                 _, extension = os.path.splitext(html_page)
-                if html_page == "current_image":
+                if html_page == "current_image" or extension in EXTENSIONS:
+                    # NB homeassistant needs to pass url ending in an image extension
+                    # in order to trigger streaming whatever is the currently showing image
                     content_type = "image"
                     page = self.server._controller.get_current_path()
-                elif extension.lower() in EXTENSIONS: # TODO .heif, .heic is not supported by browsers. Implement convert to .jpg 
-                    # load only images that are located in the actual selected path
-                    content_type = "image"
-                    page = self.server._controller.get_current_path()
+                    _, extension = os.path.splitext(page) # as current_image may be heic
+                    if extension.lower() in ('.heic', '.heif'):
+                        page = heif_to_jpg(page)
                 else:
                     page = os.path.join(self.server._html_path, html_page)
                     content_type = "text/html"

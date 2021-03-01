@@ -1,22 +1,24 @@
 viewer:
   blur_amount: 12                         # default=12,  larger values than 12 will increase processing load quite a bit
-  blur_zoom: 1.0                          # default=1.0, must be >= 1.0 which expands the backgorund to just fill the space around the image"
-  blur_edges: False                       # default=False, use blurred version of image to fill edges - will override FIT = False"
+  blur_zoom: 1.0                          # default=1.0, must be >= 1.0 which expands the backgorund to just fill the space around the image
+  blur_edges: False                       # default=False, use blurred version of image to fill edges - will override FIT = False
   edge_alpha: 0.5                         # default=0.5, background colour at edge. 1.0 would show reflection of image
   fps: 20.0                               # default=20.0
   background: [0.2, 0.2, 0.3, 1.0]        # default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting
-  blend_type: "blend"                     # default="blend", choices={"blend", "burn", "bump"}, type of blend the shader can do"
+  blend_type: "blend"                     # default="blend", choices={"blend", "burn", "bump"}, type of blend the shader can do
   font_file: "~/picframe_data/data/fonts/NotoSans-Regular.ttf"
   shader: "~/picframe_data/data/shaders/blend_new"
-  show_text_fm: '%b %d, %Y'               # default "%b %d, %Y", format to show date over the image
-  show_text_tm: 20.0                      # default=0.0, time to show text over image with file name
+  show_text_fm: "%b %d, %Y"               # default "%b %d, %Y", format to show date over the image
+  show_text_tm: 20.0                      # default=20.0, time to show text over image with file name
   show_text_sz: 40                        # default=40, text character size
-  show_text: "title caption name date folder location"  # default="date folder location", show text, include combination of words: title, caption name, date, location, folder
+  show_text: "title caption name date folder location"  # default="title caption name date folder location", show text, include combination of words: title, caption name, date, location, folder
   text_width: 70                          # width to wrap
-  fit: False                              # default=False, shrink to fit screen (i.e. don't crop")
+  text_justify: "L"                       # text justification L, C or R
+  fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
+                                          #                False => crop image so no 'gaps'
   auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4.
                                           # You should ensure your images are the correct size for the display")
-  kenburns: False                         # default=False, will set fit->False and blur_edges->False"
+  kenburns: False                         # default=False, will set fit->False and blur_edges->False
   display_x: 0                            # offset from left of screen (can be negative)
   display_y: 0                            # offset from top of screen (can be negative)
   display_w: null                         # width of display surface (null->None will use max returned by hardware)
@@ -31,13 +33,13 @@ viewer:
   outer_mat_border: 75                    # default=75, Minimum outer mat border in pixels
   inner_mat_border: 40                    # default=40, Minimum inner mat border in pixels (for styles that use it)
   use_mat_texture: True                   # default=True, True uses a mat texture. False creates a solid color mat
-  mat_resource_folder: '~/picframe_data/data/mat' # Folder containing mat image files
+  mat_resource_folder: "~/picframe_data/data/mat" # Folder containing mat image files
 
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
 
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
-  deleted_pictures: '~/DeletedPictures'   # move deleted pictures here
+  deleted_pictures: "~/DeletedPictures"   # move deleted pictures here
   no_files_img: "~/picframe_data/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   recent_n: 7                             # default=7 (days), when shuffling file change date more recent than this number of days play before the rest
@@ -45,30 +47,30 @@ model:
   time_delay: 200.0                       # default=200.0, time between consecutive slide starts - can be changed by MQTT
   fade_time: 10.0                         # default=10.0, change time during which slides overlap - can be changed by MQTT"
   shuffle: True                           # default=True, shuffle on reloading image files - can be changed by MQTT"
-  image_attr: [                           # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat, 'PICFRAME LOCATION' is special to retrieve geo reverse (load_geoloc hast to be True)
-    'PICFRAME GPS',
-    'PICFRAME LOCATION',
-    'EXIF FNumber',
-    'EXIF ExposureTime',
-    'EXIF ISOSpeedRatings',
-    'EXIF FocalLength',
-    'EXIF DateTimeOriginal',
-    'Image Model',
-    'IPTC Caption/Abstract',
-    'IPTC Object Name',
-    'IPTC Keywords']
+  image_attr: [                           # image attributes send by MQTT, Keys are taken from exifread library, "PICFRAME GPS" is special to retrieve GPS lon/lat, "PICFRAME LOCATION" is special to retrieve geo reverse (load_geoloc hast to be True)
+    "PICFRAME GPS",
+    "PICFRAME LOCATION",
+    "EXIF FNumber",
+    "EXIF ExposureTime",
+    "EXIF ISOSpeedRatings",
+    "EXIF FocalLength",
+    "EXIF DateTimeOriginal",
+    "Image Model",
+    "IPTC Caption/Abstract",
+    "IPTC Object Name",
+    "IPTC Keywords"]
   load_geoloc: True                       # get location information from open street map
-  locale: 'en_US.utf8'                    # "locale -a" shows the installed locales which could used
+  locale: "en_US.utf8"                    # "locale -a" shows the installed locales which could used
   key_list: [
-    ['tourism','amenity','isolated_dwelling'],
-    ['suburb','village'],
-    ['city','county'],
-    ['region','state','province'],
-    ['country']]
-  geo_key: 'this_needs_to@be_changed'            # use your email address
-  db_file: '~/picframe_data/data/pictureframe.db3' # database used by PictureFrame
+    ["tourism","amenity","isolated_dwelling"],
+    ["suburb","village"],
+    ["city","county"],
+    ["region","state","province"],
+    ["country"]]
+  geo_key: "this_needs_to@be_changed"     # use your email address
+  db_file: "~/picframe_data/data/pictureframe.db3" # database used by PictureFrame
   portrait_pairs: False
-  log_level: 'WARNING'                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_level: "WARNING"                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
   use_kbd: False                          # default=False, just for debug or console start. Crashing when started with systemd
 
 mqtt:
@@ -78,11 +80,11 @@ mqtt:
   login: "name"                           # your mqtt user
   password: "your_password"               # password for mqtt user
   tls: "/path/to/your/ca.crt"             # filename including path to your ca.crt. If not used, must be set to "" !!!!
-  device_id: 'picframe'                   # default='picframe' unique id of device. change if there is more than one PictureFrame
+  device_id: "picframe"                   # default="picframe" unique id of device. change if there is more than one PictureFrame
 
 http:
   use_http: False                         # default=False. Set True to enable http NB THIS SERVER IS FOR LOCAL NETWORK AND SHOULD NOT BE EXPOSED TO EXTERNAL ACCESS
-  path: "~/picframe_data/html"                 # path to where html files are located
+  path: "~/picframe_data/html"            # path to where html files are located
   port: 9000                              # port used to serve pages by http server < 1024 requires root which is *bad* idea
   use_ssl: False
   keyfile: "path/to/key.pem"              # private-key
