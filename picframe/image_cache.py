@@ -74,12 +74,12 @@ class ImageCache:
             self.__logger.debug('No unprocessed files in memory, checking disk')
             self.__modified_folders = self.__get_modified_folders()
             self.__modified_files = self.__get_modified_files(self.__modified_folders)
-            self.__logger.debug('Found {} new files on disk', len(self.__modified_files))
+            self.__logger.debug('Found %d new files on disk', len(self.__modified_files))
 
         # While we have files to process and looping isn't paused
         while self.__modified_files and not self.__pause_looping:
             file = self.__modified_files.pop(0)
-            self.__logger.debug('Inserting: ', file)
+            self.__logger.debug('Inserting: %s', file)
             self.__insert_file(file)
 
         # If we've process all files in the current collection, update the cached folder mod times
