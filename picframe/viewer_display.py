@@ -149,9 +149,12 @@ class ViewerDisplay:
             except:
                 self.__logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
         else:
-            image = Image.open(fname)
-            if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
-                image = image.convert("RGB")
+            try:
+                image = Image.open(fname)
+                if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
+                    image = image.convert("RGB")
+            except: # for whatever reason
+                image = None
             return image
 
     # Concatenate the specified images horizontally. Clip the taller
@@ -232,6 +235,8 @@ class ViewerDisplay:
                 im = self.__check_heif_then_open(pics[0].fname)
                 if pics[0].orientation != 1:
                      im = self.__orientate_image(im, pics[0].orientation)
+                if im is None:
+                    return None
             if pics[1]:
                 im2 = self.__check_heif_then_open(pics[1].fname)
                 if pics[1].orientation != 1:
@@ -291,7 +296,7 @@ class ViewerDisplay:
             self.__logger.warning("Can't create tex from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
             self.__logger.warning("Cause: %s", e)
             tex = None
-            raise
+            #raise # only re-raise errors here while debugging
         return tex
 
     def __sanitize_string(self, path_name):
