@@ -9,7 +9,7 @@
             /* widths to use for spans. Other slots in the array could be used for other
              things...
             */
-            const TYPES = {"bool":[5,], "text":[15,], "date":[7,], "number":[5,], "action":[5,]};
+            const TYPES = {"bool":[5,], "text":[15,], "date":[10,], "number":[5,], "action":[5,]};
 
             /* this is used to render the ids on this page.
              fn is a method of controller
@@ -44,6 +44,7 @@
         <h1>Simple Picture Frame page</h1>
         <div id="spans">
         </div>
-        <button onclick="uploadValues()">UPDATE</button>
+        <button id="upload_button" onclick="uploadValues()">UPDATE</button>
+        <a href="/current_image">See the current image</a> (use browser BACK to return to this page)
     </body>
 </html>

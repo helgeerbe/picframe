@@ -121,10 +121,10 @@ class ViewerDisplay:
     def text_is_on(self, txt_key):
         return self.__show_text & txt_to_bit(txt_key)
 
-    def reset_name_tm(self, pic=None, paused=None):
+    def reset_name_tm(self, pic=None, paused=None, side=0, pair=False):
         # only extend i.e. if after initial fade in
         if pic is not None and paused is not None: # text needs to be refreshed
-            self.__make_text(pic, paused)
+            self.__make_text(pic, paused, side, pair)
         self.__name_tm = max(self.__name_tm, time.time() + self.__show_text_tm)
 
     def set_brightness(self, val):
