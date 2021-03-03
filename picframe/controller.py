@@ -86,12 +86,14 @@ class Controller:
         if val is True: # allow to be called with boolean from httpserver
             val = "ON"
         self.__viewer.set_show_text(txt_key, val)
-        pic = self.__model.get_current_pics()[0]
-        self.__viewer.reset_name_tm(pic, self.paused)
+        for (side, pic) in enumerate(self.__model.get_current_pics()):
+            if pic is not None:
+                self.__viewer.reset_name_tm(pic, self.paused, side, self.__model.get_current_pics()[1] is not None)
 
     def refresh_show_text(self):
-        pic = self.__model.get_current_pics()[0]
-        self.__viewer.reset_name_tm(pic, self.paused)
+        for (side, pic) in enumerate(self.__model.get_current_pics()):
+            if pic is not None:
+                self.__viewer.reset_name_tm(pic, self.paused, side, self.__model.get_current_pics()[1] is not None)
 
     @property
     def subdirectory(self):
