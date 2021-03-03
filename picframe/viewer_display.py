@@ -87,36 +87,57 @@ class ViewerDisplay:
 
     @property
     def display_is_on(self):
-        try: # vcgencmd only applies to raspberry pi
-            cmd = ["vcgencmd", "display_power"]
-            state = str(subprocess.check_output(cmd))
-            if (state.find("display_power=1") != -1):
+        if pi3d.PLATFORM == pi3d.PLATFORM_PI:
+            try: # vcgencmd only applies to raspberry pi
+                cmd = ["vcgencmd", "display_power"]
+                state = str(subprocess.check_output(cmd))
+                if (state.find("display_power=1") != -1):
+                    return True
+                else:
+                    return False
+            except:
                 return True
-            else:
-                return False
-        except:
+        elif pi3d.PLATFORM == 3: # TODO find out why platform_linux(3) is not valid here
+            try: # try xset on linux, DPMS has to be enabled
+                output = subprocess.check_output(["xset" , "-display", ":0", "-q"])
+                if output.find(b'DPMS is Enabled') != -1:
+                    if output.find(b'Monitor is On') != -1:
+                        return True
+                    else:
+                        return False
+                else:
+                    self.__logger.warning("Can't switch display on/off.") 
+                    self.__logger.warning("DPMS seems not to be enabled.") 
+            except Exception as e:
+                self.__logger.warning("Display ON/OFF is not supported for this linux platform.")
+                self.__logger.warning("Cause: %s", e)
+        else:
+            self.__logger.warning("Display ON/OFF is not supported for this platform.")
             return True
+        
 
     @display_is_on.setter
     def display_is_on(self, on_off):
         if pi3d.PLATFORM == pi3d.PLATFORM_PI:
             try: # vcgencmd only applies to raspberry pi
-                cmd = ["vcgencmd", "display_power", "0"]
                 if on_off == True:
-                    cmd = ["vcgencmd", "display_power", "1"]
-                subprocess.call(cmd)
+                    subprocess.call(["vcgencmd", "display_power", "1"])
+                else:
+                    subprocess.call(["vcgencmd", "display_power", "0"])
             except:
                 self.__logger.warning("Display ON/OFF failed with \"vcgencmd\" on pi platform.")
                 return None
         elif pi3d.PLATFORM == 3: # TODO find out why platform_linux(3) is not valid here
             try: # try xset on linux, DPMS has to be enabled
                 output = subprocess.check_output(["xset" , "-display", ":0", "-q"])
-                for line in output.split(b'\n'):
-                    if line.find(b'DPMS is Enabled') != -1:
-                        print("on")
+                if output.find(b'DPMS is Enabled') != -1:
+                    if on_off == True:
+                        subprocess.call(["xset" , "-display", ":0", "dpms", "force", "on"])
                     else:
-                        self.__logger.warning("Can't switch display on/off.") 
-                        self.__logger.warning("DPMS seems not to be enabled.") 
+                        subprocess.call(["xset" , "-display", ":0", "dpms", "force", "off"])
+                else:
+                    self.__logger.warning("Can't switch display on/off.") 
+                    self.__logger.warning("DPMS seems not to be enabled.") 
             except Exception as e:
                 self.__logger.warning("Display ON/OFF is not supported for this linux platform.")
                 self.__logger.warning("Cause: %s", e)
