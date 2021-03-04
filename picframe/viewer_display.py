@@ -87,43 +87,18 @@ class ViewerDisplay:
         self.__in_transition = False
         self.__matter = None
         ImageFile.LOAD_TRUNCATED_IMAGES = True # occasional damaged file hangs app
-        self.__display_mode = self.__get_dpms_mode()
-
-    def __get_dpms_mode(self):
-        try: # vcgencmd only applies to raspberry pi
-            subprocess.check_output(["vcgencmd", "display_power"])
-            self.__logger.debug("Switching display on/of via vcgencmd.") 
-            return "pi"
-        except:
-            pass
-        try: # try xset on linux, DPMS has to be enabled
-            output = subprocess.check_output(["xset" , "-display", ":0", "-q"])
-            if output.find(b'DPMS is Enabled') != -1:
-                self.__logger.debug("Switching display on/of via xset.") 
-                return "x_dpms"
-            else:
-                self.__logger.warning("Can't switch display on/off.") 
-                self.__logger.warning("DPMS seems not to be enabled.") 
-                return "unsupported"
-        except Exception as e:
-            self.__logger.warning("Display ON/OFF is not supported for this linux platform.")
-            self.__logger.warning("Cause: %s", e)
-        return "unsupported"
 
     @property
     def display_is_on(self):
-        if self.__display_mode == "pi":
-            try: # vcgencmd only applies to raspberry pi
-                state = str(subprocess.check_output(["vcgencmd", "display_power"]))
-                if (state.find("display_power=1") != -1):
-                    return True
-                else:
-                    return False
-            except Exception as e:
-                self.__logger.warning("Display ON/OFF is vcgencmd, but an error occured")
-                self.__logger.warning("Cause: %s", e)
+        try: # vcgencmd only applies to raspberry pi
+            state = str(subprocess.check_output(["vcgencmd", "display_power"]))
+            if (state.find("display_power=1") != -1):
                 return True
-        elif self.__display_mode == "x_dpms":
+            else:
+                return False
+        except Exception as e:
+            self.__logger.debug("Display ON/OFF is vcgencmd, but an error occurred")
+            self.__logger.debug("Cause: %s", e)
             try: # try xset on linux, DPMS has to be enabled
                 output = subprocess.check_output(["xset" , "-display", ":0", "-q"])
                 if output.find(b'Monitor is On') != -1:
@@ -131,35 +106,30 @@ class ViewerDisplay:
                 else:
                     return False
             except Exception as e:
-                self.__logger.warning("Display ON/OFF is X with dpms enabled, but an error occured")
-                self.__logger.warning("Cause: %s", e)
-                return True
-        else:
-            self.__logger.warning("Display ON/OFF is not supported for this platform.")
-            return True
-        
+                self.__logger.debug("Display ON/OFF is X with dpms enabled, but an error occurred")
+                self.__logger.debug("Cause: %s", e)
+                self.__logger.warning("Display ON/OFF is not supported for this platform.")
+        return True
+
     @display_is_on.setter
     def display_is_on(self, on_off):
-        if self.__display_mode == "pi":
-            try: # vcgencmd only applies to raspberry pi
-                if on_off == True:
-                    subprocess.call(["vcgencmd", "display_power", "1"])
-                else:
-                    subprocess.call(["vcgencmd", "display_power", "0"])
-            except Exception as e:
-                self.__logger.warning("Display ON/OFF is vcgencmd, but an error occured")
-                self.__logger.warning("Cause: %s", e)
-        elif self.__display_mode == "x_dpms":
+        try: # vcgencmd only applies to raspberry pi
+            if on_off == True:
+                subprocess.call(["vcgencmd", "display_power", "1"])
+            else:
+                subprocess.call(["vcgencmd", "display_power", "0"])
+        except Exception as e:
+            self.__logger.debug("Display ON/OFF is vcgencmd, but an error occured")
+            self.__logger.debug("Cause: %s", e)
             try: # try xset on linux, DPMS has to be enabled
                 if on_off == True:
                     subprocess.call(["xset" , "-display", ":0", "dpms", "force", "on"])
                 else:
                     subprocess.call(["xset" , "-display", ":0", "dpms", "force", "off"])
             except Exception as e:
-                self.__logger.warning("Display ON/OFF is xset via dpms, but an error occured")
-                self.__logger.warning("Cause: %s", e)
-        else:
-            self.__logger.warning("Display ON/OFF is not supported for this platform.")
+                self.__logger.debug("Display ON/OFF is xset via dpms, but an error occured")
+                self.__logger.debug("Cause: %s", e)
+                self.__logger.warning("Display ON/OFF is not supported for this platform.")
 
     def set_show_text(self, txt_key=None, val="ON"):
         if txt_key is None:
