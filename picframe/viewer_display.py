@@ -9,6 +9,9 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageFile
 from picframe import mat_image
 
+# supported display modes for display switch
+dpms_mode = ("unsupported", "pi", "x_dpms")
+
 # utility functions with no dependency on ViewerDisplay properties
 def txt_to_bit(txt):
     txt_map = {"title":1, "caption":2, "name":4, "date":8, "location":16, "folder":32}
@@ -51,7 +54,7 @@ class ViewerDisplay:
         self.__show_text_fm = config['show_text_fm']
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
-        self.__text_width = config['text_width']
+        self.__text_width = 2800 / config['show_text_sz'] # adjust each time text drawn
         self.__text_justify = config['text_justify'].upper()
         self.__fit = config['fit']
         self.__auto_resize = config['auto_resize']
@@ -88,24 +91,45 @@ class ViewerDisplay:
     @property
     def display_is_on(self):
         try: # vcgencmd only applies to raspberry pi
-            cmd = ["vcgencmd", "display_power"]
-            state = str(subprocess.check_output(cmd))
+            state = str(subprocess.check_output(["vcgencmd", "display_power"]))
             if (state.find("display_power=1") != -1):
                 return True
             else:
                 return False
-        except:
-            return True
+        except Exception as e:
+            self.__logger.debug("Display ON/OFF is vcgencmd, but an error occurred")
+            self.__logger.debug("Cause: %s", e)
+            try: # try xset on linux, DPMS has to be enabled
+                output = subprocess.check_output(["xset" , "-display", ":0", "-q"])
+                if output.find(b'Monitor is On') != -1:
+                    return True
+                else:
+                    return False
+            except Exception as e:
+                self.__logger.debug("Display ON/OFF is X with dpms enabled, but an error occurred")
+                self.__logger.debug("Cause: %s", e)
+                self.__logger.warning("Display ON/OFF is not supported for this platform.")
+        return True
 
     @display_is_on.setter
     def display_is_on(self, on_off):
         try: # vcgencmd only applies to raspberry pi
-            cmd = ["vcgencmd", "display_power", "0"]
             if on_off == True:
-                cmd = ["vcgencmd", "display_power", "1"]
-            subprocess.call(cmd)
-        except:
-            return None
+                subprocess.call(["vcgencmd", "display_power", "1"])
+            else:
+                subprocess.call(["vcgencmd", "display_power", "0"])
+        except Exception as e:
+            self.__logger.debug("Display ON/OFF is vcgencmd, but an error occured")
+            self.__logger.debug("Cause: %s", e)
+            try: # try xset on linux, DPMS has to be enabled
+                if on_off == True:
+                    subprocess.call(["xset" , "-display", ":0", "dpms", "force", "on"])
+                else:
+                    subprocess.call(["xset" , "-display", ":0", "dpms", "force", "off"])
+            except Exception as e:
+                self.__logger.debug("Display ON/OFF is xset via dpms, but an error occured")
+                self.__logger.debug("Cause: %s", e)
+                self.__logger.warning("Display ON/OFF is not supported for this platform.")
 
     def set_show_text(self, txt_key=None, val="ON"):
         if txt_key is None:
@@ -121,10 +145,10 @@ class ViewerDisplay:
     def text_is_on(self, txt_key):
         return self.__show_text & txt_to_bit(txt_key)
 
-    def reset_name_tm(self, pic=None, paused=None):
+    def reset_name_tm(self, pic=None, paused=None, side=0, pair=False):
         # only extend i.e. if after initial fade in
         if pic is not None and paused is not None: # text needs to be refreshed
-            self.__make_text(pic, paused)
+            self.__make_text(pic, paused, side, pair)
         self.__name_tm = max(self.__name_tm, time.time() + self.__show_text_tm)
 
     def set_brightness(self, val):
@@ -149,9 +173,12 @@ class ViewerDisplay:
             except:
                 self.__logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
         else:
-            image = Image.open(fname)
-            if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
-                image = image.convert("RGB")
+            try:
+                image = Image.open(fname)
+                if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
+                    image = image.convert("RGB")
+            except: # for whatever reason
+                image = None
             return image
 
     # Concatenate the specified images horizontally. Clip the taller
@@ -232,6 +259,8 @@ class ViewerDisplay:
                 im = self.__check_heif_then_open(pics[0].fname)
                 if pics[0].orientation != 1:
                      im = self.__orientate_image(im, pics[0].orientation)
+                if im is None:
+                    return None
             if pics[1]:
                 im2 = self.__check_heif_then_open(pics[1].fname)
                 if pics[1].orientation != 1:
@@ -291,13 +320,20 @@ class ViewerDisplay:
             self.__logger.warning("Can't create tex from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
             self.__logger.warning("Cause: %s", e)
             tex = None
-            raise
+            #raise # only re-raise errors here while debugging
         return tex
 
     def __sanitize_string(self, path_name):
         name = os.path.basename(path_name)
         name = ''.join([c for c in name if c in self.__codepoints])
         return name
+
+    def __recalc_text_width(self, char_offsets):
+        # exponentially move text_width to new val calculated from PointText characters
+        first_ln = char_offsets[char_offsets[:,1] == char_offsets[0,1]]
+        span = first_ln[:,0].max() - first_ln[:,0].min() # let to rightmost char in pixels
+        new_text_width = (self.__display.width - 50) / span * len(first_ln) + 8 # add average word length to end
+        self.__text_width = self.__text_width * 0.8 + new_text_width * 0.2 # 20% smoothing
 
     def __make_text(self, pic, paused, side=0, pair=False):
         # if side 0 and pair False then this is a full width text and put into
@@ -338,6 +374,7 @@ class ViewerDisplay:
         if len(ix) > 0: # i.e. something will be drawn. ix is array of indices into char_offsets array to draw
             adj_y = block.y + block.char_offsets[ix,1].min() + self.__display.height // 2
             block.set_position(x=x, y=(block.y - adj_y + self.__show_text_sz))
+            self.__recalc_text_width(block.char_offsets[ix])
 
     def is_in_transition(self):
         return self.__in_transition
@@ -392,6 +429,8 @@ class ViewerDisplay:
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             if new_sfg is not None: # this is a possible return value which needs to be caught
                 self.__sfg = new_sfg
+            else:
+                return (True, False) # return early
             self.__alpha = 0.0
             self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
             # set the file name as the description
@@ -465,7 +504,7 @@ class ViewerDisplay:
 
 
         self.__text.draw()
-        return self.__display.loop_running()
+        return (self.__display.loop_running(), False) # now returns tuple with skip image flag added
 
     def slideshow_stop(self):
         self.__display.destroy()

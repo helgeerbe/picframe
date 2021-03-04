@@ -74,12 +74,12 @@ class ImageCache:
             self.__logger.debug('No unprocessed files in memory, checking disk')
             self.__modified_folders = self.__get_modified_folders()
             self.__modified_files = self.__get_modified_files(self.__modified_folders)
-            self.__logger.debug('Found {} new files on disk', len(self.__modified_files))
+            self.__logger.debug('Found %d new files on disk', len(self.__modified_files))
 
         # While we have files to process and looping isn't paused
         while self.__modified_files and not self.__pause_looping:
             file = self.__modified_files.pop(0)
-            self.__logger.debug('Inserting: ', file)
+            self.__logger.debug('Inserting: %s', file)
             self.__insert_file(file)
 
         # If we've process all files in the current collection, update the cached folder mod times
@@ -131,10 +131,10 @@ class ImageCache:
     def get_file_info(self, file_id):
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
         row = self.__db.execute(sql).fetchone()
-        if row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
+        if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
-        return row
+        return row # NB if select fails (i.e. moved file) will return None
 
     def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
         location = self.__geo_reverse.get_address(lat, lon)

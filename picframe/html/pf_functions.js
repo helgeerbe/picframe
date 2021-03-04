@@ -22,6 +22,14 @@ function createSpans() {
     });
     span_div = document.getElementById("spans");
     span_div.innerHTML = span_div_html;
+
+    // make enter press upload button
+    span_div.addEventListener("keyup", event => {
+        if (event.keyCode === 13) { // enter key
+            event.preventDefault();
+            uploadValues();
+        }
+    });
 }
 
 

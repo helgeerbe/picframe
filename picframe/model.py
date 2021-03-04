@@ -273,9 +273,11 @@ class Model:
             paired_pic = None
         else:
             file_ids = self.__file_list[self.__file_index]
-            pic = Pic(**self.__image_cache.get_file_info(file_ids[0]))
+            pic_row = self.__image_cache.get_file_info(file_ids[0])
+            pic = Pic(**pic_row) if pic_row is not None else None
             if len(file_ids) == 2:
-                paired_pic = Pic(**self.__image_cache.get_file_info(file_ids[1]))
+                pic_row = self.__image_cache.get_file_info(file_ids[1])
+                paired_pic = Pic(**pic_row) if pic_row is not None else None
             else:
                 paired_pic = None
         self.__current_pics = (pic, paired_pic)
@@ -307,14 +309,15 @@ class Model:
                 break
 
     def __get_files(self):
-        where_list = []
         if self.subdirectory != "":
             picture_dir = os.path.join(self.__pic_dir, self.subdirectory) # TODO catch, if subdirecotry does not exist
-            where_list.append("fname LIKE '{}/%'".format(picture_dir)) # TODO / on end to stop 'test' also selecting test1 test2 etc
+        else:
+            picture_dir = self.__pic_dir
+        where_list = ["fname LIKE '{}/%'".format(picture_dir)] # TODO / on end to stop 'test' also selecting test1 test2 etc
         where_list.extend(self.__where_clauses.values())
 
         if len(where_list) > 0:
-            where_clause = " AND ".join(where_list)
+            where_clause = " AND ".join(where_list) # TODO now always true - remove unreachable code
         else:
             where_clause = "1"
 

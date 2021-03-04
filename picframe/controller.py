@@ -86,12 +86,14 @@ class Controller:
         if val is True: # allow to be called with boolean from httpserver
             val = "ON"
         self.__viewer.set_show_text(txt_key, val)
-        pic = self.__model.get_current_pics()[0]
-        self.__viewer.reset_name_tm(pic, self.paused)
+        for (side, pic) in enumerate(self.__model.get_current_pics()):
+            if pic is not None:
+                self.__viewer.reset_name_tm(pic, self.paused, side, self.__model.get_current_pics()[1] is not None)
 
     def refresh_show_text(self):
-        pic = self.__model.get_current_pics()[0]
-        self.__viewer.reset_name_tm(pic, self.paused)
+        for (side, pic) in enumerate(self.__model.get_current_pics()):
+            if pic is not None:
+                self.__viewer.reset_name_tm(pic, self.paused, side, self.__model.get_current_pics()[1] is not None)
 
     @property
     def subdirectory(self):
@@ -246,23 +248,30 @@ class Controller:
             if not self.paused and tm > self.__next_tm:
                 self.__next_tm = tm + self.__model.time_delay
                 pics = self.__model.get_next_file()
-                image_attr = {}
-                for key in self.__model.get_model_config()['image_attr']:
-                    if key == 'PICFRAME GPS':
-                        image_attr['latitude'] = pics[0].latitude
-                        image_attr['longitude'] = pics[0].longitude
-                    elif key == 'PICFRAME LOCATION':
-                        image_attr['location'] = pics[0].location
-                    else:
-                        field_name = self.__model.EXIF_TO_FIELD[key]
-                        image_attr[key] = pics[0].__dict__[field_name] #TODO nicer using namedtuple for Pic
-                self.publish_state(pics[0].fname, image_attr)
+                if pics[0] is None:
+                    self.__next_tm = 0 # skip this image file moved or otherwise not on db
+                    pics = None # signal slideshow_is_running not to load new image
+                else:
+                    image_attr = {}
+                    for key in self.__model.get_model_config()['image_attr']:
+                        if key == 'PICFRAME GPS':
+                            image_attr['latitude'] = pics[0].latitude
+                            image_attr['longitude'] = pics[0].longitude
+                        elif key == 'PICFRAME LOCATION':
+                            image_attr['location'] = pics[0].location
+                        else:
+                            field_name = self.__model.EXIF_TO_FIELD[key]
+                            image_attr[key] = pics[0].__dict__[field_name] #TODO nicer using namedtuple for Pic
+                    self.publish_state(pics[0].fname, image_attr)
             if self.__viewer.is_in_transition() == False: # safe to do long running tasks
                 self.__model.pause_looping(True)
             else:
                 self.__model.pause_looping(False) #TODO only need to set this once rather than every loop
-            if self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused) == False:
+            (loop_running, skip_image) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
+            if not loop_running:
                 break
+            if skip_image:
+                self.__next_tm = 0
         self.__shutdown_complete = True
 
     def start(self):
