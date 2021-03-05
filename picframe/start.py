@@ -24,6 +24,7 @@ def create_config(root):
     fullpath = os.path.join(fullpath_root, 'config')
     source = os.path.join(fullpath, 'configuration_example.yaml')
     destination = os.path.join(fullpath, 'configuration.yaml')
+    run_start = os.path.join(fullpath_root, 'run_start.py') # TODO for work-around on RPi4
 
     try:
         with open (source, "r") as file:
@@ -34,27 +35,35 @@ def create_config(root):
 
         # replace all paths with selected picframe_data path
         filedata = filedata.replace("~/picframe_data", fullpath_root)
+
         #pic_dir
         pic_dir= input("Enter picture directory [~/Pictures]: ")
-        if pic_dir != "":
-            filedata = filedata.replace("~/Pictures", pic_dir)
-        #pic_dir
+        if pic_dir == "":
+            pic_dir = "~/Pictures" # convert to absolute path too for work-around on RPi4 running as root
+        pic_dir = os.path.expanduser(pic_dir)
+        filedata = filedata.replace("~/Pictures", pic_dir)
+
+        #deleted_pictures
         deleted_pictures = input("Enter picture directory [~/DeletedPictures]: ")
-        if deleted_pictures != "":
-            filedata = filedata.replace("~/DeletedPictures", deleted_pictures)
+        if deleted_pictures == "":
+            deleted_pictures = "~/DeletedPictures"
+        deleted_pictures = os.path.expanduser(deleted_pictures)
+        filedata = filedata.replace("~/DeletedPictures", deleted_pictures)
+
         #locale
         lan, enc = locale.getlocale()
-        if lan:
-            param = input("Enter locale [" + lan + "." + enc + "]: ") or (lan + "." + enc)
-        else:
-            param = input("Enter locale [en_US.utf8]: ") or "en_US.utf8"
+        if not lan:
+            (lan, enc) = ("en_US", "utf8")
+        param = input("Enter locale [" + lan + "." + enc + "]: ") or (lan + "." + enc)
         filedata = filedata.replace("en_US.utf8", param)
-        
+
         with open (destination, "w") as file:
             file.write(filedata)
+
+        with open (run_start, "w") as file: # TODO work-around for RPi4
+            file.write("from picframe import start\nstart.main()\n")
     except:
         raise
-    
 
 
 def check_packages (packages):
@@ -86,6 +95,9 @@ def main():
     group.add_argument("configfile", nargs='?', help="/path/to/configuration.yaml")
     args = parser.parse_args()
     if args.initialize:
+        if os.geteuid() == 0:
+            print("Don't run the initialize step with sudo. It might put the files in the wrong place!")
+            return
         pkgdir = sys.modules['picframe'].__path__[0]
         try: 
             dest = os.path.abspath(os.path.expanduser(args.initialize))
@@ -93,7 +105,7 @@ def main():
             copy_files(pkgdir, dest, 'config')
             copy_files(pkgdir, dest, 'data')
             create_config(dest)
-            print('created ',dest,'/picframe')
+            print('created {}/picframe_data'.format(dest))
         except Exception as e:
             print("Can't copy files to: ", args.initialize, ". Reason: ", e)
         return
