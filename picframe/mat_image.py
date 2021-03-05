@@ -11,7 +11,8 @@ class MatImage:
 
     def __init__(self, display_size, mat_type = None, outer_mat_color = None,
                 resource_folder='.', inner_mat_color = None, outer_mat_border = 75,
-                inner_mat_border = 40, use_mat_texture = True, auto_inner_mat_color = True):
+                inner_mat_border = 40, outer_mat_use_texture = True,
+                inner_mat_use_texture = False, auto_inner_mat_color = True):
 
         self.__mat_types = ['float', 'float_polaroid', 'float_color_wrap', 'single_bevel', 'double_bevel', 'double_flat']
 
@@ -24,7 +25,8 @@ class MatImage:
         self.mat_type = mat_type
         self.outer_mat_border = outer_mat_border
         self.outer_mat_color = outer_mat_color
-        self.use_mat_texture = use_mat_texture
+        self.outer_mat_use_texture = outer_mat_use_texture
+        self.inner_mat_use_texture = inner_mat_use_texture
 
         # --- Matting resources ---
         self.__mat_texture = Image.open('{0}/mat_texture.jpg'.format(resource_folder)).convert("L")
@@ -99,12 +101,20 @@ class MatImage:
         return self.__mat_types
 
     @property
-    def use_mat_texture(self):
-        return self.__use_mat_texture
+    def outer_mat_use_texture(self):
+        return self.__outer_mat_use_texture
 
-    @use_mat_texture.setter
-    def use_mat_texture(self, val):
-        self.__use_mat_texture = val
+    @outer_mat_use_texture.setter
+    def outer_mat_use_texture(self, val):
+        self.__outer_mat_use_texture = val
+
+    @property
+    def inner_mat_use_texture(self):
+        return self.__inner_mat_use_texture
+
+    @inner_mat_use_texture.setter
+    def inner_mat_use_texture(self, val):
+        self.__inner_mat_use_texture = val
 
     # endregion Pubic Properties
 
@@ -298,8 +308,8 @@ class MatImage:
         return tuple(map(lambda c: int(c * fractional_percent), rgb_color))
 
 
-    def __get_colorized_mat(self, color):
-        if self.use_mat_texture:
+    def __get_colorized_mat(self, color, use_texture):
+        if use_texture:
             mat_img = self.__mat_texture.copy()
             mat_img = mat_img.resize(self.display_size, resample=Image.BICUBIC)
             mat_img = ImageOps.colorize(mat_img, black="black", white=color)
@@ -318,11 +328,8 @@ class MatImage:
         else:
             color = tuple(self.inner_mat_color)
 
-        if self.use_mat_texture:
-            mat = self.__get_colorized_mat(color)
-            mat = mat.crop((0, 0, w, h))
-        else:
-            mat = Image.new('RGB', size, color)
+        mat = self.__get_colorized_mat(color, self.inner_mat_use_texture)
+        mat = mat.crop((0, 0, w, h))
 
         return mat
 
@@ -365,7 +372,7 @@ class MatImage:
 
 
     def __layout_images(self, images):
-        mat_image = self.__get_colorized_mat(self.__outer_mat_color_save)
+        mat_image = self.__get_colorized_mat(self.__outer_mat_color_save, self.outer_mat_use_texture)
         total_wid = self.outer_mat_border * (len(images) + 1)
         for image in images:
             total_wid += image.width

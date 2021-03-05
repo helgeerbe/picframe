@@ -41,7 +41,8 @@ DEFAULT_CONFIG = {
         'inner_mat_color': None,
         'outer_mat_border': 75,
         'inner_mat_border': 40,
-        'use_mat_texture': True,
+        'inner_mat_use_texture': False,
+        'outer_mat_use_texture': True,
         'mat_resource_folder': '~/picframe_data/data/mat',
         'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
     },
