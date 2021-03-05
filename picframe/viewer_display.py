@@ -42,7 +42,8 @@ class ViewerDisplay:
         self.__inner_mat_color = config['inner_mat_color']
         self.__outer_mat_border = config['outer_mat_border']
         self.__inner_mat_border = config['inner_mat_border']
-        self.__use_mat_texture = config['use_mat_texture']
+        self.__outer_mat_use_texture = config['outer_mat_use_texture']
+        self.__inner_mat_use_texture = config['inner_mat_use_texture']
         self.__mat_resource_folder = os.path.expanduser(config['mat_resource_folder'])
 
         self.__fps = config['fps']
@@ -252,7 +253,8 @@ class ViewerDisplay:
                     inner_mat_color = self.__inner_mat_color,
                     outer_mat_border = self.__outer_mat_border,
                     inner_mat_border = self.__inner_mat_border,
-                    use_mat_texture = self.__use_mat_texture)
+                    outer_mat_use_texture = self.__outer_mat_use_texture,
+                    inner_mat_use_texture = self.__inner_mat_use_texture)
 
             # Load the image(s) and correct their orientation as necessary
             if pics[0]:
