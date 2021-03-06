@@ -12,7 +12,6 @@ viewer:
   show_text_tm: 20.0                      # default=20.0, time to show text over image with file name
   show_text_sz: 40                        # default=40, text character size
   show_text: "title caption name date folder location"  # default="title caption name date folder location", show text, include combination of words: title, caption name, date, location, folder
-  text_width: 70                          # width to wrap
   text_justify: "L"                       # text justification L, C or R
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
