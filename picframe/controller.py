@@ -64,9 +64,8 @@ class Controller:
     @paused.setter
     def paused(self, val:bool):
         self.__paused = val
-        if val == True:
-            pic = self.__model.get_current_pics()[0]
-            self.__viewer.reset_name_tm(pic, val)
+        pic = self.__model.get_current_pics()[0] # only refresh left text
+        self.__viewer.reset_name_tm(pic, val, side=0, pair=self.__model.get_current_pics()[1] is not None)
 
     def next(self):
         self.__next_tm = 0
