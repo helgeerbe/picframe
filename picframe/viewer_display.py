@@ -350,6 +350,8 @@ class ViewerDisplay:
             if paused:
                 info_strings.append("PAUSED")
         final_string = " • ".join(info_strings)
+        if len(final_string) > 0:
+            final_string += " " # TODO fix in pi3d.TextBlock if last line too long the space will trigger wrapping
 
         block = self.__textblocks[side] # alias for brevity below
         if side == 0 and not pair:
