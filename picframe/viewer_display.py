@@ -42,7 +42,8 @@ class ViewerDisplay:
         self.__inner_mat_color = config['inner_mat_color']
         self.__outer_mat_border = config['outer_mat_border']
         self.__inner_mat_border = config['inner_mat_border']
-        self.__use_mat_texture = config['use_mat_texture']
+        self.__outer_mat_use_texture = config['outer_mat_use_texture']
+        self.__inner_mat_use_texture = config['inner_mat_use_texture']
         self.__mat_resource_folder = os.path.expanduser(config['mat_resource_folder'])
 
         self.__fps = config['fps']
@@ -54,7 +55,6 @@ class ViewerDisplay:
         self.__show_text_fm = config['show_text_fm']
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
-        self.__text_width = 2800 / config['show_text_sz'] # adjust each time text drawn
         self.__text_justify = config['text_justify'].upper()
         self.__fit = config['fit']
         self.__auto_resize = config['auto_resize']
@@ -252,7 +252,8 @@ class ViewerDisplay:
                     inner_mat_color = self.__inner_mat_color,
                     outer_mat_border = self.__outer_mat_border,
                     inner_mat_border = self.__inner_mat_border,
-                    use_mat_texture = self.__use_mat_texture)
+                    outer_mat_use_texture = self.__outer_mat_use_texture,
+                    inner_mat_use_texture = self.__inner_mat_use_texture)
 
             # Load the image(s) and correct their orientation as necessary
             if pics[0]:
@@ -328,13 +329,6 @@ class ViewerDisplay:
         name = ''.join([c for c in name if c in self.__codepoints])
         return name
 
-    def __recalc_text_width(self, char_offsets):
-        # exponentially move text_width to new val calculated from PointText characters
-        first_ln = char_offsets[char_offsets[:,1] == char_offsets[0,1]]
-        span = first_ln[:,0].max() - first_ln[:,0].min() # let to rightmost char in pixels
-        new_text_width = (self.__display.width - 50) / span * len(first_ln) + 8 # add average word length to end
-        self.__text_width = self.__text_width * 0.8 + new_text_width * 0.2 # 20% smoothing
-
     def __make_text(self, pic, paused, side=0, pair=False):
         # if side 0 and pair False then this is a full width text and put into
         # __textblocks[0] otherwise it is half width and put into __textblocks[position]
@@ -356,17 +350,17 @@ class ViewerDisplay:
             if paused:
                 info_strings.append("PAUSED")
         final_string = " • ".join(info_strings)
+        if len(final_string) > 0:
+            final_string += " " # TODO fix in pi3d.TextBlock if last line too long the space will trigger wrapping
 
         block = self.__textblocks[side] # alias for brevity below
         if side == 0 and not pair:
-            text_width = self.__text_width
             c_rng = self.__display.width - 100 # range for x loc from L to R justified
             x = int(c_rng * (block.justify - 0.5))
         else:
-            text_width = int(self.__text_width * 0.5) - 5
             c_rng = self.__display.width * 0.5 - 100 # range for x loc from L to R justified
             x = int(c_rng * (block.justify - 1) - 50) if side == 0 else int(c_rng * block.justify + 50)
-        block.set_text(text_format=final_string, wrap=text_width)
+        block.set_text(text_format=final_string, wrap_pixels=c_rng)
         #TODO next few lines are a way to find which char will be drawn and the position of lowest
         # char. This functionality could be placed in pi3d.TextBlock
         block_uvs = block._text_manager.uv[block._buffer_index:(block._buffer_index + block.char_count),:]
@@ -374,7 +368,6 @@ class ViewerDisplay:
         if len(ix) > 0: # i.e. something will be drawn. ix is array of indices into char_offsets array to draw
             adj_y = block.y + block.char_offsets[ix,1].min() + self.__display.height // 2
             block.set_position(x=x, y=(block.y - adj_y + self.__show_text_sz))
-            self.__recalc_text_width(block.char_offsets[ix])
 
     def is_in_transition(self):
         return self.__in_transition

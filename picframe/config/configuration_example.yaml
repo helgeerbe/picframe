@@ -12,7 +12,6 @@ viewer:
   show_text_tm: 20.0                      # default=20.0, time to show text over image with file name
   show_text_sz: 40                        # default=40, text character size
   show_text: "title caption name date folder location"  # default="title caption name date folder location", show text, include combination of words: title, caption name, date, location, folder
-  text_width: 70                          # width to wrap
   text_justify: "L"                       # text justification L, C or R
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
@@ -32,7 +31,8 @@ viewer:
   inner_mat_color: null                   # default=null, Color of the inner mat as an RGB list. null will auto-select a reasonable color based on the image.
   outer_mat_border: 75                    # default=75, Minimum outer mat border in pixels
   inner_mat_border: 40                    # default=40, Minimum inner mat border in pixels (for styles that use it)
-  use_mat_texture: True                   # default=True, True uses a mat texture. False creates a solid color mat
+  outer_mat_use_texture: True             # default=True, True uses a texture for the outer mat. False creates a solid-color outer mat.
+  inner_mat_use_texture: False            # default=False, True uses a texture for the inner mat. False creates a solid-color inner mat.
   mat_resource_folder: "~/picframe_data/data/mat" # Folder containing mat image files
 
   codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
