@@ -403,7 +403,7 @@ class ViewerDisplay:
                                 space=0.02, colour=(1.0, 1.0, 1.0, 1.0), justify=justify)
             self.__text.add_text_block(block)
             self.__textblocks.append(block)
-        bkg_ht = self.__display.height // 4
+        bkg_ht = min(self.__display.width, self.__display.height) // 4
         text_bkg_array = np.zeros((bkg_ht, 1, 4), dtype=np.uint8)
         text_bkg_array[:,:,3] = np.linspace(0, 120, bkg_ht).reshape(-1, 1)
         text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
