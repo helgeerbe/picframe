@@ -414,6 +414,7 @@ class ViewerDisplay:
 
 
     def slideshow_is_running(self, pics=None, time_delay = 200.0, fade_time = 10.0, paused=False):
+        loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
             self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
@@ -497,7 +498,7 @@ class ViewerDisplay:
 
 
         self.__text.draw()
-        return (self.__display.loop_running(), False) # now returns tuple with skip image flag added
+        return (loop_running, False) # now returns tuple with skip image flag added
 
     def slideshow_stop(self):
         self.__display.destroy()
