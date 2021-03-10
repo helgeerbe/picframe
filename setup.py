@@ -15,7 +15,7 @@ setup(name='picframe',
       long_description=long_description,
       long_description_content_type='text/markdown',
       classifiers=[
-        'Development Status :: 4 - Beta',
+        'Development Status :: 5 - Production/Stable',
         'License :: OSI Approved :: MIT License',
         'Programming Language :: Python :: 3.7',
         'Topic :: Multimedia :: Graphics :: Viewers',
