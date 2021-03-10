@@ -59,7 +59,9 @@ model:
     "IPTC Caption/Abstract",
     "IPTC Object Name",
     "IPTC Keywords"]
-  load_geoloc: True                       # get location information from open street map
+  load_geoloc: False                      # get location information from open street map NB if you switch this on (recommended)
+  geo_key: "this_needs_to@be_changed"     # then you **MUST** change the geo_key to something unique to you
+                                          # i.e. use your email address
   locale: "en_US.utf8"                    # "locale -a" shows the installed locales which could used
   key_list: [
     ["tourism","amenity","isolated_dwelling"],
@@ -67,7 +69,6 @@ model:
     ["city","county"],
     ["region","state","province"],
     ["country"]]
-  geo_key: "this_needs_to@be_changed"     # use your email address
   db_file: "~/picframe_data/data/pictureframe.db3" # database used by PictureFrame
   portrait_pairs: False
   log_level: "WARNING"                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
