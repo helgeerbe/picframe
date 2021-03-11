@@ -26,7 +26,7 @@ viewer:
 
   mat_images: 0.01                        # default=0.01, True, automatically mat all images. False, don't automatically mat any images. Real value, auto-mat all images with aspect ratio difference > than value
   mat_type: null                          # default=null, A string containing the mat types to choose from when matting images. It can consist of any or
-                                          # all of 'float float_polaroid single_bevel double_bevel double_flat' (null or '' will use all mat types)
+                                          # all of 'float float_polaroid float_color_wrap single_bevel double_bevel double_flat' (null or '' will use all mat types)
   outer_mat_color: null                   # default=null, Color of the outer mat as an RGB list. null will auto-select a reasonable color based on the image.
   inner_mat_color: null                   # default=null, Color of the inner mat as an RGB list. null will auto-select a reasonable color based on the image.
   outer_mat_border: 75                    # default=75, Minimum outer mat border in pixels
