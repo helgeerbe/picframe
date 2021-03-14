@@ -129,6 +129,7 @@ class ImageCache:
 
 
     def get_file_info(self, file_id):
+        if not file_id: return None
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
         row = self.__db.execute(sql).fetchone()
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
@@ -376,13 +377,19 @@ class ImageCache:
         e['focal_length'] =  exifs.get_exif('EXIF FocalLength')
         e['rating'] = exifs.get_exif('EXIF Rating')
         e['lens'] = exifs.get_exif('EXIF LensModel')
+        e['exif_datetime'] = None
         val = exifs.get_exif('EXIF DateTimeOriginal')
         if val != None:
             # Remove any subsecond portion of the DateTimeOriginal value. According to the spec, it's
             # not valid here anyway (should be in SubSecTimeOriginal), but it does exist sometimes.
             val = val.split('.', 1)[0]
-            e['exif_datetime'] = time.mktime(time.strptime(val, '%Y:%m:%d %H:%M:%S'))
-        else:
+            try:
+                e['exif_datetime'] = time.mktime(time.strptime(val, '%Y:%m:%d %H:%M:%S'))
+            except:
+                pass
+
+        # If we still don't have a date/time, just use the file's modificaiton time
+        if e['exif_datetime'] == None:
             e['exif_datetime'] = os.path.getmtime(file_path_name)
 
         gps = exifs.get_location()
