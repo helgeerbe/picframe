@@ -420,7 +420,8 @@ class ViewerDisplay:
                 for i, pic in enumerate(pics):
                     self.__make_text(pic, paused, i, pics[1] is not None) # send even if pic is None to clear previous text
             else: # could have a NO IMAGES selected and being drawn
-                for block in self.__textblocks:
+                for block in range(2):
+                    self.__textblocks[block] = None
 
             if self.__sbg is None: # first time through
                 self.__sbg = self.__sfg
