@@ -328,7 +328,7 @@ class ViewerDisplay:
 
     def __sanitize_string(self, path_name):
         name = os.path.basename(path_name)
-        name = ''.join([c for c in name if c in self.__codepoints])
+        #name = ''.join([c for c in name if c in self.__codepoints])
         return name
 
     def __make_text(self, pic, paused, side=0, pair=False):
