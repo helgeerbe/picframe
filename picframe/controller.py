@@ -218,16 +218,24 @@ class Controller:
         if val.count("(") != val.count(")"):
             return None # this should clear the filter and not raise an error
         val = val.replace(";", "").replace("'", "").replace("%", "").replace('"', '') # SQL scrambling
-        val_check = val.replace("(", "").replace(")", "").replace("not", "").replace("NOT", "").split()
-        for i, word in enumerate(val_check):
-            is_and_or = word.upper() in ("AND", "OR")
-            if (i % 2) == 0 and is_and_or or (i % 2) == 1 and not is_and_or:
-                return None
-        leave = ("(", ")", "AND", "OR", "NOT") # now copes with NOT
+        tokens = ("(", ")", "AND", "OR", "NOT") # now copes with NOT
         val_split = val.replace("(", " ( ").replace(")", " ) ").split() # so brackets not joined to words
-        filter = [(
-                s if s.upper() in leave else "{} LIKE '%{}%'".format(field, s)
-            ) for s in val_split]
+        filter = []
+        last_token = ""
+        for s in val_split:
+            s_upper = s.upper()
+            if s_upper in tokens:
+                if s_upper in ("AND", "OR"):
+                    if last_token in ("AND", "OR"):
+                        return None # must have a non-token between
+                    last_token = s_upper
+                filter.append(s)
+            else:
+                if last_token is not None:
+                    filter.append("{} LIKE '%{}%'".format(field, s))
+                else:
+                    filter[-1] = filter[-1].replace("%'", " {}%'".format(s))
+                last_token = None
         return " ".join(filter)
 
     def text_is_on(self, txt_key):
