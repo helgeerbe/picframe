@@ -218,12 +218,12 @@ class Controller:
         if val.count("(") != val.count(")"):
             return None # this should clear the filter and not raise an error
         val = val.replace(";", "").replace("'", "").replace("%", "").replace('"', '') # SQL scrambling
-        val_check = val.replace("(", "").replace(")", "").split()
+        val_check = val.replace("(", "").replace(")", "").replace("not", "").replace("NOT", "").split()
         for i, word in enumerate(val_check):
             is_and_or = word.upper() in ("AND", "OR")
             if (i % 2) == 0 and is_and_or or (i % 2) == 1 and not is_and_or:
                 return None
-        leave = ("(", ")", "AND", "OR") # TODO cope with NOT
+        leave = ("(", ")", "AND", "OR", "NOT") # now copes with NOT
         val_split = val.replace("(", " ( ").replace(")", " ) ").split() # so brackets not joined to words
         filter = [(
                 s if s.upper() in leave else "{} LIKE '%{}%'".format(field, s)
