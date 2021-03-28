@@ -113,7 +113,7 @@ class Controller:
         try:
             self.__date_from = float(val)
         except ValueError:
-            self.__date_from = make_date(val if len(val) > 0 else '1970/1/1')
+            self.__date_from = make_date(val if len(val) > 0 else '1901/12/15')
         if len(val) > 0:
             self.__model.set_where_clause('date_from', "exif_datetime > {:.0f}".format(self.__date_from))
         else:
@@ -194,25 +194,41 @@ class Controller:
     def location_filter(self, val):
         self.__location_filter = val
         if len(val) > 0:
-            self.__model.set_where_clause('location_filter', "location LIKE '%{}%'".format(val))
+            self.__model.set_where_clause("location_filter", self.__build_filter(val, "location"))
         else:
-            self.__model.set_where_clause('location_filter') # remove from where_clause
+            self.__model.set_where_clause("location_filter") # remove from where_clause
         self.__model.force_reload()
         self.__next_tm = 0
 
     @property
     def tags_filter(self):
         return self.__tags_filter
-    
+
     @tags_filter.setter
     def tags_filter(self, val):
         self.__tags_filter = val
         if len(val) > 0:
-            self.__model.set_where_clause('tags_filter', "tags LIKE '%{}%'".format(val))
+            self.__model.set_where_clause("tags_filter", self.__build_filter(val, "tags"))
         else:
-            self.__model.set_where_clause('tags_filter') # remove from where_clause
+            self.__model.set_where_clause("tags_filter") # remove from where_clause
         self.__model.force_reload()
         self.__next_tm = 0
+
+    def __build_filter(self, val, field):
+        if val.count("(") != val.count(")"):
+            return None # this should clear the filter and not raise an error
+        val = val.replace(";", "").replace("'", "").replace("%", "").replace('"', '') # SQL scrambling
+        val_check = val.replace("(", "").replace(")", "").split()
+        for i, word in enumerate(val_check):
+            is_and_or = word.upper() in ("AND", "OR")
+            if (i % 2) == 0 and is_and_or or (i % 2) == 1 and not is_and_or:
+                return None
+        leave = ("(", ")", "AND", "OR") # TODO cope with NOT
+        val_split = val.replace("(", " ( ").replace(")", " ) ").split() # so brackets not joined to words
+        filter = [(
+                s if s.upper() in leave else "{} LIKE '%{}%'".format(field, s)
+            ) for s in val_split]
+        return " ".join(filter)
 
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
