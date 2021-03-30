@@ -15,7 +15,7 @@ viewer:
   text_justify: "L"                       # text justification L, C or R
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
-  auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4.
+  #auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4.
                                           # You should ensure your images are the correct size for the display")
   kenburns: False                         # default=False, will set fit->False and blur_edges->False
   display_x: 0                            # offset from left of screen (can be negative)

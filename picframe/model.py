@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
         'show_text': "name location",
         'text_justify': 'L',
         'fit': False,
-        'auto_resize': True,
+        #'auto_resize': True,
         'kenburns': False,
         'display_x': 0,
         'display_y': 0,
@@ -43,7 +43,7 @@ DEFAULT_CONFIG = {
         'inner_mat_use_texture': False,
         'outer_mat_use_texture': True,
         'mat_resource_folder': '~/picframe_data/data/mat',
-        'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
+        #'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
     },
     'model': {
 
