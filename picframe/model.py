@@ -245,6 +245,7 @@ class Model:
         if self.subdirectory != '':
             actual_dir = self.subdirectory
         subdir_list = next(os.walk(self.__pic_dir))[1]
+        subdir_list[:] = [d for d in subdir_list if not d[0] == '.']
         subdir_list.insert(0,root)
         return actual_dir, subdir_list
 
