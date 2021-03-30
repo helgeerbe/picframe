@@ -1,5 +1,7 @@
+import sys
+sys.path.insert(1, '/home/patrick/python/pi3d')
 import pi3d
-from pi3d.Texture import MAX_SIZE
+#from pi3d.Texture import MAX_SIZE
 import math
 import time
 import subprocess
@@ -77,7 +79,7 @@ class ViewerDisplay:
         self.__slide = None
         self.__xstep = None
         self.__ystep = None
-        self.__text = None
+        #self.__text = None
         self.__textblocks = None
         self.__text_bkg = None
         self.__sfg = None # slide for background
@@ -281,13 +283,14 @@ class ViewerDisplay:
 
 
             (w, h) = im.size
-            max_dimension = MAX_SIZE # TODO changing MAX_SIZE causes serious crash on linux laptop!
-            if not self.__auto_resize: # turned off for 4K display - will cause issues on RPi before v4
-                max_dimension = 3840 # TODO check if mipmapping should be turned off with this setting.
-            if w > max_dimension:
-                im = im.resize((max_dimension, int(h * max_dimension / w)), resample=Image.BICUBIC)
-            elif h > max_dimension:
-                im = im.resize((int(w * max_dimension / h), max_dimension), resample=Image.BICUBIC)
+            # no longer allow automatic resize to be turned off - but GL_MAX_TEXTURE_SIZE used by Texture
+            #max_dimension = MAX_SIZE # TODO changing MAX_SIZE causes serious crash on linux laptop!
+            #if not self.__auto_resize: # turned off for 4K display - will cause issues on RPi before v4
+            #    max_dimension = 3840 # TODO check if mipmapping should be turned off with this setting.
+            #if w > max_dimension:
+            #    im = im.resize((max_dimension, int(h * max_dimension / w)), resample=Image.BICUBIC)
+            #elif h > max_dimension:
+            #    im = im.resize((int(w * max_dimension / h), max_dimension), resample=Image.BICUBIC)
 
             screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
 
@@ -313,8 +316,7 @@ class ViewerDisplay:
                     im_b.paste(im, box=(round(0.5 * (im_b.size[0] - im.size[0])),
                                         round(0.5 * (im_b.size[1] - im.size[1]))))
                     im = im_b # have to do this as paste applies in place
-            tex = pi3d.Texture(im, blend=True, m_repeat=True, automatic_resize=self.__auto_resize,
-                                free_after_load=True)
+            tex = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
             #tex = pi3d.Texture(im, blend=True, m_repeat=True, automatic_resize=config.AUTO_RESIZE,
             #                    mipmap=config.AUTO_RESIZE, free_after_load=True) # poss try this if still some artifacts with full resolution
         except Exception as e:
@@ -326,7 +328,7 @@ class ViewerDisplay:
 
     def __sanitize_string(self, path_name):
         name = os.path.basename(path_name)
-        name = ''.join([c for c in name if c in self.__codepoints])
+        #name = ''.join([c for c in name if c in self.__codepoints])
         return name
 
     def __make_text(self, pic, paused, side=0, pair=False):
@@ -350,24 +352,28 @@ class ViewerDisplay:
             if paused:
                 info_strings.append("PAUSED")
         final_string = " • ".join(info_strings)
-        if len(final_string) > 0:
-            final_string += " " # TODO fix in pi3d.TextBlock if last line too long the space will trigger wrapping
 
-        block = self.__textblocks[side] # alias for brevity below
-        if side == 0 and not pair:
-            c_rng = self.__display.width - 100 # range for x loc from L to R justified
-            x = int(c_rng * (block.justify - 0.5))
-        else:
-            c_rng = self.__display.width * 0.5 - 100 # range for x loc from L to R justified
-            x = int(c_rng * (block.justify - 1) - 50) if side == 0 else int(c_rng * block.justify + 50)
-        block.set_text(text_format=final_string, wrap_pixels=c_rng)
-        #TODO next few lines are a way to find which char will be drawn and the position of lowest
-        # char. This functionality could be placed in pi3d.TextBlock
-        block_uvs = block._text_manager.uv[block._buffer_index:(block._buffer_index + block.char_count),:]
-        ix = np.where((block_uvs[:,0] != 0.0) & (block_uvs[:,1] != 0.0))[0] # block_uvs is view into larger array held by text
-        if len(ix) > 0: # i.e. something will be drawn. ix is array of indices into char_offsets array to draw
-            adj_y = block.y + block.char_offsets[ix,1].min() + self.__display.height // 2
-            block.set_position(x=x, y=(block.y - adj_y + self.__show_text_sz))
+        block = None
+        if len(final_string) > 0:
+            if side == 0 and not pair:
+                c_rng = self.__display.width - 100 # range for x loc from L to R justified
+            else:
+                c_rng = self.__display.width * 0.5 - 100 # range for x loc from L to R justified
+            block = pi3d.FixedString(self.__font_file, final_string, font_size=self.__show_text_sz,
+                                    shader=self.__flat_shader, justify=self.__text_justify, width=c_rng)
+            adj_x = (c_rng - block.sprite.width) // 2 # half amount of space outside sprite
+            if self.__text_justify == "L":
+                adj_x *= -1
+            elif self.__text_justify == "C":
+                adj_x = 0
+            if side == 0 and not pair: # i.e. full width
+                x = adj_x
+            else:
+                x = adj_x + int(self.__display.width * 0.25 * (-1.0 if side == 0 else 1.0))
+            y = (block.sprite.height - self.__display.height + self.__show_text_sz) // 2
+            block.sprite.position(x, y, 0.1)
+            block.sprite.set_alpha(0.0)
+        self.__textblocks[side] = block
 
     def is_in_transition(self):
         return self.__in_transition
@@ -383,34 +389,16 @@ class ViewerDisplay:
         self.__slide.unif[47] = self.__edge_alpha
         self.__slide.unif[54] = float(self.__blend_type)
         self.__slide.unif[55] = 1.0 #brightness
-        # PointText and TextBlock. If SHOW_NAMES_TM <= 0 then this is just used for no images message
-        grid_size = math.ceil(len(self.__codepoints) ** 0.5)
-        font = pi3d.Font(self.__font_file, codepoints=self.__codepoints, grid_size=grid_size, shadow_radius=4.0,
-                        shadow=(0,0,0,128))
-        self.__text = pi3d.PointText(font, camera, max_chars=400, point_size=self.__show_text_sz)
-        self.__textblocks = []
-        if self.__text_justify == 'C':
-            justify = 0.5
-        elif self.__text_justify == 'R':
-            justify = 1.0
-        else:
-            justify = 0.0
-        for i in range(2):
-            # x position will now be recalculated for each make_text call
-            block = pi3d.TextBlock(x=0, y=-int(self.__display.height * 0.4),
-                                z=0.1, rot=0.0, char_count=199,
-                                text_format="{}".format(" "), size=0.99, spacing="F",
-                                space=0.02, colour=(1.0, 1.0, 1.0, 1.0), justify=justify)
-            self.__text.add_text_block(block)
-            self.__textblocks.append(block)
+        self.__textblocks = [None, None]
+
         bkg_ht = min(self.__display.width, self.__display.height) // 4
         text_bkg_array = np.zeros((bkg_ht, 1, 4), dtype=np.uint8)
         text_bkg_array[:,:,3] = np.linspace(0, 120, bkg_ht).reshape(-1, 1)
         text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
 
-        back_shader = pi3d.Shader("uv_flat")
+        self.__flat_shader = pi3d.Shader("uv_flat")
         self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-int(self.__display.height) // 2 + bkg_ht // 2, z=4.0)
-        self.__text_bkg.set_draw_details(back_shader, [text_bkg_tex])
+        self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
 
     def slideshow_is_running(self, pics=None, time_delay = 200.0, fade_time = 10.0, paused=False):
@@ -431,12 +419,9 @@ class ViewerDisplay:
             if self.__show_text_tm > 0.0:
                 for i, pic in enumerate(pics):
                     self.__make_text(pic, paused, i, pics[1] is not None) # send even if pic is None to clear previous text
-                self.__text.regen()
             else: # could have a NO IMAGES selected and being drawn
-                for block in self.__textblocks:
-                    block.set_text(text_format="{}".format(" "))
-                    block.colouring.set_colour(alpha=0.0)
-                self.__text.regen()
+                for block in range(2):
+                    self.__textblocks[block] = None
 
             if self.__sbg is None: # first time through
                 self.__sbg = self.__sfg
@@ -487,17 +472,15 @@ class ViewerDisplay:
             ramp_pt = max(4.0, self.__show_text_tm / 4.0)
             alpha = max(0.0, min(1.0, ramp_pt * (self.__alpha- abs(1.0 - 2.0 * dt)))) # cap text alpha at image alpha
             for block in self.__textblocks:
-                block.colouring.set_colour(alpha=alpha)
-            self.__text.regen()
+                if block is not None:
+                    block.sprite.set_alpha(alpha)
             self.__text_bkg.set_alpha(alpha)
-            txt_len = 0
-            for block in self.__textblocks:
-                txt_len += len(block.text_format.strip())
-            if txt_len > 0: #only draw background if text there
+            if any(block is not None for block in self.__textblocks): #txt_len > 0: #only draw background if text there
                 self.__text_bkg.draw()
 
-
-        self.__text.draw()
+        for block in self.__textblocks:
+            if block is not None:
+                block.sprite.draw()
         return (loop_running, False) # now returns tuple with skip image flag added
 
     def slideshow_stop(self):
