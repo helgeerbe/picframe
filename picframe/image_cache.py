@@ -98,34 +98,36 @@ class ImageCache:
     def query_cache(self, where_clause, sort_clause = 'exif_datetime ASC'):
         cursor = self.__db.cursor()
         cursor.row_factory = None # we don't want the "sqlite3.Row" setting from the db here...
-
-        if not self.__portrait_pairs: # TODO SQL insertion? Does it matter in this app?
-            sql = """SELECT file_id FROM all_data WHERE {0} ORDER BY {1}
-                """.format(where_clause, sort_clause)
-            return cursor.execute(sql).fetchall()
-        else: # make two SELECTS
-            sql = """SELECT
-                        CASE
-                            WHEN is_portrait = 0 THEN file_id
-                            ELSE -1
-                        END
-                        FROM all_data WHERE {0} ORDER BY {1}
-                                    """.format(where_clause, sort_clause)
-            full_list = cursor.execute(sql).fetchall()
-            sql = """SELECT file_id FROM all_data
-                        WHERE ({0}) AND is_portrait = 1 ORDER BY {1}
-                                    """.format(where_clause, sort_clause)
-            pair_list = cursor.execute(sql).fetchall()
-            newlist = []
-            for i in range(len(full_list)):
-                if full_list[i][0] != -1:
-                    newlist.append(full_list[i])
-                elif pair_list: #OK @rec - this is tidier and qicker!
-                    elem = pair_list.pop(0)
-                    if pair_list:
-                        elem += pair_list.pop(0)
-                    newlist.append(elem)
-            return newlist
+        try:
+            if not self.__portrait_pairs: # TODO SQL insertion? Does it matter in this app?
+                sql = """SELECT file_id FROM all_data WHERE {0} ORDER BY {1}
+                    """.format(where_clause, sort_clause)
+                return cursor.execute(sql).fetchall()
+            else: # make two SELECTS
+                sql = """SELECT
+                            CASE
+                                WHEN is_portrait = 0 THEN file_id
+                                ELSE -1
+                            END
+                            FROM all_data WHERE {0} ORDER BY {1}
+                                        """.format(where_clause, sort_clause)
+                full_list = cursor.execute(sql).fetchall()
+                sql = """SELECT file_id FROM all_data
+                            WHERE ({0}) AND is_portrait = 1 ORDER BY {1}
+                                        """.format(where_clause, sort_clause)
+                pair_list = cursor.execute(sql).fetchall()
+                newlist = []
+                for i in range(len(full_list)):
+                    if full_list[i][0] != -1:
+                        newlist.append(full_list[i])
+                    elif pair_list: #OK @rec - this is tidier and qicker!
+                        elem = pair_list.pop(0)
+                        if pair_list:
+                            elem += pair_list.pop(0)
+                        newlist.append(elem)
+                return newlist
+        except:
+            return []
 
 
     def get_file_info(self, file_id):

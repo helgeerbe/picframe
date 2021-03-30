@@ -286,7 +286,13 @@ class Model:
         return self.__current_pics
 
     def get_number_of_files(self):
-        return self.__number_of_files
+        #return self.__number_of_files
+        #return sum(1 for pics in self.__file_list for pic in pics if pic is not None)
+        # or
+        return sum(
+                    sum(1 for pic in pics if pic is not None)
+                        for pics in self.__file_list
+                )
 
     def get_current_pics(self):
         return self.__current_pics
