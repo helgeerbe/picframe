@@ -59,7 +59,7 @@ class ViewerDisplay:
         self.__show_text = parse_show_text(config['show_text'])
         self.__text_justify = config['text_justify'].upper()
         self.__fit = config['fit']
-        self.__auto_resize = config['auto_resize']
+        #self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
         if self.__kenburns:
             self.__kb_up = True
@@ -72,7 +72,7 @@ class ViewerDisplay:
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
         self.__use_glx = config['use_glx']
-        self.__codepoints = config['codepoints']
+        #self.__codepoints = config['codepoints']
         self.__alpha = 0.0 # alpha - proportion front image to back
         self.__delta_alpha = 1.0
         self.__display = None
