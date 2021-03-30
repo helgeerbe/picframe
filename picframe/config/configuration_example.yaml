@@ -35,7 +35,7 @@ viewer:
   inner_mat_use_texture: False            # default=False, True uses a texture for the inner mat. False creates a solid-color inner mat.
   mat_resource_folder: "~/picframe_data/data/mat" # Folder containing mat image files
 
-  codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
+  #codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
 
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
