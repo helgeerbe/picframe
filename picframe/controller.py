@@ -236,7 +236,7 @@ class Controller:
                 else:
                     filter[-1] = filter[-1].replace("%'", " {}%'".format(s))
                 last_token = None
-        return " ".join(filter)
+        return "({})".format(" ".join(filter)) # if OR outside brackets will modify the logic of rest of where clauses
 
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
