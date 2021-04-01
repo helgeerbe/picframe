@@ -95,7 +95,7 @@ class ImageCache:
         self.__db.commit()
 
 
-    def query_cache(self, where_clause, sort_clause = 'exif_datetime ASC'):
+    def query_cache(self, where_clause, sort_clause = 'fname ASC'):
         cursor = self.__db.cursor()
         cursor.row_factory = None # we don't want the "sqlite3.Row" setting from the db here...
         try:
@@ -138,6 +138,11 @@ class ImageCache:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
         return row # NB if select fails (i.e. moved file) will return None
+
+    def get_column_names(self):
+        sql = "PRAGMA table_info(all_data)"
+        rows = self.__db.execute(sql).fetchall()
+        return [row['name'] for row in rows]
 
     def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
         location = self.__geo_reverse.get_address(lat, lon)
@@ -286,9 +291,9 @@ class ImageCache:
     def __get_modified_files(self, modified_folders):
         out_of_date_files = []
         sql_select = "SELECT fname, last_modified FROM all_data WHERE fname = ? and last_modified >= ?"
-        for dir,date in modified_folders:
+        for dir,_date in modified_folders:
             for file in os.listdir(dir):
-                base, extension = os.path.splitext(file)
+                _base, extension = os.path.splitext(file)
                 if (extension.lower() in ImageCache.EXTENSIONS
                         and not '.AppleDouble' in dir and not file.startswith('.')): # have to filter out all the Apple junk
                     full_file = os.path.join(dir, file)

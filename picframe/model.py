@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
         'time_delay': 200.0,
         'fade_time': 10.0,
         'shuffle': True,
+        'sort_cols': 'fname ASC',
         'image_attr': ['PICFRAME GPS'],                          # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat
         'load_geoloc': True,
         'locale': 'en_US.utf8',
@@ -160,6 +161,8 @@ class Model:
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
+        self.__sort_cols = model_config['sort_cols']
+        self.__col_names = None
         self.__where_clauses = {} # these will be modified by controller
 
     def get_viewer_config(self):
@@ -257,7 +260,7 @@ class Model:
 
     def get_next_file(self):
         if self.__reload_files:
-            for i in range(5): # give image_cache chance on first load if a large directory
+            for _i in range(5): # give image_cache chance on first load if a large directory
                 self.__get_files()
                 if self.__number_of_files > 0:
                     break
@@ -336,7 +339,13 @@ class Model:
         if self.shuffle:
             sort_list.append("RANDOM()")
         else:
-            sort_list.append("exif_datetime ASC")
+            if self.__col_names is None:
+                self.__col_names = self.__image_cache.get_column_names() # do this once
+            for col in self.__sort_cols.split(","):
+                colsplit = col.split()
+                if colsplit[0] in self.__col_names and (len(colsplit) == 1 or colsplit[1].upper() in ("ASC", "DESC")):
+                    sort_list.append(col)
+            sort_list.append("fname ASC") # always finally sort on this in case nothing else to sort on or sort_cols is ""
         sort_clause = ",".join(sort_list)
 
         self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
