@@ -242,6 +242,9 @@ class Model:
     def stop_image_chache(self):
         self.__image_cache.stop()
 
+    def purge_files(self):
+        self.__image_cache.purge_files()
+
     def get_directory_list(self):
         _, root = os.path.split(self.__pic_dir)
         actual_dir = root

@@ -94,6 +94,9 @@ class Controller:
             if pic is not None:
                 self.__viewer.reset_name_tm(pic, self.paused, side, self.__model.get_current_pics()[1] is not None)
 
+    def purge_files(self):
+        self.__model.purge_files()
+
     @property
     def subdirectory(self):
         return self.__model.subdirectory

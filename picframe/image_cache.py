@@ -37,6 +37,7 @@ class ImageCache:
         self.__keep_looping = True
         self.__pause_looping = False
         self.__shutdown_completed = False
+        self.__purge_files = False
 
         t = threading.Thread(target=self.__loop)
         t.start()
@@ -62,6 +63,8 @@ class ImageCache:
         while not self.__shutdown_completed:
             time.sleep(0.05) # make function blocking to ensure staged shutdown
 
+    def purge_files(self):
+        self.__purge_files = True
 
     def update_cache(self):
         """Update the cache database with new and/or modified files
@@ -88,8 +91,9 @@ class ImageCache:
             self.__modified_folders.clear()
 
         # If looping is still not paused, remove any files or folders from the db that are no longer on disk
-        if not self.__pause_looping:
+        if not self.__pause_looping and self.__purge_files:
             self.__purge_missing_files_and_folders()
+            self.__purge_files = False
 
         # Commit the current set of changes
         self.__db.commit()
@@ -359,7 +363,6 @@ class ImageCache:
         # remove matching records from the 'meta' table as well.
         if len(file_id_list):
             self.__db.executemany('DELETE FROM file WHERE file_id = ?', file_id_list)
-
 
     def __get_exif_info(self, file_path_name):
         exifs = get_image_meta.GetImageMeta(file_path_name)
