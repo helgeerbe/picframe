@@ -47,6 +47,8 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
 Please note that PictureFrame may change significantly during its development.
 Bug reports, comments, feature requests and fixes are most welcome!
 
+To find out what's new or improved have a look at the [changelog](https://github.com/helgeerbe/picframe/wiki/Changelog).
+
 ## Acknowledgement
 
 Many Thanks to Wolfgang [www.thedigitalpictureframe.com](https://www.thedigitalpictureframe.com/) for your inspiring work. 

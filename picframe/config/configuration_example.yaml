@@ -15,7 +15,7 @@ viewer:
   text_justify: "L"                       # text justification L, C or R
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
-  auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4.
+  #auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4.
                                           # You should ensure your images are the correct size for the display")
   kenburns: False                         # default=False, will set fit->False and blur_edges->False
   display_x: 0                            # offset from left of screen (can be negative)
@@ -35,7 +35,7 @@ viewer:
   inner_mat_use_texture: False            # default=False, True uses a texture for the inner mat. False creates a solid-color inner mat.
   mat_resource_folder: "~/picframe_data/data/mat" # Folder containing mat image files
 
-  codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
+  #codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
 
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
@@ -47,6 +47,11 @@ model:
   time_delay: 200.0                       # default=200.0, time between consecutive slide starts - can be changed by MQTT
   fade_time: 10.0                         # default=10.0, change time during which slides overlap - can be changed by MQTT"
   shuffle: True                           # default=True, shuffle on reloading image files - can be changed by MQTT"
+  sort_cols: 'fname ASC'                  # default='fname ASC' can be any columns in the table with optional ASC or DESC separated by commas
+                                          # fname, last_modified, file_id, orientation, exif_datetime, f_number,
+                                          # exposure_time, iso, focal_length, make, model, lens, rating,
+                                          # latitude, longitude, width, height, title, caption, tags,
+                                          # is_portrait, location
   image_attr: [                           # image attributes send by MQTT, Keys are taken from exifread library, "PICFRAME GPS" is special to retrieve GPS lon/lat, "PICFRAME LOCATION" is special to retrieve geo reverse (load_geoloc hast to be True)
     "PICFRAME GPS",
     "PICFRAME LOCATION",

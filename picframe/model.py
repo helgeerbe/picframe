@@ -26,7 +26,7 @@ DEFAULT_CONFIG = {
         'show_text': "name location",
         'text_justify': 'L',
         'fit': False,
-        'auto_resize': True,
+        #'auto_resize': True,
         'kenburns': False,
         'display_x': 0,
         'display_y': 0,
@@ -43,7 +43,7 @@ DEFAULT_CONFIG = {
         'inner_mat_use_texture': False,
         'outer_mat_use_texture': True,
         'mat_resource_folder': '~/picframe_data/data/mat',
-        'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
+        #'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
     },
     'model': {
 
@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
         'time_delay': 200.0,
         'fade_time': 10.0,
         'shuffle': True,
+        'sort_cols': 'fname ASC',
         'image_attr': ['PICFRAME GPS'],                          # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat
         'load_geoloc': True,
         'locale': 'en_US.utf8',
@@ -160,6 +161,8 @@ class Model:
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
+        self.__sort_cols = model_config['sort_cols']
+        self.__col_names = None
         self.__where_clauses = {} # these will be modified by controller
 
     def get_viewer_config(self):
@@ -245,6 +248,7 @@ class Model:
         if self.subdirectory != '':
             actual_dir = self.subdirectory
         subdir_list = next(os.walk(self.__pic_dir))[1]
+        subdir_list[:] = [d for d in subdir_list if not d[0] == '.']
         subdir_list.insert(0,root)
         return actual_dir, subdir_list
 
@@ -256,7 +260,7 @@ class Model:
 
     def get_next_file(self):
         if self.__reload_files:
-            for i in range(5): # give image_cache chance on first load if a large directory
+            for _i in range(5): # give image_cache chance on first load if a large directory
                 self.__get_files()
                 if self.__number_of_files > 0:
                     break
@@ -285,7 +289,13 @@ class Model:
         return self.__current_pics
 
     def get_number_of_files(self):
-        return self.__number_of_files
+        #return self.__number_of_files
+        #return sum(1 for pics in self.__file_list for pic in pics if pic is not None)
+        # or
+        return sum(
+                    sum(1 for pic in pics if pic is not None)
+                        for pics in self.__file_list
+                )
 
     def get_current_pics(self):
         return self.__current_pics
@@ -329,7 +339,13 @@ class Model:
         if self.shuffle:
             sort_list.append("RANDOM()")
         else:
-            sort_list.append("exif_datetime ASC")
+            if self.__col_names is None:
+                self.__col_names = self.__image_cache.get_column_names() # do this once
+            for col in self.__sort_cols.split(","):
+                colsplit = col.split()
+                if colsplit[0] in self.__col_names and (len(colsplit) == 1 or colsplit[1].upper() in ("ASC", "DESC")):
+                    sort_list.append(col)
+            sort_list.append("fname ASC") # always finally sort on this in case nothing else to sort on or sort_cols is ""
         sort_clause = ",".join(sort_list)
 
         self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)

@@ -95,46 +95,54 @@ class ImageCache:
         self.__db.commit()
 
 
-    def query_cache(self, where_clause, sort_clause = 'exif_datetime ASC'):
+    def query_cache(self, where_clause, sort_clause = 'fname ASC'):
         cursor = self.__db.cursor()
         cursor.row_factory = None # we don't want the "sqlite3.Row" setting from the db here...
-
-        if not self.__portrait_pairs: # TODO SQL insertion? Does it matter in this app?
-            sql = """SELECT file_id FROM all_data WHERE {0} ORDER BY {1}
-                """.format(where_clause, sort_clause)
-            return cursor.execute(sql).fetchall()
-        else: # make two SELECTS
-            sql = """SELECT
-                        CASE
-                            WHEN is_portrait = 0 THEN file_id
-                            ELSE -1
-                        END
-                        FROM all_data WHERE {0} ORDER BY {1}
-                                    """.format(where_clause, sort_clause)
-            full_list = cursor.execute(sql).fetchall()
-            sql = """SELECT file_id FROM all_data
-                        WHERE ({0}) AND is_portrait = 1 ORDER BY {1}
-                                    """.format(where_clause, sort_clause)
-            pair_list = cursor.execute(sql).fetchall()
-            newlist = []
-            for i in range(len(full_list)):
-                if full_list[i][0] != -1:
-                    newlist.append(full_list[i])
-                elif pair_list: #OK @rec - this is tidier and qicker!
-                    elem = pair_list.pop(0)
-                    if pair_list:
-                        elem += pair_list.pop(0)
-                    newlist.append(elem)
-            return newlist
+        try:
+            if not self.__portrait_pairs: # TODO SQL insertion? Does it matter in this app?
+                sql = """SELECT file_id FROM all_data WHERE {0} ORDER BY {1}
+                    """.format(where_clause, sort_clause)
+                return cursor.execute(sql).fetchall()
+            else: # make two SELECTS
+                sql = """SELECT
+                            CASE
+                                WHEN is_portrait = 0 THEN file_id
+                                ELSE -1
+                            END
+                            FROM all_data WHERE {0} ORDER BY {1}
+                                        """.format(where_clause, sort_clause)
+                full_list = cursor.execute(sql).fetchall()
+                sql = """SELECT file_id FROM all_data
+                            WHERE ({0}) AND is_portrait = 1 ORDER BY {1}
+                                        """.format(where_clause, sort_clause)
+                pair_list = cursor.execute(sql).fetchall()
+                newlist = []
+                for i in range(len(full_list)):
+                    if full_list[i][0] != -1:
+                        newlist.append(full_list[i])
+                    elif pair_list: #OK @rec - this is tidier and qicker!
+                        elem = pair_list.pop(0)
+                        if pair_list:
+                            elem += pair_list.pop(0)
+                        newlist.append(elem)
+                return newlist
+        except:
+            return []
 
 
     def get_file_info(self, file_id):
+        if not file_id: return None
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
         row = self.__db.execute(sql).fetchone()
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
         return row # NB if select fails (i.e. moved file) will return None
+
+    def get_column_names(self):
+        sql = "PRAGMA table_info(all_data)"
+        rows = self.__db.execute(sql).fetchall()
+        return [row['name'] for row in rows]
 
     def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
         location = self.__geo_reverse.get_address(lat, lon)
@@ -283,9 +291,9 @@ class ImageCache:
     def __get_modified_files(self, modified_folders):
         out_of_date_files = []
         sql_select = "SELECT fname, last_modified FROM all_data WHERE fname = ? and last_modified >= ?"
-        for dir,date in modified_folders:
+        for dir,_date in modified_folders:
             for file in os.listdir(dir):
-                base, extension = os.path.splitext(file)
+                _base, extension = os.path.splitext(file)
                 if (extension.lower() in ImageCache.EXTENSIONS
                         and not '.AppleDouble' in dir and not file.startswith('.')): # have to filter out all the Apple junk
                     full_file = os.path.join(dir, file)
@@ -376,13 +384,19 @@ class ImageCache:
         e['focal_length'] =  exifs.get_exif('EXIF FocalLength')
         e['rating'] = exifs.get_exif('EXIF Rating')
         e['lens'] = exifs.get_exif('EXIF LensModel')
+        e['exif_datetime'] = None
         val = exifs.get_exif('EXIF DateTimeOriginal')
         if val != None:
             # Remove any subsecond portion of the DateTimeOriginal value. According to the spec, it's
             # not valid here anyway (should be in SubSecTimeOriginal), but it does exist sometimes.
             val = val.split('.', 1)[0]
-            e['exif_datetime'] = time.mktime(time.strptime(val, '%Y:%m:%d %H:%M:%S'))
-        else:
+            try:
+                e['exif_datetime'] = time.mktime(time.strptime(val, '%Y:%m:%d %H:%M:%S'))
+            except:
+                pass
+
+        # If we still don't have a date/time, just use the file's modificaiton time
+        if e['exif_datetime'] == None:
             e['exif_datetime'] = os.path.getmtime(file_path_name)
 
         gps = exifs.get_location()
