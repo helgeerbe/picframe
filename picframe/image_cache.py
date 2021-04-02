@@ -91,9 +91,8 @@ class ImageCache:
             self.__modified_folders.clear()
 
         # If looping is still not paused, remove any files or folders from the db that are no longer on disk
-        if not self.__pause_looping and self.__purge_files:
+        if not self.__pause_looping:
             self.__purge_missing_files_and_folders()
-            self.__purge_files = False
 
         # Commit the current set of changes
         self.__db.commit()
@@ -104,7 +103,7 @@ class ImageCache:
         cursor.row_factory = None # we don't want the "sqlite3.Row" setting from the db here...
         try:
             if not self.__portrait_pairs: # TODO SQL insertion? Does it matter in this app?
-                sql = """SELECT file_id FROM all_data WHERE {0} ORDER BY {1}
+                sql = """SELECT file_id FROM all_data WHERE missing = 0 AND {0} ORDER BY {1}
                     """.format(where_clause, sort_clause)
                 return cursor.execute(sql).fetchall()
             else: # make two SELECTS
@@ -113,11 +112,11 @@ class ImageCache:
                                 WHEN is_portrait = 0 THEN file_id
                                 ELSE -1
                             END
-                            FROM all_data WHERE {0} ORDER BY {1}
+                            FROM all_data WHERE missing = 0 AND {0} ORDER BY {1}
                                         """.format(where_clause, sort_clause)
                 full_list = cursor.execute(sql).fetchall()
                 sql = """SELECT file_id FROM all_data
-                            WHERE ({0}) AND is_portrait = 1 ORDER BY {1}
+                            WHERE missing = 0 AND ({0}) AND is_portrait = 1 ORDER BY {1}
                                         """.format(where_clause, sort_clause)
                 pair_list = cursor.execute(sql).fetchall()
                 newlist = []
@@ -163,7 +162,8 @@ class ImageCache:
             CREATE TABLE IF NOT EXISTS folder (
                 folder_id INTEGER NOT NULL PRIMARY KEY,
                 name TEXT UNIQUE NOT NULL,
-                last_modified REAL DEFAULT 0 NOT NULL
+                last_modified REAL DEFAULT 0 NOT NULL,
+                missing INTEGER DEFAULT 0 NOT NULL
             )"""
 
         sql_file_table = """
@@ -226,7 +226,8 @@ class ImageCache:
                 file.last_modified,
                 meta.*,
                 meta.height > meta.width as is_portrait,
-                location.description as location
+                location.description as location,
+                folder.missing
             FROM file
                 INNER JOIN folder
                     ON folder.folder_id = file.folder_id
@@ -287,7 +288,7 @@ class ImageCache:
         for dir in [d[0] for d in os.walk(self.__picture_dir)]:
             mod_tm = int(os.stat(dir).st_mtime)
             found = self.__db.execute(sql_select, (dir,)).fetchone()
-            if not found or found['last_modified'] < mod_tm:
+            if not found or found['last_modified'] < mod_tm or found['missing'] == 1:
                 out_of_date_folders.append((dir, mod_tm))
         return out_of_date_folders
 
@@ -310,7 +311,7 @@ class ImageCache:
 
     def __insert_file(self, file):
         file_insert = "INSERT OR REPLACE INTO file(folder_id, basename, extension, last_modified) VALUES((SELECT folder_id from folder where name = ?), ?, ?, ?)"
-        folder_insert = "INSERT OR IGNORE INTO folder(name) VALUES(?)"
+        folder_insert = "INSERT OR REPLACE INTO folder(name, missing) VALUES(?, 0)"
         mod_tm =  os.path.getmtime(file)
         dir, file_only = os.path.split(file)
         base, extension = os.path.splitext(file_only)
@@ -348,21 +349,26 @@ class ImageCache:
             if not os.path.exists(row['name']):
                 folder_id_list.append([row['folder_id']])
 
-        # Delete any non-existent folders from the db. Note, this will automatically
+        # Flag or delete any non-existent folders from the db. Note, deleting will automatically
         # remove orphaned records from the 'file' and 'meta' tables
         if len(folder_id_list):
-            self.__db.executemany('DELETE FROM folder WHERE folder_id = ?', folder_id_list)
+            if self.__purge_files:
+                self.__db.executemany('DELETE FROM folder WHERE folder_id = ?', folder_id_list)
+            else:
+                self.__db.executemany('UPDATE folder SET missing = 1 WHERE folder_id = ?', folder_id_list)
 
         # Find files in the db that are no longer on disk
-        file_id_list = []
-        for row in self.__db.execute('SELECT file_id, fname from all_data'):
-            if not os.path.exists(row['fname']):
-                file_id_list.append([row['file_id']])
+        if self.__purge_files:
+            file_id_list = []
+            for row in self.__db.execute('SELECT file_id, fname from all_data'):
+                if not os.path.exists(row['fname']):
+                    file_id_list.append([row['file_id']])
 
-        # Delete any non-existent files from the db. Note, this will automatically
-        # remove matching records from the 'meta' table as well.
-        if len(file_id_list):
-            self.__db.executemany('DELETE FROM file WHERE file_id = ?', file_id_list)
+            # Delete any non-existent files from the db. Note, this will automatically
+            # remove matching records from the 'meta' table as well.
+            if len(file_id_list):
+                self.__db.executemany('DELETE FROM file WHERE file_id = ?', file_id_list)
+            self.__purge_files = False
 
     def __get_exif_info(self, file_path_name):
         exifs = get_image_meta.GetImageMeta(file_path_name)
