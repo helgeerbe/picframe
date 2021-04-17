@@ -126,7 +126,7 @@ class Model:
         self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
-        self.__required_db_schema_version = 1
+        self.__required_db_schema_version = 2
         configfile = os.path.expanduser(configfile)
         self.__logger.info("Open config file: %s:",configfile)
         with open(configfile, 'r') as stream:
