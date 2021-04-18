@@ -297,10 +297,9 @@ class ImageCache:
                             ON location.latitude = meta.latitude AND location.longitude = meta.longitude
                     WHERE folder.missing = 0
                     """)
-
-        # Finally, update the schema version stamp
-        self.__db.execute('DELETE FROM db_info')
-        self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
+            # Finally, update the schema version stamp
+            self.__db.execute('DELETE FROM db_info')
+            self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
 
 
     def __get_modified_folders(self):
