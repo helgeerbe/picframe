@@ -287,7 +287,7 @@ class ImageCache:
                         file.last_modified,
                         meta.*,
                         meta.height > meta.width as is_portrait,
-                        location.description as location,
+                        location.description as location
                     FROM file
                         INNER JOIN folder
                             ON folder.folder_id = file.folder_id
