@@ -22,7 +22,7 @@ class ImageCache:
                      'IPTC Object Name': 'title'}
 
 
-    def __init__(self, picture_dir, db_file, geo_reverse, required_db_schema_version=2, portrait_pairs=False):
+    def __init__(self, picture_dir, db_file, geo_reverse, portrait_pairs=False):
         # TODO these class methods will crash if Model attempts to instantiate this using a
         # different version from the latest one - should this argument be taken out?
         self.__modified_folders = []
@@ -34,7 +34,8 @@ class ImageCache:
         self.__geo_reverse = geo_reverse
         self.__portrait_pairs = portrait_pairs #TODO have a function to turn this on and off?
         self.__db = self.__create_open_db(self.__db_file)
-        self.__update_schema(required_db_schema_version)
+        # NB this is where the required schema is set
+        self.__update_schema(2)
 
         self.__keep_looping = True
         self.__pause_looping = False
@@ -275,30 +276,27 @@ class ImageCache:
 
         # Here, we need to update the db schema as necessary
         if schema_version < required_db_schema_version:
-            self.__db.execute("DROP VIEW all_data") # remake all_data for all updates
-            if schema_version == 1:
+            if schema_version <= 1:
+                self.__db.execute("DROP VIEW all_data") # remake all_data for all updates
                 self.__db.execute("ALTER TABLE folder ADD COLUMN missing INTEGER DEFAULT 0 NOT NULL")
-            # TODO will we ever need to target more than the latest required_db_schema_version?
-            # the rest of the code in this class is based on the db having this schema and will fail otherwise!
-            self.__db.execute("""
-                CREATE VIEW IF NOT EXISTS all_data
-                AS
-                SELECT
-                    folder.name || "/" || file.basename || "." || file.extension AS fname,
-                    file.last_modified,
-                    meta.*,
-                    meta.height > meta.width as is_portrait,
-                    location.description as location,
-                    folder.missing
-                FROM file
-                    INNER JOIN folder
-                        ON folder.folder_id = file.folder_id
-                    LEFT JOIN meta
-                        ON file.file_id = meta.file_id
-                    LEFT JOIN location
-                        ON location.latitude = meta.latitude AND location.longitude = meta.longitude
-                WHERE folder.missing = 0
-                """)
+                self.__db.execute("""
+                    CREATE VIEW IF NOT EXISTS all_data
+                    AS
+                    SELECT
+                        folder.name || "/" || file.basename || "." || file.extension AS fname,
+                        file.last_modified,
+                        meta.*,
+                        meta.height > meta.width as is_portrait,
+                        location.description as location,
+                    FROM file
+                        INNER JOIN folder
+                            ON folder.folder_id = file.folder_id
+                        LEFT JOIN meta
+                            ON file.file_id = meta.file_id
+                        LEFT JOIN location
+                            ON location.latitude = meta.latitude AND location.longitude = meta.longitude
+                    WHERE folder.missing = 0
+                    """)
 
         # Finally, update the schema version stamp
         self.__db.execute('DELETE FROM db_info')

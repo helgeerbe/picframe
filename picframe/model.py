@@ -93,7 +93,7 @@ class Pic: #TODO could this be done more elegantly with namedtuple
                  f_number=0, exposure_time=None, iso=0, focal_length=None,
                  make=None, model=None, lens=None, rating=None, latitude=None,
                  longitude=None, width=0, height=0, is_portrait=0, location=None, title=None,
-                 caption=None, tags=None, missing=0):
+                 caption=None, tags=None):
         self.fname = fname
         self.last_modified = last_modified
         self.file_id = file_id
@@ -116,7 +116,6 @@ class Pic: #TODO could this be done more elegantly with namedtuple
         self.tags=tags
         self.caption=caption
         self.title=title
-        self.missing = missing
 
 
 class Model:
@@ -126,7 +125,6 @@ class Model:
         self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
-        self.__required_db_schema_version = 2
         configfile = os.path.expanduser(configfile)
         self.__logger.info("Open config file: %s:",configfile)
         with open(configfile, 'r') as stream:
@@ -158,7 +156,6 @@ class Model:
         self.__image_cache = image_cache.ImageCache(self.__pic_dir,
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
-                                                    self.__required_db_schema_version,
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
