@@ -29,7 +29,8 @@ def heif_to_jpg(fname):
         image.save("/dev/shm/temp.jpg") # default 75% quality
         return "/dev/shm/temp.jpg"
     except:
-        self.__logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
+        logger = logging.getLogger("interface_http.heif_to_jpg")
+        logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
         return "" # this will not render as a page and will generate error TODO serve specific page with explicit error
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -80,22 +81,23 @@ class RequestHandler(BaseHTTPRequestHandler):
                         for subkey in self.server._setters:
                             message[subkey] = getattr(self.server._controller, subkey)
                     elif key in dir(self.server._controller):
-                        if key in self.server._setters: # can info back from controller
+                        if key in self.server._setters: # can get info back from controller TODO 
                             message[key] = getattr(self.server._controller, key)
-                        lwr_val = value.lower()
-                        if lwr_val in ("true", "on", "yes"): # this only works for simple values *not* json style kwargs
-                            value = True
-                        elif lwr_val in ("false", "off", "no"):
-                            value = False
-                        try:
-                            if key in self.server._setters:
-                                setattr(self.server._controller, key, value)
-                            else:
-                                value = value.replace("\'", "\"") # only " permitted in json
-                                # value must be json kwargs
-                                getattr(self.server._controller, key)(**json.loads(value))
-                        except Exception as e:
-                            message['ERROR'] = 'Excepton:{}>{};'.format(key, e)
+                        if value != "": # parse_qsl can return empty string for value when just querying
+                            lwr_val = value.lower()
+                            if lwr_val in ("true", "on", "yes"): # this only works for simple values *not* json style kwargs
+                                value = True
+                            elif lwr_val in ("false", "off", "no"):
+                                value = False
+                            try:
+                                if key in self.server._setters:
+                                    setattr(self.server._controller, key, value)
+                                else:
+                                    value = value.replace("\'", "\"") # only " permitted in json
+                                    # value must be json kwargs
+                                    getattr(self.server._controller, key)(**json.loads(value))
+                            except Exception as e:
+                                message['ERROR'] = 'Excepton:{}>{};'.format(key, e)
 
                     self.wfile.write(bytes(json.dumps(message), "utf8"))
                     self.connection.close()
@@ -142,9 +144,10 @@ class InterfaceHttp(HTTPServer):
         self._pic_dir = os.path.expanduser(pic_dir)
         self._no_files_img = os.path.expanduser(no_files_img)
         self._html_path = os.path.expanduser(html_path)
-        self._setters = ["paused", "subdirectory", "date_from", "date_to",
-                         "display_is_on", "shuffle", "fade_time", "time_delay",
-                         "brightness", "location_filter"] #TODO can this be done with dir() and getattr() to avoid hard coding?
+        # TODO check below works with all decorated methods.. seems to work
+        controller_class = controller.__class__
+        self._setters = [method for method in dir(controller_class)
+                            if 'setter' in dir(getattr(controller_class, method))]
         self.__keep_looping = True
         self.__shutdown_completed = False
         t = threading.Thread(target=self.__loop)

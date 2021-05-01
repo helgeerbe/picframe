@@ -22,7 +22,9 @@ class ImageCache:
                      'IPTC Object Name': 'title'}
 
 
-    def __init__(self, picture_dir, db_file, geo_reverse, required_db_schema_version=1, portrait_pairs=False):
+    def __init__(self, picture_dir, db_file, geo_reverse, portrait_pairs=False):
+        # TODO these class methods will crash if Model attempts to instantiate this using a
+        # different version from the latest one - should this argument be taken out?
         self.__modified_folders = []
         self.__modified_files = []
         self.__logger = logging.getLogger("image_cache.ImageCache")
@@ -32,7 +34,8 @@ class ImageCache:
         self.__geo_reverse = geo_reverse
         self.__portrait_pairs = portrait_pairs #TODO have a function to turn this on and off?
         self.__db = self.__create_open_db(self.__db_file)
-        self.__update_schema(required_db_schema_version)
+        # NB this is where the required schema is set
+        self.__update_schema(2)
 
         self.__keep_looping = True
         self.__pause_looping = False
@@ -91,9 +94,8 @@ class ImageCache:
             self.__modified_folders.clear()
 
         # If looping is still not paused, remove any files or folders from the db that are no longer on disk
-        if not self.__pause_looping and self.__purge_files:
+        if not self.__pause_looping:
             self.__purge_missing_files_and_folders()
-            self.__purge_files = False
 
         # Commit the current set of changes
         self.__db.commit()
@@ -124,7 +126,7 @@ class ImageCache:
                 for i in range(len(full_list)):
                     if full_list[i][0] != -1:
                         newlist.append(full_list[i])
-                    elif pair_list: #OK @rec - this is tidier and qicker!
+                    elif pair_list:
                         elem = pair_list.pop(0)
                         if pair_list:
                             elem += pair_list.pop(0)
@@ -274,11 +276,30 @@ class ImageCache:
 
         # Here, we need to update the db schema as necessary
         if schema_version < required_db_schema_version:
-            pass
-
-        # Finally, update the schema version stamp
-        self.__db.execute('DELETE FROM db_info')
-        self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
+            if schema_version <= 1:
+                self.__db.execute("DROP VIEW all_data") # remake all_data for all updates
+                self.__db.execute("ALTER TABLE folder ADD COLUMN missing INTEGER DEFAULT 0 NOT NULL")
+                self.__db.execute("""
+                    CREATE VIEW IF NOT EXISTS all_data
+                    AS
+                    SELECT
+                        folder.name || "/" || file.basename || "." || file.extension AS fname,
+                        file.last_modified,
+                        meta.*,
+                        meta.height > meta.width as is_portrait,
+                        location.description as location
+                    FROM file
+                        INNER JOIN folder
+                            ON folder.folder_id = file.folder_id
+                        LEFT JOIN meta
+                            ON file.file_id = meta.file_id
+                        LEFT JOIN location
+                            ON location.latitude = meta.latitude AND location.longitude = meta.longitude
+                    WHERE folder.missing = 0
+                    """)
+            # Finally, update the schema version stamp
+            self.__db.execute('DELETE FROM db_info')
+            self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
 
 
     def __get_modified_folders(self):
@@ -287,7 +308,7 @@ class ImageCache:
         for dir in [d[0] for d in os.walk(self.__picture_dir)]:
             mod_tm = int(os.stat(dir).st_mtime)
             found = self.__db.execute(sql_select, (dir,)).fetchone()
-            if not found or found['last_modified'] < mod_tm:
+            if not found or found['last_modified'] < mod_tm or found['missing'] == 1:
                 out_of_date_folders.append((dir, mod_tm))
         return out_of_date_folders
 
@@ -310,7 +331,7 @@ class ImageCache:
 
     def __insert_file(self, file):
         file_insert = "INSERT OR REPLACE INTO file(folder_id, basename, extension, last_modified) VALUES((SELECT folder_id from folder where name = ?), ?, ?, ?)"
-        folder_insert = "INSERT OR IGNORE INTO folder(name) VALUES(?)"
+        folder_insert = "INSERT OR REPLACE INTO folder(name, missing) VALUES(?, 0)"
         mod_tm =  os.path.getmtime(file)
         dir, file_only = os.path.split(file)
         base, extension = os.path.splitext(file_only)
@@ -348,21 +369,26 @@ class ImageCache:
             if not os.path.exists(row['name']):
                 folder_id_list.append([row['folder_id']])
 
-        # Delete any non-existent folders from the db. Note, this will automatically
+        # Flag or delete any non-existent folders from the db. Note, deleting will automatically
         # remove orphaned records from the 'file' and 'meta' tables
         if len(folder_id_list):
-            self.__db.executemany('DELETE FROM folder WHERE folder_id = ?', folder_id_list)
+            if self.__purge_files:
+                self.__db.executemany('DELETE FROM folder WHERE folder_id = ?', folder_id_list)
+            else:
+                self.__db.executemany('UPDATE folder SET missing = 1 WHERE folder_id = ?', folder_id_list)
 
         # Find files in the db that are no longer on disk
-        file_id_list = []
-        for row in self.__db.execute('SELECT file_id, fname from all_data'):
-            if not os.path.exists(row['fname']):
-                file_id_list.append([row['file_id']])
+        if self.__purge_files:
+            file_id_list = []
+            for row in self.__db.execute('SELECT file_id, fname from all_data'):
+                if not os.path.exists(row['fname']):
+                    file_id_list.append([row['file_id']])
 
-        # Delete any non-existent files from the db. Note, this will automatically
-        # remove matching records from the 'meta' table as well.
-        if len(file_id_list):
-            self.__db.executemany('DELETE FROM file WHERE file_id = ?', file_id_list)
+            # Delete any non-existent files from the db. Note, this will automatically
+            # remove matching records from the 'meta' table as well.
+            if len(file_id_list):
+                self.__db.executemany('DELETE FROM file WHERE file_id = ?', file_id_list)
+            self.__purge_files = False
 
     def __get_exif_info(self, file_path_name):
         exifs = get_image_meta.GetImageMeta(file_path_name)
