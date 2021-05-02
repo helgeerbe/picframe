@@ -115,6 +115,7 @@ class InterfaceMQTT:
         self.__setup_switch(client, switch_topic_head, "_back", "mdi:skip-previous", available_topic)
         self.__setup_switch(client, switch_topic_head, "_next", "mdi:skip-next", available_topic)
 
+        client.subscribe(self.__device_id + "/purge_files", qos=0) # close down without killing!
         client.subscribe(self.__device_id + "/stop", qos=0) # close down without killing!
 
     def __setup_sensor(self, client, sensor_topic_head, topic, icon, available_topic, has_attributes=False):
@@ -306,6 +307,10 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/tags_filter":
             self.__logger.info("Recieved tags filter: %s", msg)
             self.__controller.tags_filter = msg
+
+        # set the flag to purge files from database
+        elif message.topic == self.__device_id + "/purge_files":
+            self.__controller.purge_files()
 
         # stop loops and end program
         elif message.topic == self.__device_id + "/stop":
