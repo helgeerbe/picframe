@@ -332,7 +332,7 @@ class ImageCache:
     def __insert_file(self, file):
         file_insert = "INSERT OR REPLACE INTO file(folder_id, basename, extension, last_modified) VALUES((SELECT folder_id from folder where name = ?), ?, ?, ?)"
         # Insert the new folder if it's not already in the table. Update the missing field separately.
-        folder_insert = "INSERT INTO folder(name) SELECT ? WHERE NOT EXISTS(SELECT 1 FROM folder WHERE name = ?)"
+        folder_insert = "INSERT OR IGNORE INTO folder(name) VALUES(?)"
         folder_update = "UPDATE folder SET missing = 0 where name = ?"
 
         mod_tm =  os.path.getmtime(file)
@@ -346,7 +346,7 @@ class ImageCache:
         vals.insert(0, file)
 
         # Insert this file's info into the folder, file, and meta tables
-        self.__db.execute(folder_insert, (dir,dir))
+        self.__db.execute(folder_insert, (dir,))
         self.__db.execute(folder_update, (dir,))
         self.__db.execute(file_insert, (dir, base, extension.lstrip("."), mod_tm))
         self.__db.execute(meta_insert, vals)
