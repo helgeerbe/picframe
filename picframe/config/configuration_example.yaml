@@ -27,13 +27,10 @@ viewer:
                                           # all of 'float float_polaroid float_color_wrap single_bevel double_bevel double_flat' (null or '' will use all mat types)
   outer_mat_color: null                   # default=null, Color of the outer mat as an RGB list. null will auto-select a reasonable color based on the image.
   inner_mat_color: null                   # default=null, Color of the inner mat as an RGB list. null will auto-select a reasonable color based on the image.
-
   outer_mat_border: 75                    # default=75, Minimum outer mat border in pixels
   inner_mat_border: 40                    # default=40, Minimum inner mat border in pixels (for styles that use it)
-  use_mat_texture: True                   # default=True, True uses a mat texture. False creates a solid color mat
-  auto_outer_mat_color: True              # default=True, True automatically picks an outer mat color based on the image. False uses 'outer_mat_color' value.
-  auto_inner_mat_color: True              # default=True, True automatically colors the inner mat using a darker shade of 'outer_mat_color'. False uses 'inner_mat_color' value.
-  auto_select_mat_type: False              # default=False, True randomly selects a mat type for each image. False uses 'mat_type' value.
+  outer_mat_use_texture: True             # default=True, True uses a texture for the outer mat. False creates a solid-color outer mat.
+  inner_mat_use_texture: False            # default=False, True uses a texture for the inner mat. False creates a solid-color inner mat.
   mat_resource_folder: "~/picframe_data/data/mat" # Folder containing mat image files
 
 model:
