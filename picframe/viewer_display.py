@@ -405,14 +405,18 @@ class ViewerDisplay:
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
-            self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
+            if fade_time <= 0.5:
+                fade_time = 0.5
+            #self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + float(self.__show_text_tm) # text starts after slide transition
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             if new_sfg is not None: # this is a possible return value which needs to be caught
+                self.__sbg = self.__sfg
                 self.__sfg = new_sfg
             else:
-                return (True, False) # return early
+                #return (True, False) # return early
+                (self.__sbg, self.__sfg) = (self.__sfg, self.__sbg) # swap existing images over
             self.__alpha = 0.0
             self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
             # set the file name as the description

@@ -315,15 +315,22 @@ class ImageCache:
 
     def __get_modified_files(self, modified_folders):
         out_of_date_files = []
-        sql_select = "SELECT fname, last_modified FROM all_data WHERE fname = ? and last_modified >= ?"
+        #sql_select = "SELECT fname, last_modified FROM all_data WHERE fname = ? and last_modified >= ?"
+        sql_select = """
+        SELECT file.basename, file.last_modified
+            FROM file
+                INNER JOIN folder
+                    ON folder.folder_id = file.folder_id
+            WHERE file.basename = ? AND file.extension = ? AND folder.name = ? AND file.last_modified >= ?
+        """
         for dir,_date in modified_folders:
             for file in os.listdir(dir):
-                _base, extension = os.path.splitext(file)
+                base, extension = os.path.splitext(file)
                 if (extension.lower() in ImageCache.EXTENSIONS
                         and not '.AppleDouble' in dir and not file.startswith('.')): # have to filter out all the Apple junk
                     full_file = os.path.join(dir, file)
                     mod_tm =  os.path.getmtime(full_file)
-                    found = self.__db.execute(sql_select, (full_file,mod_tm)).fetchone()
+                    found = self.__db.execute(sql_select, (base, extension.lstrip("."), dir, mod_tm)).fetchone()
                     if not found:
                         out_of_date_files.append(full_file)
         return out_of_date_files
