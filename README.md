@@ -36,7 +36,7 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
   - date
 - Remote Control
   - control interface for mqtt, http(s)
-  - tun on/of display
+  - turn on/off display
   - next/prev/pause image
   - shuffle play
   - toggle overlays
