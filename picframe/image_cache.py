@@ -35,7 +35,7 @@ class ImageCache:
         self.__portrait_pairs = portrait_pairs #TODO have a function to turn this on and off?
         self.__db = self.__create_open_db(self.__db_file)
         # NB this is where the required schema is set
-        self.__update_schema(2)
+        self.__update_schema(3)
 
         self.__keep_looping = True
         self.__pause_looping = False
@@ -143,12 +143,20 @@ class ImageCache:
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
+        # Update the file's displayed stats
+        self.__update_file_stats(file_id)
         return row # NB if select fails (i.e. moved file) will return None
 
     def get_column_names(self):
         sql = "PRAGMA table_info(all_data)"
         rows = self.__db.execute(sql).fetchall()
         return [row['name'] for row in rows]
+
+    def __update_file_stats(self, file_id):
+        # Increment the displayed count for the specified file
+        # Update the last displayed time for the specified file to "now"
+        sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = strftime('%s','now') WHERE file_id = ?"
+        self.__db.execute(sql, (file_id,))
 
     def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
         location = self.__geo_reverse.get_address(lat, lon)
@@ -276,8 +284,13 @@ class ImageCache:
 
         # Here, we need to update the db schema as necessary
         if schema_version < required_db_schema_version:
+
             if schema_version <= 1:
-                self.__db.execute("DROP VIEW all_data") # remake all_data for all updates
+                # Migrate to db schema v2
+                # Update the all_data view to only contain files from folders that currently exist.
+                # This allows stored data to be retained for files in folders that may be temporarily
+                #   missing while not causing issues for the slideshow.
+                self.__db.execute("DROP VIEW all_data")
                 self.__db.execute("ALTER TABLE folder ADD COLUMN missing INTEGER DEFAULT 0 NOT NULL")
                 self.__db.execute("""
                     CREATE VIEW IF NOT EXISTS all_data
@@ -297,7 +310,14 @@ class ImageCache:
                             ON location.latitude = meta.latitude AND location.longitude = meta.longitude
                     WHERE folder.missing = 0
                     """)
-            # Finally, update the schema version stamp
+
+            if schema_version <= 2:
+                # Migrate to db schema v3
+                # Add "displayed statistics" fields to the file table (useful for slideshow debugging)
+                self.__db.execute("ALTER TABLE file ADD COLUMN displayed_count INTEGER default 0 NOT NULL")
+                self.__db.execute("ALTER TABLE file ADD COLUMN last_displayed REAL DEFAULT 0 NOT NULL")
+
+            # Finally, update the db's schema version stamp to the app's requested version
             self.__db.execute('DELETE FROM db_info')
             self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
 
