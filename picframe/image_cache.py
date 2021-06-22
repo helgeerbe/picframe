@@ -35,7 +35,7 @@ class ImageCache:
         self.__portrait_pairs = portrait_pairs #TODO have a function to turn this on and off?
         self.__db = self.__create_open_db(self.__db_file)
         # NB this is where the required schema is set
-        self.__update_schema(2)
+        self.__update_schema(3)
 
         self.__keep_looping = True
         self.__pause_looping = False
@@ -143,12 +143,17 @@ class ImageCache:
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
+        self.__update_file_stats(file_id)
         return row # NB if select fails (i.e. moved file) will return None
 
     def get_column_names(self):
         sql = "PRAGMA table_info(all_data)"
         rows = self.__db.execute(sql).fetchall()
         return [row['name'] for row in rows]
+
+    def __update_file_stats(self, file_id):
+        sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = strftime('%s','now') WHERE file_id = ?"
+        self.__db.execute(sql, (file_id,))
 
     def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
         location = self.__geo_reverse.get_address(lat, lon)
@@ -297,6 +302,12 @@ class ImageCache:
                             ON location.latitude = meta.latitude AND location.longitude = meta.longitude
                     WHERE folder.missing = 0
                     """)
+
+            # Add "displayed stat" fields to the file table
+            if schema_version <= 2:
+                self.__db.execute("ALTER TABLE file ADD COLUMN displayed_count INTEGER default 0 NOT NULL")
+                self.__db.execute("ALTER TABLE file ADD COLUMN last_displayed REAL DEFAULT 0 NOT NULL")
+
             # Finally, update the schema version stamp
             self.__db.execute('DELETE FROM db_info')
             self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
