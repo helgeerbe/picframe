@@ -43,6 +43,7 @@ DEFAULT_CONFIG = {
         'inner_mat_use_texture': False,
         'outer_mat_use_texture': True,
         'mat_resource_folder': '~/picframe_data/data/mat',
+        'show_clock': False,
         #'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
     },
     'model': {

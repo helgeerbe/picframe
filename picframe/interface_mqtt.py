@@ -108,6 +108,8 @@ class InterfaceMQTT:
         self.__setup_switch(client, switch_topic_head, "_text_off", "mdi:badge-account-horizontal-outline", available_topic)
         self.__setup_switch(client, switch_topic_head, "_display", "mdi:panorama", available_topic,
                             self.__controller.display_is_on)
+        self.__setup_switch(client, switch_topic_head, "_clock", "mdi-clock-outline", available_topic,
+                            self.__controller.clock_is_on)
         self.__setup_switch(client, switch_topic_head, "_shuffle", "mdi:shuffle-variant", available_topic,
                             self.__controller.shuffle)
         self.__setup_switch(client, switch_topic_head, "_paused", "mdi:pause", available_topic,
@@ -176,6 +178,15 @@ class InterfaceMQTT:
                 client.publish(state_topic, "ON", retain=True)
             elif msg == "OFF":
                 self.__controller.display_is_on = False
+                client.publish(state_topic, "OFF", retain=True)
+        # clock
+        if message.topic == switch_topic_head + "_clock/set":
+            state_topic = switch_topic_head + "_clock/state"
+            if msg == "ON":
+                self.__controller.clock_is_on = True
+                client.publish(state_topic, "ON", retain=True)
+            elif msg == "OFF":
+                self.__controller.clock_is_on = False
                 client.publish(state_topic, "OFF", retain=True)
         # shuffle
         elif message.topic == switch_topic_head + "_shuffle/set":

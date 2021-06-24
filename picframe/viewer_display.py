@@ -10,6 +10,7 @@ import os
 import numpy as np
 from PIL import Image, ImageFilter, ImageFile
 from picframe import mat_image
+from datetime import datetime
 
 # supported display modes for display switch
 dpms_mode = ("unsupported", "pi", "x_dpms")
@@ -88,6 +89,9 @@ class ViewerDisplay:
         self.__name_tm = 0.0
         self.__in_transition = False
         self.__matter = None
+        self.__prev_clock_time = None
+        self.__clock_overlay = None
+        self.__show_clock = config['show_clock']
         ImageFile.LOAD_TRUNCATED_IMAGES = True # occasional damaged file hangs app
 
     @property
@@ -159,6 +163,13 @@ class ViewerDisplay:
     def get_brightness(self):
         return float("{:.2f}".format(self.__slide.unif[55])) # TODO There seems to be a rounding issue. set 0.77 get 0.7699999809265137
 
+    @property
+    def clock_is_on(self):
+        return self.__show_clock
+
+    @clock_is_on.setter
+    def clock_is_on(self, val):
+        self.__show_clock = val
 
     def __check_heif_then_open(self, fname):
         ext = os.path.splitext(fname)[1].lower()
@@ -485,6 +496,18 @@ class ViewerDisplay:
         for block in self.__textblocks:
             if block is not None:
                 block.sprite.draw()
+
+        if self.__show_clock:
+            current_time = datetime.now().strftime("%I:%M")
+            if current_time != self.__prev_clock_time:
+                self.__clock_overlay = pi3d.FixedString(self.__font_file, current_time, font_size=120,
+                    shader=self.__flat_shader, justify='L', width=self.__display.width, shadow_radius=5)
+                self.__clock_overlay.sprite.position(self.__display.width  / 2 - 190, self.__display.height / 2 - 70, 0.1)
+                self.__prev_clock_time = current_time
+
+            if self.__clock_overlay:
+                self.__clock_overlay.sprite.draw()
+
         return (loop_running, False) # now returns tuple with skip image flag added
 
     def slideshow_stop(self):
