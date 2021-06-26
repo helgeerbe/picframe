@@ -65,6 +65,7 @@ DEFAULT_CONFIG = {
         'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
         'log_level': 'WARNING',
+        'log_file': '',
         'use_kbd': False,
     },
     'mqtt': {
@@ -136,7 +137,18 @@ class Model:
                 self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
                 self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
-        logging.getLogger().setLevel(self.get_model_config()['log_level']) # set root logger
+        root_logger = logging.getLogger()
+        root_logger.setLevel(self.get_model_config()['log_level']) # set root logger
+        log_file = self.get_model_config()['log_file']
+        if log_file != '':
+            filehandler = logging.FileHandler(log_file) #NB default appending so needs monitoring
+            formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+            filehandler.setFormatter(formatter)
+            for hdlr in root_logger.handlers[:]:  # remove the existing file handlers
+                if isinstance(hdlr, logging.FileHandler):
+                    root_logger.removeHandler(hdlr)
+            root_logger.addHandler(filehandler)      # set the new handler
+
         self.__file_list = [] # this is now a list of tuples i.e (file_id1,) or (file_id1, file_id2)
         self.__number_of_files = 0 # this is shortcut for len(__file_list)
         self.__reload_files = True

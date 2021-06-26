@@ -15,8 +15,6 @@ viewer:
   text_justify: "L"                       # text justification L, C or R
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
-  #auto_resize: True                       # default=True, set this to False if you want to use 4K resolution on Raspberry Pi 4.
-                                          # You should ensure your images are the correct size for the display")
   kenburns: False                         # default=False, will set fit->False and blur_edges->False
   display_x: 0                            # offset from left of screen (can be negative)
   display_y: 0                            # offset from top of screen (can be negative)
@@ -34,8 +32,6 @@ viewer:
   outer_mat_use_texture: True             # default=True, True uses a texture for the outer mat. False creates a solid-color outer mat.
   inner_mat_use_texture: False            # default=False, True uses a texture for the inner mat. False creates a solid-color inner mat.
   mat_resource_folder: "~/picframe_data/data/mat" # Folder containing mat image files
-
-  #codepoints: "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
 
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
@@ -77,6 +73,8 @@ model:
   db_file: "~/picframe_data/data/pictureframe.db3" # database used by PictureFrame
   portrait_pairs: False
   log_level: "WARNING"                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
+  log_file: ""                            # default="" for debugging set this to the path to a file. NB logging messages will
+                                          # appended indefinitely so don't forget this. You will need to tidy it up later
   use_kbd: False                          # default=False, just for debug or console start. Crashing when started with systemd
 
 mqtt:

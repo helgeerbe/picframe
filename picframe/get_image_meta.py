@@ -57,7 +57,7 @@ class GetImageMeta:
             return self.__tags[key]
         return None
 
-    def __convert_to_degress(self, value):
+    def __convert_to_degrees(self, value):
         (deg, min, sec) = value.values
         d = float(deg.num) / float(deg.den if deg.den > 0 else 1) #TODO better catching?
         m = float(min.num) / float(min.den if min.den > 0 else 1)
@@ -74,38 +74,50 @@ class GetImageMeta:
         gps_longitude = self.__get_if_exist('GPS GPSLongitude')
         gps_longitude_ref = self.__get_if_exist('GPS GPSLongitudeRef')
 
-        if gps_latitude and gps_latitude_ref and gps_longitude and gps_longitude_ref:
-            lat = self.__convert_to_degress(gps_latitude)
-            if len(gps_latitude_ref.values) > 0 and gps_latitude_ref.values[0] == 'S':
-                # assume zero length string means N
-                lat = 0 - lat
-            gps["latitude"] = lat
-            lon = self.__convert_to_degress(gps_longitude)
-            if len(gps_longitude_ref.values) and gps_longitude_ref.values[0] == 'W':
-                lon = 0 - lon
-            gps["longitude"] = lon
+        try:
+            if gps_latitude and gps_latitude_ref and gps_longitude and gps_longitude_ref:
+                lat = self.__convert_to_degrees(gps_latitude)
+                if len(gps_latitude_ref.values) > 0 and gps_latitude_ref.values[0] == 'S':
+                    # assume zero length string means N
+                    lat = 0 - lat
+                gps["latitude"] = lat
+                lon = self.__convert_to_degress(gps_longitude)
+                if len(gps_longitude_ref.values) and gps_longitude_ref.values[0] == 'W':
+                    lon = 0 - lon
+                gps["longitude"] = lon
+        except Exception as e:
+            self.__logger.warning("get_location failed on %s -> %s", self.__filename, e)
         return gps
 
     def get_orientation(self):
-        val = self.__get_if_exist('Image Orientation')
-        if val is not None:
-            return int(val.values[0])
-        else:
+        try:
+            val = self.__get_if_exist('Image Orientation')
+            if val is not None:
+                return int(val.values[0])
+            else:
+                return 1
+        except Exception as e:
+            self.__logger.warning("get_orientation failed on %s -> %s", self.__filename, e)
             return 1
 
     def get_exif(self, key):
-        val = self.__get_if_exist(key)
-        if val:
-            if key == 'EXIF FNumber':
-                val = round(val.values[0].num / val.values[0].den, 1)
-            elif key in ['IPTC Keywords',  'IPTC Caption/Abstract',  'IPTC Object Name']:
-                return val
-            else:
-                val = val.printable
-        return val
+        try:
+            val = self.__get_if_exist(key)
+            if val is not None:
+                if key == 'EXIF FNumber':
+                    val = round(val.values[0].num / val.values[0].den, 1)
+                elif key in ['IPTC Keywords',  'IPTC Caption/Abstract',  'IPTC Object Name']:
+                    return val
+                else:
+                    val = val.printable
+            return val
+        except Exception as e:
+            self.__logger.warning("get_exif failed on %s -> %s", self.__filename, e)
+            return None
 
     def get_size(self):
         try: # corrupt image file might crash app
             return Image.open(self.__filename).size
-        except:
+        except Exception as e:
+            self.__logger.warning("get_size failed on %s -> %s", self.__filename, e)
             return (0, 0)
