@@ -10,7 +10,7 @@ class GetImageMeta:
         self.__filename = filename # in case no exif data in which case needed for size
         try:
             with open(filename, 'rb') as fh:
-                self.__tags = exifread.process_file(fh, details=False) 
+                self.__tags = exifread.process_file(fh, details=False)
         except OSError as e:
             self.__logger.warning("Can't open file: \"%s\"", filename)
             self.__logger.warning("Cause: %s", e)
@@ -29,18 +29,18 @@ class GetImageMeta:
                 iptc = IPTCInfo(fh, force=True, out_charset='utf-8') # TODO put IPTC read in separate function
                 # tags
                 val = iptc['keywords']
-                if val is not None and len(val) > 0: 
+                if val is not None and len(val) > 0:
                     keywords = ''
                     for key in iptc['keywords']:
                         keywords += key.decode('utf-8')  + ','  # decode binary strings
                     self.__tags['IPTC Keywords'] = keywords
                 # caption
                 val = iptc['caption/abstract']
-                if val is not None and len(val) > 0:  
+                if val is not None and len(val) > 0:
                     self.__tags['IPTC Caption/Abstract'] = iptc['caption/abstract'].decode('utf8')
                 # title
                 val = iptc['object name']
-                if val is not None and len(val) > 0:  
+                if val is not None and len(val) > 0:
                     self.__tags['IPTC Object Name'] = iptc['object name'].decode('utf-8')
         except Exception as e:
             self.__logger.warning("IPTC loading has failed - if you want to use this you will need to install iptcinfo3 %s -> %s",
@@ -81,7 +81,7 @@ class GetImageMeta:
                     # assume zero length string means N
                     lat = 0 - lat
                 gps["latitude"] = lat
-                lon = self.__convert_to_degress(gps_longitude)
+                lon = self.__convert_to_degrees(gps_longitude)
                 if len(gps_longitude_ref.values) and gps_longitude_ref.values[0] == 'W':
                     lon = 0 - lon
                 gps["longitude"] = lon
