@@ -108,7 +108,7 @@ class InterfaceMQTT:
         self.__setup_switch(client, switch_topic_head, "_text_off", "mdi:badge-account-horizontal-outline", available_topic)
         self.__setup_switch(client, switch_topic_head, "_display", "mdi:panorama", available_topic,
                             self.__controller.display_is_on)
-        self.__setup_switch(client, switch_topic_head, "_clock", "mdi-clock-outline", available_topic,
+        self.__setup_switch(client, switch_topic_head, "_clock", "mdi:clock-outline", available_topic,
                             self.__controller.clock_is_on)
         self.__setup_switch(client, switch_topic_head, "_shuffle", "mdi:shuffle-variant", available_topic,
                             self.__controller.shuffle)
