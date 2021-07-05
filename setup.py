@@ -33,7 +33,7 @@ setup(name='picframe',
       install_requires=[
         'Pillow',
         'ExifRead',
-        'pi3d>=2.45',
+        'pi3d>=2.46',
         'PyYAML',
         'paho-mqtt',
         'IPTCInfo3',
