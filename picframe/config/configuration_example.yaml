@@ -33,6 +33,11 @@ viewer:
   inner_mat_use_texture: False            # default=False, True uses a texture for the inner mat. False creates a solid-color inner mat.
   mat_resource_folder: "~/picframe_data/data/mat" # Folder containing mat image files
 
+  show_clock: False                       # default=False, True shows clock overlay. False does not show clock overlay
+  clock_justify: "R"                      # default="R", clock justification L, C, or R
+  clock_text_sz: 120                      # default=120, clock character size
+  clock_format: "%I:%M"                   # default="%I:%M", strftime format for clock string
+
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
   deleted_pictures: "~/DeletedPictures"   # move deleted pictures here

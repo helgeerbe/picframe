@@ -10,6 +10,7 @@ import os
 import numpy as np
 from PIL import Image, ImageFilter, ImageFile
 from picframe import mat_image
+from datetime import datetime
 
 # supported display modes for display switch
 dpms_mode = ("unsupported", "pi", "x_dpms")
@@ -88,6 +89,12 @@ class ViewerDisplay:
         self.__name_tm = 0.0
         self.__in_transition = False
         self.__matter = None
+        self.__prev_clock_time = None
+        self.__clock_overlay = None
+        self.__show_clock = config['show_clock']
+        self.__clock_justify = config['clock_justify']
+        self.__clock_text_sz = config['clock_text_sz']
+        self.__clock_format = config['clock_format']
         ImageFile.LOAD_TRUNCATED_IMAGES = True # occasional damaged file hangs app
 
     @property
@@ -159,6 +166,13 @@ class ViewerDisplay:
     def get_brightness(self):
         return float("{:.2f}".format(self.__slide.unif[55])) # TODO There seems to be a rounding issue. set 0.77 get 0.7699999809265137
 
+    @property
+    def clock_is_on(self):
+        return self.__show_clock
+
+    @clock_is_on.setter
+    def clock_is_on(self, val):
+        self.__show_clock = val
 
     def __check_heif_then_open(self, fname):
         ext = os.path.splitext(fname)[1].lower()
@@ -375,6 +389,28 @@ class ViewerDisplay:
             block.sprite.set_alpha(0.0)
         self.__textblocks[side] = block
 
+    def __draw_clock(self):
+        current_time = datetime.now().strftime(self.__clock_format)
+
+        # --- Only rebuild the FixedString containing the time valud if the time string has changed.
+        #     With the default H:M display, this will only rebuild once each minute. Note however,
+        #     time strings containing a "seconds" component will rebuild once per second.
+        if current_time != self.__prev_clock_time:
+            width = self.__display.width - 50
+            self.__clock_overlay = pi3d.FixedString(self.__font_file, current_time, font_size=self.__clock_text_sz,
+                shader=self.__flat_shader, width=width, shadow_radius=3)
+            x = (width - self.__clock_overlay.sprite.width) // 2
+            if self.__clock_justify == "L":
+                x *= -1
+            elif self.__clock_justify == "C":
+                x = 0
+            y = (self.__display.height - self.__clock_text_sz - 20) // 2
+            self.__clock_overlay.sprite.position(x, y, 0.1)
+            self.__prev_clock_time = current_time
+
+        if self.__clock_overlay:
+            self.__clock_overlay.sprite.draw()
+
     def is_in_transition(self):
         return self.__in_transition
 
@@ -485,6 +521,10 @@ class ViewerDisplay:
         for block in self.__textblocks:
             if block is not None:
                 block.sprite.draw()
+
+        if self.__show_clock:
+            self.__draw_clock()
+
         return (loop_running, False) # now returns tuple with skip image flag added
 
     def slideshow_stop(self):

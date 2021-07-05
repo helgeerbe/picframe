@@ -14,16 +14,16 @@ def make_date(txt):
 
 class Controller:
     """Controller of picframe.
-    
+
     This controller interacts via mqtt with the user to steer the image display.
 
     Attributes
     ----------
-    model : Model 
+    model : Model
         model of picframe containing config and business logic
     viewer : ViewerDisplay
         viewer of picframe representing the display
-   
+
 
     Methods
     -------
@@ -148,6 +148,14 @@ class Controller:
     @display_is_on.setter
     def display_is_on(self, on_off):
         self.__viewer.display_is_on = on_off
+
+    @property
+    def clock_is_on(self):
+        return self.__viewer.clock_is_on
+
+    @clock_is_on.setter
+    def clock_is_on(self, on_off):
+        self.__viewer.clock_is_on = on_off
 
     @property
     def shuffle(self):
@@ -309,7 +317,7 @@ class Controller:
             time.sleep(0.05) # block until main loop has stopped
         self.__model.stop_image_chache() # close db tidily (blocks till closed)
         self.__viewer.slideshow_stop() # do this last
-    
+
     def __signal_handler(self, sig, frame):
         print('You pressed Ctrl-c!')
         self.__shutdown_complete = True
