@@ -276,33 +276,56 @@ class Model:
         self.__file_index = (self.__file_index - 2) % self.__number_of_files # TODO deleting last image results in ZeroDivisionError
 
     def get_next_file(self):
-        if self.__reload_files:
-            for _i in range(5): # give image_cache chance on first load if a large directory
-                self.__get_files()
-                if self.__number_of_files > 0:
-                    break
-                time.sleep(0.5)
-        if self.__file_index == self.__number_of_files:
-            self.__num_run_through += 1
-            if self.shuffle and self.__num_run_through >= self.get_model_config()['reshuffle_num']:
-                #self.__num_run_through = 0
-                #self.__shuffle_files()
-                self.__reload_files = True
-            self.__file_index = 0
-        if self.__number_of_files == 0:
-            pic = Pic(self.__no_files_img, 0, 0)
-            paired_pic = None
-        else:
-            file_ids = self.__file_list[self.__file_index]
-            pic_row = self.__image_cache.get_file_info(file_ids[0])
-            pic = Pic(**pic_row) if pic_row is not None else None
-            if len(file_ids) == 2:
-                pic_row = self.__image_cache.get_file_info(file_ids[1])
-                paired_pic = Pic(**pic_row) if pic_row is not None else None
-            else:
+        retry_count = 0
+        while True:
+            if self.__reload_files:
+                for _i in range(5): # give image_cache chance on first load if a large directory
+                    self.__get_files()
+                    retry_count = 0
+                    if self.__number_of_files > 0:
+                        break
+                    time.sleep(0.5)
+            if self.__file_index == self.__number_of_files:
+                self.__num_run_through += 1
+                if self.shuffle and self.__num_run_through >= self.get_model_config()['reshuffle_num']:
+                    self.__reload_files = True
+                self.__file_index = 0
+            # If there are no file records in the db or if none of the files in the db actually exist
+            # then show the "no images" image
+            if self.__number_of_files == 0 or retry_count == self.__number_of_files:
+                pic = Pic(self.__no_files_img, 0, 0)
                 paired_pic = None
-        self.__current_pics = (pic, paired_pic)
-        self.__file_index += 1 # don't wrap back as __file_index == __number_of_files used as trigger above
+            else:
+                file_ids = self.__file_list[self.__file_index]
+                pic_row = self.__image_cache.get_file_info(file_ids[0])
+                pic = Pic(**pic_row) if pic_row is not None else None
+                if len(file_ids) == 2:
+                    pic_row = self.__image_cache.get_file_info(file_ids[1])
+                    paired_pic = Pic(**pic_row) if pic_row is not None else None
+                else:
+                    paired_pic = None
+            self.__current_pics = (pic, paired_pic)
+
+            # Verify the images in the selected image set actually exist on disk
+            # Blank out missing references and swap positions if necessary to try and get
+            # a valid image in the first slot.
+            pic1, pic2 = self.__current_pics
+            if pic1 and not os.path.isfile(pic1.fname): pic1 = None
+            if pic2 and not os.path.isfile(pic2.fname): pic2 = None
+            if (not pic1 and pic2): pic1, pic2 = pic2, pic1
+
+            self.__file_index += 1 # don't wrap back as __file_index == __number_of_files used as trigger above
+
+            # At this point, if the first image in the set is defined, we should be ok
+            # Break out of the loop and allow the image set to be returned
+            if pic1:
+                self.__current_pics = (pic1, pic2)
+                break
+
+            # Here, pic1 is undefined. That's a problem. Loop back and get another image set.
+            # Track the number of times we've looped back so we can abort if we don't have *any* images to display
+            retry_count += 1
+
         return self.__current_pics
 
     def get_number_of_files(self):
