@@ -123,13 +123,20 @@ class ImageCache:
                                         """.format(where_clause, sort_clause)
                 pair_list = cursor.execute(sql).fetchall()
                 newlist = []
+                skip_portrait_slot = False
                 for i in range(len(full_list)):
                     if full_list[i][0] != -1:
                         newlist.append(full_list[i])
+                    elif skip_portrait_slot:
+                        skip_portrait_slot = False
+                        continue
                     elif pair_list:
                         elem = pair_list.pop(0)
                         if pair_list:
                             elem += pair_list.pop(0)
+                            # Here, we just doubled-up a set of portrait images.
+                            # Skip the next available "portrait slot" as it's unneeded.
+                            skip_portrait_slot = True
                         newlist.append(elem)
                 return newlist
         except:
