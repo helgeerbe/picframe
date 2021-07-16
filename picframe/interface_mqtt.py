@@ -69,6 +69,7 @@ class InterfaceMQTT:
         self.__logger.info('Connected with mqtt broker')
 
         sensor_topic_head = "homeassistant/sensor/" + self.__device_id
+        number_topic_head = "homeassistant/number/" + self.__device_id
         switch_topic_head = "homeassistant/switch/" + self.__device_id
 
         # send last will and testament
@@ -89,6 +90,9 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True)
         self.__setup_sensor(client, sensor_topic_head, "directory", "mdi:folder-multiple-image", available_topic, has_attributes=True)
+
+        ## numbers
+        self.__setup_number(client, number_topic_head, "brightness", 0.0, 1.0, 0.01, "mdi:brightness-6", available_topic)
 
         ## switches
         self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic)
@@ -142,6 +146,24 @@ class InterfaceMQTT:
                                      "dev":{"ids":[self.__device_id]}})
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(self.__device_id + "/" + topic, qos=0)
+    
+    def __setup_number(self, client, number_topic_head, topic, min, max, step, icon, available_topic):
+        config_topic = number_topic_head + "_" + topic + "/config"
+        command_topic = self.__device_id + "/" + topic
+        name = self.__device_id + "_" + topic
+        config_payload = json.dumps({"name": name,
+                                    "min": min,
+                                    "max": max,
+                                    "step": step,
+                                    "icon": icon,
+                                    "state_topic": number_topic_head + "/state",
+                                    "command_topic": command_topic,
+                                    "value_template": "{{ value_json." + topic + "}}",
+                                    "avty_t": available_topic,
+                                    "uniq_id": name,
+                                    "dev":{"ids":[self.__device_id]}})
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(command_topic, qos=0)
 
     def __setup_switch(self, client, switch_topic_head, topic, icon,
                        available_topic, is_on=False):
