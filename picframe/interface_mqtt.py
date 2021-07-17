@@ -70,6 +70,7 @@ class InterfaceMQTT:
 
         sensor_topic_head = "homeassistant/sensor/" + self.__device_id
         number_topic_head = "homeassistant/number/" + self.__device_id
+        select_topic_head = "homeassistant/select/" + self.__device_id
         switch_topic_head = "homeassistant/switch/" + self.__device_id
 
         # send last will and testament
@@ -83,12 +84,17 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "tags_filter", "mdi:image-search", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True)
-        self.__setup_sensor(client, sensor_topic_head, "directory", "mdi:folder-multiple-image", available_topic, has_attributes=True)
+        
 
         ## numbers
         self.__setup_number(client, number_topic_head, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6", available_topic)
         self.__setup_number(client, number_topic_head, "time_delay", 1, 400, 1, "mdi:image-plus", available_topic)
         self.__setup_number(client, number_topic_head, "fade_time", 1, 50, 1,"mdi:image-size-select-large", available_topic)
+
+        ## selects
+        _, dir_list = self.__controller.get_directory_list()
+        dir_list.sort()
+        self.__setup_select(client, select_topic_head, "directory", dir_list, "mdi:folder-multiple-image", available_topic)
 
         ## switches
         self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic)
@@ -153,6 +159,24 @@ class InterfaceMQTT:
                                     "max": max,
                                     "step": step,
                                     "icon": icon,
+                                    "state_topic": state_topic,
+                                    "command_topic": command_topic,
+                                    "value_template": "{{ value_json." + topic + "}}",
+                                    "avty_t": available_topic,
+                                    "uniq_id": name,
+                                    "dev":{"ids":[self.__device_id]}})
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(command_topic, qos=0)
+
+    def __setup_select(self, client, select_topic_head, topic, options, icon, available_topic):
+        config_topic = select_topic_head + "_" + topic + "/config"
+        command_topic = self.__device_id + "/" + topic
+        state_topic = "homeassistant/sensor/" + self.__device_id + "/state"
+        name = self.__device_id + "_" + topic
+        
+        config_payload = json.dumps({"name": name,
+                                    "icon": icon,
+                                    "options": options,
                                     "state_topic": state_topic,
                                     "command_topic": command_topic,
                                     "value_template": "{{ value_json." + topic + "}}",
@@ -349,6 +373,7 @@ class InterfaceMQTT:
     def publish_state(self, image, image_attr):
         sensor_topic_head =  "homeassistant/sensor/" + self.__device_id
         switch_topic_head = "homeassistant/switch/" + self.__device_id
+        select_topic_head = "homeassistant/select/" + self.__device_id
         sensor_state_topic = sensor_topic_head + "/state"
 
         sensor_state_payload = {}
@@ -357,8 +382,6 @@ class InterfaceMQTT:
         # directory sensor
         actual_dir, dir_list = self.__controller.get_directory_list()
         sensor_state_payload["directory"] = actual_dir
-        dir_attr = {}
-        dir_attr['directories'] = dir_list
         # image counter sensor
         sensor_state_payload["image_counter"] = str(self.__controller.get_number_of_files())
         # image sensor
@@ -389,8 +412,9 @@ class InterfaceMQTT:
         attributes_topic = sensor_topic_head + "_image/attributes"
         self.__logger.debug("Send image attributes: %s", image_attr)
         self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
-        attributes_topic = sensor_topic_head + "_directory/attributes"
-        self.__client.publish(attributes_topic, json.dumps(dir_attr), qos=0, retain=False)
+        dir_list.sort()
+        self.__setup_select(self.__client, select_topic_head, "directory", dir_list, "mdi:folder-multiple-image", available_topic)
+
         self.__logger.info("Send sensor state: %s", sensor_state_payload)
         self.__client.publish(sensor_state_topic, json.dumps(sensor_state_payload), qos=0, retain=False)
 
