@@ -297,10 +297,7 @@ class Controller:
                             field_name = self.__model.EXIF_TO_FIELD[key]
                             image_attr[key] = pics[0].__dict__[field_name] #TODO nicer using namedtuple for Pic
                     self.publish_state(pics[0].fname, image_attr)
-            if self.__viewer.is_in_transition() == False: # safe to do long running tasks
-                self.__model.pause_looping(True)
-            else:
-                self.__model.pause_looping(False) #TODO only need to set this once rather than every loop
+            self.__model.pause_looping = self.__viewer.is_in_transition()
             (loop_running, skip_image) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
             if not loop_running:
                 break
