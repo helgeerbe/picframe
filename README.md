@@ -26,7 +26,9 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
 - Viewer
   - blend effects
   - auto mat generation
-  - overlays (title, location, date, ...)
+  - photo metadata overlays (title, location, date, ...)
+  - live clock
+  - automatic pairing of portrait images
 - Filter by
   - IPTC tags
   - location
@@ -37,7 +39,8 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
   - tun on/of display
   - next/prev/pause image
   - shuffle play
-  - toggle overlays
+  - toggle metadata overlays
+  - toggle clock visibility
   - retrieve image meta info (exif, IPTC)
 
 ## Documentation
