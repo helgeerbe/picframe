@@ -27,6 +27,8 @@ class ImageCache:
         # different version from the latest one - should this argument be taken out?
         self.__modified_folders = []
         self.__modified_files = []
+        self.__cached_file_stats = [] # collection shared between threads
+        self.__cached_file_stats_lock = threading.Lock() # lock to manage shared collection
         self.__logger = logging.getLogger("image_cache.ImageCache")
         self.__logger.debug('Creating an instance of ImageCache')
         self.__picture_dir = picture_dir
@@ -52,6 +54,7 @@ class ImageCache:
                 self.update_cache()
                 time.sleep(2.0)
             time.sleep(0.01)
+        self.__update_file_stats() # write any unsaved file stats before closing
         self.__db.commit() # close after update_cache finished for last time
         self.__db.close()
         self.__shutdown_completed = True
@@ -74,6 +77,10 @@ class ImageCache:
         """
 
         self.__logger.debug('Updating cache')
+
+        # Update any cached file stats. This should be really light-weight
+        # so just process any new stats in every pass...
+        self.__update_file_stats()
 
         # If the current collection of updated files is empty, check for disk-based changes
         if not self.__modified_files:
@@ -123,13 +130,20 @@ class ImageCache:
                                         """.format(where_clause, sort_clause)
                 pair_list = cursor.execute(sql).fetchall()
                 newlist = []
+                skip_portrait_slot = False
                 for i in range(len(full_list)):
                     if full_list[i][0] != -1:
                         newlist.append(full_list[i])
+                    elif skip_portrait_slot:
+                        skip_portrait_slot = False
+                        continue
                     elif pair_list:
                         elem = pair_list.pop(0)
                         if pair_list:
                             elem += pair_list.pop(0)
+                            # Here, we just doubled-up a set of portrait images.
+                            # Skip the next available "portrait slot" as it's unneeded.
+                            skip_portrait_slot = True
                         newlist.append(elem)
                 return newlist
         except:
@@ -143,8 +157,7 @@ class ImageCache:
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
-        # Update the file's displayed stats
-        self.__update_file_stats(file_id)
+        self.__add_file_to_stats_cache(file_id) # Add a record to the file stats cache collection
         return row # NB if select fails (i.e. moved file) will return None
 
     def get_column_names(self):
@@ -152,11 +165,22 @@ class ImageCache:
         rows = self.__db.execute(sql).fetchall()
         return [row['name'] for row in rows]
 
-    def __update_file_stats(self, file_id):
-        # Increment the displayed count for the specified file
-        # Update the last displayed time for the specified file to "now"
-        sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = strftime('%s','now') WHERE file_id = ?"
-        self.__db.execute(sql, (file_id,))
+    def __add_file_to_stats_cache(self, file_id):
+        # This collection is shared between threads, so lock it to update
+        self.__cached_file_stats_lock.acquire()
+        self.__cached_file_stats.append([file_id, time.time()])
+        self.__cached_file_stats_lock.release()
+
+    def __update_file_stats(self):
+        # Process (and drain) the entire collection of cached file stats by storing them in the db
+        # Note, this is likely an empty or very small collection
+        if self.__cached_file_stats:
+            sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = ? WHERE file_id = ?"
+            self.__cached_file_stats_lock.acquire()
+            while self.__cached_file_stats:
+                file_id, timestamp = self.__cached_file_stats.pop()
+                self.__db.execute(sql, (timestamp, file_id))
+            self.__cached_file_stats_lock.release()
 
     def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
         location = self.__geo_reverse.get_address(lat, lon)
