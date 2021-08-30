@@ -16,72 +16,133 @@ def test_file_not_found():
 
 def test_open_file():
     try:
-        GetImageMeta("test/AlleExif.JPG")
+        GetImageMeta("test/images/AlleExif.JPG")
     except:
         pytest.fail("Unexpected exception")
 
 def test_has_exif():
     try:
-        exifs = GetImageMeta("test/AlleExif.JPG")
+        exifs = GetImageMeta("test/images/AlleExif.JPG")
         assert exifs.has_exif() == True
     except:
         pytest.fail("Unexpected exception")
 
-def test_has_no_exif():
+def images_has_no_exif():
     try:
-        exifs = GetImageMeta("test/noimage.jpg")
+        exifs = GetImageMeta("test/images/noimage.jpg")
         assert exifs.has_exif() == False
     except:
         pytest.fail("Unexpected exception")
 
 def test_get_location():
     try:
-        exifs = GetImageMeta("test/AlleExif.JPG")
-        gps = exifs.get_locaction()
+        exifs = GetImageMeta("test/images/AlleExif.JPG")
+        gps = exifs.get_location()
         assert  gps == {"latitude": 25.197269, "longitude": 55.274359}
     except:
         pytest.fail("Unexpected exception")
 
 def test_get_no_location():
     try:
-        exifs = GetImageMeta("test/noimage.jpg")
-        gps = exifs.get_locaction()
+        exifs = GetImageMeta("test/images/noimage.jpg")
+        gps = exifs.get_location()
         assert  gps == {"latitude": None, "longitude": None}
     except:
         pytest.fail("Unexpected exception")
 
-def test_get_exif():
+def test_exifs_jpg():
     try:
-        exifs = GetImageMeta("test/AlleExif.JPG")
+        exifs = GetImageMeta("test/images/AlleExif.JPG")
         val = exifs.get_exif('EXIF FNumber')
-        assert  val == {"EXIF FNumber": 2.8}
+        assert  val == 2.8
         val = exifs.get_exif('EXIF ExposureTime')
-        assert  val == {"EXIF ExposureTime": "1/30"}
+        assert  val == "1/30"
         val = exifs.get_exif('EXIF ISOSpeedRatings')
-        assert  val == {"EXIF ISOSpeedRatings": "6400"}
+        assert  val == "6400"
         val = exifs.get_exif('EXIF FocalLength')
-        assert  val == {"EXIF FocalLength": "17"}
+        assert  val == "17"
         val = exifs.get_exif('EXIF DateTimeOriginal')
-        assert  val == {"EXIF DateTimeOriginal": "2020:01:30 20:01:28"}
+        assert  val == "2020:01:30 20:01:28"
         val = exifs.get_exif('Image Model')
-        assert  val == {"Image Model": "ILCE-7RM3"}
+        assert  val == "ILCE-7RM3"
+        width, height = exifs.get_size()
+        assert width == 1920
+        assert height == 1200
+        val = exifs.get_exif('Image Make')
+        assert  val == "ILCE-7RM3"
     except:
         pytest.fail("Unexpected exception")
 
 def test_get_orientation():
     try:
         # no image
-        exifs = GetImageMeta("test/noimage.jpg")
+        exifs = GetImageMeta("test/images/noimage.jpg")
         orientation = exifs.get_orientation()
         assert  orientation == 1
 
         # jpg
-        exifs = GetImageMeta("test/AlleExif.JPG")
+        exifs = GetImageMeta("test/images/AlleExif.JPG")
         orientation = exifs.get_orientation()
         assert  orientation == 1
 
-        exifs = GetImageMeta("test/test3.HEIC")
+        exifs = GetImageMeta("test/images/test3.HEIC")
         orientation = exifs.get_orientation()
         assert  orientation == 6
+    except:
+        pytest.fail("Unexpected exception")
+
+def test_exifs_heic():
+    try:
+        exifs = GetImageMeta("test/images/test3.HEIC")
+        orientation = exifs.get_orientation()
+        assert  orientation == 6
+
+        width, height = exifs.get_size()
+        assert width == 4032
+        assert height == 3024
+
+
+        f_number = exifs.get_exif('EXIF FNumber')
+        assert f_number == 1.8
+
+        make =  exifs.get_exif('Image Make')
+        assert make == "Apple"
+
+        model = exifs.get_exif('Image Model')
+        assert model == "iPhone 8"
+
+        exposure_time = exifs.get_exif('EXIF ExposureTime')
+        assert exposure_time == "1/5"
+
+        iso =  exifs.get_exif('EXIF ISOSpeedRatings')
+        assert iso == "100"
+
+        focal_length =  exifs.get_exif('EXIF FocalLength')
+        assert focal_length == "399/100"
+
+        rating = exifs.get_exif('EXIF Rating')
+        assert rating == None
+
+        lens = exifs.get_exif('EXIF LensModel')
+        assert lens ==  "iPhone 8 back camera 3.99mm f/1.8"
+
+        exif_datetime = exifs.get_exif('EXIF DateTimeOriginal')
+        assert exif_datetime == "2021:05:14 20:27:14"
+
+        gps = exifs.get_location()
+        assert gps['latitude'] == 38.71365
+        gps['longitude'] == -78.15960555555556
+        
+
+        #IPTC
+        tags = exifs.get_exif('IPTC Keywords')
+        assert tags == None
+
+        title = exifs.get_exif('IPTC Object Name')
+        assert title == None
+
+        caption = exifs.get_exif('IPTC Caption/Abstract')
+        assert caption == None
+
     except:
         pytest.fail("Unexpected exception")
