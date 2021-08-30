@@ -117,6 +117,10 @@ class GetImageMeta:
 
     def get_size(self):
         try: # corrupt image file might crash app
+            width = self.get_exif('EXIF ExifImageWidth')
+            height = self.get_exif('EXIF ExifImageLength')
+            if width and height:
+                return int(width), int(height)
             return Image.open(self.__filename).size
         except Exception as e:
             self.__logger.warning("get_size failed on %s -> %s", self.__filename, e)
