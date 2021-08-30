@@ -461,7 +461,7 @@ class ImageCache:
 
 
         e['f_number'] = exifs.get_exif('EXIF FNumber')
-        e['make'] = exifs.get_exif('EXIF Make')
+        e['make'] = exifs.get_exif('Image Make')
         e['model'] = exifs.get_exif('Image Model')
         e['exposure_time'] = exifs.get_exif('EXIF ExposureTime')
         e['iso'] =  exifs.get_exif('EXIF ISOSpeedRatings')
