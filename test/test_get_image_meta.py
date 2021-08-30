@@ -8,8 +8,11 @@ logger = logging.getLogger("test_get_image_data")
 logger.setLevel(logging.DEBUG)
 
 def test_file_not_found():
-    with pytest.raises(OSError):
-        GetImageMeta("nonsense")
+    try:
+        exifs = GetImageMeta("nonsense")
+        assert exifs.has_exif() == False
+    except:
+        pytest.fail("Unexpected exception")
 
 def test_open_file():
     try:
@@ -67,8 +70,18 @@ def test_get_exif():
 
 def test_get_orientation():
     try:
+        # no image
         exifs = GetImageMeta("test/noimage.jpg")
         orientation = exifs.get_orientation()
         assert  orientation == 1
+
+        # jpg
+        exifs = GetImageMeta("test/AlleExif.JPG")
+        orientation = exifs.get_orientation()
+        assert  orientation == 1
+
+        exifs = GetImageMeta("test/test3.HEIC")
+        orientation = exifs.get_orientation()
+        assert  orientation == 6
     except:
         pytest.fail("Unexpected exception")
