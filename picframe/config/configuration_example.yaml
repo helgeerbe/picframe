@@ -62,6 +62,7 @@ model:
     "EXIF FocalLength",
     "EXIF DateTimeOriginal",
     "Image Model",
+    "Image Make",
     "IPTC Caption/Abstract",
     "IPTC Object Name",
     "IPTC Keywords"]

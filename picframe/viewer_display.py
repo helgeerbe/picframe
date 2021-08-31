@@ -8,7 +8,7 @@ import logging
 import os
 import numpy as np
 from PIL import Image, ImageFilter, ImageFile
-from picframe import mat_image
+from picframe import mat_image, get_image_meta
 from datetime import datetime
 
 # supported display modes for display switch
@@ -173,29 +173,6 @@ class ViewerDisplay:
     def clock_is_on(self, val):
         self.__show_clock = val
 
-    def __check_heif_then_open(self, fname):
-        ext = os.path.splitext(fname)[1].lower()
-        if ext in ('.heif','.heic'):
-            try:
-                import pyheif
-
-                heif_file = pyheif.read(fname)
-                image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
-                                        "raw", heif_file.mode, heif_file.stride)
-                if image.mode not in ("RGB", "RGBA"):
-                    image = image.convert("RGB")
-                return image
-            except:
-                self.__logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
-        else:
-            try:
-                image = Image.open(fname)
-                if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
-                    image = image.convert("RGB")
-            except: # for whatever reason
-                image = None
-            return image
-
     # Concatenate the specified images horizontally. Clip the taller
     # image to the height of the shorter image.
     def __create_image_pair(self, im1, im2):
@@ -272,13 +249,13 @@ class ViewerDisplay:
 
             # Load the image(s) and correct their orientation as necessary
             if pics[0]:
-                im = self.__check_heif_then_open(pics[0].fname)
+                im = GetImageMeta.get_image_object(pics[0].fname)
                 if pics[0].orientation != 1:
                      im = self.__orientate_image(im, pics[0].orientation)
                 if im is None:
                     return None
             if pics[1]:
-                im2 = self.__check_heif_then_open(pics[1].fname)
+                im2 = GetImageMeta.get_image_object(pics[1].fname)
                 if pics[1].orientation != 1:
                      im2 = self.__orientate_image(im2, pics[1].orientation)
 

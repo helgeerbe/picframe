@@ -1,5 +1,6 @@
 import exifread
 import logging
+import os
 from PIL import Image
 
 class GetImageMeta:
@@ -117,11 +118,32 @@ class GetImageMeta:
 
     def get_size(self):
         try: # corrupt image file might crash app
-            width = self.get_exif('EXIF ExifImageWidth')
-            height = self.get_exif('EXIF ExifImageLength')
-            if width and height:
-                return int(width), int(height)
-            return Image.open(self.__filename).size
+            return GetImageMeta.get_image_object(self.__filename).size
         except Exception as e:
             self.__logger.warning("get_size failed on %s -> %s", self.__filename, e)
             return (0, 0)
+
+    @staticmethod
+    def get_image_object(fname):
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in ('.heif','.heic'):
+                try:
+                    import pyheif
+
+                    heif_file = pyheif.read(fname)
+                    image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
+                                            "raw", heif_file.mode, heif_file.stride)
+                    if image.mode not in ("RGB", "RGBA"):
+                        image = image.convert("RGB")
+                    return image
+                except:
+                    logger = logging.getLogger("get_image_meta.GetImageMeta")
+                    logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
+            else:
+                try:
+                    image = Image.open(fname)
+                    if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
+                        image = image.convert("RGB")
+                except: # for whatever reason
+                    image = None
+                return image

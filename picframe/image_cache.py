@@ -9,7 +9,7 @@ class ImageCache:
 
     EXTENSIONS = ['.png','.jpg','.jpeg','.heif','.heic']
     EXIF_TO_FIELD = {'EXIF FNumber': 'f_number',
-                     'EXIF Make': 'make',
+                     'Image Make': 'make',
                      'Image Model': 'model',
                      'EXIF ExposureTime': 'exposure_time',
                      'EXIF ISOSpeedRatings': 'iso',
