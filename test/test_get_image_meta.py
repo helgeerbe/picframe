@@ -95,7 +95,7 @@ def test_exifs_heic():
     try:
         exifs = GetImageMeta("test/images/test3.HEIC")
         orientation = exifs.get_orientation()
-        assert  orientation == 6
+        assert  orientation == 1
 
         width, height = exifs.get_size()
         assert height == 4032
