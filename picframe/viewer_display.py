@@ -249,13 +249,16 @@ class ViewerDisplay:
 
             # Load the image(s) and correct their orientation as necessary
             if pics[0]:
-                im = GetImageMeta.get_image_object(pics[0].fname)
-                if pics[0].orientation != 1:
-                     im = self.__orientate_image(im, pics[0].orientation)
+                im = get_image_meta.GetImageMeta.get_image_object(pics[0].fname)
                 if im is None:
                     return None
+                if pics[0].orientation != 1:
+                     im = self.__orientate_image(im, pics[0].orientation)
+                
             if pics[1]:
-                im2 = GetImageMeta.get_image_object(pics[1].fname)
+                im2 = get_image_meta.GetImageMeta.get_image_object(pics[1].fname)
+                if im2 is None:
+                    return None
                 if pics[1].orientation != 1:
                      im2 = self.__orientate_image(im2, pics[1].orientation)
 

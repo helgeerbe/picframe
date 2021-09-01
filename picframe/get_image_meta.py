@@ -92,6 +92,9 @@ class GetImageMeta:
 
     def get_orientation(self):
         try:
+            ext = os.path.splitext(self.__filename)[1].lower()
+            if ext in ('.heif','.heic'): # converting heic to Image object will rotate pic implicitly. So orientation is always 1
+                return 1
             val = self.__get_if_exist('Image Orientation')
             if val is not None:
                 return int(val.values[0])
