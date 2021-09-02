@@ -454,7 +454,8 @@ class ImageCache:
         e['orientation'] = exifs.get_orientation()
 
         width, height = exifs.get_size()
-        if e['orientation'] in (5, 6, 7, 8):
+        ext = os.path.splitext(file_path_name)[1].lower()
+        if ext not in ('.heif','.heic') and e['orientation'] in (5, 6, 7, 8):
             width, height = height, width # swap values
         e['width'] = width
         e['height'] = height

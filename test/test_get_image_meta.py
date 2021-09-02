@@ -87,7 +87,7 @@ def test_get_orientation():
 
         exifs = GetImageMeta("test/images/test3.HEIC")
         orientation = exifs.get_orientation()
-        assert  orientation == 1 # orientation for heic images must be always 1
+        assert  orientation == 6 
     except:
         pytest.fail("Unexpected exception")
 
@@ -95,7 +95,7 @@ def test_exifs_heic():
     try:
         exifs = GetImageMeta("test/images/test3.HEIC")
         orientation = exifs.get_orientation()
-        assert  orientation == 1
+        assert  orientation == 6
 
         width, height = exifs.get_size()
         assert height == 4032

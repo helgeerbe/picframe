@@ -187,7 +187,11 @@ class ViewerDisplay:
         dst.paste(im2, (im1.width + sep, 0))
         return dst
 
-    def __orientate_image(self, im, orientation):
+    def __orientate_image(self, im, pic):
+        ext = os.path.splitext(pic.fname)[1].lower()
+        if ext  in ('.heif','.heic'): # heif and heic images are converted to PIL.Image obects and are alway in correct orienation
+            return im
+        orientation = pic.orientation
         if orientation == 2:
             im = im.transpose(Image.FLIP_LEFT_RIGHT)
         elif orientation == 3:
@@ -253,14 +257,14 @@ class ViewerDisplay:
                 if im is None:
                     return None
                 if pics[0].orientation != 1:
-                     im = self.__orientate_image(im, pics[0].orientation)
+                    im = self.__orientate_image(im, pics[0])
                 
             if pics[1]:
                 im2 = get_image_meta.GetImageMeta.get_image_object(pics[1].fname)
                 if im2 is None:
                     return None
                 if pics[1].orientation != 1:
-                     im2 = self.__orientate_image(im2, pics[1].orientation)
+                     im2 = self.__orientate_image(im2, pics[1])
 
             screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
 
