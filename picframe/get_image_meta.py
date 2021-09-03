@@ -103,7 +103,23 @@ class GetImageMeta:
 
     def get_exif(self, key):
         try:
-            val = self.__get_if_exist(key)
+            iso_keys = ['EXIF ISOSpeedRatings', 'EXIF PhotographicSensitivity', 'EXIF ISO'] # ISO prior 2.2, ISOSpeedRatings 2.2, PhotographicSensitivity 2.3
+            if key in iso_keys:
+                for iso in iso_keys:
+                    val = self.__get_if_exist(iso)
+                    if val:
+                        break
+            else:
+                val = self.__get_if_exist(key)
+
+            if val is None:
+                grp, tag = key.split(" ", 1)
+                if grp == "EXIF":
+                    newkey = "Image" + " " + tag
+                    val = self.__get_if_exist(newkey)
+                elif grp == "Image":
+                    newkey = "EXIF" + " " + tag
+                    val = self.__get_if_exist(newkey)
             if val is not None:
                 if key == 'EXIF FNumber':
                     val = round(val.values[0].num / val.values[0].den, 1)

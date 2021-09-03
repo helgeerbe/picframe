@@ -70,6 +70,8 @@ def test_exifs_jpg():
         assert height == 1200
         val = exifs.get_exif('Image Make')
         assert  val == "SONY"
+        val = exifs.get_exif('EXIF Make') # This should work as well
+        assert  val == "SONY"
     except:
         pytest.fail("Unexpected exception")
 

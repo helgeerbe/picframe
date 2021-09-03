@@ -467,7 +467,7 @@ class ImageCache:
         e['exposure_time'] = exifs.get_exif('EXIF ExposureTime')
         e['iso'] =  exifs.get_exif('EXIF ISOSpeedRatings')
         e['focal_length'] =  exifs.get_exif('EXIF FocalLength')
-        e['rating'] = exifs.get_exif('EXIF Rating')
+        e['rating'] = exifs.get_exif('Image Rating')
         e['lens'] = exifs.get_exif('EXIF LensModel')
         e['exif_datetime'] = None
         val = exifs.get_exif('EXIF DateTimeOriginal')
