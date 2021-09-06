@@ -9,7 +9,7 @@ class ImageCache:
 
     EXTENSIONS = ['.png','.jpg','.jpeg','.heif','.heic']
     EXIF_TO_FIELD = {'EXIF FNumber': 'f_number',
-                     'EXIF Make': 'make',
+                     'Image Make': 'make',
                      'Image Model': 'model',
                      'EXIF ExposureTime': 'exposure_time',
                      'EXIF ISOSpeedRatings': 'iso',
@@ -454,7 +454,8 @@ class ImageCache:
         e['orientation'] = exifs.get_orientation()
 
         width, height = exifs.get_size()
-        if e['orientation'] in (5, 6, 7, 8):
+        ext = os.path.splitext(file_path_name)[1].lower()
+        if ext not in ('.heif','.heic') and e['orientation'] in (5, 6, 7, 8):
             width, height = height, width # swap values
         e['width'] = width
         e['height'] = height
@@ -466,7 +467,7 @@ class ImageCache:
         e['exposure_time'] = exifs.get_exif('EXIF ExposureTime')
         e['iso'] =  exifs.get_exif('EXIF ISOSpeedRatings')
         e['focal_length'] =  exifs.get_exif('EXIF FocalLength')
-        e['rating'] = exifs.get_exif('EXIF Rating')
+        e['rating'] = exifs.get_exif('Image Rating')
         e['lens'] = exifs.get_exif('EXIF LensModel')
         e['exif_datetime'] = None
         val = exifs.get_exif('EXIF DateTimeOriginal')

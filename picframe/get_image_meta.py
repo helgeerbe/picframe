@@ -1,5 +1,6 @@
 import exifread
 import logging
+import os
 from PIL import Image
 
 class GetImageMeta:
@@ -102,7 +103,23 @@ class GetImageMeta:
 
     def get_exif(self, key):
         try:
-            val = self.__get_if_exist(key)
+            iso_keys = ['EXIF ISOSpeedRatings', 'EXIF PhotographicSensitivity', 'EXIF ISO'] # ISO prior 2.2, ISOSpeedRatings 2.2, PhotographicSensitivity 2.3
+            if key in iso_keys:
+                for iso in iso_keys:
+                    val = self.__get_if_exist(iso)
+                    if val:
+                        break
+            else:
+                val = self.__get_if_exist(key)
+
+            if val is None:
+                grp, tag = key.split(" ", 1)
+                if grp == "EXIF":
+                    newkey = "Image" + " " + tag
+                    val = self.__get_if_exist(newkey)
+                elif grp == "Image":
+                    newkey = "EXIF" + " " + tag
+                    val = self.__get_if_exist(newkey)
             if val is not None:
                 if key == 'EXIF FNumber':
                     val = round(val.values[0].num / val.values[0].den, 1)
@@ -117,11 +134,32 @@ class GetImageMeta:
 
     def get_size(self):
         try: # corrupt image file might crash app
-            width = self.get_exif('EXIF ExifImageWidth')
-            height = self.get_exif('EXIF ExifImageLength')
-            if width and height:
-                return int(width), int(height)
-            return Image.open(self.__filename).size
+            return GetImageMeta.get_image_object(self.__filename).size
         except Exception as e:
             self.__logger.warning("get_size failed on %s -> %s", self.__filename, e)
             return (0, 0)
+
+    @staticmethod
+    def get_image_object(fname):
+            ext = os.path.splitext(fname)[1].lower()
+            if ext in ('.heif','.heic'):
+                try:
+                    import pyheif
+
+                    heif_file = pyheif.read(fname)
+                    image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
+                                            "raw", heif_file.mode, heif_file.stride)
+                    if image.mode not in ("RGB", "RGBA"):
+                        image = image.convert("RGB")
+                    return image
+                except:
+                    logger = logging.getLogger("get_image_meta.GetImageMeta")
+                    logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
+            else:
+                try:
+                    image = Image.open(fname)
+                    if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
+                        image = image.convert("RGB")
+                except: # for whatever reason
+                    image = None
+                return image

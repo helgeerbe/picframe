@@ -69,7 +69,9 @@ def test_exifs_jpg():
         assert width == 1920
         assert height == 1200
         val = exifs.get_exif('Image Make')
-        assert  val == "ILCE-7RM3"
+        assert  val == "SONY"
+        val = exifs.get_exif('EXIF Make') # This should work as well
+        assert  val == "SONY"
     except:
         pytest.fail("Unexpected exception")
 
@@ -87,7 +89,7 @@ def test_get_orientation():
 
         exifs = GetImageMeta("test/images/test3.HEIC")
         orientation = exifs.get_orientation()
-        assert  orientation == 6
+        assert  orientation == 6 
     except:
         pytest.fail("Unexpected exception")
 
@@ -98,8 +100,8 @@ def test_exifs_heic():
         assert  orientation == 6
 
         width, height = exifs.get_size()
-        assert width == 4032
-        assert height == 3024
+        assert height == 4032
+        assert width == 3024
 
 
         f_number = exifs.get_exif('EXIF FNumber')
