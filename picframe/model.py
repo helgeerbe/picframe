@@ -53,6 +53,7 @@ DEFAULT_CONFIG = {
 
         'pic_dir': '~/Pictures',
         'no_files_img': '~/picframe_data/data/no_pictures.jpg',
+        'follow_links': False,
         'subdirectory': '',
         'recent_n': 3,
         'reshuffle_num': 1,
@@ -170,6 +171,7 @@ class Model:
         self.__load_geoloc = model_config['load_geoloc']
         self.__geo_reverse = geo_reverse.GeoReverse(model_config['geo_key'], key_list=self.get_model_config()['key_list'])
         self.__image_cache = image_cache.ImageCache(self.__pic_dir,
+                                                    model_config['follow_links'],
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
                                                     model_config['portrait_pairs'])
@@ -264,7 +266,7 @@ class Model:
         actual_dir = root
         if self.subdirectory != '':
             actual_dir = self.subdirectory
-        subdir_list = next(os.walk(self.__pic_dir))[1]
+        subdir_list = next(os.walk(self.__pic_dir, self.get_model_config()['follow_links']))[1]
         subdir_list[:] = [d for d in subdir_list if not d[0] == '.']
         subdir_list.insert(0,root)
         return actual_dir, subdir_list

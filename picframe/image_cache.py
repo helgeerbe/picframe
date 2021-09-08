@@ -22,7 +22,7 @@ class ImageCache:
                      'IPTC Object Name': 'title'}
 
 
-    def __init__(self, picture_dir, db_file, geo_reverse, portrait_pairs=False):
+    def __init__(self, picture_dir, follow_links, db_file, geo_reverse, portrait_pairs=False):
         # TODO these class methods will crash if Model attempts to instantiate this using a
         # different version from the latest one - should this argument be taken out?
         self.__modified_folders = []
@@ -32,6 +32,7 @@ class ImageCache:
         self.__logger = logging.getLogger("image_cache.ImageCache")
         self.__logger.debug('Creating an instance of ImageCache')
         self.__picture_dir = picture_dir
+        self.__follow_links = follow_links
         self.__db_file = db_file
         self.__geo_reverse = geo_reverse
         self.__portrait_pairs = portrait_pairs #TODO have a function to turn this on and off?
@@ -349,7 +350,7 @@ class ImageCache:
     def __get_modified_folders(self):
         out_of_date_folders = []
         sql_select = "SELECT * FROM folder WHERE name = ?"
-        for dir in [d[0] for d in os.walk(self.__picture_dir)]:
+        for dir in [d[0] for d in os.walk(self.__picture_dir, followlinks=self.__follow_links)]:
             mod_tm = int(os.stat(dir).st_mtime)
             found = self.__db.execute(sql_select, (dir,)).fetchone()
             if not found or found['last_modified'] < mod_tm or found['missing'] == 1:
@@ -501,7 +502,7 @@ class ImageCache:
 
 # If being executed (instead of imported), kick it off...
 if __name__ == "__main__":
-    cache = ImageCache(picture_dir='/home/pi/Pictures', db_file='/home/pi/db.db3', geo_reverse=None)
+    cache = ImageCache(picture_dir='/home/pi/Pictures', follow_links=False, db_file='/home/pi/db.db3', geo_reverse=None)
     #cache.update_cache()
     # items = cache.query_cache("make like '%google%'", "exif_datetime asc")
     #info = cache.get_file_info(12)

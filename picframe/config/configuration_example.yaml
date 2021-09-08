@@ -41,6 +41,7 @@ viewer:
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
   deleted_pictures: "~/DeletedPictures"   # move deleted pictures here
+  follow_links: False                     # default=False, By default, picframe will not walk down into symbolic links that resolve to directories. Set follow_links to True to visit directories pointed to by symlinks, on systems that support them.
   no_files_img: "~/picframe_data/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   recent_n: 7                             # default=7 (days), when shuffling file change date more recent than this number of days play before the rest
