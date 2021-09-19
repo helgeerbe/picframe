@@ -96,9 +96,9 @@ class ImageCache:
             self.__logger.debug('Inserting: %s', file)
             self.__insert_file(file)
 
-        # If we've process all files in the current collection, update the cached folder mod times
+        # If we've process all files in the current collection, update the cached folder info
         if not self.__modified_files:
-            self.__update_folder_modtimes(self.__modified_folders)
+            self.__update_folder_info(self.__modified_folders)
             self.__modified_folders.clear()
 
         # If looping is still not paused, remove any files or folders from the db that are no longer on disk
@@ -347,6 +347,11 @@ class ImageCache:
             self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
 
 
+    # --- Returns a set of folders matching any of
+    #     - Found on disk, but not currently in the 'folder' table
+    #     - Found on disk, but newer than the associated record in the 'folder' table
+    #     - Found on disk, but flagged as 'missing' in the 'folder' table
+    # --- Note that all folders returned currently exist on disk
     def __get_modified_folders(self):
         out_of_date_folders = []
         sql_select = "SELECT * FROM folder WHERE name = ?"
@@ -404,9 +409,9 @@ class ImageCache:
         self.__db.execute(meta_insert, vals)
 
 
-    def __update_folder_modtimes(self, folder_collection):
+    def __update_folder_info(self, folder_collection):
         update_data = []
-        sql = "UPDATE folder SET last_modified = ? WHERE name = ?"
+        sql = "UPDATE folder SET last_modified = ?, missing = 0 WHERE name = ?"
         for folder, modtime in folder_collection:
             update_data.append((modtime, folder))
         self.__db.executemany(sql, update_data)
