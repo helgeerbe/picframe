@@ -266,8 +266,9 @@ class Model:
         actual_dir = root
         if self.subdirectory != '':
             actual_dir = self.subdirectory
-        subdir_list = next(os.walk(self.__pic_dir, followlinks=self.get_model_config()['follow_links']))[1]
-        subdir_list[:] = [d for d in subdir_list if not d[0] == '.']
+        follow_links = self.get_model_config()['follow_links']
+        subdir_list = next(os.walk(self.__pic_dir, followlinks=follow_links))[1]
+        subdir_list[:] = [d for d in subdir_list if not d[0] == '.' and follow_links or  (not follow_links and not os.path.islink(self.__pic_dir + '/' + d))]
         subdir_list.insert(0,root)
         return actual_dir, subdir_list
 
