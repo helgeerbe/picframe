@@ -94,7 +94,9 @@ class InterfaceMQTT:
         ## selects
         _, dir_list = self.__controller.get_directory_list()
         dir_list.sort()
-        self.__setup_select(client, select_topic_head, "directory", dir_list, "mdi:folder-multiple-image", available_topic)
+        self.__setup_select(client, select_topic_head, "directory", dir_list, "mdi:folder-multiple-image", available_topic, init=True)
+        command_topic = self.__device_id + "/directory"
+        client.subscribe(command_topic, qos=0)
 
         ## switches
         self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic)
@@ -168,7 +170,7 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(command_topic, qos=0)
 
-    def __setup_select(self, client, select_topic_head, topic, options, icon, available_topic):
+    def __setup_select(self, client, select_topic_head, topic, options, icon, available_topic, init=False):
         config_topic = select_topic_head + "_" + topic + "/config"
         command_topic = self.__device_id + "/" + topic
         state_topic = "homeassistant/sensor/" + self.__device_id + "/state"
@@ -184,7 +186,8 @@ class InterfaceMQTT:
                                     "uniq_id": name,
                                     "dev":{"ids":[self.__device_id]}})
         client.publish(config_topic, config_payload, qos=0, retain=True)
-        client.subscribe(command_topic, qos=0)
+        if init: 
+            client.subscribe(command_topic, qos=0)
 
     def __setup_switch(self, client, switch_topic_head, topic, icon,
                        available_topic, is_on=False):
@@ -413,7 +416,7 @@ class InterfaceMQTT:
         self.__logger.debug("Send image attributes: %s", image_attr)
         self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
         dir_list.sort()
-        self.__setup_select(self.__client, select_topic_head, "directory", dir_list, "mdi:folder-multiple-image", available_topic)
+        self.__setup_select(self.__client, select_topic_head, "directory", dir_list, "mdi:folder-multiple-image", available_topic, init=False)
 
         self.__logger.info("Send sensor state: %s", sensor_state_payload)
         self.__client.publish(sensor_state_topic, json.dumps(sensor_state_payload), qos=0, retain=False)
