@@ -9,7 +9,7 @@ class ImageCache:
 
     EXTENSIONS = ['.png','.jpg','.jpeg','.heif','.heic']
     EXIF_TO_FIELD = {'EXIF FNumber': 'f_number',
-                     'EXIF Make': 'make',
+                     'Image Make': 'make',
                      'Image Model': 'model',
                      'EXIF ExposureTime': 'exposure_time',
                      'EXIF ISOSpeedRatings': 'iso',
@@ -22,14 +22,17 @@ class ImageCache:
                      'IPTC Object Name': 'title'}
 
 
-    def __init__(self, picture_dir, db_file, geo_reverse, portrait_pairs=False):
+    def __init__(self, picture_dir, follow_links, db_file, geo_reverse, portrait_pairs=False):
         # TODO these class methods will crash if Model attempts to instantiate this using a
         # different version from the latest one - should this argument be taken out?
         self.__modified_folders = []
         self.__modified_files = []
+        self.__cached_file_stats = [] # collection shared between threads
+        self.__cached_file_stats_lock = threading.Lock() # lock to manage shared collection
         self.__logger = logging.getLogger("image_cache.ImageCache")
         self.__logger.debug('Creating an instance of ImageCache')
         self.__picture_dir = picture_dir
+        self.__follow_links = follow_links
         self.__db_file = db_file
         self.__geo_reverse = geo_reverse
         self.__portrait_pairs = portrait_pairs #TODO have a function to turn this on and off?
@@ -52,6 +55,7 @@ class ImageCache:
                 self.update_cache()
                 time.sleep(2.0)
             time.sleep(0.01)
+        self.__update_file_stats() # write any unsaved file stats before closing
         self.__db.commit() # close after update_cache finished for last time
         self.__db.close()
         self.__shutdown_completed = True
@@ -75,6 +79,10 @@ class ImageCache:
 
         self.__logger.debug('Updating cache')
 
+        # Update any cached file stats. This should be really light-weight
+        # so just process any new stats in every pass...
+        self.__update_file_stats()
+
         # If the current collection of updated files is empty, check for disk-based changes
         if not self.__modified_files:
             self.__logger.debug('No unprocessed files in memory, checking disk')
@@ -88,9 +96,9 @@ class ImageCache:
             self.__logger.debug('Inserting: %s', file)
             self.__insert_file(file)
 
-        # If we've process all files in the current collection, update the cached folder mod times
+        # If we've process all files in the current collection, update the cached folder info
         if not self.__modified_files:
-            self.__update_folder_modtimes(self.__modified_folders)
+            self.__update_folder_info(self.__modified_folders)
             self.__modified_folders.clear()
 
         # If looping is still not paused, remove any files or folders from the db that are no longer on disk
@@ -123,13 +131,20 @@ class ImageCache:
                                         """.format(where_clause, sort_clause)
                 pair_list = cursor.execute(sql).fetchall()
                 newlist = []
+                skip_portrait_slot = False
                 for i in range(len(full_list)):
                     if full_list[i][0] != -1:
                         newlist.append(full_list[i])
+                    elif skip_portrait_slot:
+                        skip_portrait_slot = False
+                        continue
                     elif pair_list:
                         elem = pair_list.pop(0)
                         if pair_list:
                             elem += pair_list.pop(0)
+                            # Here, we just doubled-up a set of portrait images.
+                            # Skip the next available "portrait slot" as it's unneeded.
+                            skip_portrait_slot = True
                         newlist.append(elem)
                 return newlist
         except:
@@ -143,8 +158,7 @@ class ImageCache:
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
-        # Update the file's displayed stats
-        self.__update_file_stats(file_id)
+        self.__add_file_to_stats_cache(file_id) # Add a record to the file stats cache collection
         return row # NB if select fails (i.e. moved file) will return None
 
     def get_column_names(self):
@@ -152,11 +166,22 @@ class ImageCache:
         rows = self.__db.execute(sql).fetchall()
         return [row['name'] for row in rows]
 
-    def __update_file_stats(self, file_id):
-        # Increment the displayed count for the specified file
-        # Update the last displayed time for the specified file to "now"
-        sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = strftime('%s','now') WHERE file_id = ?"
-        self.__db.execute(sql, (file_id,))
+    def __add_file_to_stats_cache(self, file_id):
+        # This collection is shared between threads, so lock it to update
+        self.__cached_file_stats_lock.acquire()
+        self.__cached_file_stats.append([file_id, time.time()])
+        self.__cached_file_stats_lock.release()
+
+    def __update_file_stats(self):
+        # Process (and drain) the entire collection of cached file stats by storing them in the db
+        # Note, this is likely an empty or very small collection
+        if self.__cached_file_stats:
+            sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = ? WHERE file_id = ?"
+            self.__cached_file_stats_lock.acquire()
+            while self.__cached_file_stats:
+                file_id, timestamp = self.__cached_file_stats.pop()
+                self.__db.execute(sql, (timestamp, file_id))
+            self.__cached_file_stats_lock.release()
 
     def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
         location = self.__geo_reverse.get_address(lat, lon)
@@ -322,10 +347,15 @@ class ImageCache:
             self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
 
 
+    # --- Returns a set of folders matching any of
+    #     - Found on disk, but not currently in the 'folder' table
+    #     - Found on disk, but newer than the associated record in the 'folder' table
+    #     - Found on disk, but flagged as 'missing' in the 'folder' table
+    # --- Note that all folders returned currently exist on disk
     def __get_modified_folders(self):
         out_of_date_folders = []
         sql_select = "SELECT * FROM folder WHERE name = ?"
-        for dir in [d[0] for d in os.walk(self.__picture_dir)]:
+        for dir in [d[0] for d in os.walk(self.__picture_dir, followlinks=self.__follow_links)]:
             mod_tm = int(os.stat(dir).st_mtime)
             found = self.__db.execute(sql_select, (dir,)).fetchone()
             if not found or found['last_modified'] < mod_tm or found['missing'] == 1:
@@ -379,9 +409,9 @@ class ImageCache:
         self.__db.execute(meta_insert, vals)
 
 
-    def __update_folder_modtimes(self, folder_collection):
+    def __update_folder_info(self, folder_collection):
         update_data = []
-        sql = "UPDATE folder SET last_modified = ? WHERE name = ?"
+        sql = "UPDATE folder SET last_modified = ?, missing = 0 WHERE name = ?"
         for folder, modtime in folder_collection:
             update_data.append((modtime, folder))
         self.__db.executemany(sql, update_data)
@@ -430,19 +460,20 @@ class ImageCache:
         e['orientation'] = exifs.get_orientation()
 
         width, height = exifs.get_size()
-        if e['orientation'] in (5, 6, 7, 8):
+        ext = os.path.splitext(file_path_name)[1].lower()
+        if ext not in ('.heif','.heic') and e['orientation'] in (5, 6, 7, 8):
             width, height = height, width # swap values
         e['width'] = width
         e['height'] = height
 
 
         e['f_number'] = exifs.get_exif('EXIF FNumber')
-        e['make'] = exifs.get_exif('EXIF Make')
+        e['make'] = exifs.get_exif('Image Make')
         e['model'] = exifs.get_exif('Image Model')
         e['exposure_time'] = exifs.get_exif('EXIF ExposureTime')
         e['iso'] =  exifs.get_exif('EXIF ISOSpeedRatings')
         e['focal_length'] =  exifs.get_exif('EXIF FocalLength')
-        e['rating'] = exifs.get_exif('EXIF Rating')
+        e['rating'] = exifs.get_exif('Image Rating')
         e['lens'] = exifs.get_exif('EXIF LensModel')
         e['exif_datetime'] = None
         val = exifs.get_exif('EXIF DateTimeOriginal')
@@ -476,7 +507,7 @@ class ImageCache:
 
 # If being executed (instead of imported), kick it off...
 if __name__ == "__main__":
-    cache = ImageCache(picture_dir='/home/pi/Pictures', db_file='/home/pi/db.db3', geo_reverse=None)
+    cache = ImageCache(picture_dir='/home/pi/Pictures', follow_links=False, db_file='/home/pi/db.db3', geo_reverse=None)
     #cache.update_cache()
     # items = cache.query_cache("make like '%google%'", "exif_datetime asc")
     #info = cache.get_file_info(12)

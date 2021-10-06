@@ -503,7 +503,7 @@ class KmeansNp:
     def run(self, image, start_clusters=None):
         image = image.copy()
         image.thumbnail(self.size)
-        im = np.array(image, dtype=np.float)[:,:,:3]
+        im = np.array(image, dtype=float)[:,:,:3]
         # following section can be used to give the clusters location as well as colour proximity
         #(ix0, ix1) = np.indices(im.shape[:2]) # vert,horiz pixel locations
         #ix0.shape = ix0.shape + (1,) # make same dim as im
@@ -516,7 +516,7 @@ class KmeansNp:
         if start_clusters is None:
             centroids = im[np.random.choice(np.arange(n), self.k)]
         else:
-            centroids = np.array(start_clusters, dtype=np.float)
+            centroids = np.array(start_clusters, dtype=float)
         old_centroids = centroids.copy()
         for i in range(self.max_iterations):
             im.shape = (1, n, d) # add dimension to allow broadcasting
