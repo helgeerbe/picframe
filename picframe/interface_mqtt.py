@@ -84,12 +84,13 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "tags_filter", "mdi:image-search", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True)
-        
+
 
         ## numbers
         self.__setup_number(client, number_topic_head, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6", available_topic)
         self.__setup_number(client, number_topic_head, "time_delay", 1, 400, 1, "mdi:image-plus", available_topic)
         self.__setup_number(client, number_topic_head, "fade_time", 1, 50, 1,"mdi:image-size-select-large", available_topic)
+        self.__setup_number(client, number_topic_head, "mat", 0.0, 1.0, 0.01, "mdi:image-size-select-large", available_topic)
 
         ## selects
         _, dir_list = self.__controller.get_directory_list()
@@ -150,7 +151,7 @@ class InterfaceMQTT:
                                      "dev":{"ids":[self.__device_id]}})
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(self.__device_id + "/" + topic, qos=0)
-    
+
     def __setup_number(self, client, number_topic_head, topic, min, max, step, icon, available_topic):
         config_topic = number_topic_head + "_" + topic + "/config"
         command_topic = self.__device_id + "/" + topic
@@ -175,7 +176,7 @@ class InterfaceMQTT:
         command_topic = self.__device_id + "/" + topic
         state_topic = "homeassistant/sensor/" + self.__device_id + "/state"
         name = self.__device_id + "_" + topic
-        
+
         config_payload = json.dumps({"name": name,
                                     "icon": icon,
                                     "options": options,
@@ -186,7 +187,7 @@ class InterfaceMQTT:
                                     "uniq_id": name,
                                     "dev":{"ids":[self.__device_id]}})
         client.publish(config_topic, config_payload, qos=0, retain=True)
-        if init: 
+        if init:
             client.subscribe(command_topic, qos=0)
 
     def __setup_switch(self, client, switch_topic_head, topic, icon,
@@ -356,6 +357,10 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/brightness":
             self.__logger.info("Recieved brightness: %s", msg)
             self.__controller.brightness = float(msg)
+        # mat
+        elif message.topic == self.__device_id + "/mat":
+            self.__logger.info("Received mat: %s", msg)
+            self.__controller.mat = float(msg)
         # location filter
         elif message.topic == self.__device_id + "/location_filter":
             self.__logger.info("Recieved location filter: %s", msg)
@@ -381,7 +386,7 @@ class InterfaceMQTT:
 
         sensor_state_payload = {}
 
-        ## sensor  
+        ## sensor
         # directory sensor
         actual_dir, dir_list = self.__controller.get_directory_list()
         sensor_state_payload["directory"] = actual_dir
@@ -406,6 +411,8 @@ class InterfaceMQTT:
         sensor_state_payload["fade_time"] = self.__controller.fade_time
         # brightness
         sensor_state_payload["brightness"] = self.__controller.brightness
+        # mat
+        sensor_state_payload["mat"] = self.__controller.mat
 
         # send last will and testament
         available_topic = switch_topic_head + "/available"

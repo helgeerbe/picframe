@@ -198,6 +198,14 @@ class Controller:
         self.__viewer.set_brightness(float(val))
 
     @property
+    def mat(self):
+        return self.__viewer.get_mat()
+
+    @mat.setter
+    def mat(self, val):
+        self.__viewer.set_mat(float(val))
+
+    @property
     def location_filter(self):
         return self.__location_filter
 
