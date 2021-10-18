@@ -85,7 +85,6 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic)
         self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True)
 
-
         ## numbers
         self.__setup_number(client, number_topic_head, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6", available_topic)
         self.__setup_number(client, number_topic_head, "time_delay", 1, 400, 1, "mdi:image-plus", available_topic)
