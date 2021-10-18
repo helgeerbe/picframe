@@ -90,7 +90,7 @@ class InterfaceMQTT:
         self.__setup_number(client, number_topic_head, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6", available_topic)
         self.__setup_number(client, number_topic_head, "time_delay", 1, 400, 1, "mdi:image-plus", available_topic)
         self.__setup_number(client, number_topic_head, "fade_time", 1, 50, 1,"mdi:image-size-select-large", available_topic)
-        self.__setup_number(client, number_topic_head, "mat", 0.0, 1.0, 0.01, "mdi:image-size-select-large", available_topic)
+        self.__setup_number(client, number_topic_head, "matting_images", 0.0, 1.0, 0.01, "mdi:image-size-select-large", available_topic)
 
         ## selects
         _, dir_list = self.__controller.get_directory_list()
@@ -357,10 +357,10 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/brightness":
             self.__logger.info("Recieved brightness: %s", msg)
             self.__controller.brightness = float(msg)
-        # mat
-        elif message.topic == self.__device_id + "/mat":
-            self.__logger.info("Received mat: %s", msg)
-            self.__controller.mat = float(msg)
+        # matting_images
+        elif message.topic == self.__device_id + "/matting_images":
+            self.__logger.info("Received matting_images: %s", msg)
+            self.__controller.matting_images = float(msg)
         # location filter
         elif message.topic == self.__device_id + "/location_filter":
             self.__logger.info("Recieved location filter: %s", msg)
@@ -411,8 +411,8 @@ class InterfaceMQTT:
         sensor_state_payload["fade_time"] = self.__controller.fade_time
         # brightness
         sensor_state_payload["brightness"] = self.__controller.brightness
-        # mat
-        sensor_state_payload["mat"] = self.__controller.mat
+        # matting_images
+        sensor_state_payload["matting_images"] = self.__controller.matting_images
 
         # send last will and testament
         available_topic = switch_topic_head + "/available"
