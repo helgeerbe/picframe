@@ -6,6 +6,7 @@ import json
 import os
 import signal
 import sys
+from picframe.interface_peripherals import InterfacePeripherals
 
 def make_date(txt):
     dt = txt.replace('/',':').replace('-',':').replace(',',':').replace('.',':').split(':')
@@ -42,6 +43,7 @@ class Controller:
         self.__model = model
         self.__viewer = viewer
         self.__paused = False
+        self.__force_navigate = False
         self.__next_tm = 0
         self.__date_from = make_date('1901/12/15') # TODO This seems to be the minimum date to be handled by date functions
         self.__date_to = make_date('2038/1/1')
@@ -49,9 +51,10 @@ class Controller:
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
-        self.__keep_looping = True
+        self.keep_looping = True
         self.__location_filter = ''
         self.__tags_filter = ''
+        self.__interface_peripherals = None
         self.__shutdown_complete = False
 
     @property
@@ -70,11 +73,13 @@ class Controller:
     def next(self):
         self.__next_tm = 0
         self.__viewer.reset_name_tm()
+        self.__force_navigate = True
 
     def back(self):
         self.__model.set_next_file_to_previous_file()
         self.__next_tm = 0
         self.__viewer.reset_name_tm()
+        self.__force_navigate = True
 
     def delete(self):
         self.__model.delete_file()
@@ -268,7 +273,7 @@ class Controller:
         signal.signal(signal.SIGINT, self.__signal_handler)
 
         #next_check_tm = time.time() + self.__model.get_model_config()['check_dir_tm']
-        while self.__keep_looping:
+        while self.keep_looping:
 
             #if self.__next_tm == 0: #TODO double check why these were set when next_tm == 0
             #    time_delay = 1 # must not be 0
@@ -279,8 +284,9 @@ class Controller:
 
             tm = time.time()
             pics = None #get_next_file returns a tuple of two in case paired portraits have been specified
-            if not self.paused and tm > self.__next_tm:
+            if not self.paused and tm > self.__next_tm or self.__force_navigate:
                 self.__next_tm = tm + self.__model.time_delay
+                self.__force_navigate = False
                 pics = self.__model.get_next_file()
                 if pics[0] is None:
                     self.__next_tm = 0 # skip this image file moved or otherwise not on db
@@ -303,13 +309,16 @@ class Controller:
                 break
             if skip_image:
                 self.__next_tm = 0
+            self.__interface_peripherals.check_input()
         self.__shutdown_complete = True
 
     def start(self):
         self.__viewer.slideshow_start()
+        self.__interface_peripherals = InterfacePeripherals(self.__model, self.__viewer, self)
 
     def stop(self):
-        self.__keep_looping = False
+        self.keep_looping = False
+        self.__interface_peripherals.stop()
         while not self.__shutdown_complete:
             time.sleep(0.05) # block until main loop has stopped
         self.__model.stop_image_chache() # close db tidily (blocks till closed)

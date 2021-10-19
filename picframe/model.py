@@ -48,6 +48,8 @@ DEFAULT_CONFIG = {
         'clock_text_sz': 120,
         'clock_format': "%I:%M",
         #'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
+        'menu_text_sz': 40,
+        'menu_autohide_tm': 10.0,
     },
     'model': {
 
@@ -71,7 +73,6 @@ DEFAULT_CONFIG = {
         'deleted_pictures': '~/DeletedPictures',
         'log_level': 'WARNING',
         'log_file': '',
-        'use_kbd': False,
     },
     'mqtt': {
         'use_mqtt': False,                          # Set tue true, to enable mqtt
@@ -89,7 +90,17 @@ DEFAULT_CONFIG = {
         'use_ssl': False,
         'keyfile': "/path/to/key.pem",
         'certfile': "/path/to/fullchain.pem"
-    }
+    },
+    'peripherals': {
+        'input_type': None,                                      # valid options: {None, "keyboard", "touch", "mouse"}
+        'buttons': {
+            'pause': {'enable': True, 'label': 'Pause', 'shortcut': ' '},
+            'display_off': {'enable': True, 'label': 'Display off', 'shortcut': 'o'},
+            'location': {'enable': False, 'label': 'Location', 'shortcut': 'l'},
+            'exit': {'enable': False, 'label': 'Exit', 'shortcut': 'e'},
+            'power_down': {'enable': False, 'label': 'Power down', 'shortcut': 'p'}
+        },
+    },
 }
 
 
@@ -136,7 +147,7 @@ class Model:
         with open(configfile, 'r') as stream:
             try:
                 conf = yaml.safe_load(stream)
-                for section in ['viewer', 'model', 'mqtt', 'http']:
+                for section in ['viewer', 'model', 'mqtt', 'http', 'peripherals']:
                     self.__config[section] = {**DEFAULT_CONFIG[section], **conf[section]}
 
                 self.__logger.debug('config data = %s', self.__config)
@@ -192,6 +203,9 @@ class Model:
 
     def get_http_config(self):
         return self.__config['http']
+
+    def get_peripherals_config(self):
+        return self.__config['peripherals']
 
     @property
     def fade_time(self):

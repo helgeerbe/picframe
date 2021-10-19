@@ -394,6 +394,14 @@ class ViewerDisplay:
         if self.__clock_overlay:
             self.__clock_overlay.sprite.draw()
 
+    @property
+    def display_width(self):
+        return self.__display.width
+
+    @property
+    def display_height(self):
+        return self.__display.height
+
     def is_in_transition(self):
         return self.__in_transition
 
@@ -421,6 +429,9 @@ class ViewerDisplay:
 
 
     def slideshow_is_running(self, pics=None, time_delay = 200.0, fade_time = 10.0, paused=False):
+        if self.clock_is_on:
+            self.__draw_clock()
+
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
@@ -504,9 +515,6 @@ class ViewerDisplay:
         for block in self.__textblocks:
             if block is not None:
                 block.sprite.draw()
-
-        if self.__show_clock:
-            self.__draw_clock()
 
         return (loop_running, False) # now returns tuple with skip image flag added
 
