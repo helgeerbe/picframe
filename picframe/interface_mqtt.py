@@ -89,7 +89,7 @@ class InterfaceMQTT:
         self.__setup_number(client, number_topic_head, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6", available_topic)
         self.__setup_number(client, number_topic_head, "time_delay", 1, 400, 1, "mdi:image-plus", available_topic)
         self.__setup_number(client, number_topic_head, "fade_time", 1, 50, 1,"mdi:image-size-select-large", available_topic)
-        self.__setup_number(client, number_topic_head, "matting_images", 0.0, 1.0, 0.01, "mdi:image-size-select-large", available_topic)
+        self.__setup_number(client, number_topic_head, "matting_images", 0.0, 1.0, 0.01, "mdi:image-frame", available_topic)
 
         ## selects
         _, dir_list = self.__controller.get_directory_list()
