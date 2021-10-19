@@ -165,6 +165,21 @@ class ViewerDisplay:
     def get_brightness(self):
         return float("{:.2f}".format(self.__slide.unif[55])) # TODO There seems to be a rounding issue. set 0.77 get 0.7699999809265137
 
+    def set_matting_images(self, val):
+        if val == float(0.0):
+            val = "true"
+        if val == float(1.0):
+            val = "false"
+        self.__mat_images, self.__mat_images_tol = self.__get_mat_image_control_values(val)
+
+    def get_matting_images(self):
+        if self.__mat_images and self.__mat_images_tol > 0:
+            return self.__mat_images_tol
+        elif self.__mat_images and self.__mat_images_tol == -1:
+            return 0
+        else:
+            return 1
+
     @property
     def clock_is_on(self):
         return self.__show_clock
@@ -233,7 +248,6 @@ class ViewerDisplay:
             diff_aspect = 1 - (image_aspect / screen_aspect)
         else:
             diff_aspect = 1 - (screen_aspect / image_aspect)
-
         return (screen_aspect, image_aspect, diff_aspect)
 
 
@@ -258,7 +272,7 @@ class ViewerDisplay:
                     return None
                 if pics[0].orientation != 1:
                     im = self.__orientate_image(im, pics[0])
-                
+
             if pics[1]:
                 im2 = get_image_meta.GetImageMeta.get_image_object(pics[1].fname)
                 if im2 is None:
