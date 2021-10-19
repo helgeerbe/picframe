@@ -63,6 +63,7 @@ class InterfacePeripherals:
         self.__mouse_is_down = False
         self.__last_touch_position = None
         self.__last_menu_show_at = 0
+        self.__clock_is_suspended = False
         self.__pointer_position = (0, 0)
         self.__timestamp = 0
 
@@ -109,10 +110,14 @@ class InterfacePeripherals:
         self.__menu_is_on = val
         if val:
             self.__last_menu_show_at = self.__timestamp
-            self.__viewer.clock_is_on = False
+            if self.__viewer.clock_is_on:
+                self.__clock_is_suspended = True
+                self.__viewer.clock_is_on = False
             self.__menu.show()
         else:
-            self.__viewer.clock_is_on = True
+            if self.__clock_is_suspended:
+                self.__clock_is_suspended = False
+                self.__viewer.clock_is_on = True
             self.__menu.hide()
 
     def __get_gui(self) -> "pi3d.Gui":
