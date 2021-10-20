@@ -163,15 +163,19 @@ class ViewerDisplay:
         self.__slide.unif[55] = val # take immediate effect
 
     def get_brightness(self):
-        return float("{:.2f}".format(self.__slide.unif[55])) # TODO There seems to be a rounding issue. set 0.77 get 0.7699999809265137
+        return round(self.__slide.unif[55], 2) # this will still give 32/64 bit differences sometimes, as will the float(format()) system
 
-    def set_matting_images(self, val):
-        if val == float(0.0):
-            val = "true"
-        if val == float(1.0):
-            val = "false"
+    def set_matting_images(self, val): # needs to cope with "true", "ON", 0, "0.2" etc.
+        try:
+            float_val = float(val)
+            if round(float_val, 4) == 0.0: # pixellish over a 4k monitor
+                val = "true"
+            if round(float_val, 4) == 1.0:
+                val = "false"
+        except: # ignore exceptions, error handling is done in following function
+            pass
         self.__mat_images, self.__mat_images_tol = self.__get_mat_image_control_values(val)
-
+        
     def get_matting_images(self):
         if self.__mat_images and self.__mat_images_tol > 0:
             return self.__mat_images_tol
