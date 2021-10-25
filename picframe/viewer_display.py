@@ -53,7 +53,7 @@ class ViewerDisplay:
         self.__blend_type = {"blend":0.0, "burn":1.0, "bump":2.0}[config['blend_type']]
         self.__font_file = os.path.expanduser(config['font_file'])
         self.__shader = os.path.expanduser(config['shader'])
-        self.__show_text_tm = config['show_text_tm']
+        self.__show_text_tm = float(config['show_text_tm'])
         self.__show_text_fm = config['show_text_fm']
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
@@ -341,29 +341,24 @@ class ViewerDisplay:
             #raise # only re-raise errors here while debugging
         return tex
 
-    def __sanitize_string(self, path_name):
-        name = os.path.basename(path_name)
-        #name = ''.join([c for c in name if c in self.__codepoints])
-        return name
-
     def __make_text(self, pic, paused, side=0, pair=False):
         # if side 0 and pair False then this is a full width text and put into
         # __textblocks[0] otherwise it is half width and put into __textblocks[position]
         info_strings = []
         if pic is not None and (self.__show_text > 0 or paused): #was SHOW_TEXT_TM > 0.0
             if (self.__show_text & 1) == 1 and pic.title is not None: # title
-                info_strings.append(self.__sanitize_string(pic.title))
+                info_strings.append(pic.title)
             if (self.__show_text & 2) == 2 and pic.caption is not None: # caption
-                info_strings.append(self.__sanitize_string(pic.caption))
+                info_strings.append(pic.caption)
             if (self.__show_text & 4) == 4: # name
-                info_strings.append(self.__sanitize_string(pic.fname))
+                info_strings.append(pic.fname)
             if (self.__show_text & 8) == 8 and pic.exif_datetime > 0: # date
                 fdt = time.strftime(self.__show_text_fm, time.localtime(pic.exif_datetime))
                 info_strings.append(fdt)
             if (self.__show_text & 16) == 16 and pic.location is not None: # location
                 info_strings.append(pic.location) #TODO need to sanitize and check longer than 0 for real
             if (self.__show_text & 32) == 32: # folder
-                info_strings.append(self.__sanitize_string(os.path.basename(os.path.dirname(pic.fname))))
+                info_strings.append(os.path.basename(os.path.dirname(pic.fname)))
             if paused:
                 info_strings.append("PAUSED")
         final_string = " • ".join(info_strings)
@@ -388,6 +383,8 @@ class ViewerDisplay:
             y = (block.sprite.height - self.__display.height + self.__show_text_sz) // 2
             block.sprite.position(x, y, 0.1)
             block.sprite.set_alpha(0.0)
+        if side == 0:
+            self.__textblocks[1] = None
         self.__textblocks[side] = block
 
     def __draw_clock(self):
@@ -442,11 +439,9 @@ class ViewerDisplay:
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
-            if fade_time <= 0.5:
-                fade_time = 0.5
             #self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
             self.__next_tm = tm + time_delay
-            self.__name_tm = tm + fade_time + float(self.__show_text_tm) # text starts after slide transition
+            self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             if new_sfg is not None: # this is a possible return value which needs to be caught
                 self.__sbg = self.__sfg
@@ -455,7 +450,10 @@ class ViewerDisplay:
                 #return (True, False) # return early
                 (self.__sbg, self.__sfg) = (self.__sfg, self.__sbg) # swap existing images over
             self.__alpha = 0.0
-            self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
+            if fade_time > 0.5:
+                self.__delta_alpha = 1.0 / (self.__fps * fade_time) # delta alpha
+            else:
+                self.__delta_alpha = 1.0 # else jump alpha from 0 to 1 in one frame
             # set the file name as the description
             if self.__show_text_tm > 0.0:
                 for i, pic in enumerate(pics):
@@ -509,9 +507,10 @@ class ViewerDisplay:
 
         if self.__alpha >= 1.0 and tm < self.__name_tm:
             # this sets alpha for the TextBlock from 0 to 1 then back to 0
-            dt = (self.__show_text_tm - self.__name_tm + tm + 0.1) / self.__show_text_tm
-            ramp_pt = max(4.0, self.__show_text_tm / 4.0)
-            alpha = max(0.0, min(1.0, ramp_pt * (self.__alpha- abs(1.0 - 2.0 * dt)))) # cap text alpha at image alpha
+            dt = 1.1 - (self.__name_tm - tm) / self.__show_text_tm # i.e. dt from 0.1 to 1.1
+            ramp_pt = max(4.0, self.__show_text_tm / 4.0) # always > 4 so text fade will always < 4s
+            # create single saw tooth over 0 to __show_text_tm
+            alpha = max(0.0, min(1.0, ramp_pt * (1.0 - abs(1.0 - 2.0 * dt)))) # function only run if image alpha is 1.0 so can use 1.0 - abs...
             for block in self.__textblocks:
                 if block is not None:
                     block.sprite.set_alpha(alpha)
