@@ -351,7 +351,7 @@ class ViewerDisplay:
             if (self.__show_text & 2) == 2 and pic.caption is not None: # caption
                 info_strings.append(pic.caption)
             if (self.__show_text & 4) == 4: # name
-                info_strings.append(pic.fname)
+                info_strings.append(os.path.basename(pic.fname))
             if (self.__show_text & 8) == 8 and pic.exif_datetime > 0: # date
                 fdt = time.strftime(self.__show_text_fm, time.localtime(pic.exif_datetime))
                 info_strings.append(fdt)
