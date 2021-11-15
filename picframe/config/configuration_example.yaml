@@ -13,6 +13,7 @@ viewer:
   show_text_sz: 40                        # default=40, text character size
   show_text: "title caption name date folder location"  # default="title caption name date folder location", show text, include combination of words: title, caption name, date, location, folder
   text_justify: "L"                       # text justification L, C or R
+  text_bkg_hgt: 0.25                      # default=0.25 (0.01-1.0), percentage of screen height for text background texture
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
   kenburns: False                         # default=False, will set fit->False and blur_edges->False
