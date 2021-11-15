@@ -92,7 +92,7 @@ mqtt:
   password: "your_password"               # password for mqtt user
   tls: "/path/to/your/ca.crt"             # filename including path to your ca.crt. If not used, must be set to "" !!!!
   device_id: "picframe"                   # default="picframe" unique id of device. change if there is more than one PictureFrame
-  device_url: ""                          # if use_http==True, set url to picframe config page
+  device_url: ""                          # if use_http==True, set url to picframe config page. Must be a valid url, or "" otherwise home assistant runs in an error.
 
 http:
   use_http: False                         # default=False. Set True to enable http NB THIS SERVER IS FOR LOCAL NETWORK AND SHOULD NOT BE EXPOSED TO EXTERNAL ACCESS
