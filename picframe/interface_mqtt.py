@@ -202,10 +202,11 @@ class InterfaceMQTT:
                 "dev": {
                 "ids": [self.__device_id],
                 "name": self.__device_id,
-                "cu": self.__device_url,
                 "mdl": "PictureFrame",
                 "sw": __version__,
                 "mf": "pi3d PictureFrame project"}}
+        if self.__device_url :
+            dict["dev"]["cu"] = self.__device_url
         if entity_category:
             dict["entity_category"] = entity_category
         config_payload = json.dumps(dict)
