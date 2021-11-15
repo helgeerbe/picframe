@@ -44,6 +44,7 @@ class InterfaceMQTT:
             self.__client.on_connect = self.on_connect
             self.__client.on_message = self.on_message
             self.__device_id = mqtt_config['device_id']
+            self.__device_url = mqtt_config['device_url']
         except Exception as e:
             self.__logger.info("MQTT not set up because of: {}".format(e))
 
@@ -203,6 +204,7 @@ class InterfaceMQTT:
                                      "dev": {
                                         "ids": [self.__device_id],
                                         "name": self.__device_id,
+                                        "cu": self.__device_url,
                                         "mdl": "PictureFrame",
                                         "sw": __version__,
                                         "mf": "pi3d PictureFrame project"}})
