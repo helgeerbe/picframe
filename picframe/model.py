@@ -82,6 +82,7 @@ DEFAULT_CONFIG = {
         'password': '',
         'tls': '',
         'device_id': 'picframe',                                 # unique id of device. change if there is more than one picture frame
+        'device_url': '',
     },
     'http': {
         'use_http': False,
