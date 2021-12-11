@@ -5,6 +5,7 @@ import os
 import logging
 import json
 import threading
+import requests
 from functools import partial
 
 try:
@@ -81,7 +82,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                         for subkey in self.server._setters:
                             message[subkey] = getattr(self.server._controller, subkey)
                     elif key in dir(self.server._controller):
-                        if key in self.server._setters: # can get info back from controller TODO 
+                        if key in self.server._setters: # can get info back from controller TODO
                             message[key] = getattr(self.server._controller, key)
                         if value != "": # parse_qsl can return empty string for value when just querying
                             lwr_val = value.lower()
@@ -141,6 +142,7 @@ class InterfaceHttp(HTTPServer):
         self._logger = logging.getLogger("simple_server.InterfaceHttp")
         self._logger.info("creating an instance of InterfaceHttp")
         self._controller = controller
+        self._port = port
         self._pic_dir = os.path.expanduser(pic_dir)
         self._no_files_img = os.path.expanduser(no_files_img)
         self._html_path = os.path.expanduser(html_path)
@@ -161,5 +163,8 @@ class InterfaceHttp(HTTPServer):
 
     def stop(self):
         self.__keep_looping = False
+        # Workaround: handle_request() is waiting for an request and will never stop.
+        # This dummy request exits handle_request()-loop
+        requests.get("http://localhost:"+str(self._port))
         while not self.__shutdown_completed:
             time.sleep(0.05) # function blocking until loop stopped
