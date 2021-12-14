@@ -58,9 +58,7 @@ class ViewerDisplay:
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
         self.__text_justify = config['text_justify'].upper()
-        self.__text_bkg_hgt = config['text_bkg_hgt']
-        if self.__text_bkg_hgt <= 0 or self.__text_bkg_hgt > 1.0:
-            self.__text_bkg_hgt = 0.25
+        self.__text_bkg_hgt = config['text_bkg_hgt'] if 0 <= config['text_bkg_hgt'] <= 1 else 0.25
         self.__fit = config['fit']
         #self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
@@ -80,6 +78,7 @@ class ViewerDisplay:
         self.__delta_alpha = 1.0
         self.__display = None
         self.__slide = None
+        self.__flat_shader = None
         self.__xstep = None
         self.__ystep = None
         #self.__text = None
@@ -372,7 +371,7 @@ class ViewerDisplay:
                 c_rng = self.__display.width - 100 # range for x loc from L to R justified
             else:
                 c_rng = self.__display.width * 0.5 - 100 # range for x loc from L to R justified
-            block = pi3d.FixedString(self.__font_file, final_string, font_size=self.__show_text_sz,
+            block = pi3d.FixedString(self.__font_file, final_string, shadow_radius=3, font_size=self.__show_text_sz,
                                     shader=self.__flat_shader, justify=self.__text_justify, width=c_rng)
             adj_x = (c_rng - block.sprite.width) // 2 # half amount of space outside sprite
             if self.__text_justify == "L":
@@ -427,15 +426,15 @@ class ViewerDisplay:
         self.__slide.unif[54] = float(self.__blend_type)
         self.__slide.unif[55] = 1.0 #brightness
         self.__textblocks = [None, None]
-
-        bkg_hgt = int(min(self.__display.width, self.__display.height) * self.__text_bkg_hgt)
-        text_bkg_array = np.zeros((bkg_hgt, 1, 4), dtype=np.uint8)
-        text_bkg_array[:,:,3] = np.linspace(0, 120, bkg_hgt).reshape(-1, 1)
-        text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
-
         self.__flat_shader = pi3d.Shader("uv_flat")
-        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_hgt, y=-int(self.__display.height) // 2 + bkg_hgt // 2, z=4.0)
-        self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
+
+        if self.__text_bkg_hgt:
+            bkg_hgt = int(min(self.__display.width, self.__display.height) * self.__text_bkg_hgt)
+            text_bkg_array = np.zeros((bkg_hgt, 1, 4), dtype=np.uint8)
+            text_bkg_array[:, :, 3] = np.linspace(0, 120, bkg_hgt).reshape(-1, 1)
+            text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
+            self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_hgt, y=-int(self.__display.height) // 2 + bkg_hgt // 2, z=4.0)
+            self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
 
     def slideshow_is_running(self, pics=None, time_delay = 200.0, fade_time = 10.0, paused=False):
@@ -517,9 +516,11 @@ class ViewerDisplay:
             for block in self.__textblocks:
                 if block is not None:
                     block.sprite.set_alpha(alpha)
-            self.__text_bkg.set_alpha(alpha)
-            if any(block is not None for block in self.__textblocks): #txt_len > 0: #only draw background if text there
-                self.__text_bkg.draw()
+
+            if self.__text_bkg_hgt:
+                self.__text_bkg.set_alpha(alpha)
+                if any(block is not None for block in self.__textblocks): #txt_len > 0: #only draw background if text there
+                    self.__text_bkg.draw()
 
         for block in self.__textblocks:
             if block is not None:
