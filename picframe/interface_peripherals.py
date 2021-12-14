@@ -1,12 +1,15 @@
 import inspect
 import logging
-import os
+import subprocess
 import sys
 import time
 import typing
 
 import numpy as np
 import pi3d
+
+
+logger = logging.getLogger(__name__)
 
 
 class InterfacePeripherals:
@@ -25,19 +28,19 @@ class InterfacePeripherals:
         viewer: "picframe.viewer_display.ViewerDisplay",
         controller: "picframe.controller.Controller",
     ) -> None:
-        self.__logger = logging.getLogger(__name__)
-        self.__logger.info("creating an instance of InterfacePeripherals")
+        logger.info("creating an instance of InterfacePeripherals")
+
         self.__model = model
         self.__viewer = viewer
         self.controller = controller
 
         self.__input_type = self.__model.get_peripherals_config()["input_type"]
         if not self.__input_type:
-            self.__logger.info("no peripheral input is enabled")
+            logger.info("peripheral input is disabled")
             return
         valid_input_types = {"keyboard", "touch", "mouse"}
         if self.__input_type not in valid_input_types:
-            self.__logger.warning(
+            logger.warning(
                 "input type '%s' is invalid, valid options are: %s",
                 self.__input_type,
                 valid_input_types,
@@ -307,22 +310,22 @@ class InterfacePeripherals:
         return False
 
     def __handle_click(self) -> None:
-        self.__logger.debug("handling click at position x: %s, y: %s", *self.__pointer_position)
+        logger.debug("handling click at position x: %s, y: %s", *self.__pointer_position)
         self.__gui.check(*self.__pointer_position)
 
     def __go_back(self, position) -> None:
-        self.__logger.debug("previous picture")
+        logger.info("navigation: previous picture")
         self.controller.back()
 
     def __go_next(self, position) -> None:
-        self.__logger.debug("next picture")
+        logger.info("navigation: next picture")
         self.controller.next()
 
 
 class IPMenuItem(pi3d.MenuItem):
-    """Wrapper around pi3d.MenuItem that implements `callback` method.
+    """Wrapper around pi3d.MenuItem that implements `action` method.
     In the future, this class can be extended to support toggling of multiple text labels
-    (e.g., "Pause"/"Unpause").
+    (e.g., "Pause"/"Resume").
 
     A subclass must imlement class variable `config_name` that matches its name in the configuration.
     """
@@ -335,7 +338,16 @@ class IPMenuItem(pi3d.MenuItem):
         super().__init__(gui, text=text, callback=self.callback, shortcut=shortcut)
 
     def callback(self, *args) -> None:
-        """A subclass must override this method to define its business logic."""
+        """
+        Logs each action.
+        """
+        logger.info("invoked menu item: %s", self.config_name)
+        self.action()
+
+    def action(self) -> None:
+        """
+        A subclass must override this method to define its business logic.
+        """
         raise NotImplementedError
 
 
@@ -346,7 +358,7 @@ class PauseMenuItem(IPMenuItem):
 
     config_name = "pause"
 
-    def callback(self, *args):
+    def action(self):
         self.ip.controller.paused = not self.ip.controller.paused
 
 
@@ -357,7 +369,7 @@ class DisplayOffMenuItem(IPMenuItem):
 
     config_name = "display_off"
 
-    def callback(self, *args):
+    def action(self):
         self.ip.controller.display_is_on = False
 
 
@@ -366,7 +378,7 @@ class LocationMenuItem(IPMenuItem):
 
     config_name = "location"
 
-    def callback(self, *args):
+    def action(self):
         if self.ip.controller.text_is_on("location"):
             self.ip.controller.set_show_text("location", "OFF")
         else:
@@ -378,7 +390,7 @@ class ExitMenuItem(IPMenuItem):
 
     config_name = "exit"
 
-    def callback(self, *args):
+    def action(self):
         self.ip.controller.keep_looping = False
 
 
@@ -387,6 +399,6 @@ class PowerDownMenuItem(IPMenuItem):
 
     config_name = "power_down"
 
-    def callback(self, *args):
+    def action(self):
         self.ip.controller.keep_looping = False
-        os.system("sudo shutdown now")
+        subprocess.check_call(["sudo", "poweroff"])
