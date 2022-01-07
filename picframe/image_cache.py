@@ -345,7 +345,7 @@ class ImageCache:
             # Finally, update the db's schema version stamp to the app's requested version
             self.__db.execute('DELETE FROM db_info')
             self.__db.execute('INSERT INTO db_info VALUES(?)', (required_db_schema_version,))
-
+            self.__db.commit()
 
     # --- Returns a set of folders matching any of
     #     - Found on disk, but not currently in the 'folder' table
