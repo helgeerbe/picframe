@@ -25,6 +25,7 @@ DEFAULT_CONFIG = {
         'show_text_sz': 40,
         'show_text': "name location",
         'text_justify': 'L',
+        'text_bkg_hgt': 0.25,
         'fit': False,
         #'auto_resize': True,
         'kenburns': False,
@@ -81,6 +82,7 @@ DEFAULT_CONFIG = {
         'password': '',
         'tls': '',
         'device_id': 'picframe',                                 # unique id of device. change if there is more than one picture frame
+        'device_url': '',
     },
     'http': {
         'use_http': False,

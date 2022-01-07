@@ -58,6 +58,9 @@ class ViewerDisplay:
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
         self.__text_justify = config['text_justify'].upper()
+        self.__text_bkg_hgt = config['text_bkg_hgt']
+        if self.__text_bkg_hgt <= 0 or self.__text_bkg_hgt > 1.0:
+            self.__text_bkg_hgt = 0.25
         self.__fit = config['fit']
         #self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
@@ -175,7 +178,7 @@ class ViewerDisplay:
         except: # ignore exceptions, error handling is done in following function
             pass
         self.__mat_images, self.__mat_images_tol = self.__get_mat_image_control_values(val)
-        
+
     def get_matting_images(self):
         if self.__mat_images and self.__mat_images_tol > 0:
             return self.__mat_images_tol
@@ -425,13 +428,13 @@ class ViewerDisplay:
         self.__slide.unif[55] = 1.0 #brightness
         self.__textblocks = [None, None]
 
-        bkg_ht = min(self.__display.width, self.__display.height) // 4
-        text_bkg_array = np.zeros((bkg_ht, 1, 4), dtype=np.uint8)
-        text_bkg_array[:,:,3] = np.linspace(0, 120, bkg_ht).reshape(-1, 1)
+        bkg_hgt = int(min(self.__display.width, self.__display.height) * self.__text_bkg_hgt)
+        text_bkg_array = np.zeros((bkg_hgt, 1, 4), dtype=np.uint8)
+        text_bkg_array[:,:,3] = np.linspace(0, 120, bkg_hgt).reshape(-1, 1)
         text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
 
         self.__flat_shader = pi3d.Shader("uv_flat")
-        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-int(self.__display.height) // 2 + bkg_ht // 2, z=4.0)
+        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_hgt, y=-int(self.__display.height) // 2 + bkg_hgt // 2, z=4.0)
         self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
 
