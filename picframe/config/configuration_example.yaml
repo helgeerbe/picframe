@@ -39,6 +39,9 @@ viewer:
   clock_text_sz: 120                      # default=120, clock character size
   clock_format: "%I:%M"                   # default="%I:%M", strftime format for clock string
 
+  menu_text_sz: 40                        # default=40, menu character size
+  menu_autohide_tm: 10.0                  # default=10.0, time in seconds to show menu before auto hiding (0 disables auto hiding)
+
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
   deleted_pictures: "~/DeletedPictures"   # move deleted pictures here
@@ -83,7 +86,6 @@ model:
   log_level: "WARNING"                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
   log_file: ""                            # default="" for debugging set this to the path to a file. NB logging messages will
                                           # appended indefinitely so don't forget this. You will need to tidy it up later
-  use_kbd: False                          # default=False, just for debug or console start. Crashing when started with systemd
 
 mqtt:
   use_mqtt: False                         # default=False. Set True true, to enable mqtt
@@ -102,3 +104,27 @@ http:
   use_ssl: False
   keyfile: "path/to/key.pem"              # private-key
   certfile: "path/to/cert.pem"            # server certificate
+
+peripherals:
+  input_type: null                        # default=null, valid options: {null, "keyboard", "touch", "mouse"}
+  buttons:
+    pause:                                # pause/unpause the show
+      enable: True                        # default=True
+      label: "Pause"                      # default="Pause"
+      shortcut: " "                       # default=" "
+    display_off:                          # turn off the display (when off, any input from selected peripheral will turn it back on)
+      enable: True                        # default=True
+      label: "Display off"                # default="Display off"
+      shortcut: "o"                       # default="o"
+    location:                             # shows or hides location information
+      enable: False                       # default=False
+      label: "Location"                   # default="Location"
+      shortcut: "l"                       # default="l"
+    exit:                                 # exit PictureFrame
+      enable: False                       # default=False
+      label: "Exit"                       # default="Exit"
+      shortcut: "e"                       # default="e"
+    power_down:                           # power down the device, uses sudo
+      enable: False                       # default=False
+      label: "Power down"                 # default="Power down"
+      shortcut: "p"                       # default="p"
