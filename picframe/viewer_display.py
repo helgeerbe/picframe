@@ -58,6 +58,7 @@ class ViewerDisplay:
         self.__show_text_sz = config['show_text_sz']
         self.__show_text = parse_show_text(config['show_text'])
         self.__text_justify = config['text_justify'].upper()
+        self.__text_bkg_hgt = config['text_bkg_hgt'] if 0 <= config['text_bkg_hgt'] <= 1 else 0.25
         self.__fit = config['fit']
         #self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
@@ -77,6 +78,7 @@ class ViewerDisplay:
         self.__delta_alpha = 1.0
         self.__display = None
         self.__slide = None
+        self.__flat_shader = None
         self.__xstep = None
         self.__ystep = None
         #self.__text = None
@@ -175,7 +177,7 @@ class ViewerDisplay:
         except: # ignore exceptions, error handling is done in following function
             pass
         self.__mat_images, self.__mat_images_tol = self.__get_mat_image_control_values(val)
-        
+
     def get_matting_images(self):
         if self.__mat_images and self.__mat_images_tol > 0:
             return self.__mat_images_tol
@@ -369,7 +371,7 @@ class ViewerDisplay:
                 c_rng = self.__display.width - 100 # range for x loc from L to R justified
             else:
                 c_rng = self.__display.width * 0.5 - 100 # range for x loc from L to R justified
-            block = pi3d.FixedString(self.__font_file, final_string, font_size=self.__show_text_sz,
+            block = pi3d.FixedString(self.__font_file, final_string, shadow_radius=3, font_size=self.__show_text_sz,
                                     shader=self.__flat_shader, justify=self.__text_justify, width=c_rng)
             adj_x = (c_rng - block.sprite.width) // 2 # half amount of space outside sprite
             if self.__text_justify == "L":
@@ -409,6 +411,14 @@ class ViewerDisplay:
         if self.__clock_overlay:
             self.__clock_overlay.sprite.draw()
 
+    @property
+    def display_width(self):
+        return self.__display.width
+
+    @property
+    def display_height(self):
+        return self.__display.height
+
     def is_in_transition(self):
         return self.__in_transition
 
@@ -424,30 +434,32 @@ class ViewerDisplay:
         self.__slide.unif[54] = float(self.__blend_type)
         self.__slide.unif[55] = 1.0 #brightness
         self.__textblocks = [None, None]
-
-        bkg_ht = min(self.__display.width, self.__display.height) // 4
-        text_bkg_array = np.zeros((bkg_ht, 1, 4), dtype=np.uint8)
-        text_bkg_array[:,:,3] = np.linspace(0, 120, bkg_ht).reshape(-1, 1)
-        text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
-
         self.__flat_shader = pi3d.Shader("uv_flat")
-        self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_ht, y=-int(self.__display.height) // 2 + bkg_ht // 2, z=4.0)
-        self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
+
+        if self.__text_bkg_hgt:
+            bkg_hgt = int(min(self.__display.width, self.__display.height) * self.__text_bkg_hgt)
+            text_bkg_array = np.zeros((bkg_hgt, 1, 4), dtype=np.uint8)
+            text_bkg_array[:, :, 3] = np.linspace(0, 120, bkg_hgt).reshape(-1, 1)
+            text_bkg_tex = pi3d.Texture(text_bkg_array, blend=True, mipmap=False, free_after_load=True)
+            self.__text_bkg = pi3d.Sprite(w=self.__display.width, h=bkg_hgt, y=-int(self.__display.height) // 2 + bkg_hgt // 2, z=4.0)
+            self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
 
     def slideshow_is_running(self, pics=None, time_delay = 200.0, fade_time = 10.0, paused=False):
+        if self.clock_is_on:
+            self.__draw_clock()
+
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
-            #self.__sbg = self.__sfg # if the first tex_load fails then __sfg might be Null TODO should fn return if None?
+            new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
+            tm = time.time()
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + self.__show_text_tm # text starts after slide transition
-            new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             if new_sfg is not None: # this is a possible return value which needs to be caught
                 self.__sbg = self.__sfg
                 self.__sfg = new_sfg
             else:
-                #return (True, False) # return early
                 (self.__sbg, self.__sfg) = (self.__sfg, self.__sbg) # swap existing images over
             self.__alpha = 0.0
             if fade_time > 0.5:
@@ -481,13 +493,9 @@ class ViewerDisplay:
                 self.__xstep, self.__ystep = (self.__slide.unif[i] * 2.0 / (time_delay - fade_time) for i in (48, 49))
                 self.__slide.unif[48] = 0.0
                 self.__slide.unif[49] = 0.0
-                #self.__kb_up = not self.__kb_up # just go in one direction
 
         if self.__kenburns and self.__alpha >= 1.0:
             t_factor = time_delay - fade_time - self.__next_tm + tm
-            #t_factor = self.__next_tm - tm
-            #if self.__kb_up:
-            #    t_factor = time_delay - t_factor
             # add exponentially smoothed tweening in case of timing delays etc. to avoid 'jumps'
             self.__slide.unif[48] = self.__slide.unif[48] * 0.95 + self.__xstep * t_factor * 0.05
             self.__slide.unif[49] = self.__slide.unif[49] * 0.95 + self.__ystep * t_factor * 0.05
@@ -507,23 +515,26 @@ class ViewerDisplay:
 
         if self.__alpha >= 1.0 and tm < self.__name_tm:
             # this sets alpha for the TextBlock from 0 to 1 then back to 0
-            dt = 1.1 - (self.__name_tm - tm) / self.__show_text_tm # i.e. dt from 0.1 to 1.1
+            dt = 1.0 - (self.__name_tm - tm) / self.__show_text_tm
+            if dt > 0.995: dt = 1 # ensure that calculated alpha value fully reaches 0 (TODO: Improve!)
             ramp_pt = max(4.0, self.__show_text_tm / 4.0) # always > 4 so text fade will always < 4s
+
             # create single saw tooth over 0 to __show_text_tm
             alpha = max(0.0, min(1.0, ramp_pt * (1.0 - abs(1.0 - 2.0 * dt)))) # function only run if image alpha is 1.0 so can use 1.0 - abs...
+
+            # if we have text, set it's current alpha value to fade in/out
             for block in self.__textblocks:
                 if block is not None:
                     block.sprite.set_alpha(alpha)
-            self.__text_bkg.set_alpha(alpha)
-            if any(block is not None for block in self.__textblocks): #txt_len > 0: #only draw background if text there
+
+            # if we have a text background to render (and we currently have text), set its alpha and draw it
+            if self.__text_bkg_hgt and any(block is not None for block in self.__textblocks): #txt_len > 0: #only draw background if text there
+                self.__text_bkg.set_alpha(alpha)
                 self.__text_bkg.draw()
 
         for block in self.__textblocks:
             if block is not None:
                 block.sprite.draw()
-
-        if self.__show_clock:
-            self.__draw_clock()
 
         return (loop_running, False) # now returns tuple with skip image flag added
 

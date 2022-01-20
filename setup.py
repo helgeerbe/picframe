@@ -31,7 +31,7 @@ setup(name='picframe',
         'config/*', 'config/**/*', 
         'html/*', 'html/**/*']},
       install_requires=[
-        'Pillow',
+        'Pillow>=9.0.0',
         'ExifRead',
         'pi3d>=2.49',
         'PyYAML',

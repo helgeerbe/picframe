@@ -81,8 +81,6 @@ class RequestHandler(BaseHTTPRequestHandler):
                         for subkey in self.server._setters:
                             message[subkey] = getattr(self.server._controller, subkey)
                     elif key in dir(self.server._controller):
-                        if key in self.server._setters: # can get info back from controller TODO 
-                            message[key] = getattr(self.server._controller, key)
                         if value != "": # parse_qsl can return empty string for value when just querying
                             lwr_val = value.lower()
                             if lwr_val in ("true", "on", "yes"): # this only works for simple values *not* json style kwargs
@@ -98,6 +96,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                                     getattr(self.server._controller, key)(**json.loads(value))
                             except Exception as e:
                                 message['ERROR'] = 'Excepton:{}>{};'.format(key, e)
+                        if key in self.server._setters: # can get info back from controller TODO 
+                            message[key] = getattr(self.server._controller, key)
 
                     self.wfile.write(bytes(json.dumps(message), "utf8"))
                     self.connection.close()
@@ -148,18 +148,8 @@ class InterfaceHttp(HTTPServer):
         controller_class = controller.__class__
         self._setters = [method for method in dir(controller_class)
                             if 'setter' in dir(getattr(controller_class, method))]
-        self.__keep_looping = True
-        self.__shutdown_completed = False
-        t = threading.Thread(target=self.__loop)
+        t = threading.Thread(target=self.serve_forever)
         t.start()
 
-    def __loop(self):
-        while self.__keep_looping:
-            self.handle_request()
-            time.sleep(0.1)
-        self.__shutdown_completed = True
-
     def stop(self):
-        self.__keep_looping = False
-        while not self.__shutdown_completed:
-            time.sleep(0.05) # function blocking until loop stopped
+        self.shutdown()
