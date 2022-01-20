@@ -29,6 +29,7 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
   - photo metadata overlays (title, location, date, ...)
   - live clock
   - automatic pairing of portrait images
+  - keyboard, mouse and touch screen support
 - Filter by
   - IPTC tags
   - location
@@ -53,6 +54,8 @@ Bug reports, comments, feature requests and fixes are most welcome!
 To find out what's new or improved have a look at the [changelog](https://github.com/helgeerbe/picframe/wiki/Changelog).
 
 ## Acknowledgement
+
+[glenvorel](https://github.com/glenvorel) Thanks for the new keyboard, mouse and touch screen support.
 
 Many Thanks to Wolfgang [www.thedigitalpictureframe.com](https://www.thedigitalpictureframe.com/) for your inspiring work. 
 
