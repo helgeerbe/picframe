@@ -1,5 +1,7 @@
 ## PictureFrame powered by pi3d
 
+[[/images/Picframe_Logo.png | picframe logo]]
+
 - [PictureFrame powered by pi3d](#pictureframe-powered-by-pi3d)
 - [What Is PictureFrame?](#what-is-pictureframe)
 - [History of PictureFrame](#history-of-pictureframe)
@@ -37,7 +39,7 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
   - date
 - Remote Control
   - control interface for mqtt, http(s)
-  - tun on/of display
+  - tun on/off display
   - next/prev/pause image
   - shuffle play
   - toggle metadata overlays
