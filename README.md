@@ -1,6 +1,6 @@
 ## PictureFrame powered by pi3d
 
-[[/images/Picframe_Logo.png | picframe logo]]
+![picframe logo](https://github.com/helgeerbe/picframe/wiki/images/Picframe_Logo.png)
 
 - [PictureFrame powered by pi3d](#pictureframe-powered-by-pi3d)
 - [What Is PictureFrame?](#what-is-pictureframe)
