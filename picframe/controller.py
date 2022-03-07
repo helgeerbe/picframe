@@ -152,6 +152,7 @@ class Controller:
 
     @display_is_on.setter
     def display_is_on(self, on_off):
+        self.paused = not on_off
         self.__viewer.display_is_on = on_off
 
     @property
