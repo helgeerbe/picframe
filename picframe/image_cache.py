@@ -155,6 +155,10 @@ class ImageCache:
         if not file_id: return None
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
         row = self.__db.execute(sql).fetchone()
+        if row is not None and row['last_modified']  != os.path.getmtime(row['fname']):
+            self.__logger.debug('Cache miss: File %s changed on disk', row['fname'])
+            self.__insert_file(row['fname'], file_id)
+            row = self.__db.execute(sql).fetchone() # description inserted in table
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
@@ -387,8 +391,9 @@ class ImageCache:
         return out_of_date_files
 
 
-    def __insert_file(self, file):
+    def __insert_file(self, file, file_id = None):
         file_insert = "INSERT OR REPLACE INTO file(folder_id, basename, extension, last_modified) VALUES((SELECT folder_id from folder where name = ?), ?, ?, ?)"
+        file_update = "UPDATE file SET folder_id = (SELECT folder_id from folder where name = ?), basename = ?, extension = ?, last_modified = ? WHERE file_id = ?"
         # Insert the new folder if it's not already in the table. Update the missing field separately.
         folder_insert = "INSERT OR IGNORE INTO folder(name) VALUES(?)"
         folder_update = "UPDATE folder SET missing = 0 where name = ?"
@@ -406,7 +411,10 @@ class ImageCache:
         # Insert this file's info into the folder, file, and meta tables
         self.__db.execute(folder_insert, (dir,))
         self.__db.execute(folder_update, (dir,))
-        self.__db.execute(file_insert, (dir, base, extension.lstrip("."), mod_tm))
+        if file_id is None:
+            self.__db.execute(file_insert, (dir, base, extension.lstrip("."), mod_tm))
+        else:
+            self.__db.execute(file_update, (dir, base, extension.lstrip("."), mod_tm, file_id))
         self.__db.execute(meta_insert, vals)
 
 
