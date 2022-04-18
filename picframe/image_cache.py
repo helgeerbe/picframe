@@ -155,10 +155,13 @@ class ImageCache:
         if not file_id: return None
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
         row = self.__db.execute(sql).fetchone()
-        if row is not None and row['last_modified']  != os.path.getmtime(row['fname']):
-            self.__logger.debug('Cache miss: File %s changed on disk', row['fname'])
-            self.__insert_file(row['fname'], file_id)
-            row = self.__db.execute(sql).fetchone() # description inserted in table
+        try:
+            if row is not None and row['last_modified']  != os.path.getmtime(row['fname']):
+                self.__logger.debug('Cache miss: File %s changed on disk', row['fname'])
+                self.__insert_file(row['fname'], file_id)
+                row = self.__db.execute(sql).fetchone() # description inserted in table
+        except OSError:
+            self.__logger.warning("Image '%s' does not exists or is inaccessible" %row['fname'])
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
