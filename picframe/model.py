@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
         'show_text': "name location",
         'text_justify': 'L',
         'text_bkg_hgt': 0.25,
+        'text_opacity': 1.0,
         'fit': False,
         #'auto_resize': True,
         'kenburns': False,
@@ -48,6 +49,7 @@ DEFAULT_CONFIG = {
         'clock_justify': "R",
         'clock_text_sz': 120,
         'clock_format': "%I:%M",
+        'clock_opacity': 1.0,
         #'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
         'menu_text_sz': 40,
         'menu_autohide_tm': 10.0,
