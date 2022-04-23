@@ -60,6 +60,7 @@ class ViewerDisplay:
         self.__text_justify = config['text_justify'].upper()
         self.__text_bkg_hgt = config['text_bkg_hgt'] if 0 <= config['text_bkg_hgt'] <= 1 else 0.25
         self.__fit = config['fit']
+        self.__geo_suppress_list = config['geo_suppress_list']
         #self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
         if self.__kenburns:
@@ -358,7 +359,16 @@ class ViewerDisplay:
                 fdt = time.strftime(self.__show_text_fm, time.localtime(pic.exif_datetime))
                 info_strings.append(fdt)
             if (self.__show_text & 16) == 16 and pic.location is not None: # location
-                info_strings.append(pic.location) #TODO need to sanitize and check longer than 0 for real
+                location = pic.location
+                # search for and remove substrings from the location text
+                if self.__geo_suppress_list is not None:
+                    for part in self.__geo_suppress_list:
+                        location = location.replace(part, "")
+                    # remove any redundant concatination strings once the substrings have been removed
+                    location = location.replace(" ,", "")
+                    # remove any trailing commas or spaces from the location
+                    location = location.strip(", ")
+                info_strings.append(location) #TODO need to sanitize and check longer than 0 for real
             if (self.__show_text & 32) == 32: # folder
                 info_strings.append(os.path.basename(os.path.dirname(pic.fname)))
             if paused:
