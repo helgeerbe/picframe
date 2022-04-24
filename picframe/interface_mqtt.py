@@ -46,21 +46,23 @@ class InterfaceMQTT:
             self.__device_id = mqtt_config['device_id']
             self.__device_url = mqtt_config['device_url']
         except Exception as e:
-            self.__logger.info("MQTT not set up because of: {}".format(e))
+            self.__logger.error("MQTT not set up because of: {}".format(e))
+            raise
 
     def start(self):
         try:
             self.__controller.publish_state = self.publish_state
             self.__client.loop_start()
         except Exception as e:
-            self.__logger.info("MQTT not started because of: {}".format(e))
+            self.__logger.error("MQTT not started because of: {}".format(e))
+            raise
 
     def stop(self):
         try:
             self.__controller.publish_state = None
             self.__client.loop_stop()
         except Exception as e:
-            self.__logger.info("MQTT stopping failed because of: {}".format(e))
+            self.__logger.error("MQTT stopping failed because of: {}".format(e))
 
 
     def on_connect(self, client, userdata, flags, rc):
