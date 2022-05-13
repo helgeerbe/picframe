@@ -72,6 +72,7 @@ class InterfaceMQTT:
         self.__logger.info('Connected with mqtt broker')
 
         sensor_topic_head = "homeassistant/sensor/" + self.__device_id
+        image_topic_head = "homeassistant/image/" + self.__device_id
         number_topic_head = "homeassistant/number/" + self.__device_id
         select_topic_head = "homeassistant/select/" + self.__device_id
         switch_topic_head = "homeassistant/switch/" + self.__device_id
@@ -86,7 +87,7 @@ class InterfaceMQTT:
         self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:map-search", available_topic, entity_category="config")
         self.__setup_sensor(client, sensor_topic_head, "tags_filter", "mdi:image-search", available_topic, entity_category="config")
         self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic, entity_category="diagnostic")
-        self.__setup_sensor(client, sensor_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True, entity_category="diagnostic")
+        self.__setup_sensor(client, image_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True, entity_category="diagnostic")
 
         ## numbers
         self.__setup_number(client, number_topic_head, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6", available_topic)
@@ -383,13 +384,28 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/stop":
             self.__controller.stop()
 
-    def publish_state(self, image, image_attr):
+    def publish_state(self, image=None, image_attr=None):
         sensor_topic_head =  "homeassistant/sensor/" + self.__device_id
+        image_topic_head = "homeassistant/image/" + self.__device_id
         switch_topic_head = "homeassistant/switch/" + self.__device_id
         select_topic_head = "homeassistant/select/" + self.__device_id
         sensor_state_topic = sensor_topic_head + "/state"
+        image_state_topic = image_topic_head + "/state"
 
         sensor_state_payload = {}
+        image_state_payload = {}
+
+        ## image
+        # image attributes
+        if image_attr is not None:
+            attributes_topic = sensor_topic_head + "_image/attributes"
+            self.__logger.debug("Send image attributes: %s", image_attr)
+            self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
+        # image sensor
+        if image is not None:
+            _, tail = os.path.split(image)
+            image_state_payload["image"] = tail
+            self.__client.publish(image_state_topic, json.dumps(image_state_payload), qos=0, retain=False)
 
         ## sensor
         # directory sensor
@@ -397,9 +413,6 @@ class InterfaceMQTT:
         sensor_state_payload["directory"] = actual_dir
         # image counter sensor
         sensor_state_payload["image_counter"] = str(self.__controller.get_number_of_files())
-        # image sensor
-        _, tail = os.path.split(image)
-        sensor_state_payload["image"] = tail
         # date_from
         sensor_state_payload["date_from"] = int(self.__controller.date_from)
         # date_to
@@ -408,7 +421,6 @@ class InterfaceMQTT:
         sensor_state_payload["location_filter"] = self.__controller.location_filter
         # tags_filter
         sensor_state_payload["tags_filter"] = self.__controller.tags_filter
-
         ## number state
         # time_delay
         sensor_state_payload["time_delay"] = self.__controller.time_delay
@@ -419,17 +431,14 @@ class InterfaceMQTT:
         # matting_images
         sensor_state_payload["matting_images"] = self.__controller.matting_images
 
-        # send last will and testament
-        available_topic = switch_topic_head + "/available"
-        self.__client.publish(available_topic, "online", qos=0, retain=True)
-
         #pulish sensors
-        attributes_topic = sensor_topic_head + "_image/attributes"
-        self.__logger.debug("Send image attributes: %s", image_attr)
-        self.__client.publish(attributes_topic, json.dumps(image_attr), qos=0, retain=False)
         dir_list.sort()
         self.__setup_select(self.__client, select_topic_head, "directory", dir_list, "mdi:folder-multiple-image", available_topic, init=False)
 
         self.__logger.info("Send sensor state: %s", sensor_state_payload)
         self.__client.publish(sensor_state_topic, json.dumps(sensor_state_payload), qos=0, retain=False)
+
+        # send last will and testament
+        available_topic = switch_topic_head + "/available"
+        self.__client.publish(available_topic, "online", qos=0, retain=True)
 
