@@ -71,79 +71,76 @@ class InterfaceMQTT:
             return
         self.__logger.info('Connected with mqtt broker')
 
-        sensor_topic_head = "homeassistant/sensor/" + self.__device_id
-        image_topic_head = "homeassistant/image/" + self.__device_id
-        number_topic_head = "homeassistant/number/" + self.__device_id
-        select_topic_head = "homeassistant/select/" + self.__device_id
-        switch_topic_head = "homeassistant/switch/" + self.__device_id
-
         # send last will and testament
-        available_topic = switch_topic_head + "/available"
+        available_topic = "homeassistant/switch/" + self.__device_id + "/available"
         client.publish(available_topic, "online", qos=0, retain=True)
 
         ## sensors
-        self.__setup_sensor(client, sensor_topic_head, "date_from", "mdi:calendar-arrow-left", available_topic, entity_category="config")
-        self.__setup_sensor(client, sensor_topic_head, "date_to", "mdi:calendar-arrow-right", available_topic, entity_category="config")
-        self.__setup_sensor(client, sensor_topic_head, "location_filter", "mdi:map-search", available_topic, entity_category="config")
-        self.__setup_sensor(client, sensor_topic_head, "tags_filter", "mdi:image-search", available_topic, entity_category="config")
-        self.__setup_sensor(client, sensor_topic_head, "image_counter", "mdi:camera-burst", available_topic, entity_category="diagnostic")
-        self.__setup_sensor(client, image_topic_head, "image", "mdi:file-image", available_topic, has_attributes=True, entity_category="diagnostic")
+        self.__setup_sensor(client, "date_from", "mdi:calendar-arrow-left", available_topic, entity_category="config")
+        self.__setup_sensor(client, "date_to", "mdi:calendar-arrow-right", available_topic, entity_category="config")
+        self.__setup_sensor(client, "location_filter", "mdi:map-search", available_topic, entity_category="config")
+        self.__setup_sensor(client, "tags_filter", "mdi:image-search", available_topic, entity_category="config")
+        self.__setup_sensor(client, "image_counter", "mdi:camera-burst", available_topic, entity_category="diagnostic")
+        self.__setup_sensor(client, "image", "mdi:file-image", available_topic, has_attributes=True, entity_category="diagnostic")
 
         ## numbers
-        self.__setup_number(client, number_topic_head, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6", available_topic)
-        self.__setup_number(client, number_topic_head, "time_delay", 1, 400, 1, "mdi:image-plus", available_topic)
-        self.__setup_number(client, number_topic_head, "fade_time", 1, 50, 1,"mdi:image-size-select-large", available_topic)
-        self.__setup_number(client, number_topic_head, "matting_images", 0.0, 1.0, 0.01, "mdi:image-frame", available_topic)
+        self.__setup_number(client, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6", available_topic)
+        self.__setup_number(client, "time_delay", 1, 400, 1, "mdi:image-plus", available_topic)
+        self.__setup_number(client, "fade_time", 1, 50, 1,"mdi:image-size-select-large", available_topic)
+        self.__setup_number(client, "matting_images", 0.0, 1.0, 0.01, "mdi:image-frame", available_topic)
 
         ## selects
         _, dir_list = self.__controller.get_directory_list()
         dir_list.sort()
-        self.__setup_select(client, select_topic_head, "directory", dir_list, "mdi:folder-multiple-image", available_topic, init=True)
+        self.__setup_select(client, "directory", dir_list, "mdi:folder-multiple-image", available_topic, init=True)
         command_topic = self.__device_id + "/directory"
         client.subscribe(command_topic, qos=0)
 
         ## switches
-        self.__setup_switch(client, switch_topic_head, "_text_refresh", "mdi:refresh", available_topic, entity_category="config")
-        self.__setup_switch(client, switch_topic_head, "_delete", "mdi:delete", available_topic)
-        self.__setup_switch(client, switch_topic_head, "_name_toggle", "mdi:subtitles", available_topic,
+        self.__setup_switch(client, "_text_refresh", "mdi:refresh", available_topic, entity_category="config")
+        self.__setup_switch(client, "_delete", "mdi:delete", available_topic)
+        self.__setup_switch(client, "_name_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("name"), entity_category="config")
-        self.__setup_switch(client, switch_topic_head, "_title_toggle", "mdi:subtitles", available_topic,
+        self.__setup_switch(client, "_title_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("title"), entity_category="config")
-        self.__setup_switch(client, switch_topic_head, "_caption_toggle", "mdi:subtitles", available_topic,
+        self.__setup_switch(client, "_caption_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("caption"), entity_category="config")
-        self.__setup_switch(client, switch_topic_head, "_date_toggle", "mdi:calendar-today", available_topic,
+        self.__setup_switch(client, "_date_toggle", "mdi:calendar-today", available_topic,
                             self.__controller.text_is_on("date"), entity_category="config")
-        self.__setup_switch(client, switch_topic_head, "_location_toggle", "mdi:crosshairs-gps", available_topic,
+        self.__setup_switch(client, "_location_toggle", "mdi:crosshairs-gps", available_topic,
                             self.__controller.text_is_on("location"), entity_category="config")
-        self.__setup_switch(client, switch_topic_head, "_directory_toggle", "mdi:folder", available_topic,
+        self.__setup_switch(client, "_directory_toggle", "mdi:folder", available_topic,
                             self.__controller.text_is_on("directory"), entity_category="config")
-        self.__setup_switch(client, switch_topic_head, "_text_off", "mdi:badge-account-horizontal-outline", available_topic, entity_category="config")
-        self.__setup_switch(client, switch_topic_head, "_display", "mdi:panorama", available_topic,
+        self.__setup_switch(client, "_text_off", "mdi:badge-account-horizontal-outline", available_topic, entity_category="config")
+        self.__setup_switch(client, "_display", "mdi:panorama", available_topic,
                             self.__controller.display_is_on)
-        self.__setup_switch(client, switch_topic_head, "_clock", "mdi:clock-outline", available_topic,
+        self.__setup_switch(client, "_clock", "mdi:clock-outline", available_topic,
                             self.__controller.clock_is_on, entity_category="config")
-        self.__setup_switch(client, switch_topic_head, "_shuffle", "mdi:shuffle-variant", available_topic,
+        self.__setup_switch(client, "_shuffle", "mdi:shuffle-variant", available_topic,
                             self.__controller.shuffle)
-        self.__setup_switch(client, switch_topic_head, "_paused", "mdi:pause", available_topic,
+        self.__setup_switch(client, "_paused", "mdi:pause", available_topic,
                             self.__controller.paused)
-        self.__setup_switch(client, switch_topic_head, "_back", "mdi:skip-previous", available_topic)
-        self.__setup_switch(client, switch_topic_head, "_next", "mdi:skip-next", available_topic)
+        self.__setup_switch(client, "_back", "mdi:skip-previous", available_topic)
+        self.__setup_switch(client, "_next", "mdi:skip-next", available_topic)
 
         client.subscribe(self.__device_id + "/purge_files", qos=0) # close down without killing!
         client.subscribe(self.__device_id + "/stop", qos=0) # close down without killing!
 
-    def __setup_sensor(self, client, sensor_topic_head, topic, icon, available_topic, has_attributes=False, entity_category=None):
+    def __setup_sensor(self, client, topic, icon, available_topic, has_attributes=False, entity_category=None):
+        sensor_topic_head = "homeassistant/sensor/" + self.__device_id
         config_topic = sensor_topic_head + "_" + topic + "/config"
         name = self.__device_id + "_" + topic
         dict = {"name": name,
                 "icon": icon,
-                "state_topic": sensor_topic_head + "/state",
                 "value_template": "{{ value_json." + topic + "}}",
                 "avty_t": available_topic,
                 "uniq_id": name,
                 "dev":{"ids":[self.__device_id]}}
         if has_attributes == True:
+            dict["state_topic"] = sensor_topic_head + "_" + topic + "/state"
             dict["json_attributes_topic"] = sensor_topic_head + "_" + topic + "/attributes"
+        else:
+            dict["state_topic"] = sensor_topic_head + "/state"
         if entity_category:
             dict["entity_category"] = entity_category
                                      
@@ -151,7 +148,8 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(self.__device_id + "/" + topic, qos=0)
 
-    def __setup_number(self, client, number_topic_head, topic, min, max, step, icon, available_topic):
+    def __setup_number(self, client, topic, min, max, step, icon, available_topic):
+        number_topic_head = "homeassistant/number/" + self.__device_id
         config_topic = number_topic_head + "_" + topic + "/config"
         command_topic = self.__device_id + "/" + topic
         state_topic = "homeassistant/sensor/" + self.__device_id + "/state"
@@ -171,7 +169,8 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(command_topic, qos=0)
 
-    def __setup_select(self, client, select_topic_head, topic, options, icon, available_topic, init=False):
+    def __setup_select(self, client, topic, options, icon, available_topic, init=False):
+        select_topic_head = "homeassistant/select/" + self.__device_id
         config_topic = select_topic_head + "_" + topic + "/config"
         command_topic = self.__device_id + "/" + topic
         state_topic = "homeassistant/sensor/" + self.__device_id + "/state"
@@ -191,8 +190,9 @@ class InterfaceMQTT:
         if init:
             client.subscribe(command_topic, qos=0)
 
-    def __setup_switch(self, client, switch_topic_head, topic, icon,
+    def __setup_switch(self, client, topic, icon,
                        available_topic, is_on=False, entity_category=None):
+        switch_topic_head = "homeassistant/switch/" + self.__device_id
         config_topic = switch_topic_head + topic + "/config"
         command_topic = switch_topic_head + topic + "/set"
         state_topic = switch_topic_head + topic + "/state"
@@ -386,11 +386,7 @@ class InterfaceMQTT:
 
     def publish_state(self, image=None, image_attr=None):
         sensor_topic_head =  "homeassistant/sensor/" + self.__device_id
-        image_topic_head = "homeassistant/image/" + self.__device_id
-        switch_topic_head = "homeassistant/switch/" + self.__device_id
-        select_topic_head = "homeassistant/select/" + self.__device_id
-        sensor_state_topic = sensor_topic_head + "/state"
-        image_state_topic = image_topic_head + "/state"
+        available_topic = "homeassistant/switch/" + self.__device_id + "/available"
 
         sensor_state_payload = {}
         image_state_payload = {}
@@ -405,6 +401,8 @@ class InterfaceMQTT:
         if image is not None:
             _, tail = os.path.split(image)
             image_state_payload["image"] = tail
+            image_state_topic = sensor_topic_head + "_image/state"
+            self.__logger.info("Send image state: %s", image_state_payload)
             self.__client.publish(image_state_topic, json.dumps(image_state_payload), qos=0, retain=False)
 
         ## sensor
@@ -433,12 +431,12 @@ class InterfaceMQTT:
 
         #pulish sensors
         dir_list.sort()
-        self.__setup_select(self.__client, select_topic_head, "directory", dir_list, "mdi:folder-multiple-image", available_topic, init=False)
+        self.__setup_select(self.__client, "directory", dir_list, "mdi:folder-multiple-image", available_topic, init=False)
 
         self.__logger.info("Send sensor state: %s", sensor_state_payload)
+        sensor_state_topic = sensor_topic_head + "/state"
         self.__client.publish(sensor_state_topic, json.dumps(sensor_state_payload), qos=0, retain=False)
 
         # send last will and testament
-        available_topic = switch_topic_head + "/available"
         self.__client.publish(available_topic, "online", qos=0, retain=True)
 
