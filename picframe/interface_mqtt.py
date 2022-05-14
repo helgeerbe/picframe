@@ -98,7 +98,6 @@ class InterfaceMQTT:
 
         ## switches
         self.__setup_switch(client, "_text_refresh", "mdi:refresh", available_topic, entity_category="config")
-        self.__setup_switch(client, "_delete", "mdi:delete", available_topic)
         self.__setup_switch(client, "_name_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("name"), entity_category="config")
         self.__setup_switch(client, "_title_toggle", "mdi:subtitles", available_topic,
@@ -120,8 +119,11 @@ class InterfaceMQTT:
                             self.__controller.shuffle)
         self.__setup_switch(client, "_paused", "mdi:pause", available_topic,
                             self.__controller.paused)
-        self.__setup_switch(client, "_back", "mdi:skip-previous", available_topic)
-        self.__setup_switch(client, "_next", "mdi:skip-next", available_topic)
+
+        # buttons
+        self.__setup_button(client, "_delete", "mdi:delete", available_topic)
+        self.__setup_button(client, "_back", "mdi:skip-previous", available_topic)
+        self.__setup_button(client, "_next", "mdi:skip-next", available_topic)
 
         client.subscribe(self.__device_id + "/purge_files", qos=0) # close down without killing!
         client.subscribe(self.__device_id + "/stop", qos=0) # close down without killing!
@@ -218,9 +220,36 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.publish(state_topic, "ON" if is_on else "OFF", qos=0, retain=True)
 
+    def __setup_button(self, client, topic, icon,
+                       available_topic, entity_category=None):
+        button_topic_head = "homeassistant/button/" + self.__device_id
+        config_topic = button_topic_head + topic + "/config"
+        command_topic = button_topic_head + topic + "/set"
+        dict = {"name": self.__device_id + topic,
+                "icon": icon,
+                "command_topic": command_topic,
+                "payload_press": "ON",
+                "avty_t": available_topic,
+                "uniq_id": self.__device_id + topic,
+                "dev": {
+                "ids": [self.__device_id],
+                "name": self.__device_id,
+                "mdl": "PictureFrame",
+                "sw": __version__,
+                "mf": "pi3d PictureFrame project"}}
+        if self.__device_url :
+            dict["dev"]["cu"] = self.__device_url
+        if entity_category:
+            dict["entity_category"] = entity_category
+        config_payload = json.dumps(dict)
+
+        client.subscribe(command_topic , qos=0)
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+
     def on_message(self, client, userdata, message):
         msg = message.payload.decode("utf-8")
         switch_topic_head = "homeassistant/switch/" + self.__device_id
+        button_topic_head = "homeassistant/button/" + self.__device_id
 
         ###### switches ######
         # display
@@ -260,22 +289,16 @@ class InterfaceMQTT:
                 self.__controller.paused = False
                 client.publish(state_topic, "OFF", retain=True)
         # back buttons
-        elif message.topic == switch_topic_head + "_back/set":
-            state_topic = switch_topic_head + "_back/state"
+        elif message.topic == button_topic_head + "_back/set":
             if msg == "ON":
-                client.publish(state_topic, "OFF", retain=True)
                 self.__controller.back()
         # next buttons
-        elif message.topic == switch_topic_head + "_next/set":
-            state_topic = switch_topic_head + "_next/state"
+        elif message.topic == button_topic_head + "_next/set":
             if msg == "ON":
-                client.publish(state_topic, "OFF", retain=True)
                 self.__controller.next()
         # delete
-        elif message.topic == switch_topic_head + "_delete/set":
-            state_topic = switch_topic_head + "_delete/state"
+        elif message.topic == button_topic_head + "_delete/set":
             if msg == "ON":
-                client.publish(state_topic, "OFF", retain=True)
                 self.__controller.delete()
         # title on
         elif message.topic == switch_topic_head + "_title_toggle/set":
@@ -444,7 +467,7 @@ class InterfaceMQTT:
         payload = "ON" if self.__controller.paused else "OFF"
         self.__client.publish(state_topic, payload, retain=True)
         # shuffle
-        state_topic = switch_topic_head + "_shuffle/set"
+        state_topic = switch_topic_head + "_shuffle/state"
         payload = "ON" if self.__controller.shuffle else "OFF"
         self.__client.publish(state_topic, payload, retain=True)
         # display
