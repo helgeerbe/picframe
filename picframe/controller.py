@@ -69,6 +69,7 @@ class Controller:
         self.__paused = val
         pic = self.__model.get_current_pics()[0] # only refresh left text
         self.__viewer.reset_name_tm(pic, val, side=0, pair=self.__model.get_current_pics()[1] is not None)
+        self.publish_state()
 
     def next(self):
         self.__next_tm = 0
@@ -154,6 +155,7 @@ class Controller:
     def display_is_on(self, on_off):
         self.paused = not on_off
         self.__viewer.display_is_on = on_off
+        self.publish_state()
 
     @property
     def clock_is_on(self):
@@ -172,6 +174,7 @@ class Controller:
         self.__model.shuffle = val
         self.__model.force_reload()
         self.__next_tm = 0
+        self.publish_state()
 
     @property
     def fade_time(self):

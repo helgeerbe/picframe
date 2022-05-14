@@ -385,8 +385,9 @@ class InterfaceMQTT:
             self.__controller.stop()
 
     def publish_state(self, image=None, image_attr=None):
-        sensor_topic_head =  "homeassistant/sensor/" + self.__device_id
-        available_topic = "homeassistant/switch/" + self.__device_id + "/available"
+        sensor_topic_head = "homeassistant/sensor/" + self.__device_id
+        switch_topic_head = "homeassistant/switch/" + self.__device_id
+        available_topic = switch_topic_head + "/available"
 
         sensor_state_payload = {}
         image_state_payload = {}
@@ -436,6 +437,20 @@ class InterfaceMQTT:
         self.__logger.info("Send sensor state: %s", sensor_state_payload)
         sensor_state_topic = sensor_topic_head + "/state"
         self.__client.publish(sensor_state_topic, json.dumps(sensor_state_payload), qos=0, retain=False)
+
+        # publish state of switches
+        # pause
+        state_topic = switch_topic_head + "_paused/state"
+        payload = "ON" if self.__controller.paused else "OFF"
+        self.__client.publish(state_topic, payload, retain=True)
+        # shuffle
+        state_topic = switch_topic_head + "_shuffle/set"
+        payload = "ON" if self.__controller.shuffle else "OFF"
+        self.__client.publish(state_topic, payload, retain=True)
+        # display
+        state_topic = switch_topic_head + "_display/state"
+        payload = "ON" if self.__controller.display_is_on else "OFF"
+        self.__client.publish(state_topic, payload, retain=True)
 
         # send last will and testament
         self.__client.publish(available_topic, "online", qos=0, retain=True)
