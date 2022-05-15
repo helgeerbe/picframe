@@ -69,6 +69,7 @@ class Controller:
         self.__paused = val
         pic = self.__model.get_current_pics()[0] # only refresh left text
         self.__viewer.reset_name_tm(pic, val, side=0, pair=self.__model.get_current_pics()[1] is not None)
+        self.publish_state()
 
     def next(self):
         self.__next_tm = 0
@@ -83,7 +84,7 @@ class Controller:
 
     def delete(self):
         self.__model.delete_file()
-        self.back() # TODO check needed to avoid skipping one as record has been deleted from model.__file_list
+        self.next() # TODO check needed to avoid skipping one as record has been deleted from model.__file_list
         self.__next_tm = 0
 
     def set_show_text(self, txt_key=None, val="ON"):
@@ -154,6 +155,7 @@ class Controller:
     def display_is_on(self, on_off):
         self.paused = not on_off
         self.__viewer.display_is_on = on_off
+        self.publish_state()
 
     @property
     def clock_is_on(self):
@@ -172,6 +174,7 @@ class Controller:
         self.__model.shuffle = val
         self.__model.force_reload()
         self.__next_tm = 0
+        self.publish_state()
 
     @property
     def fade_time(self):
@@ -202,7 +205,7 @@ class Controller:
     @brightness.setter
     def brightness(self, val):
         self.__viewer.set_brightness(float(val))
-        self.__next_tm = 0
+        self.publish_state()
 
     @property
     def matting_images(self):
