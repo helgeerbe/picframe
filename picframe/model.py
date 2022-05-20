@@ -51,6 +51,7 @@ DEFAULT_CONFIG = {
         #'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
         'menu_text_sz': 40,
         'menu_autohide_tm': 10.0,
+        'geo_suppress_list': [],
     },
     'model': {
 
