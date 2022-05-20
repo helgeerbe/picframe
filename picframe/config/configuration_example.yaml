@@ -43,7 +43,7 @@ viewer:
 
   menu_text_sz: 40                        # default=40, menu character size
   menu_autohide_tm: 10.0                  # default=10.0, time in seconds to show menu before auto hiding (0 disables auto hiding)
-  geo_suppress_list: [],                  # default=None, substrings to remove from the location text
+  geo_suppress_list: []                   # default=None, substrings to remove from the location text
 
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images
