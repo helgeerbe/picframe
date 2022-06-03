@@ -14,6 +14,7 @@ viewer:
   show_text: "title caption name date folder location"  # default="title caption name date folder location", show text, include combination of words: title, caption name, date, location, folder
   text_justify: "L"                       # text justification L, C or R
   text_bkg_hgt: 0.25                      # default=0.25 (0.0-1.0), percentage of screen height for text background texture
+  text_opacity: 1.0                       # default=1.0 (0.0-1.0), alpha value of text overlay
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
   kenburns: False                         # default=False, will set fit->False and blur_edges->False
@@ -38,9 +39,11 @@ viewer:
   clock_justify: "R"                      # default="R", clock justification L, C, or R
   clock_text_sz: 120                      # default=120, clock character size
   clock_format: "%I:%M"                   # default="%I:%M", strftime format for clock string
+  clock_opacity: 1.0                      # default=1.0 (0.0-1.0), alpha value of clock overlay
 
   menu_text_sz: 40                        # default=40, menu character size
   menu_autohide_tm: 10.0                  # default=10.0, time in seconds to show menu before auto hiding (0 disables auto hiding)
+  geo_suppress_list: []                   # default=None, substrings to remove from the location text
 
 model:
   pic_dir: "~/Pictures"                   # default="~/Pictures", root folder for images

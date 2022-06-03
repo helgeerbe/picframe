@@ -59,7 +59,9 @@ class ViewerDisplay:
         self.__show_text = parse_show_text(config['show_text'])
         self.__text_justify = config['text_justify'].upper()
         self.__text_bkg_hgt = config['text_bkg_hgt'] if 0 <= config['text_bkg_hgt'] <= 1 else 0.25
+        self.__text_opacity = config['text_opacity']
         self.__fit = config['fit']
+        self.__geo_suppress_list = config['geo_suppress_list']
         #self.__auto_resize = config['auto_resize']
         self.__kenburns = config['kenburns']
         if self.__kenburns:
@@ -96,6 +98,7 @@ class ViewerDisplay:
         self.__clock_justify = config['clock_justify']
         self.__clock_text_sz = config['clock_text_sz']
         self.__clock_format = config['clock_format']
+        self.__clock_opacity = config['clock_opacity']
         ImageFile.LOAD_TRUNCATED_IMAGES = True # occasional damaged file hangs app
 
     @property
@@ -358,7 +361,16 @@ class ViewerDisplay:
                 fdt = time.strftime(self.__show_text_fm, time.localtime(pic.exif_datetime))
                 info_strings.append(fdt)
             if (self.__show_text & 16) == 16 and pic.location is not None: # location
-                info_strings.append(pic.location) #TODO need to sanitize and check longer than 0 for real
+                location = pic.location
+                # search for and remove substrings from the location text
+                if self.__geo_suppress_list is not None:
+                    for part in self.__geo_suppress_list:
+                        location = location.replace(part, "")
+                    # remove any redundant concatination strings once the substrings have been removed
+                    location = location.replace(" ,", "")
+                    # remove any trailing commas or spaces from the location
+                    location = location.strip(", ")
+                info_strings.append(location) #TODO need to sanitize and check longer than 0 for real
             if (self.__show_text & 32) == 32: # folder
                 info_strings.append(os.path.basename(os.path.dirname(pic.fname)))
             if paused:
@@ -372,7 +384,8 @@ class ViewerDisplay:
             else:
                 c_rng = self.__display.width * 0.5 - 100 # range for x loc from L to R justified
             block = pi3d.FixedString(self.__font_file, final_string, shadow_radius=3, font_size=self.__show_text_sz,
-                                    shader=self.__flat_shader, justify=self.__text_justify, width=c_rng)
+                                    shader=self.__flat_shader, justify=self.__text_justify, width=c_rng,
+                                    color=(255, 255, 255, int(255 * float(self.__text_opacity))))
             adj_x = (c_rng - block.sprite.width) // 2 # half amount of space outside sprite
             if self.__text_justify == "L":
                 adj_x *= -1
@@ -398,7 +411,8 @@ class ViewerDisplay:
         if current_time != self.__prev_clock_time:
             width = self.__display.width - 50
             self.__clock_overlay = pi3d.FixedString(self.__font_file, current_time, font_size=self.__clock_text_sz,
-                shader=self.__flat_shader, width=width, shadow_radius=3)
+                shader=self.__flat_shader, width=width, shadow_radius=3,
+                color=(255, 255, 255, int(255 * float(self.__clock_opacity))))
             x = (width - self.__clock_overlay.sprite.width) // 2
             if self.__clock_justify == "L":
                 x *= -1

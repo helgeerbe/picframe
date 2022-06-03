@@ -138,8 +138,14 @@ def main():
     mqtt_config = m.get_mqtt_config()
     if mqtt_config['use_mqtt']:
         from picframe import interface_mqtt
-        mqtt = interface_mqtt.InterfaceMQTT(c, mqtt_config)
-        mqtt.start()
+        try:
+            mqtt = interface_mqtt.InterfaceMQTT(c, mqtt_config)
+            mqtt.start()
+        except:
+            logger.error("Can't initialize mqtt. Stopping picframe")
+            sys.exit(1) 
+
+
 
     http_config = m.get_http_config()
     model_config = m.get_model_config()
