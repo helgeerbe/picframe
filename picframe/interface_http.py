@@ -18,10 +18,10 @@ EXTENSIONS = [".jpg", ".jpeg", ".png", ".heif", ".heic"]
 
 def heif_to_jpg(fname):
     try:
-        import pyheif
+        import pillow_heif
         from PIL import Image
 
-        heif_file = pyheif.read(fname)
+        heif_file = pillow_heif.open_heif(fname)
         image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
                                 "raw", heif_file.mode, heif_file.stride)
         if image.mode not in ("RGB", "RGBA"):
@@ -30,7 +30,7 @@ def heif_to_jpg(fname):
         return "/dev/shm/temp.jpg"
     except:
         logger = logging.getLogger("interface_http.heif_to_jpg")
-        logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
+        logger.warning("Failed attempt to convert %s \n** Have you installed pillow_heif? **", fname)
         return "" # this will not render as a page and will generate error TODO serve specific page with explicit error
 
 class RequestHandler(BaseHTTPRequestHandler):

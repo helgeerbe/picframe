@@ -124,7 +124,7 @@ def main():
         ]
         check_packages(required_packages)
         print("\nChecking optional packages......")
-        check_packages(['pyheif'])
+        check_packages(['pillow_heif'])
         return
     elif args.configfile:
         m = model.Model(args.configfile)
