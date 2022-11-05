@@ -144,9 +144,9 @@ class GetImageMeta:
             ext = os.path.splitext(fname)[1].lower()
             if ext in ('.heif','.heic'):
                 try:
-                    import pillow_heif
+                    import pi_heif
 
-                    heif_file = pillow_heif.open_heif(fname)
+                    heif_file = pi_heif.open_heif(fname)
                     image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
                                             "raw", heif_file.mode, heif_file.stride)
                     if image.mode not in ("RGB", "RGBA"):
@@ -154,7 +154,7 @@ class GetImageMeta:
                     return image
                 except:
                     logger = logging.getLogger("get_image_meta.GetImageMeta")
-                    logger.warning("Failed attempt to convert %s \n** Have you installed pillow_heif? **", fname)
+                    logger.warning("Failed attempt to convert %s \n** Have you installed pi_heif? **", fname)
             else:
                 try:
                     image = Image.open(fname)
