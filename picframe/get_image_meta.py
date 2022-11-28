@@ -2,6 +2,7 @@ import exifread
 import logging
 import os
 from PIL import Image
+from pi_heif import register_heif_opener
 
 class GetImageMeta:
 
@@ -144,22 +145,15 @@ class GetImageMeta:
             ext = os.path.splitext(fname)[1].lower()
             if ext in ('.heif','.heic'):
                 try:
-                    import pyheif
-
-                    heif_file = pyheif.read(fname)
-                    image = Image.frombytes(heif_file.mode, heif_file.size, heif_file.data,
-                                            "raw", heif_file.mode, heif_file.stride)
-                    if image.mode not in ("RGB", "RGBA"):
-                        image = image.convert("RGB")
-                    return image
+                    from pi_heif import register_heif_opener
+                    register_heif_opener()
                 except:
                     logger = logging.getLogger("get_image_meta.GetImageMeta")
-                    logger.warning("Failed attempt to convert %s \n** Have you installed pyheif? **", fname)
-            else:
-                try:
-                    image = Image.open(fname)
-                    if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
-                        image = image.convert("RGB")
-                except: # for whatever reason
-                    image = None
-                return image
+                    logger.warning("Failed attempt to convert %s \n** Have you installed pi_heif? **", fname)
+            try:
+                image = Image.open(fname)
+                if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
+                    image = image.convert("RGB")
+            except: # for whatever reason
+                image = None
+            return image

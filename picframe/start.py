@@ -120,11 +120,10 @@ def main():
             'paho.mqtt',
             'iptcinfo3',
             'numpy',
-            'ninepatch'
+            'ninepatch',
+            'pi_heif'
         ]
         check_packages(required_packages)
-        print("\nChecking optional packages......")
-        check_packages(['pyheif'])
         return
     elif args.configfile:
         m = model.Model(args.configfile)
