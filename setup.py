@@ -32,7 +32,7 @@ setup(name='picframe',
         'html/*', 'html/**/*']},
       install_requires=[
         'Pillow>=9.0.0',
-        'ExifRead',
+        'ExifRead<3',
         'pi3d>=2.49',
         'PyYAML',
         'paho-mqtt',
