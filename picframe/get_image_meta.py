@@ -1,8 +1,13 @@
-import exifread
 import logging
 import os
 from PIL import Image
+from PIL.Image import Exif
+from PIL.ExifTags import TAGS, GPSTAGS
 from pi_heif import register_heif_opener
+from fractions import Fraction
+
+
+register_heif_opener()
 
 class GetImageMeta:
 
@@ -10,17 +15,42 @@ class GetImageMeta:
         self.__logger = logging.getLogger("get_image_meta.GetImageMeta")
         self.__tags = {}
         self.__filename = filename # in case no exif data in which case needed for size
-        try:
-            with open(filename, 'rb') as fh:
-                self.__tags = exifread.process_file(fh, details=False)
-        except OSError as e:
-            self.__logger.warning("Can't open file: \"%s\"", filename)
-            self.__logger.warning("Cause: %s", e)
-            #raise # the system should be able to withstand files being moved etc without crashing
-        except Exception as e:
-            self.__logger.warning("exifread doesn't manage well and gives AttributeError for heif files %s -> %s",
-                                  filename, e)
-        self.__do_iptc_keywords()
+        image = self.get_image_object(filename)
+        if image:
+            exif = image.getexif()
+            self.__do_image_tags(exif)
+            self.__do_exif_tags(exif)
+            self.__do_geo_tags(exif)
+            self.__do_iptc_keywords()
+
+    def __do_image_tags(self, exif):
+        tags =  {
+            "Image " + TAGS.get(key, key): value
+            for key, value in exif.items()
+        }
+        self.__tags.update(tags)
+
+    def __do_exif_tags(self, exif):
+        for key, value in TAGS.items():
+            if value == "ExifOffset":
+                break
+        info = exif.get_ifd(key)
+        tags =  {
+            "EXIF " +  TAGS.get(key, key): value
+            for key, value in info.items()
+        }
+        self.__tags.update(tags)
+
+    def __do_geo_tags(self, exif):
+        for key, value in TAGS.items():
+            if value == "GPSInfo":
+                break
+        gps_info = exif.get_ifd(key)
+        tags =  {
+            "GPS " + GPSTAGS.get(key, key): value
+            for key, value in gps_info.items()
+        }
+        self.__tags.update(tags)
 
     def __do_iptc_keywords(self):
         try:
@@ -60,11 +90,8 @@ class GetImageMeta:
         return None
 
     def __convert_to_degrees(self, value):
-        (deg, min, sec) = value.values
-        d = float(deg.num) / float(deg.den if deg.den > 0 else 1) #TODO better catching?
-        m = float(min.num) / float(min.den if min.den > 0 else 1)
-        s = float(sec.num) / float(sec.den if sec.den > 0 else 1)
-        return d + (m / 60.0) + (s / 3600.0)
+        (deg, min, sec) = value
+        return deg + (min / 60.0) + (sec / 3600.0)
 
     def get_location(self):
         gps = {"latitude": None, "longitude": None}
@@ -79,12 +106,12 @@ class GetImageMeta:
         try:
             if gps_latitude and gps_latitude_ref and gps_longitude and gps_longitude_ref:
                 lat = self.__convert_to_degrees(gps_latitude)
-                if len(gps_latitude_ref.values) > 0 and gps_latitude_ref.values[0] == 'S':
+                if len(gps_latitude_ref) > 0 and gps_latitude_ref[0] == 'S':
                     # assume zero length string means N
                     lat = 0 - lat
                 gps["latitude"] = lat
                 lon = self.__convert_to_degrees(gps_longitude)
-                if len(gps_longitude_ref.values) and gps_longitude_ref.values[0] == 'W':
+                if len(gps_longitude_ref) and gps_longitude_ref[0] == 'W':
                     lon = 0 - lon
                 gps["longitude"] = lon
         except Exception as e:
@@ -95,7 +122,7 @@ class GetImageMeta:
         try:
             val = self.__get_if_exist('Image Orientation')
             if val is not None:
-                return int(val.values[0])
+                return val
             else:
                 return 1
         except Exception as e:
@@ -121,14 +148,14 @@ class GetImageMeta:
                 elif grp == "Image":
                     newkey = "EXIF" + " " + tag
                     val = self.__get_if_exist(newkey)
-            if val is not None:
-                if key == 'EXIF FNumber':
-                    val = round(val.values[0].num / val.values[0].den, 1)
-                elif key in ['IPTC Keywords',  'IPTC Caption/Abstract',  'IPTC Object Name']:
-                    return val
-                else:
-                    val = val.printable
-            return val
+            if val:
+                if key == "EXIF ExposureTime":
+                    val = str(Fraction(val))
+                elif key == "EXIF FocalLength":
+                    val = str(val)
+                elif key == "EXIF FNumber":
+                    val = float(val)
+                return val
         except Exception as e:
             self.__logger.warning("get_exif failed on %s -> %s", self.__filename, e)
             return None
@@ -142,18 +169,15 @@ class GetImageMeta:
 
     @staticmethod
     def get_image_object(fname):
-            ext = os.path.splitext(fname)[1].lower()
-            if ext in ('.heif','.heic'):
-                try:
-                    from pi_heif import register_heif_opener
-                    register_heif_opener()
-                except:
-                    logger = logging.getLogger("get_image_meta.GetImageMeta")
-                    logger.warning("Failed attempt to convert %s \n** Have you installed pi_heif? **", fname)
-            try:
-                image = Image.open(fname)
-                if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
-                    image = image.convert("RGB")
-            except: # for whatever reason
-                image = None
-            return image
+        ext = os.path.splitext(fname)[1].lower()
+        try:
+            image = Image.open(fname)
+            if image.mode not in ("RGB", "RGBA"): # mat system needs RGB or more
+                image = image.convert("RGB")
+        #raise # the system should be able to withstand files being moved etc without crashing
+        except Exception as e:
+            logger = logging.getLogger("get_image_meta.GetImageMeta")
+            logger.warning("Can't open file: \"%s\"", fname)
+            logger.warning("Cause: %s", e)
+            image = None
+        return image
