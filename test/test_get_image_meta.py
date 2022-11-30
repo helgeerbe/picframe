@@ -58,9 +58,9 @@ def test_exifs_jpg():
         val = exifs.get_exif('EXIF ExposureTime')
         assert  val == "1/30"
         val = exifs.get_exif('EXIF ISOSpeedRatings')
-        assert  val == "6400"
+        assert  val == 6400
         val = exifs.get_exif('EXIF FocalLength')
-        assert  val == "17"
+        assert  val == "17.0"
         val = exifs.get_exif('EXIF DateTimeOriginal')
         assert  val == "2020:01:30 20:01:28"
         val = exifs.get_exif('Image Model')
@@ -89,7 +89,7 @@ def test_get_orientation():
 
         exifs = GetImageMeta("test/images/test3.HEIC")
         orientation = exifs.get_orientation()
-        assert  orientation == 6 
+        assert  orientation == 1 
     except:
         pytest.fail("Unexpected exception")
 
@@ -97,7 +97,7 @@ def test_exifs_heic():
     try:
         exifs = GetImageMeta("test/images/test3.HEIC")
         orientation = exifs.get_orientation()
-        assert  orientation == 6
+        assert  orientation == 1
 
         width, height = exifs.get_size()
         assert height == 4032
@@ -117,10 +117,10 @@ def test_exifs_heic():
         assert exposure_time == "1/5"
 
         iso =  exifs.get_exif('EXIF ISOSpeedRatings')
-        assert iso == "100"
+        assert iso == 100
 
         focal_length =  exifs.get_exif('EXIF FocalLength')
-        assert focal_length == "399/100"
+        assert focal_length == "3.99"
 
         rating = exifs.get_exif('EXIF Rating')
         assert rating == None

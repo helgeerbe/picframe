@@ -114,7 +114,6 @@ def main():
         print("\nChecking required packages......")
         required_packages=[
             'PIL',
-            'exifread',
             'pi3d',
             'yaml',
             'paho.mqtt',
