@@ -138,13 +138,13 @@ def test_exifs_heic():
 
         #IPTC
         tags = exifs.get_exif('IPTC Keywords')
-        assert tags == None
+        assert tags == 'Stichwort1,Stichwort2,'
 
         title = exifs.get_exif('IPTC Object Name')
-        assert title == None
+        assert title == 'Das ist die Überschrift'
 
         caption = exifs.get_exif('IPTC Caption/Abstract')
-        assert caption == None
+        assert caption == 'Hier ist die Beschreibung'
 
     except:
         pytest.fail("Unexpected exception")

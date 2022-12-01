@@ -22,6 +22,9 @@ class GetImageMeta:
             self.__do_exif_tags(exif)
             self.__do_geo_tags(exif)
             self.__do_iptc_keywords()
+            xmp = image.getxmp()
+            if len(xmp) > 0:
+                self.__do_xmp_keywords(xmp)
 
     def __do_image_tags(self, exif):
         tags =  {
@@ -51,6 +54,35 @@ class GetImageMeta:
             for key, value in gps_info.items()
         }
         self.__tags.update(tags)
+    
+    def __do_xmp_keywords(self, xmp):
+        try:
+            # title
+            try:
+                val = xmp['xmpmeta']['RDF']['Description']['Headline']
+                if len(val) > 0:
+                    self.__tags['IPTC Object Name'] = val
+            except KeyError:
+                pass
+            # caption
+            try:
+                val = xmp['xmpmeta']['RDF']['Description']['description']['Alt']['li']['text']
+                if len(val) > 0:
+                 self.__tags['IPTC Caption/Abstract'] = val
+            except KeyError:
+                pass
+            # tags
+            try: 
+                val = xmp['xmpmeta']['RDF']['Description']['subject']['Bag']['li']
+                if len(val) > 0:
+                    tags = ''
+                    for tag in val:
+                        tags += tag +  ","
+                    self.__tags['IPTC Keywords'] = tags 
+            except KeyError:
+                pass
+        except Exception as e:
+            self.__logger.warning("xmp loading has failed: %s -> %s", self.__filename, e)
 
     def __do_iptc_keywords(self):
         try:

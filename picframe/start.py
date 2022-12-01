@@ -120,7 +120,8 @@ def main():
             'iptcinfo3',
             'numpy',
             'ninepatch',
-            'pi_heif'
+            'pi_heif',
+            'defusedxml'
         ]
         check_packages(required_packages)
         return
