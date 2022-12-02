@@ -55,30 +55,47 @@ class GetImageMeta:
         }
         self.__tags.update(tags)
     
+    def __find_xmp_key(self, key, dic):
+        for k, v in dic.items():
+            if key == k:
+                return v
+            elif isinstance(v, dict):
+                val = self.__find_xmp_key(key, v) 
+                if val:
+                    return val 
+            elif isinstance(v, list):
+                for x in v:
+                    if isinstance(x, dict):
+                        val = self.__find_xmp_key(key, x) 
+                        if val:
+                            return val 
+        return None
+    
     def __do_xmp_keywords(self, xmp):
         try:
             # title
-            try:
-                val = xmp['xmpmeta']['RDF']['Description']['Headline']
-                if len(val) > 0:
-                    self.__tags['IPTC Object Name'] = val
-            except KeyError:
-                pass
+            val = self.__find_xmp_key('Headline', xmp)
+            if val and isinstance(val, str) and len(val) > 0:
+                self.__tags['IPTC Object Name'] = val
             # caption
             try:
-                val = xmp['xmpmeta']['RDF']['Description']['description']['Alt']['li']['text']
-                if len(val) > 0:
-                 self.__tags['IPTC Caption/Abstract'] = val
+                val = self.__find_xmp_key('description', xmp)
+                if val:
+                    val = val['Alt']['li']['text']
+                    if val and isinstance(val, str) and len(val) > 0:
+                        self.__tags['IPTC Caption/Abstract'] = val
             except KeyError:
                 pass
             # tags
             try: 
-                val = xmp['xmpmeta']['RDF']['Description']['subject']['Bag']['li']
-                if len(val) > 0:
-                    tags = ''
-                    for tag in val:
-                        tags += tag +  ","
-                    self.__tags['IPTC Keywords'] = tags 
+                val = self.__find_xmp_key('subject', xmp)
+                if val:
+                    val = val['Bag']['li']
+                    if val and isinstance(val, list) and len(val) > 0:
+                        tags = ''
+                        for tag in val:
+                            tags += tag +  ","
+                        self.__tags['IPTC Keywords'] = tags 
             except KeyError:
                 pass
         except Exception as e:
