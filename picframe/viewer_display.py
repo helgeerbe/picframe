@@ -74,6 +74,7 @@ class ViewerDisplay:
         self.__display_y = int(config['display_y'])
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
+        self.__display_power = int(config['display_power']) 
         self.__use_glx = config['use_glx']
         #self.__codepoints = config['codepoints']
         self.__alpha = 0.0 # alpha - proportion front image to back
@@ -103,15 +104,18 @@ class ViewerDisplay:
 
     @property
     def display_is_on(self):
-        try: # vcgencmd only applies to raspberry pi
-            state = str(subprocess.check_output(["vcgencmd", "display_power"]))
-            if (state.find("display_power=1") != -1):
-                return True
-            else:
-                return False
-        except Exception as e:
-            self.__logger.debug("Display ON/OFF is vcgencmd, but an error occurred")
-            self.__logger.debug("Cause: %s", e)
+        if self.__display_power == 0:
+            try: # vcgencmd only applies to raspberry pi
+                state = str(subprocess.check_output(["vcgencmd", "display_power"]))
+                if (state.find("display_power=1") != -1):
+                    return True
+                else:
+                    return False
+            except Exception as e:
+                self.__logger.debug("Display ON/OFF is vcgencmd, but an error occurred")
+                self.__logger.debug("Cause: %s", e)
+            return True
+        elif self.__display_power == 1:
             try: # try xset on linux, DPMS has to be enabled
                 output = subprocess.check_output(["xset" , "-display", ":0", "-q"])
                 if output.find(b'Monitor is On') != -1:
@@ -121,19 +125,24 @@ class ViewerDisplay:
             except Exception as e:
                 self.__logger.debug("Display ON/OFF is X with dpms enabled, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
-                self.__logger.warning("Display ON/OFF is not supported for this platform.")
-        return True
+            return True
+        else:
+            self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
+            return True
 
     @display_is_on.setter
     def display_is_on(self, on_off):
-        try: # vcgencmd only applies to raspberry pi
-            if on_off == True:
-                subprocess.call(["vcgencmd", "display_power", "1"])
-            else:
-                subprocess.call(["vcgencmd", "display_power", "0"])
-        except Exception as e:
-            self.__logger.debug("Display ON/OFF is vcgencmd, but an error occured")
-            self.__logger.debug("Cause: %s", e)
+        self.__logger.debug("Switch display (display_power=%d).", self.__display_power)
+        if self.__display_power == 0:
+            try: # vcgencmd only applies to raspberry pi
+                if on_off == True:
+                    subprocess.call(["vcgencmd", "display_power", "1"])
+                else:
+                    subprocess.call(["vcgencmd", "display_power", "0"])
+            except Exception as e:
+                self.__logger.debug("Display ON/OFF is vcgencmd, but an error occured")
+                self.__logger.debug("Cause: %s", e)
+        elif self.__display_power == 1:
             try: # try xset on linux, DPMS has to be enabled
                 if on_off == True:
                     subprocess.call(["xset" , "-display", ":0", "dpms", "force", "on"])
@@ -142,7 +151,8 @@ class ViewerDisplay:
             except Exception as e:
                 self.__logger.debug("Display ON/OFF is xset via dpms, but an error occured")
                 self.__logger.debug("Cause: %s", e)
-                self.__logger.warning("Display ON/OFF is not supported for this platform.")
+        else:
+            self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
 
     def set_show_text(self, txt_key=None, val="ON"):
         if txt_key is None:

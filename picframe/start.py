@@ -114,17 +114,16 @@ def main():
         print("\nChecking required packages......")
         required_packages=[
             'PIL',
-            'exifread',
             'pi3d',
             'yaml',
             'paho.mqtt',
             'iptcinfo3',
             'numpy',
-            'ninepatch'
+            'ninepatch',
+            'pi_heif',
+            'defusedxml'
         ]
         check_packages(required_packages)
-        print("\nChecking optional packages......")
-        check_packages(['pyheif'])
         return
     elif args.configfile:
         m = model.Model(args.configfile)

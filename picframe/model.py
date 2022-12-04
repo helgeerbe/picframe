@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
         'display_y': 0,
         'display_w': None,
         'display_h': None,
+        'display_power': 0,
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'test_key': 'test_value',
         'mat_images': True,

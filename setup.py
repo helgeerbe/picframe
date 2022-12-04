@@ -32,13 +32,14 @@ setup(name='picframe',
         'html/*', 'html/**/*']},
       install_requires=[
         'Pillow>=9.0.0',
-        'ExifRead',
+        'defusedxml',
         'pi3d>=2.49',
         'PyYAML',
         'paho-mqtt',
         'IPTCInfo3',
         'numpy',
-        'ninepatch'
+        'ninepatch',
+        'pi_heif>=0.8.0'
       ],
       entry_points = {
         'console_scripts': ['picframe=picframe.start:main']
