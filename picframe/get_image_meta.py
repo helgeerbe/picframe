@@ -22,9 +22,14 @@ class GetImageMeta:
             self.__do_exif_tags(exif)
             self.__do_geo_tags(exif)
             self.__do_iptc_keywords()
-            xmp = image.getxmp()
-            if len(xmp) > 0:
-                self.__do_xmp_keywords(xmp)
+            try:
+                xmp = image.getxmp()
+                if len(xmp) > 0:
+                    self.__do_xmp_keywords(xmp)
+            except Exception as e:
+                xmp = {}
+                self.__logger.warning("PILL getxmp() failed: %s -> %s", filename, e)
+                
 
     def __do_image_tags(self, exif):
         tags =  {
