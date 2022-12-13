@@ -28,7 +28,6 @@ class ImageCache:
         self.__modified_folders = []
         self.__modified_files = []
         self.__cached_file_stats = [] # collection shared between threads
-        self.__cached_file_stats_lock = threading.Lock() # lock to manage shared collection
         self.__logger = logging.getLogger("image_cache.ImageCache")
         self.__logger.debug('Creating an instance of ImageCache')
         self.__picture_dir = picture_dir
@@ -37,6 +36,7 @@ class ImageCache:
         self.__geo_reverse = geo_reverse
         self.__portrait_pairs = portrait_pairs #TODO have a function to turn this on and off?
         self.__db = self.__create_open_db(self.__db_file)
+        self.__db_write_lock = threading.Lock() # lock to serialize db writes between threads
         # NB this is where the required schema is set
         self.__update_schema(3)
 
@@ -55,8 +55,9 @@ class ImageCache:
                 self.update_cache()
                 time.sleep(2.0)
             time.sleep(0.01)
-        self.__update_file_stats() # write any unsaved file stats before closing
+        self.__db_write_lock.acquire()
         self.__db.commit() # close after update_cache finished for last time
+        self.__db_write_lock.release()
         self.__db.close()
         self.__shutdown_completed = True
 
@@ -79,9 +80,6 @@ class ImageCache:
 
         self.__logger.debug('Updating cache')
 
-        # Update any cached file stats. This should be really light-weight
-        # so just process any new stats in every pass...
-        self.__update_file_stats()
 
         # If the current collection of updated files is empty, check for disk-based changes
         if not self.__modified_files:
@@ -106,7 +104,9 @@ class ImageCache:
             self.__purge_missing_files_and_folders()
 
         # Commit the current set of changes
+        self.__db_write_lock.acquire()
         self.__db.commit()
+        self.__db_write_lock.release()
 
 
     def query_cache(self, where_clause, sort_clause = 'fname ASC'):
@@ -165,7 +165,14 @@ class ImageCache:
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
                 row = self.__db.execute(sql).fetchone() # description inserted in table
-        self.__add_file_to_stats_cache(file_id) # Add a record to the file stats cache collection
+        sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = ? WHERE file_id = ?"
+        starttime = round(time.time() * 1000)
+        self.__db_write_lock.acquire()
+        waittime = round(time.time() * 1000)
+        self.__db.execute(sql, (time.time(), file_id)) # Add file stats 
+        self.__db_write_lock.release()
+        now = round(time.time() * 1000)
+        self.__logger.debug('Update file stats: Wait for %d ms and need %d ms for update ', waittime - starttime, now - waittime)
         return row # NB if select fails (i.e. moved file) will return None
 
     def get_column_names(self):
@@ -173,30 +180,19 @@ class ImageCache:
         rows = self.__db.execute(sql).fetchall()
         return [row['name'] for row in rows]
 
-    def __add_file_to_stats_cache(self, file_id):
-        # This collection is shared between threads, so lock it to update
-        self.__cached_file_stats_lock.acquire()
-        self.__cached_file_stats.append([file_id, time.time()])
-        self.__cached_file_stats_lock.release()
-
-    def __update_file_stats(self):
-        # Process (and drain) the entire collection of cached file stats by storing them in the db
-        # Note, this is likely an empty or very small collection
-        if self.__cached_file_stats:
-            sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = ? WHERE file_id = ?"
-            self.__cached_file_stats_lock.acquire()
-            while self.__cached_file_stats:
-                file_id, timestamp = self.__cached_file_stats.pop()
-                self.__db.execute(sql, (timestamp, file_id))
-            self.__cached_file_stats_lock.release()
-
     def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
         location = self.__geo_reverse.get_address(lat, lon)
         if len(location) == 0:
             return False #TODO this will continue to try even if there is some permanant cause
         else:
             sql = "INSERT OR REPLACE INTO location (latitude, longitude, description) VALUES (?, ?, ?)"
+            starttime = round(time.time() * 1000)
+            self.__db_write_lock.acquire()
+            waittime = round(time.time() * 1000)
             self.__db.execute(sql, (lat, lon, location))
+            self.__db_write_lock.release()
+            now = round(time.time() * 1000)
+            self.__logger.debug('Update location: Wait for db %d ms and need %d ms for update ', waittime - starttime, now - waittime)
             return True
 
 
@@ -412,6 +408,7 @@ class ImageCache:
         vals.insert(0, file)
 
         # Insert this file's info into the folder, file, and meta tables
+        self.__db_write_lock.acquire()
         self.__db.execute(folder_insert, (dir,))
         self.__db.execute(folder_update, (dir,))
         if file_id is None:
@@ -419,6 +416,7 @@ class ImageCache:
         else:
             self.__db.execute(file_update, (dir, base, extension.lstrip("."), mod_tm, file_id))
         self.__db.execute(meta_insert, vals)
+        self.__db_write_lock.release()
 
 
     def __update_folder_info(self, folder_collection):
@@ -426,7 +424,9 @@ class ImageCache:
         sql = "UPDATE folder SET last_modified = ?, missing = 0 WHERE name = ?"
         for folder, modtime in folder_collection:
             update_data.append((modtime, folder))
+        self.__db_write_lock.acquire()
         self.__db.executemany(sql, update_data)
+        self.__db_write_lock.release()
 
 
     def __get_meta_sql_from_dict(self, dict):
@@ -445,10 +445,12 @@ class ImageCache:
         # Flag or delete any non-existent folders from the db. Note, deleting will automatically
         # remove orphaned records from the 'file' and 'meta' tables
         if len(folder_id_list):
+            self.__db_write_lock.acquire()
             if self.__purge_files:
                 self.__db.executemany('DELETE FROM folder WHERE folder_id = ?', folder_id_list)
             else:
                 self.__db.executemany('UPDATE folder SET missing = 1 WHERE folder_id = ?', folder_id_list)
+            self.__db_write_lock.release()
 
         # Find files in the db that are no longer on disk
         if self.__purge_files:
@@ -460,7 +462,9 @@ class ImageCache:
             # Delete any non-existent files from the db. Note, this will automatically
             # remove matching records from the 'meta' table as well.
             if len(file_id_list):
+                self.__db_write_lock.acquire()
                 self.__db.executemany('DELETE FROM file WHERE file_id = ?', file_id_list)
+                self.__db_write_lock.release()
             self.__purge_files = False
 
     def __get_exif_info(self, file_path_name):

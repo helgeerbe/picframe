@@ -22,13 +22,18 @@ class GetImageMeta:
             self.__do_exif_tags(exif)
             self.__do_geo_tags(exif)
             self.__do_iptc_keywords()
-            xmp = image.getxmp()
-            if len(xmp) > 0:
-                self.__do_xmp_keywords(xmp)
+            try:
+                xmp = image.getxmp()
+                if len(xmp) > 0:
+                    self.__do_xmp_keywords(xmp)
+            except Exception as e:
+                xmp = {}
+                self.__logger.warning("PILL getxmp() failed: %s -> %s", filename, e)
+                
 
     def __do_image_tags(self, exif):
         tags =  {
-            "Image " + TAGS.get(key, key): value
+            "Image " + str(TAGS.get(key, key)): value
             for key, value in exif.items()
         }
         self.__tags.update(tags)
@@ -39,7 +44,7 @@ class GetImageMeta:
                 break
         info = exif.get_ifd(key)
         tags =  {
-            "EXIF " +  TAGS.get(key, key): value
+            "EXIF " +  str(TAGS.get(key, key)): value
             for key, value in info.items()
         }
         self.__tags.update(tags)
@@ -50,7 +55,7 @@ class GetImageMeta:
                 break
         gps_info = exif.get_ifd(key)
         tags =  {
-            "GPS " + GPSTAGS.get(key, key): value
+            "GPS " + str(GPSTAGS.get(key, key)): value
             for key, value in gps_info.items()
         }
         self.__tags.update(tags)
