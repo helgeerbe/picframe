@@ -1,0 +1,79 @@
+[build-system]
+requires = ["setuptools", "versioneer[toml]", "tomli; python_version < '3.11'"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "picframe"
+description = "Picture frame viewer powered by raspberry with homeassistant integration"
+keywords = [
+    "picframe", 
+    "viewer", 
+    "raspberry", 
+    "raspi",
+    "homeassistant", 
+    "hass"]
+authors = [
+  { name = "Helge Erbe", email = "helge@erbehome.de"  },
+  { name = "Paddy Gaunt" },
+  { name = "Jeff Godfrey" },
+]
+maintainers = [
+  { name = "Helge Erbe", email = "helge@erbehome.de"  },
+]
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.7"
+classifiers=[
+    "Development Status :: 4 - Beta",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.7",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Topic :: Multimedia :: Graphics :: Viewers",
+]
+dynamic = ["version"]
+dependencies = [
+    "Pillow>=9.0.0",
+    "defusedxml",
+    "pi3d>=2.49",
+    "PyYAML",
+    "paho-mqtt",
+    "IPTCInfo3",
+    "numpy",
+    "ninepatch",
+    "pi_heif>=0.8.0"
+]
+
+[project.urls]
+"Homepage" = "https://github.com/helgeerbe/picframe"
+
+[project.scripts]
+picframe = "picframe.start:main"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+namespaces = true
+where = ["src"]
+
+
+[tool.setuptools.package-data]
+"picframe.data" = ["**"]
+"picframe.config" = ["**"]
+"picframe.html" = ["**"]
+
+[tool.setuptools.dynamic]
+version = {attr = "picframe.__version__"}
+readme = {file = ["README.rst", "USAGE.rst"]}
+
+[tool.versioneer]
+VCS = "git"
+style = "pep440"
+versionfile_source = "src/picframe/_version.py"
+versionfile_build = "picframe/_version.py"
+tag_prefix = ""
+parentdir_prefix = "picframe-"
