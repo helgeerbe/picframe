@@ -1,7 +1,7 @@
 name: flake8 & pytest
 
 on: 
-  [push]
+  #[push]
   workflow_dispatch:
 
 jobs:
