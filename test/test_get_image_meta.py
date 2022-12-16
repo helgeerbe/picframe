@@ -13,6 +13,7 @@ def test_file_not_found():
         assert exifs.has_exif() == False
     except:
         pytest.fail("Unexpected exception")
+        
 
 def test_open_file():
     try:
