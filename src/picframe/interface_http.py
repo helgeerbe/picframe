@@ -5,16 +5,16 @@ import os
 import logging
 import json
 import threading
-from functools import partial
 
 try:
-    from http.server import BaseHTTPRequestHandler, HTTPServer #py3
+    from http.server import BaseHTTPRequestHandler, HTTPServer  # py3
     import urllib.parse as urlparse
 except ImportError:
-    from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer #py2
+    from BaseHTTPServer import BaseHTTPRequestHandler, HTTPServer  # py2
     import urlparse
 
 EXTENSIONS = [".jpg", ".jpeg", ".png", ".heif", ".heic"]
+
 
 def heif_to_jpg(fname):
     try:
@@ -25,12 +25,13 @@ def heif_to_jpg(fname):
         image = Image.open(fname)
         if image.mode not in ("RGB", "RGBA"):
             image = image.convert("RGB")
-        image.save("/dev/shm/temp.jpg") # default 75% quality
+        image.save("/dev/shm/temp.jpg")  # default 75% quality
         return "/dev/shm/temp.jpg"
-    except:
+    except Exception:
         logger = logging.getLogger("interface_http.heif_to_jpg")
         logger.warning("Failed attempt to convert %s \n** Have you installed pi_heif? **", fname)
-        return "" # this will not render as a page and will generate error TODO serve specific page with explicit error
+        return ""  # this will not render as a page and will generate error TODO serve specific page with explicit error
+
 
 class RequestHandler(BaseHTTPRequestHandler):
 
@@ -38,8 +39,8 @@ class RequestHandler(BaseHTTPRequestHandler):
         try:
             path_split = self.path.split("?")
             page_ok = False
-            if len(path_split) == 1: # i.e. no ? - just serve index.html or image
-                if path_split[0] != "/": # serve static page from html_path...
+            if len(path_split) == 1:  # i.e. no ? - just serve index.html or image
+                if path_split[0] != "/":  # serve static page from html_path...
                     html_page = path_split[0].strip("/")
                 else:
                     html_page = "index.html"
@@ -49,7 +50,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     # in order to trigger streaming whatever is the currently showing image
                     content_type = "image"
                     page = self.server._controller.get_current_path()
-                    _, extension = os.path.splitext(page) # as current_image may be heic
+                    _, extension = os.path.splitext(page)  # as current_image may be heic
                     if extension.lower() in ('.heic', '.heif'):
                         page = heif_to_jpg(page)
                 else:
@@ -59,7 +60,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if os.path.isfile(page):
                     self.send_response(200)
                     self.send_header('Content-type', content_type)
-                    #TODO check if html or js - in which case application/javascript
+                    # TODO check if html or js - in which case application/javascript
                     # really should filter out attempts to render all other file types (jpg etc?)
                     self.end_headers()
                     with open(page, "rb") as f:
@@ -67,7 +68,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                         self.wfile.write(page_bytes)
                     self.connection.close()
                     page_ok = True
-            else: # server type request - get or set info
+            else:  # server type request - get or set info
                 start_time = time.time()
                 message = {}
                 self.send_response(200)
@@ -80,9 +81,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                         for subkey in self.server._setters:
                             message[subkey] = getattr(self.server._controller, subkey)
                     elif key in dir(self.server._controller):
-                        if value != "": # parse_qsl can return empty string for value when just querying
+                        if value != "":  # parse_qsl can return empty string for value when just querying
                             lwr_val = value.lower()
-                            if lwr_val in ("true", "on", "yes"): # this only works for simple values *not* json style kwargs
+                            if lwr_val in ("true", "on", "yes"):  # this only works for simple values *not* json style kwargs # noqa: E501
                                 value = True
                             elif lwr_val in ("false", "off", "no"):
                                 value = False
@@ -90,12 +91,12 @@ class RequestHandler(BaseHTTPRequestHandler):
                                 if key in self.server._setters:
                                     setattr(self.server._controller, key, value)
                                 else:
-                                    value = value.replace("\'", "\"") # only " permitted in json
+                                    value = value.replace("\'", "\"")  # only " permitted in json
                                     # value must be json kwargs
                                     getattr(self.server._controller, key)(**json.loads(value))
                             except Exception as e:
                                 message['ERROR'] = 'Excepton:{}>{};'.format(key, e)
-                        if key in self.server._setters: # can get info back from controller TODO 
+                        if key in self.server._setters:  # can get info back from controller TODO
                             message[key] = getattr(self.server._controller, key)
 
                     self.wfile.write(bytes(json.dumps(message), "utf8"))
@@ -103,8 +104,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                     page_ok = True
 
                 self.server._logger.info(message)
-                self.server._logger.debug("request finished in:  %s seconds" %
-                              (time.time() - start_time))
+                self.server._logger.debug("request finished in:  %s seconds" % (time.time() - start_time))
             if not page_ok:
                 self.send_response(404)
                 self.connection.close()
@@ -115,14 +115,11 @@ class RequestHandler(BaseHTTPRequestHandler):
 
         return
 
-
     def log_request(self, code):
         pass
 
-
     def do_POST(self):
         self.do_GET()
-
 
     def end_headers(self):
         try:
@@ -146,7 +143,7 @@ class InterfaceHttp(HTTPServer):
         # TODO check below works with all decorated methods.. seems to work
         controller_class = controller.__class__
         self._setters = [method for method in dir(controller_class)
-                            if 'setter' in dir(getattr(controller_class, method))]
+                         if 'setter' in dir(getattr(controller_class, method))]
         t = threading.Thread(target=self.serve_forever)
         t.start()
 
