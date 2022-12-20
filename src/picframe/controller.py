@@ -3,7 +3,6 @@
 import logging
 import time
 import signal
-from picframe.interface_peripherals import InterfacePeripherals
 
 
 def make_date(txt):
@@ -328,6 +327,7 @@ class Controller:
 
     def start(self):
         self.__viewer.slideshow_start()
+        from picframe.interface_peripherals import InterfacePeripherals
         self.__interface_peripherals = InterfacePeripherals(self.__model, self.__viewer, self)
 
     def stop(self):
