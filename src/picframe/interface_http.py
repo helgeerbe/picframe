@@ -35,7 +35,7 @@ def heif_to_jpg(fname):
 
 class RequestHandler(BaseHTTPRequestHandler):
 
-    def do_GET(self):
+    def do_GET(self):  # noqa: C901
         try:
             path_split = self.path.split("?")
             page_ok = False

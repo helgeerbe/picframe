@@ -264,7 +264,7 @@ class ViewerDisplay:
             diff_aspect = 1 - (screen_aspect / image_aspect)
         return (screen_aspect, image_aspect, diff_aspect)
 
-    def __tex_load(self, pics, size=None):
+    def __tex_load(self, pics, size=None):  # noqa: C901
         try:
             if self.__mat_images and self.__matter is None:
                 self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
@@ -336,7 +336,7 @@ class ViewerDisplay:
             # raise # only re-raise errors here while debugging
         return tex
 
-    def __make_text(self, pic, paused, side=0, pair=False):
+    def __make_text(self, pic, paused, side=0, pair=False):  # noqa: C901
         # if side 0 and pair False then this is a full width text and put into
         # __textblocks[0] otherwise it is half width and put into __textblocks[position]
         info_strings = []
@@ -450,7 +450,7 @@ class ViewerDisplay:
                                           h=bkg_hgt, y=-int(self.__display.height) // 2 + bkg_hgt // 2, z=4.0)
             self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
-    def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):
+    def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
         if self.clock_is_on:
             self.__draw_clock()
 

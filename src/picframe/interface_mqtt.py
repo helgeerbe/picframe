@@ -247,7 +247,7 @@ class InterfaceMQTT:
         client.subscribe(command_topic, qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
 
-    def on_message(self, client, userdata, message):
+    def on_message(self, client, userdata, message):  # noqa: C901
         msg = message.payload.decode("utf-8")
         switch_topic_head = "homeassistant/switch/" + self.__device_id
         button_topic_head = "homeassistant/button/" + self.__device_id
