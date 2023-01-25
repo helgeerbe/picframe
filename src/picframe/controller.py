@@ -3,6 +3,7 @@
 import logging
 import time
 import signal
+import sys
 
 
 def make_date(txt):
@@ -58,6 +59,7 @@ class Controller:
         self.__location_filter = ''
         self.__tags_filter = ''
         self.__interface_peripherals = None
+        self.__interface_mqtt = None
         self.__shutdown_complete = False
 
     @property
@@ -330,9 +332,22 @@ class Controller:
         from picframe.interface_peripherals import InterfacePeripherals
         self.__interface_peripherals = InterfacePeripherals(self.__model, self.__viewer, self)
 
+        # start mqtt
+        mqtt_config = self.__model.get_mqtt_config()
+        if mqtt_config['use_mqtt']:
+            from picframe import interface_mqtt
+            try:
+                self.__interface_mqtt = interface_mqtt.InterfaceMQTT(self, mqtt_config)
+                self.__interface_mqtt.start()
+            except Exception:
+                self.__logger.error("Can't initialize mqtt. Stopping picframe")
+                sys.exit(1)
+
     def stop(self):
         self.keep_looping = False
         self.__interface_peripherals.stop()
+        if self.__interface_mqtt:
+            self.__interface_mqtt.stop()
         while not self.__shutdown_complete:
             time.sleep(0.05)  # block until main loop has stopped
         self.__model.stop_image_chache()  # close db tidily (blocks till closed)

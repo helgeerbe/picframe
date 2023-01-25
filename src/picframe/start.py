@@ -1,5 +1,4 @@
 import logging
-import sys
 import argparse
 import os
 import ssl
@@ -135,15 +134,7 @@ def main():
     c = controller.Controller(m, v)
     c.start()
 
-    mqtt_config = m.get_mqtt_config()
-    if mqtt_config['use_mqtt']:
-        from picframe import interface_mqtt
-        try:
-            mqtt = interface_mqtt.InterfaceMQTT(c, mqtt_config)
-            mqtt.start()
-        except Exception:
-            logger.error("Can't initialize mqtt. Stopping picframe")
-            sys.exit(1)
+ 
 
     http_config = m.get_http_config()
     model_config = m.get_model_config()
@@ -160,8 +151,7 @@ def main():
                                             certfile=http_config['certfile'],
                                             server_side=True)
     c.loop()
-    if mqtt_config['use_mqtt']:
-        mqtt.stop()
+
     if http_config['use_http']:  # TODO objects living in multiple threads issue at shutdown!
         server.stop()
     c.stop()
