@@ -148,4 +148,10 @@ class InterfaceHttp(HTTPServer):
         t.start()
 
     def stop(self):
-        self.shutdown()
+        try:
+            os.kill(self._process.pid, SIGTERM)
+            self._logger.info("Stopping server")
+        except Exception:
+            self._logger.info("No server process to stop")
+        self._process.join()
+        self._process.terminate()

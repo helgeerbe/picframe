@@ -60,6 +60,7 @@ class Controller:
         self.__tags_filter = ''
         self.__interface_peripherals = None
         self.__interface_mqtt = None
+        self.__interface_http = None
         self.__shutdown_complete = False
 
     @property
@@ -343,11 +344,31 @@ class Controller:
                 self.__logger.error("Can't initialize mqtt. Stopping picframe")
                 sys.exit(1)
 
+        # start http server
+        http_config = self.__model.get_http_config()
+        if http_config['use_http']:
+            from picframe import interface_http
+            model_config = self.__model.get_model_config()
+            self.__interface_http = interface_http.InterfaceHttp(self,
+                                                                 http_config['path'],
+                                                                 model_config['pic_dir'],
+                                                                 model_config['no_files_img'],
+                                                                 http_config['port'])  # TODO: Implement TLS
+            self.__interface_http.run()
+            # if http_config['use_ssl']:
+            #     server.socket = ssl.wrap_socket(
+            #                                     server.socket,
+            #                                     keyfile=http_config['keyfile'],
+            #                                     certfile=http_config['certfile'],
+            #                                     server_side=True)
+
     def stop(self):
         self.keep_looping = False
         self.__interface_peripherals.stop()
         if self.__interface_mqtt:
             self.__interface_mqtt.stop()
+        if self.__interface_http:
+            self.__interface_http.stop()
         while not self.__shutdown_complete:
             time.sleep(0.05)  # block until main loop has stopped
         self.__model.stop_image_chache()  # close db tidily (blocks till closed)

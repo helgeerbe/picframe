@@ -3,9 +3,10 @@ import argparse
 import os
 import ssl
 import locale
+import sys
 from distutils.dir_util import copy_tree
 
-from picframe import model, viewer_display, controller, interface_http, __version__
+from picframe import model, viewer_display, controller, __version__
 
 PICFRAME_DATA_DIR = 'picframe_data'
 
@@ -133,28 +134,8 @@ def main():
     v = viewer_display.ViewerDisplay(m.get_viewer_config())
     c = controller.Controller(m, v)
     c.start()
-
- 
-
-    http_config = m.get_http_config()
-    model_config = m.get_model_config()
-    if http_config['use_http']:
-        server = interface_http.InterfaceHttp(c,
-                                              http_config['path'],
-                                              model_config['pic_dir'],
-                                              model_config['no_files_img'],
-                                              http_config['port'])
-        if http_config['use_ssl']:
-            server.socket = ssl.wrap_socket(
-                                            server.socket,
-                                            keyfile=http_config['keyfile'],
-                                            certfile=http_config['certfile'],
-                                            server_side=True)
     c.loop()
-
-    if http_config['use_http']:  # TODO objects living in multiple threads issue at shutdown!
-        server.stop()
-    c.stop()
+    # c.stop()
 
 
 if __name__ == "__main__":
