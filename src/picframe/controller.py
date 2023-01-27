@@ -61,7 +61,6 @@ class Controller:
         self.__interface_peripherals = None
         self.__interface_mqtt = None
         self.__interface_http = None
-        self.__shutdown_complete = False
 
     @property
     def paused(self):
@@ -326,7 +325,6 @@ class Controller:
             if skip_image:
                 self.__next_tm = 0
             self.__interface_peripherals.check_input()
-        self.__shutdown_complete = True
 
     def start(self):
         self.__viewer.slideshow_start()
@@ -369,12 +367,9 @@ class Controller:
             self.__interface_mqtt.stop()
         if self.__interface_http:
             self.__interface_http.stop()
-        while not self.__shutdown_complete:
-            time.sleep(0.05)  # block until main loop has stopped
         self.__model.stop_image_chache()  # close db tidily (blocks till closed)
         self.__viewer.slideshow_stop()  # do this last
 
     def __signal_handler(self, sig, frame):
         print('You pressed Ctrl-c!')
-        self.__shutdown_complete = True
-        self.stop()
+        self.keep_looping = False

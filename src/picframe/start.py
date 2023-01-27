@@ -135,7 +135,7 @@ def main():
     c = controller.Controller(m, v)
     c.start()
     c.loop()
-    # c.stop()
+    c.stop()
 
 
 if __name__ == "__main__":
