@@ -1,4 +1,4 @@
-name: Publish ${package_name} to PyPI / GitHub
+name: Publish picframe to PyPI / GitHub
 
 on:
   push:
@@ -11,7 +11,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/picframe
+      url: https://pypi.org/p/picframe
     permissions:
       id-token: write  # IMPORTANT: this permission is mandatory for trusted publishing
 
