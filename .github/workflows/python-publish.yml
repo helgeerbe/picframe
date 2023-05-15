@@ -50,21 +50,8 @@ jobs:
         with:
           body: ${{steps.github_release.outputs.changelog}}
           draft: false
+          files: |
+            dist/picframe-*.tar.gz, dist/picframe-*.whl
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
 
-      - name: Get Asset name
-        run: |
-          export PKG=$(ls dist/ | grep tar)
-          set -- $PKG
-          echo "name=$1" >> $GITHUB_ENV
-      - name: Upload Release Asset (sdist) to GitHub
-        id: upload-release-asset
-        uses: actions/upload-release-asset@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: dist/${{ env.name }}
-          asset_name: ${{ env.name }}
-          asset_content_type: application/zip
