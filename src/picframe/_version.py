@@ -74,7 +74,7 @@ def run_command(commands, args, cwd=None, verbose=False, hide_stderr=False,
     p = None
     for c in commands:
         dispcmd = str([c] + args)
-        try: 
+        try:
             # remember shell=False, so use git.cmd on windows, not just git
             p = subprocess.Popen([c] + args, cwd=cwd, env=env,
                                  stdout=subprocess.PIPE,

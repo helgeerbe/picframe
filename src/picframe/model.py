@@ -2,8 +2,6 @@ import yaml
 import os
 import time
 import logging
-import random
-import json
 import locale
 from picframe import geo_reverse, image_cache
 
@@ -16,8 +14,7 @@ DEFAULT_CONFIG = {
         'edge_alpha': 0.5,
         'fps': 20.0,
         'background': [0.2, 0.2, 0.3, 1.0],
-        'blend_type': "blend", # {"blend":0.0, "burn":1.0, "bump":2.0}
-
+        'blend_type': "blend",  # {"blend":0.0, "burn":1.0, "bump":2.0}
         'font_file': '~/picframe_data/data/fonts/NotoSans-Regular.ttf',
         'shader': '~/picframe_data/data/shaders/blend_new',
         'show_text_fm': '%b %d, %Y',
@@ -28,7 +25,6 @@ DEFAULT_CONFIG = {
         'text_bkg_hgt': 0.25,
         'text_opacity': 1.0,
         'fit': False,
-        #'auto_resize': True,
         'kenburns': False,
         'display_x': 0,
         'display_y': 0,
@@ -51,7 +47,6 @@ DEFAULT_CONFIG = {
         'clock_text_sz': 120,
         'clock_format': "%I:%M",
         'clock_opacity': 1.0,
-        #'codepoints': "1234567890AÄÀÆÅÃBCÇDÈÉÊEËFGHIÏÍJKLMNÑOÓÖÔŌØPQRSTUÚÙÜVWXYZaáàãæåäbcçdeéèêëfghiíïjklmnñoóôōøöpqrsßtuúüvwxyz., _-+*()&/`´'•" # limit to 121 ie 11x11 grid_size
         'menu_text_sz': 40,
         'menu_autohide_tm': 10.0,
         'geo_suppress_list': [],
@@ -68,10 +63,14 @@ DEFAULT_CONFIG = {
         'fade_time': 10.0,
         'shuffle': True,
         'sort_cols': 'fname ASC',
-        'image_attr': ['PICFRAME GPS'],                          # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat
+        'image_attr': ['PICFRAME GPS'],  # image attributes send by MQTT, Keys are taken from exifread library, 'PICFRAME GPS' is special to retrieve GPS lon/lat # noqa: E501
         'load_geoloc': True,
         'locale': 'en_US.utf8',
-        'key_list': [['tourism','amenity','isolated_dwelling'],['suburb','village'],['city','county'],['region','state','province'],['country']],
+        'key_list': [['tourism', 'amenity', 'isolated_dwelling'],
+                     ['suburb', 'village'],
+                     ['city', 'county'],
+                     ['region', 'state', 'province'],
+                     ['country']],
         'geo_key': 'this_needs_to@be_changed',  # use your email address
         'db_file': '~/picframe_data/data/pictureframe.db3',
         'portrait_pairs': False,
@@ -80,13 +79,13 @@ DEFAULT_CONFIG = {
         'log_file': '',
     },
     'mqtt': {
-        'use_mqtt': False,                          # Set tue true, to enable mqtt
+        'use_mqtt': False,  # Set tue true, to enable mqtt
         'server': '',
         'port': 8883,
         'login': '',
         'password': '',
         'tls': '',
-        'device_id': 'picframe',                                 # unique id of device. change if there is more than one picture frame
+        'device_id': 'picframe',  # unique id of device. change if there is more than one picture frame
         'device_url': '',
     },
     'http': {
@@ -98,7 +97,7 @@ DEFAULT_CONFIG = {
         'certfile': "/path/to/fullchain.pem"
     },
     'peripherals': {
-        'input_type': None,                                      # valid options: {None, "keyboard", "touch", "mouse"}
+        'input_type': None,  # valid options: {None, "keyboard", "touch", "mouse"}
         'buttons': {
             'pause': {'enable': True, 'label': 'Pause', 'shortcut': ' '},
             'display_off': {'enable': True, 'label': 'Display off', 'shortcut': 'o'},
@@ -110,7 +109,7 @@ DEFAULT_CONFIG = {
 }
 
 
-class Pic: #TODO could this be done more elegantly with namedtuple
+class Pic:  # TODO could this be done more elegantly with namedtuple
 
     def __init__(self, fname, last_modified, file_id, orientation=1, exif_datetime=0,
                  f_number=0, exposure_time=None, iso=0, focal_length=None,
@@ -136,20 +135,20 @@ class Pic: #TODO could this be done more elegantly with namedtuple
         self.height = height
         self.is_portrait = is_portrait
         self.location = location
-        self.tags=tags
-        self.caption=caption
-        self.title=title
+        self.tags = tags
+        self.caption = caption
+        self.title = title
 
 
 class Model:
 
-    def __init__(self, configfile = DEFAULT_CONFIGFILE):
+    def __init__(self, configfile=DEFAULT_CONFIGFILE):
         self.__logger = logging.getLogger("model.Model")
         self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
         configfile = os.path.expanduser(configfile)
-        self.__logger.info("Open config file: %s:",configfile)
+        self.__logger.info("Open config file: %s:", configfile)
         with open(configfile, 'r') as stream:
             try:
                 conf = yaml.safe_load(stream)
@@ -160,10 +159,10 @@ class Model:
             except yaml.YAMLError as exc:
                 self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
         root_logger = logging.getLogger()
-        root_logger.setLevel(self.get_model_config()['log_level']) # set root logger
+        root_logger.setLevel(self.get_model_config()['log_level'])  # set root logger
         log_file = self.get_model_config()['log_file']
         if log_file != '':
-            filehandler = logging.FileHandler(log_file) #NB default appending so needs monitoring
+            filehandler = logging.FileHandler(log_file)  # NB default appending so needs monitoring
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
             filehandler.setFormatter(formatter)
             for hdlr in root_logger.handlers[:]:  # remove the existing file handlers
@@ -171,22 +170,23 @@ class Model:
                     root_logger.removeHandler(hdlr)
             root_logger.addHandler(filehandler)      # set the new handler
 
-        self.__file_list = [] # this is now a list of tuples i.e (file_id1,) or (file_id1, file_id2)
-        self.__number_of_files = 0 # this is shortcut for len(__file_list)
+        self.__file_list = []  # this is now a list of tuples i.e (file_id1,) or (file_id1, file_id2)
+        self.__number_of_files = 0  # this is shortcut for len(__file_list)
         self.__reload_files = True
-        self.__file_index = 0 # pointer to next position in __file_list
-        self.__current_pics = (None, None) # this hold a tuple of (pic, None) or two pic objects if portrait pairs
+        self.__file_index = 0  # pointer to next position in __file_list
+        self.__current_pics = (None, None)  # this hold a tuple of (pic, None) or two pic objects if portrait pairs
         self.__num_run_through = 0
 
-        model_config = self.get_model_config() # alias for brevity as used several times below
+        model_config = self.get_model_config()  # alias for brevity as used several times below
         try:
             locale.setlocale(locale.LC_TIME, model_config['locale'])
-        except:
+        except Exception:
             self.__logger.error("error trying to set locale to {}".format(model_config['locale']))
         self.__pic_dir = os.path.expanduser(model_config['pic_dir'])
         self.__subdirectory = os.path.expanduser(model_config['subdirectory'])
         self.__load_geoloc = model_config['load_geoloc']
-        self.__geo_reverse = geo_reverse.GeoReverse(model_config['geo_key'], key_list=self.get_model_config()['key_list'])
+        self.__geo_reverse = geo_reverse.GeoReverse(model_config['geo_key'],
+                                                    key_list=self.get_model_config()['key_list'])
         self.__image_cache = image_cache.ImageCache(self.__pic_dir,
                                                     model_config['follow_links'],
                                                     os.path.expanduser(model_config['db_file']),
@@ -196,7 +196,7 @@ class Model:
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
         self.__sort_cols = model_config['sort_cols']
         self.__col_names = None
-        self.__where_clauses = {} # these will be modified by controller
+        self.__where_clauses = {}  # these will be modified by controller
 
     def get_viewer_config(self):
         return self.__config['viewer']
@@ -248,7 +248,7 @@ class Model:
             self.__reload_files = True
 
     @property
-    def EXIF_TO_FIELD(self): # bit convoluted TODO hold in config? not really configurable
+    def EXIF_TO_FIELD(self):  # bit convoluted TODO hold in config? not really configurable
         return self.__image_cache.EXIF_TO_FIELD
 
     @property
@@ -256,12 +256,8 @@ class Model:
         return self.__config['model']['shuffle']
 
     @shuffle.setter
-    def shuffle(self, val:bool):
-        self.__config['model']['shuffle'] = val #TODO should this be altered in config?
-        #if val == True:
-        #    self.__shuffle_files()
-        #else:
-        #    self.__sort_files()
+    def shuffle(self, val: bool):
+        self.__config['model']['shuffle'] = val  # TODO should this be altered in config?
         self.__reload_files = True
 
     def set_where_clause(self, key, value=None):
@@ -291,14 +287,14 @@ class Model:
         subdir_list[:] = [d for d in subdir_list if not d[0] == '.']
         if not follow_links:
             subdir_list[:] = [d for d in subdir_list if not os.path.islink(self.__pic_dir + '/' + d)]
-        subdir_list.insert(0,root)
+        subdir_list.insert(0, root)
         return actual_dir, subdir_list
 
     def force_reload(self):
         self.__reload_files = True
 
     def set_next_file_to_previous_file(self):
-        self.__file_index = (self.__file_index - 2) % self.__number_of_files # TODO deleting last image results in ZeroDivisionError
+        self.__file_index = (self.__file_index - 2) % self.__number_of_files  # TODO deleting last image results in ZeroDivisionError # noqa: E501
 
     def get_next_file(self):
         missing_images = 0
@@ -310,7 +306,7 @@ class Model:
 
             # Reload the playlist if requested
             if self.__reload_files:
-                for _i in range(5): # give image_cache chance on first load if a large directory
+                for _i in range(5):  # give image_cache chance on first load if a large directory
                     self.__get_files()
                     missing_images = 0
                     if self.__number_of_files > 0:
@@ -345,9 +341,12 @@ class Model:
             # Verify the images in the selected image set actually exist on disk
             # Blank out missing references and swap positions if necessary to try and get
             # a valid image in the first slot.
-            if pic1 and not os.path.isfile(pic1.fname): pic1 = None
-            if pic2 and not os.path.isfile(pic2.fname): pic2 = None
-            if (not pic1 and pic2): pic1, pic2 = pic2, pic1
+            if pic1 and not os.path.isfile(pic1.fname):
+                pic1 = None
+            if pic2 and not os.path.isfile(pic2.fname):
+                pic2 = None
+            if (not pic1 and pic2):
+                pic1, pic2 = pic2, pic1
 
             # Increment the image index for next time
             self.__file_index += 1
@@ -364,12 +363,9 @@ class Model:
         return self.__current_pics
 
     def get_number_of_files(self):
-        #return self.__number_of_files
-        #return sum(1 for pics in self.__file_list for pic in pics if pic is not None)
-        # or
         return sum(
                     sum(1 for pic in pics if pic is not None)
-                        for pics in self.__file_list
+                    for pics in self.__file_list
                 )
 
     def get_current_pics(self):
@@ -382,27 +378,28 @@ class Model:
             return None
         f_to_delete = pic.fname
         move_to_dir = os.path.expanduser(self.__deleted_pictures)
-        # TODO should these os system calls be inside a try block in case the file has been deleted after it started to show?
+        # TODO should these os system calls be inside a try block
+        # in case the file has been deleted after it started to show?
         if not os.path.exists(move_to_dir):
-          os.system("mkdir {}".format(move_to_dir)) # problems with ownership using python func
-        os.system("mv '{}' '{}'".format(f_to_delete, move_to_dir)) # and with SMB drives
+            os.system("mkdir {}".format(move_to_dir))  # problems with ownership using python func
+        os.system("mv '{}' '{}'".format(f_to_delete, move_to_dir))  # and with SMB drives
         # find and delete record from __file_list
         for i, file_rec in enumerate(self.__file_list):
-            if file_rec[0] == pic.file_id: # database id TODO check that db tidies itself up
+            if file_rec[0] == pic.file_id:  # database id TODO check that db tidies itself up
                 self.__file_list.pop(i)
                 self.__number_of_files -= 1
                 break
 
     def __get_files(self):
         if self.subdirectory != "":
-            picture_dir = os.path.join(self.__pic_dir, self.subdirectory) # TODO catch, if subdirecotry does not exist
+            picture_dir = os.path.join(self.__pic_dir, self.subdirectory)  # TODO catch, if subdirecotry does not exist
         else:
             picture_dir = self.__pic_dir
-        where_list = ["fname LIKE '{}/%'".format(picture_dir)] # TODO / on end to stop 'test' also selecting test1 test2 etc
+        where_list = ["fname LIKE '{}/%'".format(picture_dir)]  # TODO / on end to stop 'test' also selecting test1 test2 etc  # noqa: E501
         where_list.extend(self.__where_clauses.values())
 
         if len(where_list) > 0:
-            where_clause = " AND ".join(where_list) # TODO now always true - remove unreachable code
+            where_clause = " AND ".join(where_list)  # TODO now always true - remove unreachable code
         else:
             where_clause = "1"
 
@@ -415,12 +412,12 @@ class Model:
             sort_list.append("RANDOM()")
         else:
             if self.__col_names is None:
-                self.__col_names = self.__image_cache.get_column_names() # do this once
+                self.__col_names = self.__image_cache.get_column_names()  # do this once
             for col in self.__sort_cols.split(","):
                 colsplit = col.split()
                 if colsplit[0] in self.__col_names and (len(colsplit) == 1 or colsplit[1].upper() in ("ASC", "DESC")):
                     sort_list.append(col)
-            sort_list.append("fname ASC") # always finally sort on this in case nothing else to sort on or sort_cols is ""
+            sort_list.append("fname ASC")  # always finally sort on this in case nothing else to sort on or sort_cols is "" # noqa: E501
         sort_clause = ",".join(sort_list)
 
         self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
@@ -428,16 +425,3 @@ class Model:
         self.__file_index = 0
         self.__num_run_through = 0
         self.__reload_files = False
-
-    """def __shuffle_files(self):
-        #self.__file_list.sort(key=lambda x: x[1]) # will be later files last
-        recent_n = self.get_model_config()['recent_n']
-        temp_list_first = self.__file_list[-recent_n:]
-        temp_list_last = self.__file_list[:-recent_n]
-        random.seed()
-        random.shuffle(temp_list_first)
-        random.shuffle(temp_list_last)
-        self.__file_list = temp_list_first + temp_list_last
-
-    def __sort_files(self):
-        self.__file_list.sort() # if not shuffled; sort by name"""

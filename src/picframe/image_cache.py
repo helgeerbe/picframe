@@ -5,9 +5,10 @@ import logging
 import threading
 from picframe import get_image_meta
 
+
 class ImageCache:
 
-    EXTENSIONS = ['.png','.jpg','.jpeg','.heif','.heic']
+    EXTENSIONS = ['.png', '.jpg', '.jpeg', '.heif', '.heic']
     EXIF_TO_FIELD = {'EXIF FNumber': 'f_number',
                      'Image Make': 'make',
                      'Image Model': 'model',
@@ -21,22 +22,21 @@ class ImageCache:
                      'IPTC Caption/Abstract': 'caption',
                      'IPTC Object Name': 'title'}
 
-
     def __init__(self, picture_dir, follow_links, db_file, geo_reverse, portrait_pairs=False):
         # TODO these class methods will crash if Model attempts to instantiate this using a
         # different version from the latest one - should this argument be taken out?
         self.__modified_folders = []
         self.__modified_files = []
-        self.__cached_file_stats = [] # collection shared between threads
+        self.__cached_file_stats = []  # collection shared between threads
         self.__logger = logging.getLogger("image_cache.ImageCache")
         self.__logger.debug('Creating an instance of ImageCache')
         self.__picture_dir = picture_dir
         self.__follow_links = follow_links
         self.__db_file = db_file
         self.__geo_reverse = geo_reverse
-        self.__portrait_pairs = portrait_pairs #TODO have a function to turn this on and off?
+        self.__portrait_pairs = portrait_pairs  # TODO have a function to turn this on and off?
         self.__db = self.__create_open_db(self.__db_file)
-        self.__db_write_lock = threading.Lock() # lock to serialize db writes between threads
+        self.__db_write_lock = threading.Lock()  # lock to serialize db writes between threads
         # NB this is where the required schema is set
         self.__update_schema(3)
 
@@ -48,7 +48,6 @@ class ImageCache:
         t = threading.Thread(target=self.__loop)
         t.start()
 
-
     def __loop(self):
         while self.__keep_looping:
             if not self.__pause_looping:
@@ -56,20 +55,18 @@ class ImageCache:
                 time.sleep(2.0)
             time.sleep(0.01)
         self.__db_write_lock.acquire()
-        self.__db.commit() # close after update_cache finished for last time
+        self.__db.commit()  # close after update_cache finished for last time
         self.__db_write_lock.release()
         self.__db.close()
         self.__shutdown_completed = True
 
-
     def pause_looping(self, value):
         self.__pause_looping = value
-
 
     def stop(self):
         self.__keep_looping = False
         while not self.__shutdown_completed:
-            time.sleep(0.05) # make function blocking to ensure staged shutdown
+            time.sleep(0.05)  # make function blocking to ensure staged shutdown
 
     def purge_files(self):
         self.__purge_files = True
@@ -79,7 +76,6 @@ class ImageCache:
         """
 
         self.__logger.debug('Updating cache')
-
 
         # If the current collection of updated files is empty, check for disk-based changes
         if not self.__modified_files:
@@ -108,16 +104,15 @@ class ImageCache:
         self.__db.commit()
         self.__db_write_lock.release()
 
-
-    def query_cache(self, where_clause, sort_clause = 'fname ASC'):
+    def query_cache(self, where_clause, sort_clause='fname ASC'):
         cursor = self.__db.cursor()
-        cursor.row_factory = None # we don't want the "sqlite3.Row" setting from the db here...
+        cursor.row_factory = None  # we don't want the "sqlite3.Row" setting from the db here...
         try:
-            if not self.__portrait_pairs: # TODO SQL insertion? Does it matter in this app?
+            if not self.__portrait_pairs:  # TODO SQL insertion? Does it matter in this app?
                 sql = """SELECT file_id FROM all_data WHERE {0} ORDER BY {1}
                     """.format(where_clause, sort_clause)
                 return cursor.execute(sql).fetchall()
-            else: # make two SELECTS
+            else:  # make two SELECTS
                 sql = """SELECT
                             CASE
                                 WHEN is_portrait = 0 THEN file_id
@@ -147,43 +142,45 @@ class ImageCache:
                             skip_portrait_slot = True
                         newlist.append(elem)
                 return newlist
-        except:
+        except Exception:
             return []
 
-
     def get_file_info(self, file_id):
-        if not file_id: return None
+        if not file_id:
+            return None
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
         row = self.__db.execute(sql).fetchone()
         try:
-            if row is not None and row['last_modified']  != os.path.getmtime(row['fname']):
+            if row is not None and row['last_modified'] != os.path.getmtime(row['fname']):
                 self.__logger.debug('Cache miss: File %s changed on disk', row['fname'])
                 self.__insert_file(row['fname'], file_id)
-                row = self.__db.execute(sql).fetchone() # description inserted in table
+                row = self.__db.execute(sql).fetchone()  # description inserted in table
         except OSError:
-            self.__logger.warning("Image '%s' does not exists or is inaccessible" %row['fname'])
+            self.__logger.warning("Image '%s' does not exists or is inaccessible", row['fname'])
         if row is not None and row['latitude'] is not None and row['longitude'] is not None and row['location'] is None:
             if self.__get_geo_location(row['latitude'], row['longitude']):
-                row = self.__db.execute(sql).fetchone() # description inserted in table
+                row = self.__db.execute(sql).fetchone()  # description inserted in table
         sql = "UPDATE file SET displayed_count = displayed_count + 1, last_displayed = ? WHERE file_id = ?"
         starttime = round(time.time() * 1000)
         self.__db_write_lock.acquire()
         waittime = round(time.time() * 1000)
-        self.__db.execute(sql, (time.time(), file_id)) # Add file stats 
+        self.__db.execute(sql, (time.time(), file_id))  # Add file stats
         self.__db_write_lock.release()
         now = round(time.time() * 1000)
-        self.__logger.debug('Update file stats: Wait for %d ms and need %d ms for update ', waittime - starttime, now - waittime)
-        return row # NB if select fails (i.e. moved file) will return None
+        self.__logger.debug(
+            'Update file stats: Wait for %d ms and need %d ms for update ',
+            waittime - starttime, now - waittime)
+        return row  # NB if select fails (i.e. moved file) will return None
 
     def get_column_names(self):
         sql = "PRAGMA table_info(all_data)"
         rows = self.__db.execute(sql).fetchall()
         return [row['name'] for row in rows]
 
-    def __get_geo_location(self, lat, lon): # TODO periodically check all lat/lon in meta with no location and try again
+    def __get_geo_location(self, lat, lon):  # TODO periodically check all lat/lon in meta with no location and try again # noqa: E501
         location = self.__geo_reverse.get_address(lat, lon)
         if len(location) == 0:
-            return False #TODO this will continue to try even if there is some permanant cause
+            return False  # TODO this will continue to try even if there is some permanant cause
         else:
             sql = "INSERT OR REPLACE INTO location (latitude, longitude, description) VALUES (?, ?, ?)"
             starttime = round(time.time() * 1000)
@@ -192,9 +189,10 @@ class ImageCache:
             self.__db.execute(sql, (lat, lon, location))
             self.__db_write_lock.release()
             now = round(time.time() * 1000)
-            self.__logger.debug('Update location: Wait for db %d ms and need %d ms for update ', waittime - starttime, now - waittime)
+            self.__logger.debug(
+                'Update location: Wait for db %d ms and need %d ms for update ',
+                waittime - starttime, now - waittime)
             return True
-
 
     def __create_open_db(self, db_file):
         sql_folder_table = """
@@ -292,14 +290,13 @@ class ImageCache:
                 DELETE FROM meta WHERE file_id = OLD.file_id;
             END"""
 
-        db = sqlite3.connect(db_file, check_same_thread=False) # writing only done in loop thread, reading in this so should be safe
-        db.row_factory = sqlite3.Row # make results accessible by field name
+        db = sqlite3.connect(db_file, check_same_thread=False)
+        db.row_factory = sqlite3.Row  # make results accessible by field name
         for item in (sql_folder_table, sql_file_table, sql_meta_table, sql_location_table, sql_meta_index,
-                    sql_all_data_view, sql_db_info_table, sql_clean_file_trigger, sql_clean_meta_trigger):
+                     sql_all_data_view, sql_db_info_table, sql_clean_file_trigger, sql_clean_meta_trigger):
             db.execute(item)
 
         return db
-
 
     def __update_schema(self, required_db_schema_version):
         sql_select = "SELECT schema_version from db_info"
@@ -359,17 +356,17 @@ class ImageCache:
         out_of_date_folders = []
         sql_select = "SELECT * FROM folder WHERE name = ?"
         for dir in [d[0] for d in os.walk(self.__picture_dir, followlinks=self.__follow_links)]:
-            if os.path.basename(dir)[0] == '.': continue # ignore hidden folders
+            if os.path.basename(dir)[0] == '.':
+                continue  # ignore hidden folders
             mod_tm = int(os.stat(dir).st_mtime)
             found = self.__db.execute(sql_select, (dir,)).fetchone()
             if not found or found['last_modified'] < mod_tm or found['missing'] == 1:
                 out_of_date_folders.append((dir, mod_tm))
         return out_of_date_folders
 
-
     def __get_modified_files(self, modified_folders):
         out_of_date_files = []
-        #sql_select = "SELECT fname, last_modified FROM all_data WHERE fname = ? and last_modified >= ?"
+        # sql_select = "SELECT fname, last_modified FROM all_data WHERE fname = ? and last_modified >= ?"
         sql_select = """
         SELECT file.basename, file.last_modified
             FROM file
@@ -377,27 +374,27 @@ class ImageCache:
                     ON folder.folder_id = file.folder_id
             WHERE file.basename = ? AND file.extension = ? AND folder.name = ? AND file.last_modified >= ?
         """
-        for dir,_date in modified_folders:
+        for dir, _date in modified_folders:
             for file in os.listdir(dir):
                 base, extension = os.path.splitext(file)
                 if (extension.lower() in ImageCache.EXTENSIONS
-                        and not '.AppleDouble' in dir and not file.startswith('.')): # have to filter out all the Apple junk
+                        # have to filter out all the Apple junk
+                        and '.AppleDouble' not in dir and not file.startswith('.')):
                     full_file = os.path.join(dir, file)
-                    mod_tm =  os.path.getmtime(full_file)
+                    mod_tm = os.path.getmtime(full_file)
                     found = self.__db.execute(sql_select, (base, extension.lstrip("."), dir, mod_tm)).fetchone()
                     if not found:
                         out_of_date_files.append(full_file)
         return out_of_date_files
 
-
-    def __insert_file(self, file, file_id = None):
-        file_insert = "INSERT OR REPLACE INTO file(folder_id, basename, extension, last_modified) VALUES((SELECT folder_id from folder where name = ?), ?, ?, ?)"
-        file_update = "UPDATE file SET folder_id = (SELECT folder_id from folder where name = ?), basename = ?, extension = ?, last_modified = ? WHERE file_id = ?"
+    def __insert_file(self, file, file_id=None):
+        file_insert = "INSERT OR REPLACE INTO file(folder_id, basename, extension, last_modified) VALUES((SELECT folder_id from folder where name = ?), ?, ?, ?)"  # noqa: E501
+        file_update = "UPDATE file SET folder_id = (SELECT folder_id from folder where name = ?), basename = ?, extension = ?, last_modified = ? WHERE file_id = ?"  # noqa: E501
         # Insert the new folder if it's not already in the table. Update the missing field separately.
         folder_insert = "INSERT OR IGNORE INTO folder(name) VALUES(?)"
         folder_update = "UPDATE folder SET missing = 0 where name = ?"
 
-        mod_tm =  os.path.getmtime(file)
+        mod_tm = os.path.getmtime(file)
         dir, file_only = os.path.split(file)
         base, extension = os.path.splitext(file_only)
 
@@ -418,7 +415,6 @@ class ImageCache:
         self.__db.execute(meta_insert, vals)
         self.__db_write_lock.release()
 
-
     def __update_folder_info(self, folder_collection):
         update_data = []
         sql = "UPDATE folder SET last_modified = ?, missing = 0 WHERE name = ?"
@@ -428,12 +424,10 @@ class ImageCache:
         self.__db.executemany(sql, update_data)
         self.__db_write_lock.release()
 
-
     def __get_meta_sql_from_dict(self, dict):
         columns = ', '.join(dict.keys())
         ques = ', '.join('?' * len(dict.keys()))
-        return 'INSERT OR REPLACE INTO meta(file_id, {0}) VALUES((SELECT file_id from all_data where fname = ?), {1})'.format(columns, ques)
-
+        return 'INSERT OR REPLACE INTO meta(file_id, {0}) VALUES((SELECT file_id from all_data where fname = ?), {1})'.format(columns, ques)  # noqa: E501
 
     def __purge_missing_files_and_folders(self):
         # Find folders in the db that are no longer on disk
@@ -477,46 +471,44 @@ class ImageCache:
 
         width, height = exifs.get_size()
         ext = os.path.splitext(file_path_name)[1].lower()
-        if ext not in ('.heif','.heic') and e['orientation'] in (5, 6, 7, 8):
-            width, height = height, width # swap values
+        if ext not in ('.heif', '.heic') and e['orientation'] in (5, 6, 7, 8):
+            width, height = height, width  # swap values
         e['width'] = width
         e['height'] = height
-
 
         e['f_number'] = exifs.get_exif('EXIF FNumber')
         e['make'] = exifs.get_exif('Image Make')
         e['model'] = exifs.get_exif('Image Model')
         e['exposure_time'] = exifs.get_exif('EXIF ExposureTime')
-        e['iso'] =  exifs.get_exif('EXIF ISOSpeedRatings')
-        e['focal_length'] =  exifs.get_exif('EXIF FocalLength')
+        e['iso'] = exifs.get_exif('EXIF ISOSpeedRatings')
+        e['focal_length'] = exifs.get_exif('EXIF FocalLength')
         e['rating'] = exifs.get_exif('Image Rating')
         e['lens'] = exifs.get_exif('EXIF LensModel')
         e['exif_datetime'] = None
         val = exifs.get_exif('EXIF DateTimeOriginal')
-        if val != None:
+        if val is not None:
             # Remove any subsecond portion of the DateTimeOriginal value. According to the spec, it's
             # not valid here anyway (should be in SubSecTimeOriginal), but it does exist sometimes.
             val = val.split('.', 1)[0]
             try:
                 e['exif_datetime'] = time.mktime(time.strptime(val, '%Y:%m:%d %H:%M:%S'))
-            except:
+            except Exception:
                 pass
 
         # If we still don't have a date/time, just use the file's modificaiton time
-        if e['exif_datetime'] == None:
+        if e['exif_datetime'] is None:
             e['exif_datetime'] = os.path.getmtime(file_path_name)
 
         gps = exifs.get_location()
         lat = gps['latitude']
         lon = gps['longitude']
-        e['latitude'] = round(lat, 4) if lat is not None else lat #TODO sqlite requires (None,) to insert NULL
+        e['latitude'] = round(lat, 4) if lat is not None else lat  # TODO sqlite requires (None,) to insert NULL
         e['longitude'] = round(lon, 4) if lon is not None else lon
 
-        #IPTC
+        # IPTC
         e['tags'] = exifs.get_exif('IPTC Keywords')
         e['title'] = exifs.get_exif('IPTC Object Name')
         e['caption'] = exifs.get_exif('IPTC Caption/Abstract')
-
 
         return e
 
@@ -524,6 +516,3 @@ class ImageCache:
 # If being executed (instead of imported), kick it off...
 if __name__ == "__main__":
     cache = ImageCache(picture_dir='/home/pi/Pictures', follow_links=False, db_file='/home/pi/db.db3', geo_reverse=None)
-    #cache.update_cache()
-    # items = cache.query_cache("make like '%google%'", "exif_datetime asc")
-    #info = cache.get_file_info(12)
