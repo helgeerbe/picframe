@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 import time
 import os
+import signal
 import logging
 import json
 import threading
@@ -149,7 +150,7 @@ class InterfaceHttp(HTTPServer):
 
     def stop(self):
         try:
-            os.kill(self._process.pid, SIGTERM)
+            os.kill(self._process.pid, signal.SIGTERM)
             self._logger.info("Stopping server")
         except Exception:
             self._logger.error("No server process to stop")

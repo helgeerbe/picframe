@@ -4,6 +4,7 @@ import logging
 import time
 import signal
 import sys
+import ssl
 
 
 def make_date(txt):
@@ -46,6 +47,8 @@ class Controller:
         self.__logger.info('creating an instance of Controller')
         self.__model = model
         self.__viewer = viewer
+        self.__http_config = self.__model.get_http_config()
+        self.__mqtt_config = self.__model.get_mqtt_config()
         self.__paused = False
         self.__force_navigate = False
         self.__next_tm = 0
@@ -75,7 +78,8 @@ class Controller:
         self.__paused = val
         pic = self.__model.get_current_pics()[0]  # only refresh left text
         self.__viewer.reset_name_tm(pic, val, side=0, pair=self.__model.get_current_pics()[1] is not None)
-        self.publish_state()
+        if self.__mqtt_config['use_mqtt']:
+            self.publish_state()
 
     def next(self):
         self.__next_tm = 0
@@ -162,7 +166,8 @@ class Controller:
     def display_is_on(self, on_off):
         self.paused = not on_off
         self.__viewer.display_is_on = on_off
-        self.publish_state()
+        if self.__mqtt_config['use_mqtt']:
+            self.publish_state()
 
     @property
     def clock_is_on(self):
@@ -181,7 +186,8 @@ class Controller:
         self.__model.shuffle = val
         self.__model.force_reload()
         self.__next_tm = 0
-        self.publish_state()
+        if self.__mqtt_config['use_mqtt']:
+            self.publish_state()
 
     @property
     def fade_time(self):
@@ -212,7 +218,8 @@ class Controller:
     @brightness.setter
     def brightness(self, val):
         self.__viewer.set_brightness(float(val))
-        self.publish_state()
+        if self.__mqtt_config['use_mqtt']:
+            self.publish_state()
 
     @property
     def matting_images(self):
@@ -317,7 +324,8 @@ class Controller:
                         else:
                             field_name = self.__model.EXIF_TO_FIELD[key]
                             image_attr[key] = pics[0].__dict__[field_name]  # TODO nicer using namedtuple for Pic
-                    self.publish_state(pics[0].fname, image_attr)
+                    if self.__mqtt_config['use_mqtt']:
+                        self.publish_state(pics[0].fname, image_attr)
             self.__model.pause_looping = self.__viewer.is_in_transition()
             (loop_running, skip_image) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
             if not loop_running:
@@ -332,33 +340,30 @@ class Controller:
         self.__interface_peripherals = InterfacePeripherals(self.__model, self.__viewer, self)
 
         # start mqtt
-        mqtt_config = self.__model.get_mqtt_config()
-        if mqtt_config['use_mqtt']:
+        if self.__mqtt_config['use_mqtt']:
             from picframe import interface_mqtt
             try:
-                self.__interface_mqtt = interface_mqtt.InterfaceMQTT(self, mqtt_config)
+                self.__interface_mqtt = interface_mqtt.InterfaceMQTT(self, self.__mqtt_config)
                 self.__interface_mqtt.start()
             except Exception:
                 self.__logger.error("Can't initialize mqtt. Stopping picframe")
                 sys.exit(1)
 
         # start http server
-        http_config = self.__model.get_http_config()
-        if http_config['use_http']:
+        if self.__http_config['use_http']:
             from picframe import interface_http
             model_config = self.__model.get_model_config()
             self.__interface_http = interface_http.InterfaceHttp(self,
-                                                                 http_config['path'],
+                                                                 self.__http_config['path'],
                                                                  model_config['pic_dir'],
                                                                  model_config['no_files_img'],
-                                                                 http_config['port'])  # TODO: Implement TLS
-            self.__interface_http.run()
-            # if http_config['use_ssl']:
-            #     server.socket = ssl.wrap_socket(
-            #                                     server.socket,
-            #                                     keyfile=http_config['keyfile'],
-            #                                     certfile=http_config['certfile'],
-            #                                     server_side=True)
+                                                                 self.__http_config['port'])  # TODO: Implement TLS
+            if self.__http_config['use_ssl']:
+                self.__interface_http.socket = ssl.wrap_socket(
+                                                self.__interface_http.socket,
+                                                keyfile=self.__http_config['keyfile'],
+                                                certfile=self.__http_config['certfile'],
+                                                server_side=True)
 
     def stop(self):
         self.keep_looping = False

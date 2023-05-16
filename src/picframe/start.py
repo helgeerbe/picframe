@@ -1,7 +1,6 @@
 import logging
 import argparse
 import os
-import ssl
 import locale
 import sys
 from distutils.dir_util import copy_tree
