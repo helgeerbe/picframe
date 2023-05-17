@@ -4,9 +4,6 @@ import subprocess
 import sys
 import time
 import typing
-from picframe.model import Model
-from picframe.viewer_display import ViewerDisplay
-from picframe.controller import Controller
 import numpy as np
 import pi3d
 
@@ -26,9 +23,9 @@ class InterfacePeripherals:
 
     def __init__(
         self,
-        model: type[Model],
-        viewer: type[ViewerDisplay],
-        controller: type[Controller],
+        model,
+        viewer,
+        controller,
     ) -> None:
         logger.info("creating an instance of InterfacePeripherals")
 

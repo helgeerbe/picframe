@@ -406,7 +406,7 @@ class InterfaceMQTT:
 
         # stop loops and end program
         elif message.topic == self.__device_id + "/stop":
-            self.__controller.stop()
+            self.__controller.keep_looping = False
 
     def publish_state(self, image=None, image_attr=None):
         sensor_topic_head = "homeassistant/sensor/" + self.__device_id
