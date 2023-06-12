@@ -1,11 +1,14 @@
 import logging
 from PIL import Image
 from PIL.ExifTags import TAGS, GPSTAGS
-from pi_heif import register_heif_opener
 from fractions import Fraction
 
+try:
+    from pi_heif import register_heif_opener
 
-register_heif_opener()
+    register_heif_opener()
+except ImportError:
+    register_heif_opener = None
 
 
 class GetImageMeta:
