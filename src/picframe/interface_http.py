@@ -19,9 +19,12 @@ EXTENSIONS = [".jpg", ".jpeg", ".png", ".heif", ".heic"]
 def heif_to_jpg(fname):
     try:
         from PIL import Image
-        from pi_heif import register_heif_opener
+        try:
+            from pi_heif import register_heif_opener
+            register_heif_opener()
+        except ImportError:
+            register_heif_opener = None
 
-        register_heif_opener()
         image = Image.open(fname)
         if image.mode not in ("RGB", "RGBA"):
             image = image.convert("RGB")
