@@ -356,8 +356,9 @@ class ImageCache:
         out_of_date_folders = []
         sql_select = "SELECT * FROM folder WHERE name = ?"
         for dir in [d[0] for d in os.walk(self.__picture_dir, followlinks=self.__follow_links)]:
-            if os.path.basename(dir)[0] == '.':
-                continue  # ignore hidden folders
+            if os.path.basename(dir):
+                if os.path.basename(dir)[0] == '.':
+                    continue  # ignore hidden folders
             mod_tm = int(os.stat(dir).st_mtime)
             found = self.__db.execute(sql_select, (dir,)).fetchone()
             if not found or found['last_modified'] < mod_tm or found['missing'] == 1:
