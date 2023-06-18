@@ -412,7 +412,10 @@ class ImageCache:
             self.__db.execute(file_insert, (dir, base, extension.lstrip("."), mod_tm))
         else:
             self.__db.execute(file_update, (dir, base, extension.lstrip("."), mod_tm, file_id))
-        self.__db.execute(meta_insert, vals)
+        try:
+            self.__db.execute(meta_insert, vals)
+        except:
+            self.__logger.error(f"###FAILED meta_insert = {meta_insert}, vals = {vals}")
         self.__db_write_lock.release()
 
     def __update_folder_info(self, folder_collection):
