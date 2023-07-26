@@ -206,7 +206,7 @@ class MatImage:
             self.__add_image_outline(image, color2)
             image = ImageOps.expand(image, border_width)
             self.__add_image_outline(image, color, outline_width=border_width)
-            highlight = self.__9patch_highlight.render(image.width, image.height)
+            highlight = self.__9patch_highlight.render(image.width, image.height,  Image.Resampling.LANCZOS)
             image.paste(highlight, (0, 0), highlight)
             image = self.__add_drop_shadow(image)
             final_images.append(image)
@@ -337,12 +337,12 @@ class MatImage:
     def __add_outer_bevel(self, image, expand=True):
         if expand:
             image = ImageOps.expand(image, 5)
-        outer_bevel_image = self.__9patch_bevel.render(image.width, image.height)
+        outer_bevel_image = self.__9patch_bevel.render(image.width, image.height, Image.Resampling.LANCZOS)
         image.paste(outer_bevel_image, (0, 0), outer_bevel_image)
         return image
 
     def __add_inner_shadow(self, image):
-        inner_shadow_image = self.__9patch_inner_shadow.render(image.width, image.height)
+        inner_shadow_image = self.__9patch_inner_shadow.render(image.width, image.height,  Image.Resampling.LANCZOS)
         image.paste(inner_shadow_image, (0, 0), inner_shadow_image)
         return image
 
@@ -362,7 +362,7 @@ class MatImage:
     def __add_drop_shadow(self, image):
         shadow_offset = 15
         mod_image = Image.new('RGBA', (image.width + shadow_offset, image.height + shadow_offset), (0, 0, 0, 0))
-        shadow_image = self.__9patch_drop_shadow.render(mod_image.width, mod_image.height)
+        shadow_image = self.__9patch_drop_shadow.render(mod_image.width, mod_image.height,  Image.Resampling.LANCZOS)
         mod_image.paste(shadow_image, (0, 0), shadow_image)
         mod_image.paste(image, (0, 0))
         return mod_image
