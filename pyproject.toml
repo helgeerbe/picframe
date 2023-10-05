@@ -36,14 +36,14 @@ classifiers=[
 ]
 dynamic = ["version"]
 dependencies = [
-    "Pillow==9.5.0",
+    "Pillow>=10.0.1",
     "defusedxml",
-    "pi3d>=2.49",
+    "pi3d@git+https://github.com/tipam/pi3d",
     "PyYAML",
     "paho-mqtt",
     "IPTCInfo3",
     "numpy",
-    "ninepatch",
+    "ninepatch@git+https://github.com/vindolin/ninepatch",
     "pi_heif>=0.8.0"
 ]
 
