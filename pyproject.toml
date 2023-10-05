@@ -36,7 +36,7 @@ classifiers=[
 ]
 dynamic = ["version"]
 dependencies = [
-    "Pillow==9.5.0",
+    "Pillow>=10.0.1",
     "defusedxml",
     "pi3d>=2.49",
     "PyYAML",
