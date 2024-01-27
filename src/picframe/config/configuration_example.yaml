@@ -105,6 +105,9 @@ http:
   use_http: False                         # default=False. Set True to enable http NB THIS SERVER IS FOR LOCAL NETWORK AND SHOULD NOT BE EXPOSED TO EXTERNAL ACCESS
   path: "~/picframe_data/html"            # path to where html files are located
   port: 9000                              # port used to serve pages by http server < 1024 requires root which is *bad* idea
+  auth: false                             # default=False. Set True if enable basic auth for http
+  username: admin                         # username for basic auth
+  password: null                          # password for basic auth. If set null generate random password in file basic_auth.txt in parent http directory
   use_ssl: False
   keyfile: "path/to/key.pem"              # private-key
   certfile: "path/to/cert.pem"            # server certificate

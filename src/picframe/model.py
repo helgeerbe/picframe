@@ -208,6 +208,16 @@ class Model:
         return self.__config['mqtt']
 
     def get_http_config(self):
+        if 'auth' in self.__config['http'] and self.__config['http']['auth'] and self.__config['http']['password'] is None:
+            http_parent = os.path.abspath(os.path.join(self.__config['http']['path'], os.pardir))
+            password_path = os.path.join(http_parent, 'basic_auth.txt')
+            if not os.path.exists(password_path):
+                new_password = self.__generate_random_string(64)
+                with open(password_path, "w") as f:
+                    f.write(new_password)
+            with open(password_path, "r") as f:
+                password = f.read()
+                self.__config['http']['password'] = password
         return self.__config['http']
 
     def get_peripherals_config(self):
@@ -425,3 +435,8 @@ class Model:
         self.__file_index = 0
         self.__num_run_through = 0
         self.__reload_files = False
+
+    def __generate_random_string(self, length):
+        random_bytes = os.urandom(length // 2)
+        random_string = ''.join('{:02x}'.format(ord(chr(byte))) for byte in random_bytes)
+        return random_string

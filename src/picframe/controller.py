@@ -353,11 +353,16 @@ class Controller:
         if self.__http_config['use_http']:
             from picframe import interface_http
             model_config = self.__model.get_model_config()
-            self.__interface_http = interface_http.InterfaceHttp(self,
-                                                                 self.__http_config['path'],
-                                                                 model_config['pic_dir'],
-                                                                 model_config['no_files_img'],
-                                                                 self.__http_config['port'])  # TODO: Implement TLS
+            self.__interface_http = interface_http.InterfaceHttp(
+                                                                    self,
+                                                                    self.__http_config['path'],
+                                                                    model_config['pic_dir'],
+                                                                    model_config['no_files_img'],
+                                                                    self.__http_config['port'],
+                                                                    self.__http_config['auth'],
+                                                                    self.__http_config['username'],
+                                                                    self.__http_config['password'],
+                                                                )  # TODO: Implement TLS
             if self.__http_config['use_ssl']:
                 self.__interface_http.socket = ssl.wrap_socket(
                                                 self.__interface_http.socket,
