@@ -520,7 +520,10 @@ class ViewerDisplay:
 
         if self.__alpha >= 1.0 and tm < self.__name_tm:
             # this sets alpha for the TextBlock from 0 to 1 then back to 0
-            dt = 1.0 - (self.__name_tm - tm) / self.__show_text_tm
+            if self.__show_text_tm > 0:
+                dt = 1.0 - (self.__name_tm - tm) / self.__show_text_tm
+            else 
+                dt = 1
             if dt > 0.995:
                 dt = 1  # ensure that calculated alpha value fully reaches 0 (TODO: Improve!)
             ramp_pt = max(4.0, self.__show_text_tm / 4.0)  # always > 4 so text fade will always < 4s
