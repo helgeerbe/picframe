@@ -192,6 +192,9 @@ class GetImageMeta:
                 for iso in iso_keys:
                     val = self.__get_if_exist(iso)
                     if val:
+                        # If ISO is returned as a tuple, take the first element
+                        if type(val) is tuple:
+                            val = val[0]
                         break
             else:
                 val = self.__get_if_exist(key)
