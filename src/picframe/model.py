@@ -77,6 +77,8 @@ DEFAULT_CONFIG = {
         'deleted_pictures': '~/DeletedPictures',
         'log_level': 'WARNING',
         'log_file': '',
+        'location_filter': '',
+        'tags_filter': '',
     },
     'mqtt': {
         'use_mqtt': False,  # Set tue true, to enable mqtt
@@ -196,7 +198,10 @@ class Model:
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
         self.__sort_cols = model_config['sort_cols']
         self.__col_names = None
-        self.__where_clauses = {}  # these will be modified by controller
+        # init where clauses through setters
+        self.__where_clauses = {}
+        self.location_filter = model_config['location_filter']
+        self.tags_filter = model_config['tags_filter']
 
     def get_viewer_config(self):
         return self.__config['viewer']
@@ -259,6 +264,56 @@ class Model:
     def shuffle(self, val: bool):
         self.__config['model']['shuffle'] = val  # TODO should this be altered in config?
         self.__reload_files = True
+
+    @property
+    def location_filter(self):
+        return self.__config['model']['location_filter']
+
+    @location_filter.setter
+    def location_filter(self, val):
+        self.__config['model']['location_filter'] = val
+        if len(val) > 0:
+            self.set_where_clause("location_filter", self.__build_filter(val, "location"))
+        else:
+            self.set_where_clause("location_filter")  # remove from where_clause
+        self.__reload_files = True
+
+    @property
+    def tags_filter(self):
+        return self.__config['model']['tags_filter']
+
+    @tags_filter.setter
+    def tags_filter(self, val):
+        self.__config['model']['tags_filter'] = val
+        if len(val) > 0:
+            self.set_where_clause("tags_filter", self.__build_filter(val, "tags"))
+        else:
+            self.set_where_clause("tags_filter")  # remove from where_clause
+        self.__reload_files = True
+
+    def __build_filter(self, val, field):
+        if val.count("(") != val.count(")"):
+            return None  # this should clear the filter and not raise an error
+        val = val.replace(";", "").replace("'", "").replace("%", "").replace('"', '')  # SQL scrambling
+        tokens = ("(", ")", "AND", "OR", "NOT")  # now copes with NOT
+        val_split = val.replace("(", " ( ").replace(")", " ) ").split()  # so brackets not joined to words
+        filter = []
+        last_token = ""
+        for s in val_split:
+            s_upper = s.upper()
+            if s_upper in tokens:
+                if s_upper in ("AND", "OR"):
+                    if last_token in ("AND", "OR"):
+                        return None  # must have a non-token between
+                    last_token = s_upper
+                filter.append(s)
+            else:
+                if last_token is not None:
+                    filter.append("{} LIKE '%{}%'".format(field, s))
+                else:
+                    filter[-1] = filter[-1].replace("%'", " {}%'".format(s))
+                last_token = None
+        return "({})".format(" ".join(filter))  # if OR outside brackets will modify the logic of rest of where clauses
 
     def set_where_clause(self, key, value=None):
         # value must be a string for later join()
