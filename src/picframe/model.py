@@ -77,6 +77,7 @@ DEFAULT_CONFIG = {
         'deleted_pictures': '~/DeletedPictures',
         'log_level': 'WARNING',
         'log_file': '',
+        'location_filter': '',
         'tags_filter': '',
     },
     'mqtt': {
@@ -259,6 +260,15 @@ class Model:
     @shuffle.setter
     def shuffle(self, val: bool):
         self.__config['model']['shuffle'] = val  # TODO should this be altered in config?
+        self.__reload_files = True
+
+    @property
+    def location_filter(self):
+        return self.__config['model']['location_filter']
+
+    @location_filter.setter
+    def location_filter(self, val):
+        self.__config['model']['location_filter'] = val
         self.__reload_files = True
 
     @property

@@ -54,12 +54,10 @@ class Controller:
         self.__next_tm = 0
         self.__date_from = make_date('1901/12/15')  # TODO This seems to be the minimum date to be handled by date functions  # noqa: E501
         self.__date_to = make_date('2038/1/1')
-        self.__location_filter = ""
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
         self.keep_looping = True
-        self.__location_filter = ''
         self.__interface_peripherals = None
         self.__interface_mqtt = None
         self.__interface_http = None
@@ -231,11 +229,11 @@ class Controller:
 
     @property
     def location_filter(self):
-        return self.__location_filter
+        return self.__model.location_filter
 
     @location_filter.setter
     def location_filter(self, val):
-        self.__location_filter = val
+        self.__model.location_filter = val
         if len(val) > 0:
             self.__model.set_where_clause("location_filter", self.__build_filter(val, "location"))
         else:
