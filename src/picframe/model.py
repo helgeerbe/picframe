@@ -77,6 +77,7 @@ DEFAULT_CONFIG = {
         'deleted_pictures': '~/DeletedPictures',
         'log_level': 'WARNING',
         'log_file': '',
+        'tags_filter': '',
     },
     'mqtt': {
         'use_mqtt': False,  # Set tue true, to enable mqtt
@@ -258,6 +259,15 @@ class Model:
     @shuffle.setter
     def shuffle(self, val: bool):
         self.__config['model']['shuffle'] = val  # TODO should this be altered in config?
+        self.__reload_files = True
+
+    @property
+    def tags_filter(self):
+        return self.__config['model']['tags_filter']
+
+    @tags_filter.setter
+    def tags_filter(self, val):
+        self.__config['model']['tags_filter'] = val
         self.__reload_files = True
 
     def set_where_clause(self, key, value=None):

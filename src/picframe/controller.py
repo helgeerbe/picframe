@@ -60,7 +60,6 @@ class Controller:
         self.publish_state = lambda x, y: None
         self.keep_looping = True
         self.__location_filter = ''
-        self.__tags_filter = ''
         self.__interface_peripherals = None
         self.__interface_mqtt = None
         self.__interface_http = None
@@ -246,11 +245,11 @@ class Controller:
 
     @property
     def tags_filter(self):
-        return self.__tags_filter
+        return self.__model.tags_filter
 
     @tags_filter.setter
     def tags_filter(self, val):
-        self.__tags_filter = val
+        self.__model.tags_filter = val
         if len(val) > 0:
             self.__model.set_where_clause("tags_filter", self.__build_filter(val, "tags"))
         else:
