@@ -52,7 +52,7 @@ class Controller:
         self.__paused = False
         self.__force_navigate = False
         self.__next_tm = 0
-        self.__date_from = make_date('1901/12/15')  # TODO This seems to be the minimum date to be handled by date functions  # noqa: E501
+        self.__date_from = make_date('1970/1/2')  # TODO This seems to be the minimum date to be handled by date functions  # noqa: E501
         self.__date_to = make_date('2038/1/1')
         self.__location_filter = ""
         self.__where_clauses = {}
@@ -132,7 +132,7 @@ class Controller:
         try:
             self.__date_from = float(val)
         except ValueError:
-            self.__date_from = make_date(val if len(val) > 0 else '1901/12/15')
+            self.__date_from = make_date(val if len(val) > 0 else '1970/1/2')
         if len(val) > 0:
             self.__model.set_where_clause('date_from', "exif_datetime > {:.0f}".format(self.__date_from))
         else:
