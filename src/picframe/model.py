@@ -75,6 +75,7 @@ DEFAULT_CONFIG = {
         'db_file': '~/picframe_data/data/pictureframe.db3',
         'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
+        'update_interval': 2.0,
         'log_level': 'WARNING',
         'log_file': '',
         'location_filter': '',
@@ -193,6 +194,7 @@ class Model:
                                                     model_config['follow_links'],
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
+                                                    model_config['update_interval'],
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
@@ -255,6 +257,10 @@ class Model:
     @property
     def EXIF_TO_FIELD(self):  # bit convoluted TODO hold in config? not really configurable
         return self.__image_cache.EXIF_TO_FIELD
+
+    @property
+    def update_interval(self):
+        return self.__config['model']['update_interval']
 
     @property
     def shuffle(self):

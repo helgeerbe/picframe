@@ -56,6 +56,7 @@ model:
   reshuffle_num: 1                        # default=1, times through before reshuffling
   time_delay: 200.0                       # default=200.0, time between consecutive slide starts - can be changed by MQTT
   fade_time: 10.0                         # default=10.0, change time during which slides overlap - can be changed by MQTT"
+  update_interval: 2.0                    # default=2.0, time in seconds to wait between two consecutive scans for new files
   shuffle: True                           # default=True, shuffle on reloading image files - can be changed by MQTT"
   sort_cols: 'fname ASC'                  # default='fname ASC' can be any columns in the table with optional ASC or DESC separated by commas
                                           # fname, last_modified, file_id, orientation, exif_datetime, f_number,
