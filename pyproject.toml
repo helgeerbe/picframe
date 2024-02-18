@@ -44,7 +44,9 @@ dependencies = [
     "IPTCInfo3",
     "numpy",
     "ninepatch@git+https://github.com/vindolin/ninepatch",
-    "pi_heif>=0.8.0"
+    "pi_heif>=0.8.0",
+    'pysdl2-dll ; platform_system == "Windows"',
+    'pygame ; platform_system == "Windows"'
 ]
 
 [project.urls]
