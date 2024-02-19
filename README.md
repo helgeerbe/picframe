@@ -2,6 +2,7 @@
 
 ![picframe logo](https://github.com/helgeerbe/picframe/wiki/images/Picframe_Logo.png)
 
+- [![PyPI version](https://badge.fury.io/py/picframe.svg)](https://badge.fury.io/py/picframe)
 - [PictureFrame powered by pi3d](#pictureframe-powered-by-pi3d)
 - [What Is PictureFrame?](#what-is-pictureframe)
 - [History of PictureFrame](#history-of-pictureframe)
