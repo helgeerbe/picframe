@@ -43,7 +43,7 @@ dependencies = [
     "paho-mqtt",
     "IPTCInfo3",
     "numpy",
-    "ninepatch@git+https://github.com/vindolin/ninepatch",
+    "ninepatch>=0.2.0",
     "pi_heif>=0.8.0"
 ]
 
