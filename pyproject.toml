@@ -45,6 +45,8 @@ dependencies = [
     "numpy",
     "ninepatch>=0.2.0",
     "pi_heif>=0.8.0"
+    'pysdl2-dll ; platform_system == "Windows"',
+    'pygame ; platform_system == "Windows"'
 ]
 
 [project.urls]

@@ -1,9 +1,10 @@
 import logging
 import argparse
+import ctypes
 import os
 import locale
 import sys
-from distutils.dir_util import copy_tree
+from shutil import copytree
 
 from picframe import model, viewer_display, controller, __version__
 
@@ -15,7 +16,7 @@ def copy_files(pkgdir, dest, target):
         fullpath = os.path.join(pkgdir,  target)
         destination = os.path.join(dest,  PICFRAME_DATA_DIR)
         destination = os.path.join(destination,  target)
-        copy_tree(fullpath,  destination)
+        copytree(fullpath,  destination)
     except Exception:
         raise
 
@@ -97,7 +98,11 @@ def main():
     group.add_argument("configfile", nargs='?', help="/path/to/configuration.yaml")
     args = parser.parse_args()
     if args.initialize:
-        if os.geteuid() == 0:
+        try:
+            is_admin = os.getuid() == 0
+        except AttributeError:
+            is_admin = ctypes.windll.shell32.IsUserAnAdmin() != 0
+        if is_admin:
             print("Don't run the initialize step with sudo. It might put the files in the wrong place!")
             return
         pkgdir = sys.modules['picframe'].__path__[0]
