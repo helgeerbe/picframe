@@ -522,7 +522,7 @@ class ViewerDisplay:
             # this sets alpha for the TextBlock from 0 to 1 then back to 0
             if self.__show_text_tm > 0:
                 dt = 1.0 - (self.__name_tm - tm) / self.__show_text_tm
-            else 
+            else:
                 dt = 1
             if dt > 0.995:
                 dt = 1  # ensure that calculated alpha value fully reaches 0 (TODO: Improve!)
