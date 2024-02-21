@@ -75,8 +75,11 @@ DEFAULT_CONFIG = {
         'db_file': '~/picframe_data/data/pictureframe.db3',
         'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
+        'update_interval': 2.0,
         'log_level': 'WARNING',
         'log_file': '',
+        'location_filter': '',
+        'tags_filter': '',
     },
     'mqtt': {
         'use_mqtt': False,  # Set tue true, to enable mqtt
@@ -191,6 +194,7 @@ class Model:
                                                     model_config['follow_links'],
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
+                                                    model_config['update_interval'],
                                                     model_config['portrait_pairs'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
@@ -262,12 +266,34 @@ class Model:
         return self.__image_cache.EXIF_TO_FIELD
 
     @property
+    def update_interval(self):
+        return self.__config['model']['update_interval']
+
+    @property
     def shuffle(self):
         return self.__config['model']['shuffle']
 
     @shuffle.setter
     def shuffle(self, val: bool):
         self.__config['model']['shuffle'] = val  # TODO should this be altered in config?
+        self.__reload_files = True
+
+    @property
+    def location_filter(self):
+        return self.__config['model']['location_filter']
+
+    @location_filter.setter
+    def location_filter(self, val):
+        self.__config['model']['location_filter'] = val
+        self.__reload_files = True
+
+    @property
+    def tags_filter(self):
+        return self.__config['model']['tags_filter']
+
+    @tags_filter.setter
+    def tags_filter(self, val):
+        self.__config['model']['tags_filter'] = val
         self.__reload_files = True
 
     def set_where_clause(self, key, value=None):
