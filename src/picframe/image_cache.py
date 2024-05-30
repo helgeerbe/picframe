@@ -22,7 +22,7 @@ class ImageCache:
                      'IPTC Caption/Abstract': 'caption',
                      'IPTC Object Name': 'title'}
 
-    def __init__(self, picture_dir, follow_links, db_file, geo_reverse, portrait_pairs=False):
+    def __init__(self, picture_dir, follow_links, db_file, geo_reverse, update_interval, portrait_pairs=False):
         # TODO these class methods will crash if Model attempts to instantiate this using a
         # different version from the latest one - should this argument be taken out?
         self.__modified_folders = []
@@ -34,6 +34,7 @@ class ImageCache:
         self.__follow_links = follow_links
         self.__db_file = db_file
         self.__geo_reverse = geo_reverse
+        self.__update_interval = update_interval
         self.__portrait_pairs = portrait_pairs  # TODO have a function to turn this on and off?
         self.__db = self.__create_open_db(self.__db_file)
         self.__db_write_lock = threading.Lock()  # lock to serialize db writes between threads
@@ -52,7 +53,7 @@ class ImageCache:
         while self.__keep_looping:
             if not self.__pause_looping:
                 self.update_cache()
-                time.sleep(2.0)
+                time.sleep(self.__update_interval)
             time.sleep(0.01)
         self.__db_write_lock.acquire()
         self.__db.commit()  # close after update_cache finished for last time
@@ -519,4 +520,4 @@ class ImageCache:
 
 # If being executed (instead of imported), kick it off...
 if __name__ == "__main__":
-    cache = ImageCache(picture_dir='/home/pi/Pictures', follow_links=False, db_file='/home/pi/db.db3', geo_reverse=None)
+    cache = ImageCache(picture_dir='/home/pi/Pictures', follow_links=False, db_file='/home/pi/db.db3', geo_reverse=None, update_interval=2)

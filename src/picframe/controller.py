@@ -54,13 +54,10 @@ class Controller:
         self.__next_tm = 0
         self.__date_from = make_date('1901/12/15')  # TODO This seems to be the minimum date to be handled by date functions  # noqa: E501
         self.__date_to = make_date('2038/1/1')
-        self.__location_filter = ""
         self.__where_clauses = {}
         self.__sort_clause = "exif_datetime ASC"
         self.publish_state = lambda x, y: None
         self.keep_looping = True
-        self.__location_filter = ''
-        self.__tags_filter = ''
         self.__interface_peripherals = None
         self.__interface_mqtt = None
         self.__interface_http = None
@@ -232,55 +229,21 @@ class Controller:
 
     @property
     def location_filter(self):
-        return self.__location_filter
+        return self.__model.location_filter
 
     @location_filter.setter
     def location_filter(self, val):
-        self.__location_filter = val
-        if len(val) > 0:
-            self.__model.set_where_clause("location_filter", self.__build_filter(val, "location"))
-        else:
-            self.__model.set_where_clause("location_filter")  # remove from where_clause
-        self.__model.force_reload()
+        self.__model.location_filter = val
         self.__next_tm = 0
 
     @property
     def tags_filter(self):
-        return self.__tags_filter
+        return self.__model.tags_filter
 
     @tags_filter.setter
     def tags_filter(self, val):
-        self.__tags_filter = val
-        if len(val) > 0:
-            self.__model.set_where_clause("tags_filter", self.__build_filter(val, "tags"))
-        else:
-            self.__model.set_where_clause("tags_filter")  # remove from where_clause
-        self.__model.force_reload()
+        self.__model.tags_filter = val
         self.__next_tm = 0
-
-    def __build_filter(self, val, field):
-        if val.count("(") != val.count(")"):
-            return None  # this should clear the filter and not raise an error
-        val = val.replace(";", "").replace("'", "").replace("%", "").replace('"', '')  # SQL scrambling
-        tokens = ("(", ")", "AND", "OR", "NOT")  # now copes with NOT
-        val_split = val.replace("(", " ( ").replace(")", " ) ").split()  # so brackets not joined to words
-        filter = []
-        last_token = ""
-        for s in val_split:
-            s_upper = s.upper()
-            if s_upper in tokens:
-                if s_upper in ("AND", "OR"):
-                    if last_token in ("AND", "OR"):
-                        return None  # must have a non-token between
-                    last_token = s_upper
-                filter.append(s)
-            else:
-                if last_token is not None:
-                    filter.append("{} LIKE '%{}%'".format(field, s))
-                else:
-                    filter[-1] = filter[-1].replace("%'", " {}%'".format(s))
-                last_token = None
-        return "({})".format(" ".join(filter))  # if OR outside brackets will modify the logic of rest of where clauses
 
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
