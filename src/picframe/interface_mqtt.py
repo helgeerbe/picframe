@@ -77,10 +77,10 @@ class InterfaceMQTT:
         client.publish(available_topic, "online", qos=0, retain=True)
 
         # sensors
-        self.__setup_sensor(client, "date_from", "mdi:calendar-arrow-left", available_topic, entity_category="config")
-        self.__setup_sensor(client, "date_to", "mdi:calendar-arrow-right", available_topic, entity_category="config")
-        self.__setup_sensor(client, "location_filter", "mdi:map-search", available_topic, entity_category="config")
-        self.__setup_sensor(client, "tags_filter", "mdi:image-search", available_topic, entity_category="config")
+        self.__setup_text(client, "date_from", "mdi:calendar-arrow-left", available_topic, entity_category="config")
+        self.__setup_text(client, "date_to", "mdi:calendar-arrow-right", available_topic, entity_category="config")
+        self.__setup_text(client, "location_filter", "mdi:map-search", available_topic, entity_category="config")
+        self.__setup_text(client, "tags_filter", "mdi:image-search", available_topic, entity_category="config")
         self.__setup_sensor(client, "image_counter", "mdi:camera-burst", available_topic, entity_category="diagnostic")
         self.__setup_sensor(client, "image", "mdi:file-image",
                             available_topic, has_attributes=True, entity_category="diagnostic")
@@ -99,34 +99,34 @@ class InterfaceMQTT:
         client.subscribe(command_topic, qos=0)
 
         # switches
-        self.__setup_switch(client, "_text_refresh", "mdi:refresh", available_topic, entity_category="config")
-        self.__setup_switch(client, "_name_toggle", "mdi:subtitles", available_topic,
+        self.__setup_switch(client, "text_refresh", "mdi:refresh", available_topic, entity_category="config")
+        self.__setup_switch(client, "name_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("name"), entity_category="config")
-        self.__setup_switch(client, "_title_toggle", "mdi:subtitles", available_topic,
+        self.__setup_switch(client, "title_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("title"), entity_category="config")
-        self.__setup_switch(client, "_caption_toggle", "mdi:subtitles", available_topic,
+        self.__setup_switch(client, "caption_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("caption"), entity_category="config")
-        self.__setup_switch(client, "_date_toggle", "mdi:calendar-today", available_topic,
+        self.__setup_switch(client, "date_toggle", "mdi:calendar-today", available_topic,
                             self.__controller.text_is_on("date"), entity_category="config")
-        self.__setup_switch(client, "_location_toggle", "mdi:crosshairs-gps", available_topic,
+        self.__setup_switch(client, "location_toggle", "mdi:crosshairs-gps", available_topic,
                             self.__controller.text_is_on("location"), entity_category="config")
-        self.__setup_switch(client, "_directory_toggle", "mdi:folder", available_topic,
+        self.__setup_switch(client, "directory_toggle", "mdi:folder", available_topic,
                             self.__controller.text_is_on("directory"), entity_category="config")
-        self.__setup_switch(client, "_text_off", "mdi:badge-account-horizontal-outline",
+        self.__setup_switch(client, "text_off", "mdi:badge-account-horizontal-outline",
                             available_topic, entity_category="config")
-        self.__setup_switch(client, "_display", "mdi:panorama", available_topic,
+        self.__setup_switch(client, "display", "mdi:panorama", available_topic,
                             self.__controller.display_is_on)
-        self.__setup_switch(client, "_clock", "mdi:clock-outline", available_topic,
+        self.__setup_switch(client, "clock", "mdi:clock-outline", available_topic,
                             self.__controller.clock_is_on, entity_category="config")
-        self.__setup_switch(client, "_shuffle", "mdi:shuffle-variant", available_topic,
+        self.__setup_switch(client, "shuffle", "mdi:shuffle-variant", available_topic,
                             self.__controller.shuffle)
-        self.__setup_switch(client, "_paused", "mdi:pause", available_topic,
+        self.__setup_switch(client, "paused", "mdi:pause", available_topic,
                             self.__controller.paused)
 
         # buttons
-        self.__setup_button(client, "_delete", "mdi:delete", available_topic)
-        self.__setup_button(client, "_back", "mdi:skip-previous", available_topic)
-        self.__setup_button(client, "_next", "mdi:skip-next", available_topic)
+        self.__setup_button(client, "delete", "mdi:delete", available_topic)
+        self.__setup_button(client, "back", "mdi:skip-previous", available_topic)
+        self.__setup_button(client, "next", "mdi:skip-next", available_topic)
 
         client.subscribe(self.__device_id + "/purge_files", qos=0)  # close down without killing!
         client.subscribe(self.__device_id + "/stop", qos=0)  # close down without killing!
@@ -135,17 +135,44 @@ class InterfaceMQTT:
         sensor_topic_head = "homeassistant/sensor/" + self.__device_id
         config_topic = sensor_topic_head + "_" + topic + "/config"
         name = self.__device_id + "_" + topic
-        dict = {"name": name,
+        dict = {"name": topic,
                 "icon": icon,
                 "value_template": "{{ value_json." + topic + "}}",
                 "avty_t": available_topic,
                 "uniq_id": name,
-                "dev": {"ids": [self.__device_id]}}
+                "dev": {"ids": [self.__device_id],
+                        "name": self.__device_id,
+                        "mdl": "PictureFrame",
+                        "sw": __version__,
+                        "mf": "pi3d PictureFrame project"}}
         if has_attributes is True:
             dict["state_topic"] = sensor_topic_head + "_" + topic + "/state"
             dict["json_attributes_topic"] = sensor_topic_head + "_" + topic + "/attributes"
         else:
             dict["state_topic"] = sensor_topic_head + "/state"
+        if entity_category:
+            dict["entity_category"] = entity_category
+
+        config_payload = json.dumps(dict)
+        client.publish(config_topic, config_payload, qos=0, retain=True)
+        client.subscribe(self.__device_id + "/" + topic, qos=0)
+    
+    def __setup_text(self, client, topic, icon, available_topic, entity_category=None):
+        text_topic_head = "homeassistant/text/" + self.__device_id
+        config_topic = text_topic_head + "_" + topic + "/config"
+        name = self.__device_id + "_" + topic
+        dict = {"name": topic,
+                "icon": icon,
+                "value_template": "{{ value_json." + topic + "}}",
+                "state_topic": "homeassistant/sensor/" + self.__device_id + "/state",
+                "command_topic": text_topic_head + "_" + topic + "/cmd",
+                "avty_t": available_topic,
+                "uniq_id": name,
+                "dev": {"ids": [self.__device_id],
+                        "name": self.__device_id,
+                        "mdl": "PictureFrame",
+                        "sw": __version__,
+                        "mf": "pi3d PictureFrame project"}}
         if entity_category:
             dict["entity_category"] = entity_category
 
@@ -159,7 +186,7 @@ class InterfaceMQTT:
         command_topic = self.__device_id + "/" + topic
         state_topic = "homeassistant/sensor/" + self.__device_id + "/state"
         name = self.__device_id + "_" + topic
-        config_payload = json.dumps({"name": name,
+        config_payload = json.dumps({"name": topic,
                                      "min": min,
                                      "max": max,
                                      "step": step,
@@ -170,7 +197,11 @@ class InterfaceMQTT:
                                      "value_template": "{{ value_json." + topic + "}}",
                                      "avty_t": available_topic,
                                      "uniq_id": name,
-                                     "dev": {"ids": [self.__device_id]}})
+                                      "dev": {"ids": [self.__device_id],
+                                             "name": self.__device_id,
+                                             "mdl": "PictureFrame",
+                                             "sw": __version__,
+                                             "mf": "pi3d PictureFrame project"}})
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(command_topic, qos=0)
 
@@ -181,7 +212,7 @@ class InterfaceMQTT:
         state_topic = "homeassistant/sensor/" + self.__device_id + "/state"
         name = self.__device_id + "_" + topic
 
-        config_payload = json.dumps({"name": name,
+        config_payload = json.dumps({"name": topic,
                                      "entity_category": "config",
                                      "icon": icon,
                                      "options": options,
@@ -190,7 +221,11 @@ class InterfaceMQTT:
                                      "value_template": "{{ value_json." + topic + "}}",
                                      "avty_t": available_topic,
                                      "uniq_id": name,
-                                     "dev": {"ids": [self.__device_id]}})
+                                     "dev": {"ids": [self.__device_id],
+                                             "name": self.__device_id,
+                                             "mdl": "PictureFrame",
+                                             "sw": __version__,
+                                             "mf": "pi3d PictureFrame project"}})
         client.publish(config_topic, config_payload, qos=0, retain=True)
         if init:
             client.subscribe(command_topic, qos=0)
@@ -198,15 +233,15 @@ class InterfaceMQTT:
     def __setup_switch(self, client, topic, icon,
                        available_topic, is_on=False, entity_category=None):
         switch_topic_head = "homeassistant/switch/" + self.__device_id
-        config_topic = switch_topic_head + topic + "/config"
-        command_topic = switch_topic_head + topic + "/set"
-        state_topic = switch_topic_head + topic + "/state"
-        dict = {"name": self.__device_id + topic,
+        config_topic = switch_topic_head + "_" + topic + "/config"
+        command_topic = switch_topic_head + "_" + topic + "/set"
+        state_topic = switch_topic_head + "_" + topic + "/state"
+        dict = {"name": topic,
                 "icon": icon,
                 "command_topic": command_topic,
                 "state_topic": state_topic,
                 "avty_t": available_topic,
-                "uniq_id": self.__device_id + topic,
+                "uniq_id": self.__device_id + "_" + topic,
                 "dev": {"ids": [self.__device_id],
                         "name": self.__device_id,
                         "mdl": "PictureFrame",
@@ -225,14 +260,14 @@ class InterfaceMQTT:
     def __setup_button(self, client, topic, icon,
                        available_topic, entity_category=None):
         button_topic_head = "homeassistant/button/" + self.__device_id
-        config_topic = button_topic_head + topic + "/config"
-        command_topic = button_topic_head + topic + "/set"
-        dict = {"name": self.__device_id + topic,
+        config_topic = button_topic_head + "_" + topic + "/config"
+        command_topic = button_topic_head + "_" + topic + "/set"
+        dict = {"name": topic,
                 "icon": icon,
                 "command_topic": command_topic,
                 "payload_press": "ON",
                 "avty_t": available_topic,
-                "uniq_id": self.__device_id + topic,
+                "uniq_id": self.__device_id + "_" + topic,
                 "dev": {"ids": [self.__device_id],
                         "name": self.__device_id,
                         "mdl": "PictureFrame",
