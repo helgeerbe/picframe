@@ -1,9 +1,9 @@
 """MQTT interface of picframe."""
 
 import logging
-import paho.mqtt.client as mqtt
 import json
 import os
+import paho.mqtt.client as mqtt
 from picframe import __version__
 
 
@@ -17,13 +17,38 @@ class InterfaceMQTT:
     controller : Controler
         Controller for picframe
 
-
     Methods
     -------
-
+    __init__(self, controller, mqtt_config)
+        Initializes an instance of InterfaceMQTT.
+    start(self)
+        Starts the MQTT interface.
+    stop(self)
+        Stops the MQTT interface.
+    on_connect(self, client, userdata, flags, rc)
+        Callback function for MQTT connection.
+    __get_dev_element(self)
+        Returns the device element for MQTT configuration.
+    __setup_sensor(self, client, topic, icon, available_topic, has_attributes=False, entity_category=None)
+        Sets up a sensor for MQTT.
+    __setup_text(self, client, topic, icon, available_topic, entity_category=None)
+        Sets up a text entity for MQTT.
+    __setup_number(self, client, topic, min, max, step, icon, available_topic)
+        Sets up a number entity for MQTT.
     """
 
     def __init__(self, controller, mqtt_config):
+        """
+        Initializes an instance of InterfaceMQTT.
+
+        Args:
+            controller (Controller): The controller object.
+            mqtt_config (dict): A dictionary containing MQTT configuration parameters.
+
+        Raises:
+            Exception: If MQTT setup fails.
+
+        """
         self.__logger = logging.getLogger("interface_mqtt.InterfaceMQTT")
         self.__logger.info('creating an instance of InterfaceMQTT')
         self.__controller = controller
@@ -52,6 +77,15 @@ class InterfaceMQTT:
             raise
 
     def start(self):
+        """
+        Starts the MQTT client and publishes the state.
+
+        This method sets the `publish_state` attribute of the controller and starts the MQTT client's loop.
+
+        Raises:
+            Exception: If the MQTT client fails to start.
+
+        """
         try:
             self.__controller.publish_state = self.publish_state
             self.__client.loop_start()
@@ -60,6 +94,20 @@ class InterfaceMQTT:
             raise
 
     def stop(self):
+        """
+        Returns a dictionary representing the device element.
+
+        The dictionary contains the following keys:
+        - ids: A list containing the device ID.
+        - name: The device ID.
+        - mdl: The model of the device, set to "PictureFrame".
+        - sw: The software version, set to the value of __version__.
+        - mf: The manufacturer of the device, set to "pi3d PictureFrame project".
+        - cu (optional): The device URL, only included if __device_url is set.
+
+        Returns:
+        A dictionary representing the device element.
+        """
         try:
             self.__controller.publish_state = None
             self.__client.loop_stop()
@@ -67,6 +115,18 @@ class InterfaceMQTT:
             self.__logger.error("MQTT stopping failed because of: {}".format(e))
 
     def on_connect(self, client, userdata, flags, rc):
+        """
+        Callback function that is called when the client successfully connects to the MQTT broker.
+
+        Parameters:
+            client (mqtt.Client): The MQTT client instance.
+            userdata: The user data passed to the client when connecting.
+            flags: Response flags sent by the broker.
+            rc (int): The connection result code.
+
+        Returns:
+            None
+        """
         if rc != 0:
             self.__logger.warning("Can't connect with mqtt broker. Reason = {0}".format(rc))
             return
@@ -131,7 +191,47 @@ class InterfaceMQTT:
         client.subscribe(self.__device_id + "/purge_files", qos=0)  # close down without killing!
         client.subscribe(self.__device_id + "/stop", qos=0)  # close down without killing!
 
+    def __get_dev_element(self):
+        """
+        Returns a dictionary representing the device element.
+
+        The dictionary contains the following keys:
+        - ids: A list containing the device ID.
+        - name: The device ID.
+        - mdl: The model of the device, set to "PictureFrame".
+        - sw: The software version, set to the value of __version__.
+        - mf: The manufacturer of the device, set to "pi3d PictureFrame project".
+        - cu (optional): The device URL, only included if __device_url is set.
+
+        Returns:
+        A dictionary representing the device element.
+        """
+        dev =  {
+            "ids": [self.__device_id],
+            "name": self.__device_id,
+            "mdl": "PictureFrame",
+            "sw": __version__,
+            "mf": "pi3d PictureFrame project"
+        }
+        if self.__device_url:
+            dev["cu"] = self.__device_url
+        return dev    
+
     def __setup_sensor(self, client, topic, icon, available_topic, has_attributes=False, entity_category=None):
+        """
+        Set up a sensor in Home Assistant.
+
+        Args:
+            client: The MQTT client used to publish and subscribe to topics.
+            topic: The topic of the sensor.
+            icon: The icon to be displayed for the sensor.
+            available_topic: The availability topic of the sensor.
+            has_attributes: A boolean indicating whether the sensor has attributes.
+            entity_category: The category of the sensor entity.
+
+        Returns:
+            None
+        """
         sensor_topic_head = "homeassistant/sensor/" + self.__device_id
         config_topic = sensor_topic_head + "_" + topic + "/config"
         name = self.__device_id + "_" + topic
@@ -140,11 +240,7 @@ class InterfaceMQTT:
                 "value_template": "{{ value_json." + topic + "}}",
                 "avty_t": available_topic,
                 "uniq_id": name,
-                "dev": {"ids": [self.__device_id],
-                        "name": self.__device_id,
-                        "mdl": "PictureFrame",
-                        "sw": __version__,
-                        "mf": "pi3d PictureFrame project"}}
+                "dev": self.__get_dev_element()}
         if has_attributes is True:
             dict["state_topic"] = sensor_topic_head + "_" + topic + "/state"
             dict["json_attributes_topic"] = sensor_topic_head + "_" + topic + "/attributes"
@@ -158,6 +254,19 @@ class InterfaceMQTT:
         client.subscribe(self.__device_id + "/" + topic, qos=0)
     
     def __setup_text(self, client, topic, icon, available_topic, entity_category=None):
+        """
+        Sets up the text sensor configuration and publishes it to the MQTT broker.
+
+        Args:
+            client (mqtt.Client): The MQTT client instance.
+            topic (str): The topic of the text sensor.
+            icon (str): The icon to be displayed for the text sensor.
+            available_topic (str): The availability topic for the text sensor.
+            entity_category (str, optional): The entity category of the text sensor.
+
+        Returns:
+            None
+        """
         text_topic_head = "homeassistant/text/" + self.__device_id
         config_topic = text_topic_head + "_" + topic + "/config"
         name = self.__device_id + "_" + topic
@@ -168,11 +277,7 @@ class InterfaceMQTT:
                 "command_topic": text_topic_head + "_" + topic + "/cmd",
                 "avty_t": available_topic,
                 "uniq_id": name,
-                "dev": {"ids": [self.__device_id],
-                        "name": self.__device_id,
-                        "mdl": "PictureFrame",
-                        "sw": __version__,
-                        "mf": "pi3d PictureFrame project"}}
+                "dev": self.__get_dev_element()}
         if entity_category:
             dict["entity_category"] = entity_category
 
@@ -181,6 +286,21 @@ class InterfaceMQTT:
         client.subscribe(self.__device_id + "/" + topic, qos=0)
 
     def __setup_number(self, client, topic, min, max, step, icon, available_topic):
+        """
+        Set up a number entity in Home Assistant.
+
+        Args:
+            client (mqtt.Client): The MQTT client used for communication.
+            topic (str): The topic of the number entity.
+            min (float): The minimum value of the number entity.
+            max (float): The maximum value of the number entity.
+            step (float): The step value for incrementing or decrementing the number entity.
+            icon (str): The icon to be displayed for the number entity.
+            available_topic (str): The topic used to indicate the availability of the number entity.
+
+        Returns:
+            None
+        """
         number_topic_head = "homeassistant/number/" + self.__device_id
         config_topic = number_topic_head + "_" + topic + "/config"
         command_topic = self.__device_id + "/" + topic
@@ -197,15 +317,22 @@ class InterfaceMQTT:
                                      "value_template": "{{ value_json." + topic + "}}",
                                      "avty_t": available_topic,
                                      "uniq_id": name,
-                                      "dev": {"ids": [self.__device_id],
-                                             "name": self.__device_id,
-                                             "mdl": "PictureFrame",
-                                             "sw": __version__,
-                                             "mf": "pi3d PictureFrame project"}})
+                                    "dev": self.__get_dev_element()})
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(command_topic, qos=0)
 
     def __setup_select(self, client, topic, options, icon, available_topic, init=False):
+        """
+        Set up a select component in Home Assistant.
+
+        Args:
+            client (mqtt.Client): The MQTT client used to publish and subscribe to topics.
+            topic (str): The topic of the select component.
+            options (list): The list of options for the select component.
+            icon (str): The icon to be displayed for the select component.
+            available_topic (str): The availability topic for the select component.
+            init (bool, optional): Whether to subscribe to the command topic during initialization. Defaults to False.
+        """
         select_topic_head = "homeassistant/select/" + self.__device_id
         config_topic = select_topic_head + "_" + topic + "/config"
         command_topic = self.__device_id + "/" + topic
@@ -221,17 +348,24 @@ class InterfaceMQTT:
                                      "value_template": "{{ value_json." + topic + "}}",
                                      "avty_t": available_topic,
                                      "uniq_id": name,
-                                     "dev": {"ids": [self.__device_id],
-                                             "name": self.__device_id,
-                                             "mdl": "PictureFrame",
-                                             "sw": __version__,
-                                             "mf": "pi3d PictureFrame project"}})
+                                     "dev": self.__get_dev_element()})
         client.publish(config_topic, config_payload, qos=0, retain=True)
         if init:
             client.subscribe(command_topic, qos=0)
 
     def __setup_switch(self, client, topic, icon,
                        available_topic, is_on=False, entity_category=None):
+        """
+        Sets up a switch in Home Assistant.
+
+        Args:
+            client (mqtt.Client): The MQTT client object.
+            topic (str): The topic of the switch.
+            icon (str): The icon to be displayed for the switch.
+            available_topic (str): The availability topic for the switch.
+            is_on (bool, optional): The initial state of the switch. Defaults to False.
+            entity_category (str, optional): The category of the entity. Defaults to None.
+        """
         switch_topic_head = "homeassistant/switch/" + self.__device_id
         config_topic = switch_topic_head + "_" + topic + "/config"
         command_topic = switch_topic_head + "_" + topic + "/set"
@@ -242,13 +376,7 @@ class InterfaceMQTT:
                 "state_topic": state_topic,
                 "avty_t": available_topic,
                 "uniq_id": self.__device_id + "_" + topic,
-                "dev": {"ids": [self.__device_id],
-                        "name": self.__device_id,
-                        "mdl": "PictureFrame",
-                        "sw": __version__,
-                        "mf": "pi3d PictureFrame project"}}
-        if self.__device_url:
-            dict["dev"]["cu"] = self.__device_url
+                "dev": self.__get_dev_element()}
         if entity_category:
             dict["entity_category"] = entity_category
         config_payload = json.dumps(dict)
@@ -259,6 +387,19 @@ class InterfaceMQTT:
 
     def __setup_button(self, client, topic, icon,
                        available_topic, entity_category=None):
+        """
+        Set up a button configuration for the Home Assistant integration.
+
+        Args:
+            client (mqtt.Client): The MQTT client used for communication.
+            topic (str): The topic of the button.
+            icon (str): The icon to be displayed for the button.
+            available_topic (str): The availability topic for the button.
+            entity_category (str, optional): The category of the entity. Defaults to None.
+
+        Returns:
+            None
+        """
         button_topic_head = "homeassistant/button/" + self.__device_id
         config_topic = button_topic_head + "_" + topic + "/config"
         command_topic = button_topic_head + "_" + topic + "/set"
@@ -268,13 +409,7 @@ class InterfaceMQTT:
                 "payload_press": "ON",
                 "avty_t": available_topic,
                 "uniq_id": self.__device_id + "_" + topic,
-                "dev": {"ids": [self.__device_id],
-                        "name": self.__device_id,
-                        "mdl": "PictureFrame",
-                        "sw": __version__,
-                        "mf": "pi3d PictureFrame project"}}
-        if self.__device_url:
-            dict["dev"]["cu"] = self.__device_url
+                "dev": self.__get_dev_element()}
         if entity_category:
             dict["entity_category"] = entity_category
         config_payload = json.dumps(dict)
@@ -283,6 +418,20 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
 
     def on_message(self, client, userdata, message):  # noqa: C901
+        """
+        Callback function that is called when a message is received.
+
+        Args:
+            client: The MQTT client instance.
+            userdata: The user data passed to the MQTT client.
+            message: An instance of the MQTTMessage class representing the received message.
+
+        Returns:
+            None
+
+        Raises:
+            None
+        """
         msg = message.payload.decode("utf-8")
         switch_topic_head = "homeassistant/switch/" + self.__device_id
         button_topic_head = "homeassistant/button/" + self.__device_id
@@ -444,6 +593,16 @@ class InterfaceMQTT:
             self.__controller.keep_looping = False
 
     def publish_state(self, image=None, image_attr=None):
+        """
+        Publishes the state of the device to the MQTT broker.
+
+        Args:
+            image (str, optional): The path to the image file. Defaults to None.
+            image_attr (dict, optional): The attributes of the image. Defaults to None.
+
+        Returns:
+            None
+        """
         sensor_topic_head = "homeassistant/sensor/" + self.__device_id
         switch_topic_head = "homeassistant/switch/" + self.__device_id
         available_topic = switch_topic_head + "/available"
