@@ -305,7 +305,7 @@ class MatImage:
     def __get_outer_mat_color(self, image):
         k = KmeansNp(k=3, max_iterations=10, size=100)
         colors = k.run(image)
-        return tuple(colors[0])
+        return tuple(colors[0].tolist())
 
     def __get_darker_shade(self, rgb_color, fractional_percent=0.5):
         return tuple(map(lambda c: int(c * fractional_percent), rgb_color))
