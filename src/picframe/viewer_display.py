@@ -74,6 +74,7 @@ class ViewerDisplay:
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
         self.__display_power = int(config['display_power'])
+        self.__use_sdl2 = config['use_sdl2']
         self.__use_glx = config['use_glx']
         self.__alpha = 0.0  # alpha - proportion front image to back
         self.__delta_alpha = 1.0
@@ -314,12 +315,12 @@ class ViewerDisplay:
                     (w, h) = (round(size[0] / sc_b / self.__blur_zoom), round(size[1] / sc_b / self.__blur_zoom))
                     (x, y) = (round(0.5 * (im.size[0] - w)), round(0.5 * (im.size[1] - h)))
                     box = (x, y, x + w, y + h)
-                    blr_sz = (int(x * 512 / size[0]) for x in size)
+                    blr_sz = [int(x * 512 / size[0]) for x in size]
                     im_b = im.resize(size, resample=0, box=box).resize(blr_sz)
                     im_b = im_b.filter(ImageFilter.GaussianBlur(self.__blur_amount))
                     im_b = im_b.resize(size, resample=Image.BICUBIC)
                     im_b.putalpha(round(255 * self.__edge_alpha))  # to apply the same EDGE_ALPHA as the no blur method.
-                    im = im.resize((int(x * sc_f) for x in im.size), resample=Image.BICUBIC)
+                    im = im.resize([int(x * sc_f) for x in im.size], resample=Image.BICUBIC)
                     """resize can use Image.LANCZOS (alias for Image.ANTIALIAS) for resampling
                     for better rendering of high-contranst diagonal lines. NB downscaled large
                     images are rescaled near the start of this try block if w or h > max_dimension
@@ -430,7 +431,7 @@ class ViewerDisplay:
         self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
                                              w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
                                              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR,
-                                             background=self.__background, use_glx=self.__use_glx)
+                                             background=self.__background, use_glx=self.__use_glx, use_sdl2=self.__use_sdl2)
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)

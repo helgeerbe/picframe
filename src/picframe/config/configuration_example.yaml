@@ -23,7 +23,8 @@ viewer:
   display_w: null                         # width of display surface (null->None will use max returned by hardware)
   display_h: null                         # height of display surface
   display_power: 0                        # default=0. choices={0, 1}, 0 will use legacy `vcgencmd` and 1 will use `xset` to blank the display
-  use_glx: False                          # default=False. Set to True on linux with xserver running
+  use_glx: False                          # default=False. Set to True on linux with xserver running. NB use_sdl2 might need to be False for this to work.
+  use_sdl2: True                          # default=True. pysdl2 can use display without xserver, it is installed as a dependency of pi3d
 
   mat_images: 0.01                        # default=0.01, True, automatically mat all images. False, don't automatically mat any images. Real value, auto-mat all images with aspect ratio difference > than value
   mat_type: null                          # default=null, A string containing the mat types to choose from when matting images. It can consist of any or

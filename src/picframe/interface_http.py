@@ -198,4 +198,5 @@ class InterfaceHttp(HTTPServer):
         t.start()
 
     def stop(self):
-        self.shutdown()
+        t = threading.Thread(target=self.shutdown, daemon=True)
+        t.start()
