@@ -40,8 +40,12 @@ viewer:
   show_clock: False                       # default=False, True shows clock overlay. False does not show clock overlay
   clock_justify: "R"                      # default="R", clock justification L, C, or R
   clock_text_sz: 120                      # default=120, clock character size
-  clock_format: "%I:%M"                   # default="%I:%M", strftime format for clock string
+  clock_format: "%-I:%M"                  # default="%-I:%M", strftime format for clock string
   clock_opacity: 1.0                      # default=1.0 (0.0-1.0), alpha value of clock overlay
+  clock_top_bottom: "T"                   # default="T" ("T", "B"), whether to display clock at top or bottom of screen
+  clock_wdt_offset_pct: 3.0               # default=3.0 (1.0-10.0), used to calclate pixels between clock text and side of screen
+  clock_hgt_offset_pct: 3.0               # default=3.0 (1.0-10.0), used to calclate pixels between clock text and top/bottom of screen
+                                          # If text is found in the ramdisk /dev/shm/clock.txt then it will be displayed under the time
 
   menu_text_sz: 40                        # default=40, menu character size
   menu_autohide_tm: 10.0                  # default=10.0, time in seconds to show menu before auto hiding (0 disables auto hiding)

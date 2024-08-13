@@ -98,6 +98,9 @@ class ViewerDisplay:
         self.__clock_text_sz = config['clock_text_sz']
         self.__clock_format = config['clock_format']
         self.__clock_opacity = config['clock_opacity']
+        self.__clock_top_bottom = config['clock_top_bottom']
+        self.__clock_wdt_offset_pct = config['clock_wdt_offset_pct']
+        self.__clock_hgt_offset_pct = config['clock_hgt_offset_pct']
         ImageFile.LOAD_TRUNCATED_IMAGES = True  # occasional damaged file hangs app
 
     @property
@@ -400,21 +403,35 @@ class ViewerDisplay:
         #     With the default H:M display, this will only rebuild once each minute. Note however,
         #     time strings containing a "seconds" component will rebuild once per second.
         if current_time != self.__prev_clock_time:
-            width = self.__display.width - 50
-            self.__clock_overlay = pi3d.FixedString(self.__font_file, current_time, font_size=self.__clock_text_sz,
+            # Calculate width and height offsets based on percents from configuration.yaml
+            wdt_offset = int(self.__display.width * self.__clock_wdt_offset_pct / 100)
+            hgt_offset = int(self.__display.height * self.__clock_hgt_offset_pct / 100)
+            width = self.__display.width - wdt_offset
+            # check if /dev/shm/clock.txt exists, if so add it to current_time
+            clock_text = current_time
+            if os.path.isfile("/dev/shm/clock.txt"):
+                with open("/dev/shm/clock.txt", "r") as f:
+                    clock_text = f.read()
+                    clock_text = f"{current_time}\n{clock_text}"
+            self.__clock_overlay = pi3d.FixedString(self.__font_file, clock_text, font_size=self.__clock_text_sz,
                                                     shader=self.__flat_shader, width=width, shadow_radius=3,
+                                                    justify=self.__clock_justify,
                                                     color=(255, 255, 255, int(255 * float(self.__clock_opacity))))
             x = (width - self.__clock_overlay.sprite.width) // 2
             if self.__clock_justify == "L":
                 x *= -1
             elif self.__clock_justify == "C":
                 x = 0
-            y = (self.__display.height - self.__clock_text_sz - 20) // 2
+            y = (self.__display.height - self.__clock_overlay.sprite.height + self.__clock_text_sz * 0.5 - hgt_offset) // 2
+            # Handle whether to draw the clock at top or bottom
+            if self.__clock_top_bottom == "B":
+                y *= -1
             self.__clock_overlay.sprite.position(x, y, 0.1)
             self.__prev_clock_time = current_time
 
         if self.__clock_overlay:
             self.__clock_overlay.sprite.draw()
+
 
     @property
     def display_width(self):
