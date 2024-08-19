@@ -445,7 +445,7 @@ class ViewerDisplay:
         change_time = os.path.getmtime(overlay_file)
         if self.__prev_overlay_time is None or self.__prev_overlay_time < change_time: # load Texture
             self.__prev_overlay_time = change_time
-            overlay_texture = pi3d.Texture(overlay_file, blend=True, free_after_load=True, mipmap=False) #TODO check generally OK with blend=False
+            overlay_texture = pi3d.Texture(overlay_file, blend=False, free_after_load=True, mipmap=False) #TODO check generally OK with blend=False
             self.__image_overlay = pi3d.Sprite(w=self.__display.width, h=self.__display.height,z=4.1) # just behind text_bkg
             self.__image_overlay.set_draw_details(self.__flat_shader, [overlay_texture])
         if self.__image_overlay is not None: # shouldn't be possible to get here otherwise, but just in case!
