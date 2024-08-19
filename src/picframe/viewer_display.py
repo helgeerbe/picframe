@@ -424,7 +424,11 @@ class ViewerDisplay:
                 x *= -1
             elif self.__clock_justify == "C":
                 x = 0
-            y = (self.__display.height - self.__clock_overlay.sprite.height + self.__clock_text_sz * 0.5 - hgt_offset) // 2
+            y = (self.__display.height
+                 - self.__clock_overlay.sprite.height
+                 + self.__clock_text_sz * 0.5
+                 - hgt_offset
+                 ) // 2
             # Handle whether to draw the clock at top or bottom
             if self.__clock_top_bottom == "B":
                 y *= -1
@@ -438,17 +442,22 @@ class ViewerDisplay:
         # Very simple function pasting the overlay_file below over the main picture but beneath
         # the clock and the image info text. The user must make the image transparent as needed
         # and the correct aspect ratio for the screen. The image will be scaled to the screen size
-        overlay_file = "/dev/shm/overlay.png" #TODO make this user configurable?
-        if not os.path.isfile(overlay_file): # empty file used as flag to return early
+        overlay_file = "/dev/shm/overlay.png"  # TODO make this user configurable?
+        if not os.path.isfile(overlay_file):  # empty file used as flag to return early
             self.__image_overlay = None
             return
         change_time = os.path.getmtime(overlay_file)
-        if self.__prev_overlay_time is None or self.__prev_overlay_time < change_time: # load Texture
+        if self.__prev_overlay_time is None or self.__prev_overlay_time < change_time:  # load Texture
             self.__prev_overlay_time = change_time
-            overlay_texture = pi3d.Texture(overlay_file, blend=False, free_after_load=True, mipmap=False) #TODO check generally OK with blend=False
-            self.__image_overlay = pi3d.Sprite(w=self.__display.width, h=self.__display.height,z=4.1) # just behind text_bkg
+            overlay_texture = pi3d.Texture(overlay_file,
+                                           blend=False,  # TODO check generally OK with blend=False
+                                           free_after_load=True,
+                                           mipmap=False)
+            self.__image_overlay = pi3d.Sprite(w=self.__display.width,
+                                               h=self.__display.height,
+                                               z=4.1)  # just behind text_bkg
             self.__image_overlay.set_draw_details(self.__flat_shader, [overlay_texture])
-        if self.__image_overlay is not None: # shouldn't be possible to get here otherwise, but just in case!
+        if self.__image_overlay is not None:  # shouldn't be possible to get here otherwise, but just in case!
             self.__image_overlay.draw()
 
     @property
@@ -466,7 +475,8 @@ class ViewerDisplay:
         self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
                                              w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
                                              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR,
-                                             background=self.__background, use_glx=self.__use_glx, use_sdl2=self.__use_sdl2)
+                                             background=self.__background, use_glx=self.__use_glx,
+                                             use_sdl2=self.__use_sdl2)
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
