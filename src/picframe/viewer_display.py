@@ -179,9 +179,6 @@ class ViewerDisplay:
 
     def set_brightness(self, val):
         self.__slide.unif[55] = val  # take immediate effect
-
-    def get_brightness(self):
-        return round(self.__slide.unif[55], 2)  # this will still give 32/64 bit differences sometimes, as will the float(format()) system # noqa: E501
         if self.__clock_overlay: # will be set to None if not text
             self.__clock_overlay.sprite.set_alpha(val)
         if self.__image_overlay:
@@ -189,6 +186,9 @@ class ViewerDisplay:
         for txt in self.__textblocks: # must be list
             if txt:
                 txt.sprite.set_alpha(val)
+
+    def get_brightness(self):
+        return round(self.__slide.unif[55], 2)  # this will still give 32/64 bit differences sometimes, as will the float(format()) system # noqa: E501
 
     def set_matting_images(self, val):  # needs to cope with "true", "ON", 0, "0.2" etc.
         try:
