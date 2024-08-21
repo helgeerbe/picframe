@@ -466,6 +466,7 @@ class ViewerDisplay:
                                                h=self.__display.height,
                                                z=4.1)  # just behind text_bkg
             self.__image_overlay.set_draw_details(self.__flat_shader, [overlay_texture])
+            self.__image_overlay.set_alpha(self.get_brightness())
         if self.__image_overlay is not None:  # shouldn't be possible to get here otherwise, but just in case!
             self.__image_overlay.draw()
 
