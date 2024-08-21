@@ -83,7 +83,7 @@ class ViewerDisplay:
         self.__flat_shader = None
         self.__xstep = None
         self.__ystep = None
-        self.__textblocks = None
+        self.__textblocks = [None, None]
         self.__text_bkg = None
         self.__sfg = None  # slide for background
         self.__sbg = None  # slide for foreground
@@ -182,6 +182,13 @@ class ViewerDisplay:
 
     def get_brightness(self):
         return round(self.__slide.unif[55], 2)  # this will still give 32/64 bit differences sometimes, as will the float(format()) system # noqa: E501
+        if self.__clock_overlay: # will be set to None if not text
+            self.__clock_overlay.sprite.set_alpha(val)
+        if self.__image_overlay:
+            self.__image_overlay.set_alpha(val)
+        for txt in self.__textblocks: # must be list
+            if txt:
+                txt.sprite.set_alpha(val)
 
     def set_matting_images(self, val):  # needs to cope with "true", "ON", 0, "0.2" etc.
         try:
@@ -379,9 +386,10 @@ class ViewerDisplay:
                 c_rng = self.__display.width - 100  # range for x loc from L to R justified
             else:
                 c_rng = self.__display.width * 0.5 - 100  # range for x loc from L to R justified
+            opacity = int(255 * float(self.__text_opacity) * self.get_brightness())
             block = pi3d.FixedString(self.__font_file, final_string, shadow_radius=3, font_size=self.__show_text_sz,
                                      shader=self.__flat_shader, justify=self.__text_justify, width=c_rng,
-                                     color=(255, 255, 255, int(255 * float(self.__text_opacity))))
+                                     color=(255, 255, 255, opacity))
             adj_x = (c_rng - block.sprite.width) // 2  # half amount of space outside sprite
             if self.__text_justify == "L":
                 adj_x *= -1
@@ -415,10 +423,11 @@ class ViewerDisplay:
                 with open("/dev/shm/clock.txt", "r") as f:
                     clock_text = f.read()
                     clock_text = f"{current_time}\n{clock_text}"
+            opacity = int(255 * float(self.__clock_opacity))
             self.__clock_overlay = pi3d.FixedString(self.__font_file, clock_text, font_size=self.__clock_text_sz,
                                                     shader=self.__flat_shader, width=width, shadow_radius=3,
-                                                    justify=self.__clock_justify,
-                                                    color=(255, 255, 255, int(255 * float(self.__clock_opacity))))
+                                                    justify=self.__clock_justify, color=(255, 255, 255, opacity))
+            self.__clock_overlay.sprite.set_alpha(self.get_brightness())
             x = (width - self.__clock_overlay.sprite.width) // 2
             if self.__clock_justify == "L":
                 x *= -1
@@ -497,9 +506,6 @@ class ViewerDisplay:
             self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
     def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
-        if self.clock_is_on:
-            self.__draw_clock()
-
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
@@ -564,6 +570,8 @@ class ViewerDisplay:
 
         self.__slide.draw()
         self.__draw_overlay()
+        if self.clock_is_on:
+            self.__draw_clock()
 
         if self.__alpha >= 1.0 and tm < self.__name_tm:
             # this sets alpha for the TextBlock from 0 to 1 then back to 0
