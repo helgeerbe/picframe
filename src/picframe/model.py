@@ -32,6 +32,7 @@ DEFAULT_CONFIG = {
         'display_h': None,
         'display_power': 0,
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
+        'use_sdl2': False,
         'test_key': 'test_value',
         'mat_images': True,
         'mat_type': None,
