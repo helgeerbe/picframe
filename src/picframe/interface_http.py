@@ -118,7 +118,7 @@ class RequestHandler(BaseHTTPRequestHandler):
                         for subkey in self.server._setters:
                             message[subkey] = getattr(self.server._controller, subkey)
                     elif key in dir(self.server._controller):
-                        if value != "":  # parse_qsl can return empty string for value when just querying
+                        if value != "" or key in ("subdirectory", "location_filter", "tags_filter"):  # parse_qsl can return empty string for value when just querying
                             lwr_val = value.lower()
                             if lwr_val in ("true", "on", "yes"):  # this only works for simple values *not* json style kwargs # noqa: E501
                                 value = True
@@ -198,4 +198,5 @@ class InterfaceHttp(HTTPServer):
         t.start()
 
     def stop(self):
-        self.shutdown()
+        t = threading.Thread(target=self.shutdown, daemon=True)
+        t.start()

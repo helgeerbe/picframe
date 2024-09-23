@@ -74,6 +74,7 @@ class ViewerDisplay:
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
         self.__display_power = int(config['display_power'])
+        self.__use_sdl2 = config['use_sdl2']
         self.__use_glx = config['use_glx']
         self.__alpha = 0.0  # alpha - proportion front image to back
         self.__delta_alpha = 1.0
@@ -82,7 +83,7 @@ class ViewerDisplay:
         self.__flat_shader = None
         self.__xstep = None
         self.__ystep = None
-        self.__textblocks = None
+        self.__textblocks = [None, None]
         self.__text_bkg = None
         self.__sfg = None  # slide for background
         self.__sbg = None  # slide for foreground
@@ -97,6 +98,11 @@ class ViewerDisplay:
         self.__clock_text_sz = config['clock_text_sz']
         self.__clock_format = config['clock_format']
         self.__clock_opacity = config['clock_opacity']
+        self.__clock_top_bottom = config['clock_top_bottom']
+        self.__clock_wdt_offset_pct = config['clock_wdt_offset_pct']
+        self.__clock_hgt_offset_pct = config['clock_hgt_offset_pct']
+        self.__image_overlay = None
+        self.__prev_overlay_time = None
         ImageFile.LOAD_TRUNCATED_IMAGES = True  # occasional damaged file hangs app
 
     @property
@@ -173,6 +179,13 @@ class ViewerDisplay:
 
     def set_brightness(self, val):
         self.__slide.unif[55] = val  # take immediate effect
+        if self.__clock_overlay: # will be set to None if not text
+            self.__clock_overlay.sprite.set_alpha(val)
+        if self.__image_overlay:
+            self.__image_overlay.set_alpha(val)
+        for txt in self.__textblocks: # must be list
+            if txt:
+                txt.sprite.set_alpha(val)
 
     def get_brightness(self):
         return round(self.__slide.unif[55], 2)  # this will still give 32/64 bit differences sometimes, as will the float(format()) system # noqa: E501
@@ -314,12 +327,12 @@ class ViewerDisplay:
                     (w, h) = (round(size[0] / sc_b / self.__blur_zoom), round(size[1] / sc_b / self.__blur_zoom))
                     (x, y) = (round(0.5 * (im.size[0] - w)), round(0.5 * (im.size[1] - h)))
                     box = (x, y, x + w, y + h)
-                    blr_sz = (int(x * 512 / size[0]) for x in size)
+                    blr_sz = [int(x * 512 / size[0]) for x in size]
                     im_b = im.resize(size, resample=0, box=box).resize(blr_sz)
                     im_b = im_b.filter(ImageFilter.GaussianBlur(self.__blur_amount))
                     im_b = im_b.resize(size, resample=Image.BICUBIC)
                     im_b.putalpha(round(255 * self.__edge_alpha))  # to apply the same EDGE_ALPHA as the no blur method.
-                    im = im.resize((int(x * sc_f) for x in im.size), resample=Image.BICUBIC)
+                    im = im.resize([int(x * sc_f) for x in im.size], resample=Image.BICUBIC)
                     """resize can use Image.LANCZOS (alias for Image.ANTIALIAS) for resampling
                     for better rendering of high-contranst diagonal lines. NB downscaled large
                     images are rescaled near the start of this try block if w or h > max_dimension
@@ -373,9 +386,10 @@ class ViewerDisplay:
                 c_rng = self.__display.width - 100  # range for x loc from L to R justified
             else:
                 c_rng = self.__display.width * 0.5 - 100  # range for x loc from L to R justified
+            opacity = int(255 * float(self.__text_opacity) * self.get_brightness())
             block = pi3d.FixedString(self.__font_file, final_string, shadow_radius=3, font_size=self.__show_text_sz,
                                      shader=self.__flat_shader, justify=self.__text_justify, width=c_rng,
-                                     color=(255, 255, 255, int(255 * float(self.__text_opacity))))
+                                     color=(255, 255, 255, opacity))
             adj_x = (c_rng - block.sprite.width) // 2  # half amount of space outside sprite
             if self.__text_justify == "L":
                 adj_x *= -1
@@ -399,21 +413,62 @@ class ViewerDisplay:
         #     With the default H:M display, this will only rebuild once each minute. Note however,
         #     time strings containing a "seconds" component will rebuild once per second.
         if current_time != self.__prev_clock_time:
-            width = self.__display.width - 50
-            self.__clock_overlay = pi3d.FixedString(self.__font_file, current_time, font_size=self.__clock_text_sz,
+            # Calculate width and height offsets based on percents from configuration.yaml
+            wdt_offset = int(self.__display.width * self.__clock_wdt_offset_pct / 100)
+            hgt_offset = int(self.__display.height * self.__clock_hgt_offset_pct / 100)
+            width = self.__display.width - wdt_offset
+            # check if /dev/shm/clock.txt exists, if so add it to current_time
+            clock_text = current_time
+            if os.path.isfile("/dev/shm/clock.txt"):
+                with open("/dev/shm/clock.txt", "r") as f:
+                    clock_text = f.read()
+                    clock_text = f"{current_time}\n{clock_text}"
+            opacity = int(255 * float(self.__clock_opacity))
+            self.__clock_overlay = pi3d.FixedString(self.__font_file, clock_text, font_size=self.__clock_text_sz,
                                                     shader=self.__flat_shader, width=width, shadow_radius=3,
-                                                    color=(255, 255, 255, int(255 * float(self.__clock_opacity))))
+                                                    justify=self.__clock_justify, color=(255, 255, 255, opacity))
+            self.__clock_overlay.sprite.set_alpha(self.get_brightness())
             x = (width - self.__clock_overlay.sprite.width) // 2
             if self.__clock_justify == "L":
                 x *= -1
             elif self.__clock_justify == "C":
                 x = 0
-            y = (self.__display.height - self.__clock_text_sz - 20) // 2
+            y = (self.__display.height
+                 - self.__clock_overlay.sprite.height
+                 + self.__clock_text_sz * 0.5
+                 - hgt_offset
+                 ) // 2
+            # Handle whether to draw the clock at top or bottom
+            if self.__clock_top_bottom == "B":
+                y *= -1
             self.__clock_overlay.sprite.position(x, y, 0.1)
             self.__prev_clock_time = current_time
 
         if self.__clock_overlay:
             self.__clock_overlay.sprite.draw()
+
+    def __draw_overlay(self):
+        # Very simple function pasting the overlay_file below over the main picture but beneath
+        # the clock and the image info text. The user must make the image transparent as needed
+        # and the correct aspect ratio for the screen. The image will be scaled to the screen size
+        overlay_file = "/dev/shm/overlay.png"  # TODO make this user configurable?
+        if not os.path.isfile(overlay_file):  # empty file used as flag to return early
+            self.__image_overlay = None
+            return
+        change_time = os.path.getmtime(overlay_file)
+        if self.__prev_overlay_time is None or self.__prev_overlay_time < change_time:  # load Texture
+            self.__prev_overlay_time = change_time
+            overlay_texture = pi3d.Texture(overlay_file,
+                                           blend=False,  # TODO check generally OK with blend=False
+                                           free_after_load=True,
+                                           mipmap=False)
+            self.__image_overlay = pi3d.Sprite(w=self.__display.width,
+                                               h=self.__display.height,
+                                               z=4.1)  # just behind text_bkg
+            self.__image_overlay.set_draw_details(self.__flat_shader, [overlay_texture])
+            self.__image_overlay.set_alpha(self.get_brightness())
+        if self.__image_overlay is not None:  # shouldn't be possible to get here otherwise, but just in case!
+            self.__image_overlay.draw()
 
     @property
     def display_width(self):
@@ -430,7 +485,8 @@ class ViewerDisplay:
         self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
                                              w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
                                              display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR,
-                                             background=self.__background, use_glx=self.__use_glx)
+                                             background=self.__background, use_glx=self.__use_glx,
+                                             use_sdl2=self.__use_sdl2)
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
@@ -451,9 +507,6 @@ class ViewerDisplay:
             self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
     def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
-        if self.clock_is_on:
-            self.__draw_clock()
-
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
@@ -517,6 +570,9 @@ class ViewerDisplay:
             self.__in_transition = False
 
         self.__slide.draw()
+        self.__draw_overlay()
+        if self.clock_is_on:
+            self.__draw_clock()
 
         if self.__alpha >= 1.0 and tm < self.__name_tm:
             # this sets alpha for the TextBlock from 0 to 1 then back to 0

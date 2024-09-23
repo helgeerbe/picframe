@@ -23,7 +23,9 @@ viewer:
   display_w: null                         # width of display surface (null->None will use max returned by hardware)
   display_h: null                         # height of display surface
   display_power: 0                        # default=0. choices={0, 1}, 0 will use legacy `vcgencmd` and 1 will use `xset` to blank the display
-  use_glx: False                          # default=False. Set to True on linux with xserver running
+  use_glx: False                          # default=False. Set to True on linux with xserver running. NB use_sdl2 might need to be False for this to work.
+  use_sdl2: False                         # default=True. pysdl2 can use display without xserver, it should be installed as a dependency of pi3d
+                                          # but might need `sudo apt install libsdl2-dev` if picframe gives errors about missing sdl2
 
   mat_images: 0.01                        # default=0.01, True, automatically mat all images. False, don't automatically mat any images. Real value, auto-mat all images with aspect ratio difference > than value
   mat_type: null                          # default=null, A string containing the mat types to choose from when matting images. It can consist of any or
@@ -39,8 +41,12 @@ viewer:
   show_clock: False                       # default=False, True shows clock overlay. False does not show clock overlay
   clock_justify: "R"                      # default="R", clock justification L, C, or R
   clock_text_sz: 120                      # default=120, clock character size
-  clock_format: "%I:%M"                   # default="%I:%M", strftime format for clock string
+  clock_format: "%-I:%M"                  # default="%-I:%M", strftime format for clock string
   clock_opacity: 1.0                      # default=1.0 (0.0-1.0), alpha value of clock overlay
+  clock_top_bottom: "T"                   # default="T" ("T", "B"), whether to display clock at top or bottom of screen
+  clock_wdt_offset_pct: 3.0               # default=3.0 (1.0-10.0), used to calclate pixels between clock text and side of screen
+  clock_hgt_offset_pct: 3.0               # default=3.0 (1.0-10.0), used to calclate pixels between clock text and top/bottom of screen
+                                          # If text is found in the ramdisk /dev/shm/clock.txt then it will be displayed under the time
 
   menu_text_sz: 40                        # default=40, menu character size
   menu_autohide_tm: 10.0                  # default=10.0, time in seconds to show menu before auto hiding (0 disables auto hiding)

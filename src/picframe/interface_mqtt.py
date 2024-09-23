@@ -590,7 +590,7 @@ class InterfaceMQTT:
 
         # stop loops and end program
         elif message.topic == self.__device_id + "/stop":
-            self.__controller.keep_looping = False
+            self.__controller.stop()
 
     def publish_state(self, image=None, image_attr=None):
         """
