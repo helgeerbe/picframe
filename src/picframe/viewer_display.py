@@ -154,6 +154,14 @@ class ViewerDisplay:
             except Exception as e:
                 self.__logger.debug("Display ON/OFF is xset via dpms, but an error occured")
                 self.__logger.debug("Cause: %s", e)
+        elif self.__display_power == 2:
+            try:  # try wlr-randr for RPi5 with wayland desktop
+                wlr_randr_cmd = ["wlr-randr", "--output", "HDMI-A-1"]
+                wlr_randr_cmd.append('--on' if on_off else '--off')
+                subprocess.call(wlr_randr_cmd)
+            except Exception as e:
+                self.__logger.debug("Display ON/OFF is wlr-randr, but an error occured")
+                self.__logger.debug("Cause: %s", e)
         else:
             self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
 
