@@ -38,7 +38,7 @@ dynamic = ["version"]
 dependencies = [
     "Pillow>=10.2.0",
     "defusedxml",
-    "pi3d>=2.51",
+    "pi3d>=2.52",
     "PyYAML",
     "paho-mqtt",
     "IPTCInfo3",
