@@ -22,9 +22,9 @@ viewer:
   display_y: 0                            # offset from top of screen (can be negative)
   display_w: null                         # width of display surface (null->None will use max returned by hardware)
   display_h: null                         # height of display surface
-  display_power: 0                        # default=0. choices={0, 1, 2}, 0 will use legacy `vcgencmd`, 1 will use `xset`, 2 will use 'wlr-randr' to blank the display
+  display_power: 2                        # default=0. choices={0, 1, 2}, 0 will use legacy `vcgencmd`, 1 will use `xset`, 2 will use 'wlr-randr' to blank the display
   use_glx: False                          # default=False. Set to True on linux with xserver running. NB use_sdl2 might need to be False for this to work.
-  use_sdl2: False                         # default=True. pysdl2 can use display without xserver, it should be installed as a dependency of pi3d
+  use_sdl2: True                          # default=True. pysdl2 can use display without xserver, it should be installed as a dependency of pi3d
                                           # but might need `sudo apt install libsdl2-dev` if picframe gives errors about missing sdl2
 
   mat_images: 0.01                        # default=0.01, True, automatically mat all images. False, don't automatically mat any images. Real value, auto-mat all images with aspect ratio difference > than value
