@@ -129,6 +129,8 @@ class ViewerDisplay:
                 self.__logger.debug("Display ON/OFF is X with dpms enabled, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
+        elif self.__display_power == 2:
+            return True # TODO this needs proper test
         else:
             self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
             return True
@@ -287,6 +289,7 @@ class ViewerDisplay:
 
     def __tex_load(self, pics, size=None):  # noqa: C901
         try:
+            self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}") #<<<<<<
             if self.__mat_images and self.__matter is None:
                 self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
                                                    resource_folder=self.__mat_resource_folder,
@@ -492,7 +495,7 @@ class ViewerDisplay:
     def slideshow_start(self):
         self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
                                              w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
-                                             display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR,
+                                             display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR | pi3d.DISPLAY_CONFIG_NO_FRAME,
                                              background=self.__background, use_glx=self.__use_glx,
                                              use_sdl2=self.__use_sdl2)
         camera = pi3d.Camera(is_3d=False)

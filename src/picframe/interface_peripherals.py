@@ -68,6 +68,7 @@ class InterfacePeripherals:
         self.__clock_is_suspended = False
         self.__pointer_position = (0, 0)
         self.__timestamp = 0
+        self.__last_check_display_on = 0.0
 
     def check_input(self) -> None:
         """Checks for any input from the selected peripheral device and handles it."""
@@ -135,6 +136,7 @@ class InterfacePeripherals:
     def __get_mouse(self) -> typing.Optional["pi3d.Mouse"]:
         if self.__input_type in ["touch", "mouse"]:
             mouse = pi3d.Mouse(
+                use_x=True,
                 restrict=self.__input_type == "mouse",
                 width=self.__viewer.display_width,
                 height=self.__viewer.display_height,
@@ -253,6 +255,12 @@ class InterfacePeripherals:
                 self.controller.display_is_on = True
             else:
                 self.__gui.checkkey(code)
+                if code == "RIGHT":
+                    self.controller.next()
+                elif code == "LEFT":
+                    self.controller.back()
+                elif code == "ESCAPE":
+                    self.controller.stop()
 
     def __handle_touch_input(self) -> None:
         """Due to pi3d not reliably detecting touch as Mouse.LEFT_BUTTON event
@@ -275,14 +283,18 @@ class InterfacePeripherals:
                 self.menu_is_on = True  # Reset clock for autohide
 
     def __handle_mouse_input(self) -> None:
-        if self.__pointer_moved() and not self.controller.display_is_on:
-            self.controller.display_is_on = True
+        if self.__pointer_moved():
+            if self.__timestamp > self.__last_check_display_on + 2.0: # this @getter is potentially expensive to run so will slow the mouse
+                self.__last_check_display_on = self.__timestamp
+                if self.controller.display_is_on:
+                    self.controller.display_is_on = True
 
         # Show or hide menu
         self.menu_is_on = self.__pointer_position[1] > self.__viewer.display_height // 2 - self.__menu_height
 
         # Detect click
-        if self.__mouse.button_status() == self.__mouse.LEFT_BUTTON and not self.__mouse_is_down:
+        button = self.__mouse.button_status()
+        if button == self.__mouse.LEFT_BUTTON and not self.__mouse_is_down:
             self.__mouse_is_down = True
             self.__handle_click()
         elif self.__mouse.button_status() != self.__mouse.LEFT_BUTTON and self.__mouse_is_down:
@@ -290,6 +302,7 @@ class InterfacePeripherals:
 
     def __update_pointer_position(self) -> None:
         position_x, position_y = self.__mouse.position()
+        """ # the mouse location should be generated correctly by X11 or SDL2 in the Mouse class now
         if self.__input_type == "mouse":
             position_x -= self.__viewer.display_width // 2
             position_y -= self.__viewer.display_height // 2
@@ -297,6 +310,7 @@ class InterfacePeripherals:
             # Workaround, pi3d seems to always assume screen ratio 4:3 so touch is incorrectly translated
             # to x, y on screens with a different ratio
             position_y *= self.__viewer.display_height / (self.__viewer.display_width * 3 / 4)
+        """
         self.__pointer_position = (position_x, position_y)
 
     def __pointer_moved(self) -> bool:
@@ -390,7 +404,7 @@ class ExitMenuItem(IPMenuItem):
     config_name = "exit"
 
     def action(self):
-        self.ip.controller.keep_looping = False
+        self.ip.controller.stop()
 
 
 class PowerDownMenuItem(IPMenuItem):
@@ -399,5 +413,5 @@ class PowerDownMenuItem(IPMenuItem):
     config_name = "power_down"
 
     def action(self):
-        self.ip.controller.keep_looping = False
+        self.ip.controller.stop()
         subprocess.check_call(["sudo", "poweroff"])

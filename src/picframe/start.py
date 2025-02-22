@@ -3,7 +3,7 @@ import argparse
 import os
 import locale
 import sys
-from distutils.dir_util import copy_tree
+from shutil import copytree
 
 from picframe import model, viewer_display, controller, __version__
 
@@ -15,7 +15,7 @@ def copy_files(pkgdir, dest, target):
         fullpath = os.path.join(pkgdir,  target)
         destination = os.path.join(dest,  PICFRAME_DATA_DIR)
         destination = os.path.join(destination,  target)
-        copy_tree(fullpath,  destination)
+        copytree(fullpath,  destination)
     except Exception:
         raise
 
