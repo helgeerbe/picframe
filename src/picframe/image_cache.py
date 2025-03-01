@@ -9,6 +9,7 @@ from picframe import get_image_meta
 class ImageCache:
 
     EXTENSIONS = ['.png', '.jpg', '.jpeg', '.heif', '.heic']
+    VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
     EXIF_TO_FIELD = {'EXIF FNumber': 'f_number',
                      'Image Make': 'make',
                      'Image Model': 'model',
@@ -379,7 +380,7 @@ class ImageCache:
         for dir, _date in modified_folders:
             for file in os.listdir(dir):
                 base, extension = os.path.splitext(file)
-                if (extension.lower() in ImageCache.EXTENSIONS
+                if (extension.lower() in (ImageCache.EXTENSIONS + ImageCache.VIDEO_EXTENSIONS)
                         # have to filter out all the Apple junk
                         and '.AppleDouble' not in dir and not file.startswith('.')):
                     full_file = os.path.join(dir, file)
@@ -467,6 +468,9 @@ class ImageCache:
             self.__purge_files = False
 
     def __get_exif_info(self, file_path_name):
+        ext = os.path.splitext(file_path_name)[1].lower()
+        if ext in ImageCache.VIDEO_EXTENSIONS: # no exif info available
+            return {'width': 100, 'height': 100} # return early with min info for videos TODO duration available in video_info
         exifs = get_image_meta.GetImageMeta(file_path_name)
         # Dict to store interesting EXIF data
         # Note, the 'key' must match a field in the 'meta' table
