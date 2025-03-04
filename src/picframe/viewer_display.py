@@ -134,7 +134,16 @@ class ViewerDisplay:
                 self.__logger.debug("Cause: %s", e)
             return True
         elif self.__display_power == 2:
-            return True # TODO this needs proper test
+            try:
+                output = subprocess.check_output(["wlr-randr"])
+                if output.find(b'Enabled: yes') != -1:
+                    return True
+                else:
+                    return False
+            except Exception as e:
+                self.__logger.debug("Display ON/OFF is wlr-randr, but an error occurred")
+                self.__logger.debug("Cause: %s", e)
+            return True
         else:
             self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
             return True
@@ -293,14 +302,16 @@ class ViewerDisplay:
 
     def __tex_load(self, pics, size=None):  # noqa: C901
         if self.__video_streamer is not None:
-            self.__video_streamer.kill()
-            self.__video_streamer = None
+            self.__video_streamer.stop()
         try:
             self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}") #<<<<<<
             if pics[0] and os.path.splitext(pics[0].fname)[1].lower() in VIDEO_EXTENSIONS:
                 # start video stream
-                self.__video_streamer = VideoStreamer(pics[0].fname)
-                im = self.__video_streamer.player.screenshot_raw() #np.zeros((100, 100, 4), dtype='uint8') # placeholder
+                if self.__video_streamer is None:
+                    self.__video_streamer = VideoStreamer(pics[0].fname)
+                else:
+                    self.__video_streamer.play(pics[0].fname)
+                im = self.__video_streamer.player.screenshot_raw() #np.zeros((100, 100, 4), dtype='uint8') # placeholder #TODO get final frame rather than early frame
             else: # normal image or image pair
                 if self.__mat_images and self.__matter is None:
                     self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
