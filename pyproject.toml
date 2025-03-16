@@ -36,13 +36,14 @@ dynamic = ["version"]
 dependencies = [
     "Pillow>=10.2.0",
     "defusedxml",
-    "pi3d>=2.52",
+    "pi3d>=2.54",
     "PyYAML",
     "paho-mqtt",
     "IPTCInfo3",
     "numpy",
     "ninepatch>=0.2.0",
-    "pi_heif>=0.8.0"
+    "pi_heif>=0.8.0",
+    mpv
 ]
 
 [project.urls]
