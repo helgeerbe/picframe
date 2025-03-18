@@ -311,7 +311,8 @@ class ViewerDisplay:
                     self.__video_streamer = VideoStreamer(pics[0].fname)
                 else:
                     self.__video_streamer.play(pics[0].fname)
-                im = self.__video_streamer.player.screenshot_raw() #np.zeros((100, 100, 4), dtype='uint8') # placeholder #TODO get final frame rather than early frame
+                im = np.zeros((100, 100, 4), dtype='uint8')
+                # im = self.__video_streamer.player.screenshot_raw() #np.zeros((100, 100, 4), dtype='uint8') # placeholder #TODO get final frame rather than early frame
             else: # normal image or image pair
                 if self.__mat_images and self.__matter is None:
                     self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),

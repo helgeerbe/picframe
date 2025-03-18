@@ -43,7 +43,7 @@ dependencies = [
     "numpy",
     "ninepatch>=0.2.0",
     "pi_heif>=0.8.0",
-    "mpv"
+    "python-vlc"
 ]
 
 [project.urls]
