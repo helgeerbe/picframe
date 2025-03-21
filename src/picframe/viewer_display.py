@@ -543,6 +543,11 @@ class ViewerDisplay:
 
     def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
         loop_running = self.__display.loop_running()
+        video_playing = False
+        if self.__video_streamer is not None and self.__video_streamer.is_playing == True:
+            video_playing = True
+            skip_image = False
+            return (loop_running, skip_image, video_playing)
         tm = time.time()
         if pics is not None:
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
@@ -638,10 +643,7 @@ class ViewerDisplay:
                 if block is not None:
                     block.sprite.draw()
 
-        video_time = None
-        if self.__video_streamer is not None and self.__video_streamer.duration is not None:
-            video_time = max(1.0, self.__video_streamer.duration - 0.5)
-        return (loop_running, skip_image, video_time)  # now returns tuple with skip image flag and video_time added
+        return (loop_running, skip_image, video_playing)  # now returns tuple with skip image flag and video_time added
 
     def slideshow_stop(self):
         if self.__video_streamer is not None:

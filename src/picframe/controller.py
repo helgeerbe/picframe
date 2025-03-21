@@ -290,16 +290,15 @@ class Controller:
                             image_attr[key] = pics[0].__dict__[field_name]  # TODO nicer using namedtuple for Pic
                     if self.__mqtt_config['use_mqtt']:
                         self.publish_state(pics[0].fname, image_attr)
-                video_extended = False
             self.__model.pause_looping = self.__viewer.is_in_transition()
-            (loop_running, skip_image, video_time) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
+            (loop_running, skip_image, video_playing) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
             if not loop_running:
                 break
-            if skip_image:
+            if skip_image or (video_extended and not video_playing):
                 self.__next_tm = 0
-            if video_time is not None and not video_extended:
+                video_extended = False
+            if video_playing:
                 video_extended = True
-                self.__next_tm += (video_time - time_delay)
             self.__interface_peripherals.check_input()
 
     def start(self):
