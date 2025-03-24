@@ -1,5 +1,4 @@
 import vlc
-import time
 import pi3d
 import sdl2
 import sys
@@ -19,10 +18,10 @@ class VideoStreamer:
             self.__logger.error("Can't get SDL WM info.")
             sys.exit(1)
         win_id = wminfo.info.x11.window
+
         self.player.set_xwindow(win_id)
         if video_path is not None:
             self.play(video_path)
-
 
     def play(self, video_path):
         if video_path is not None:
@@ -42,7 +41,6 @@ class VideoStreamer:
         self.player.stop()
         self.__logger.debug("Release media")
         self.player.get_media().release()
-        
 
     def kill(self):
         self.__logger.debug("Kill video")

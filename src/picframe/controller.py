@@ -81,12 +81,14 @@ class Controller:
     def next(self):
         self.__next_tm = 0
         self.__viewer.reset_name_tm()
+        self.__viewer.stop_video()
         self.__force_navigate = True
 
     def back(self):
         self.__model.set_next_file_to_previous_file()
         self.__next_tm = 0
         self.__viewer.reset_name_tm()
+        self.__viewer.stop_video()
         self.__force_navigate = True
 
     def delete(self):

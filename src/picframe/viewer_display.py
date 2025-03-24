@@ -301,8 +301,7 @@ class ViewerDisplay:
         return (screen_aspect, image_aspect, diff_aspect)
 
     def __tex_load(self, pics, size=None):  # noqa: C901
-        if self.__video_streamer is not None:
-            self.__video_streamer.stop()
+        self.stop_video()
         try:
             self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}") #<<<<<<
             if pics[0] and os.path.splitext(pics[0].fname)[1].lower() in VIDEO_EXTENSIONS:
@@ -644,8 +643,11 @@ class ViewerDisplay:
                 if block is not None:
                     block.sprite.draw()
         return (loop_running, skip_image, video_playing)  # now returns tuple with skip image flag and video_time added
+    
+    def stop_video(self):
+        if self.__video_streamer is not None:
+            self.__video_streamer.stop()
 
     def slideshow_stop(self):
-        if self.__video_streamer is not None:
-            self.__video_streamer.kill()
+        self.stop_video()
         self.__display.destroy()
