@@ -1,6 +1,5 @@
 import vlc
 import time
-import threading
 import pi3d
 import sdl2
 import sys
@@ -14,12 +13,12 @@ class VideoStreamer:
         display = pi3d.Display.Display.INSTANCE
         self.instance = vlc.Instance('--no-audio')
         self.player = self.instance.media_player_new()
-        wminfo = sdl2.SDL_SysWMinfo();
-        sdl2.SDL_GetVersion(wminfo.version);
+        wminfo = sdl2.SDL_SysWMinfo()
+        sdl2.SDL_GetVersion(wminfo.version)
         if(sdl2.SDL_GetWindowWMInfo(display.opengl.window, wminfo) == 0):
             self.__logger.error("Can't get SDL WM info.")
             sys.exit(1)
-        win_id = wminfo.info.x11.window;
+        win_id = wminfo.info.x11.window
         self.player.set_xwindow(win_id)
         if video_path is not None:
             self.play(video_path)
@@ -35,12 +34,13 @@ class VideoStreamer:
 
     def is_playing(self):
         state = self.player.get_state()
-        self.__logger.debug("Player state: %d", state.value)
+        # self.__logger.debug("Player state: %d", state.value)
         return state in [vlc.State.Opening, vlc.State.Playing, vlc.State.Paused, vlc.State.Buffering]
 
     def stop(self):
         self.__logger.debug("Stop video")
         self.player.stop()
+        self.__logger.debug("Release media")
         self.player.get_media().release()
         
 
