@@ -543,11 +543,6 @@ class ViewerDisplay:
 
     def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
         loop_running = self.__display.loop_running()
-        video_playing = False
-        if self.__video_streamer is not None and self.__video_streamer.is_playing == True:
-            video_playing = True
-            skip_image = False
-            return (loop_running, skip_image, video_playing)
         tm = time.time()
         if pics is not None:
             new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
@@ -611,6 +606,12 @@ class ViewerDisplay:
 
         skip_image = False # can add possible reasons to skip image below here
 
+        # if video is playing, we are done here
+        video_playing = False
+        if self.__video_streamer is not None and (self.__video_streamer.is_playing() == True):
+            video_playing = True
+            return (loop_running, skip_image, video_playing)  # now returns tuple with skip image flag and video_time added
+
         self.__slide.draw()
         self.__draw_overlay()
         if self.clock_is_on:
@@ -642,7 +643,6 @@ class ViewerDisplay:
             for block in self.__textblocks:
                 if block is not None:
                     block.sprite.draw()
-
         return (loop_running, skip_image, video_playing)  # now returns tuple with skip image flag and video_time added
 
     def slideshow_stop(self):
