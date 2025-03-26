@@ -541,6 +541,13 @@ class ViewerDisplay:
             self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
     def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
+         # if video is playing, we are done here
+        video_playing = False
+        if self.__video_streamer is not None and (self.__video_streamer.is_playing() == True):
+            video_playing = True
+            time.sleep(0.5)
+            return (True, False, video_playing)  # now returns tuple with skip image flag and video_time added
+
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
@@ -604,12 +611,6 @@ class ViewerDisplay:
             self.__in_transition = False
 
         skip_image = False # can add possible reasons to skip image below here
-
-        # if video is playing, we are done here
-        video_playing = False
-        if self.__video_streamer is not None and (self.__video_streamer.is_playing() == True):
-            video_playing = True
-            return (loop_running, skip_image, video_playing)  # now returns tuple with skip image flag and video_time added
 
         self.__slide.draw()
         self.__draw_overlay()
