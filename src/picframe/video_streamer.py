@@ -12,7 +12,7 @@ class VideoStreamer:
         self.window = sdl2.SDL_CreateWindow(b"",
                               x, y,
                               w, h, sdl2.SDL_WINDOW_HIDDEN )
-        display = pi3d.Display.Display.INSTANCE
+        sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
         self.instance = vlc.Instance('--no-audio')
         self.player = self.instance.media_player_new()
         wminfo = sdl2.SDL_SysWMinfo()
