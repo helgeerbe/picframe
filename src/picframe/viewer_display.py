@@ -307,7 +307,7 @@ class ViewerDisplay:
             if pics[0] and os.path.splitext(pics[0].fname)[1].lower() in VIDEO_EXTENSIONS:
                 # start video stream
                 if self.__video_streamer is None:
-                    self.__video_streamer = VideoStreamer(pics[0].fname)
+                    self.__video_streamer = VideoStreamer(self.__display_x, self.__display_y, self.__display.width, self.__display.height, pics[0].fname)
                 else:
                     self.__video_streamer.play(pics[0].fname)
                 im = np.zeros((100, 100, 4), dtype='uint8')

@@ -5,16 +5,19 @@ import sys
 import logging
 
 class VideoStreamer:
-    def __init__(self, video_path=None):
+    def __init__(self, x, y, w, h, video_path=None):
         self.__logger = logging.getLogger("video_streamer")
         self.__logger.setLevel("DEBUG")
         self.__logger.debug("Init")
+        self.window = sdl2.SDL_CreateWindow(b"",
+                              x, y,
+                              w, h, sdl2.SDL_WINDOW_HIDDEN )
         display = pi3d.Display.Display.INSTANCE
         self.instance = vlc.Instance('--no-audio')
         self.player = self.instance.media_player_new()
         wminfo = sdl2.SDL_SysWMinfo()
         sdl2.SDL_GetVersion(wminfo.version)
-        if(sdl2.SDL_GetWindowWMInfo(display.opengl.window, wminfo) == 0):
+        if(sdl2.SDL_GetWindowWMInfo(self.window, wminfo) == 0):
             self.__logger.error("Can't get SDL WM info.")
             sys.exit(1)
         win_id = wminfo.info.x11.window
@@ -29,6 +32,7 @@ class VideoStreamer:
             media = self.instance.media_new_path(video_path)
             self.player.set_media(media)
             self.__logger.debug("Play video")
+            sdl2.SDL_ShowWindow(self.window)
             self.player.play()  
 
     def is_playing(self):
@@ -39,12 +43,14 @@ class VideoStreamer:
     def stop(self):
         self.__logger.debug("Stop video")
         self.player.stop()
+        sdl2.SDL_HideWindow(self.window)
         self.__logger.debug("Release media")
         self.player.get_media().release()
 
     def kill(self):
         self.__logger.debug("Kill video")
         self.player.stop()
+        sdl2.SDL_HideWindow(self.window)
         self.player.get_media().release()
         
     #TODO communicate with video player, overlay info, etc etc
