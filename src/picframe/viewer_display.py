@@ -7,9 +7,7 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageFile
 from picframe import mat_image, get_image_meta
 from datetime import datetime
-from picframe.video_streamer import VideoStreamer
-
-VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
+from picframe.video_streamer import VideoStreamer, VIDEO_EXTENSIONS, get_frame
 
 # supported display modes for display switch
 dpms_mode = ("unsupported", "pi", "x_dpms")
@@ -90,6 +88,8 @@ class ViewerDisplay:
         self.__text_bkg = None
         self.__sfg = None  # slide for background
         self.__sbg = None  # slide for foreground
+        self.__last_frame_tex = None # slide for last frame of video
+        self.__video_path = None # path to video file
         self.__next_tm = 0.0
         self.__name_tm = 0.0
         self.__in_transition = False
@@ -301,81 +301,70 @@ class ViewerDisplay:
         return (screen_aspect, image_aspect, diff_aspect)
 
     def __tex_load(self, pics, size=None):  # noqa: C901
-        self.stop_video()
         try:
-            self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}") #<<<<<<
-            if pics[0] and os.path.splitext(pics[0].fname)[1].lower() in VIDEO_EXTENSIONS:
-                # start video stream
-                if self.__video_streamer is None:
-                    self.__video_streamer = VideoStreamer(self.__display_x, self.__display_y, self.__display.width, self.__display.height, pics[0].fname)
-                else:
-                    self.__video_streamer.play(pics[0].fname)
-                im = self.__video_streamer.get_last_frame(pics[0].fname)
+            self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}")
+            if self.__mat_images and self.__matter is None:
+                self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
+                                                resource_folder=self.__mat_resource_folder,
+                                                mat_type=self.__mat_type,
+                                                outer_mat_color=self.__outer_mat_color,
+                                                inner_mat_color=self.__inner_mat_color,
+                                                outer_mat_border=self.__outer_mat_border,
+                                                inner_mat_border=self.__inner_mat_border,
+                                                outer_mat_use_texture=self.__outer_mat_use_texture,
+                                                inner_mat_use_texture=self.__inner_mat_use_texture)
+
+            # Load the image(s) and correct their orientation as necessary
+            if pics[0]:
+                im = get_image_meta.GetImageMeta.get_image_object(pics[0].fname)
                 if im is None:
-                    im = np.zeros((100, 100, 4), dtype='uint8')
-            else: # normal image or image pair
-                if self.__mat_images and self.__matter is None:
-                    self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
-                                                    resource_folder=self.__mat_resource_folder,
-                                                    mat_type=self.__mat_type,
-                                                    outer_mat_color=self.__outer_mat_color,
-                                                    inner_mat_color=self.__inner_mat_color,
-                                                    outer_mat_border=self.__outer_mat_border,
-                                                    inner_mat_border=self.__inner_mat_border,
-                                                    outer_mat_use_texture=self.__outer_mat_use_texture,
-                                                    inner_mat_use_texture=self.__inner_mat_use_texture)
+                    return None
+                if pics[0].orientation != 1:
+                    im = self.__orientate_image(im, pics[0])
 
-                # Load the image(s) and correct their orientation as necessary
-                if pics[0]:
-                    im = get_image_meta.GetImageMeta.get_image_object(pics[0].fname)
-                    if im is None:
-                        return None
-                    if pics[0].orientation != 1:
-                        im = self.__orientate_image(im, pics[0])
+            if pics[1]:
+                im2 = get_image_meta.GetImageMeta.get_image_object(pics[1].fname)
+                if im2 is None:
+                    return None
+                if pics[1].orientation != 1:
+                    im2 = self.__orientate_image(im2, pics[1])
 
-                if pics[1]:
-                    im2 = get_image_meta.GetImageMeta.get_image_object(pics[1].fname)
-                    if im2 is None:
-                        return None
-                    if pics[1].orientation != 1:
-                        im2 = self.__orientate_image(im2, pics[1])
+            screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
 
-                screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
-
-                if self.__mat_images and diff_aspect > self.__mat_images_tol:
-                    if not pics[1]:
-                        im = self.__matter.mat_image((im,))
-                    else:
-                        im = self.__matter.mat_image((im, im2))
+            if self.__mat_images and diff_aspect > self.__mat_images_tol:
+                if not pics[1]:
+                    im = self.__matter.mat_image((im,))
                 else:
-                    if pics[1]:  # i.e portrait pair
-                        im = self.__create_image_pair(im, im2)
+                    im = self.__matter.mat_image((im, im2))
+            else:
+                if pics[1]:  # i.e portrait pair
+                    im = self.__create_image_pair(im, im2)
 
-                (w, h) = im.size
-                screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
+            (w, h) = im.size
+            screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
 
-                if self.__blur_edges and size:
-                    if diff_aspect > 0.01:
-                        (sc_b, sc_f) = (size[1] / im.size[1], size[0] / im.size[0])
-                        if screen_aspect > image_aspect:
-                            (sc_b, sc_f) = (sc_f, sc_b)  # swap round
-                        (w, h) = (round(size[0] / sc_b / self.__blur_zoom), round(size[1] / sc_b / self.__blur_zoom))
-                        (x, y) = (round(0.5 * (im.size[0] - w)), round(0.5 * (im.size[1] - h)))
-                        box = (x, y, x + w, y + h)
-                        blr_sz = [int(x * 512 / size[0]) for x in size]
-                        im_b = im.resize(size, resample=0, box=box).resize(blr_sz)
-                        im_b = im_b.filter(ImageFilter.GaussianBlur(self.__blur_amount))
-                        im_b = im_b.resize(size, resample=Image.BICUBIC)
-                        im_b.putalpha(round(255 * self.__edge_alpha))  # to apply the same EDGE_ALPHA as the no blur method.
-                        im = im.resize([int(x * sc_f) for x in im.size], resample=Image.BICUBIC)
-                        """resize can use Image.LANCZOS (alias for Image.ANTIALIAS) for resampling
-                        for better rendering of high-contranst diagonal lines. NB downscaled large
-                        images are rescaled near the start of this try block if w or h > max_dimension
-                        so those lines might need changing too.
-                        """
-                        im_b.paste(im, box=(round(0.5 * (im_b.size[0] - im.size[0])),
-                                            round(0.5 * (im_b.size[1] - im.size[1]))))
-                        im = im_b  # have to do this as paste applies in place
+            if self.__blur_edges and size:
+                if diff_aspect > 0.01:
+                    (sc_b, sc_f) = (size[1] / im.size[1], size[0] / im.size[0])
+                    if screen_aspect > image_aspect:
+                        (sc_b, sc_f) = (sc_f, sc_b)  # swap round
+                    (w, h) = (round(size[0] / sc_b / self.__blur_zoom), round(size[1] / sc_b / self.__blur_zoom))
+                    (x, y) = (round(0.5 * (im.size[0] - w)), round(0.5 * (im.size[1] - h)))
+                    box = (x, y, x + w, y + h)
+                    blr_sz = [int(x * 512 / size[0]) for x in size]
+                    im_b = im.resize(size, resample=0, box=box).resize(blr_sz)
+                    im_b = im_b.filter(ImageFilter.GaussianBlur(self.__blur_amount))
+                    im_b = im_b.resize(size, resample=Image.BICUBIC)
+                    im_b.putalpha(round(255 * self.__edge_alpha))  # to apply the same EDGE_ALPHA as the no blur method.
+                    im = im.resize([int(x * sc_f) for x in im.size], resample=Image.BICUBIC)
+                    """resize can use Image.LANCZOS (alias for Image.ANTIALIAS) for resampling
+                    for better rendering of high-contranst diagonal lines. NB downscaled large
+                    images are rescaled near the start of this try block if w or h > max_dimension
+                    so those lines might need changing too.
+                    """
+                    im_b.paste(im, box=(round(0.5 * (im_b.size[0] - im.size[0])),
+                                        round(0.5 * (im_b.size[1] - im.size[1]))))
+                    im = im_b  # have to do this as paste applies in place
             tex = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
         except Exception as e:
             self.__logger.warning("Can't create tex from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
@@ -552,7 +541,27 @@ class ViewerDisplay:
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
-            new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
+            self.stop_video()
+            if pics[0] and os.path.splitext(pics[0].fname)[1].lower() in VIDEO_EXTENSIONS:
+                try:
+                    self.__logger.debug(f"loading video frames: {pics[0].fname} {pics[1].fname if pics[1] else ''}")
+                    self.__video_path = pics[0].fname
+                    # get first video frame
+                    im = get_frame(self.__video_path, frame_position=True)  
+                    if im is None:
+                        im = np.zeros((100, 100, 3), dtype='uint8')
+                    new_sfg = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
+                    # get last video frame
+                    im = get_frame(self.__video_path, frame_position=False)  
+                    if im is None:
+                        im = np.zeros((100, 100, 3), dtype='uint8')
+                    self.__last_frame_tex = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
+                except Exception as e:
+                    self.__logger.warning("Can't create video texs from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
+                    self.__logger.warning("Cause: %s", e)
+                    new_sfg = None
+            else: # normal image or image pair
+                new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             tm = time.time()
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + self.__show_text_tm  # text starts after slide transition
@@ -610,6 +619,18 @@ class ViewerDisplay:
             self.__in_transition = True  # set __in_transition True a few seconds *before* end of previous slide
         else:  # no transition effect safe to update database, resuffle etc
             self.__in_transition = False
+            if self.__video_path is not None:
+                # start video stream
+                if self.__video_streamer is None:
+                    self.__video_streamer = VideoStreamer(self.__display_x, self.__display_y, self.__display.width, self.__display.height, self.__video_path)
+                else:
+                    self.__video_streamer.play(self.__video_path)
+                self.__video_path = None
+                if self.__last_frame_tex is not None:  # first time through
+                    self.__sfg = self.__last_frame_tex
+                    self.__last_frame_tex = None
+                    self.__slide.set_textures([self.__sfg, self.__sbg])
+
 
         skip_image = False # can add possible reasons to skip image below here
 

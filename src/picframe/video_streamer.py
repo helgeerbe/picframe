@@ -7,6 +7,43 @@ import cv2
 import numpy as np
 from typing import Optional
 
+VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
+
+def get_frame(video_path: str, frame_position: bool = True) -> Optional[np.ndarray]:
+    """
+    Retrieve a specific frame (first or last) of a video as a NumPy array with 3 channels (RGB).
+
+    Parameters:
+    -----------
+    video_path : str
+        The path to the video file.
+    frame_position : bool
+        If True, retrieves the first frame. If False, retrieves the last frame.
+
+    Returns:
+    --------
+    Optional[np.ndarray]
+        The requested frame as a NumPy array, or None if an error occurs.
+    """
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        logging.getLogger("video_streamer").error(f"Error: Could not open video '{video_path}'")
+        return None
+
+    if not frame_position:  # If False, set to the last frame
+        cap.set(cv2.CAP_PROP_POS_FRAMES, cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1)
+
+    ret, frame = cap.read()
+    cap.release()
+
+    if ret:
+        # Convert from BGR to RGB
+        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        return frame
+
+    return None
+
+
 class VideoStreamer:
     """
     A class for streaming video using VLC and SDL2.
@@ -46,26 +83,28 @@ class VideoStreamer:
         self.__logger = logging.getLogger("video_streamer")
         self.__logger.debug("Initializing VideoStreamer")
 
-        # Create SDL2 window
-        self.__window = sdl2.SDL_CreateWindow(b"", x, y, w, h, sdl2.SDL_WINDOW_HIDDEN)
-        if not self.__window:
-            self.__logger.error(f"Error creating window: {sdl2.SDL_GetError().decode('utf-8')}")
-            return
-        sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
-        
-        # Retrieve window manager info
-        wminfo = sdl2.SDL_SysWMinfo()
-        sdl2.SDL_GetVersion(wminfo.version)
-        if sdl2.SDL_GetWindowWMInfo(self.__window, wminfo) == 0:
-            self.__logger.error("Can't get SDL WM info.")
-            sdl2.SDL_DestroyWindow(self.__window)
-            self.__window = None
-            return
+        if sys.platform != "darwin":
+            # Create SDL2 window
+            self.__window = sdl2.SDL_CreateWindow(b"", x, y, w, h, sdl2.SDL_WINDOW_HIDDEN)
+            if not self.__window:
+                self.__logger.error(f"Error creating window: {sdl2.SDL_GetError().decode('utf-8')}")
+                return
+            sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
+            
+            # Retrieve window manager info
+            wminfo = sdl2.SDL_SysWMinfo()
+            sdl2.SDL_GetVersion(wminfo.version)
+            if sdl2.SDL_GetWindowWMInfo(self.__window, wminfo) == 0:
+                self.__logger.error("Can't get SDL WM info.")
+                sdl2.SDL_DestroyWindow(self.__window)
+                self.__window = None
+                return
 
         # Create VLC instance and player
         self.__instance = vlc.Instance('--no-audio')
         self.player = self.__instance.media_player_new()
-        self.player.set_xwindow(wminfo.info.x11.window)
+        if sys.platform != "darwin":
+            self.player.set_xwindow(wminfo.info.x11.window)
         
         # Start video playback if a path is provided
         if video_path is not None:
@@ -140,36 +179,3 @@ class VideoStreamer:
             self.__instance.release()
             self.__instance = None
         self.player = None
-
-    def get_first_frame(self, video_path: str) -> Optional[np.ndarray]:
-        """Retrieve the first frame of a video as a NumPy array with 4 channels (RGBA)."""
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            self.__logger.error(f"Error: Could not open video '{video_path}'")
-            return None
-        
-        ret, frame = cap.read()
-        cap.release()
-        
-        if ret:
-            # Convert to RGBA (4 channels)
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
-            return frame
-        return None
-
-    def get_last_frame(self, video_path: str) -> Optional[np.ndarray]:
-        """Retrieve the last frame of a video as a NumPy array with 4 channels (RGBA)."""
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            self.__logger.error(f"Error: Could not open video '{video_path}'")
-            return None
-        
-        cap.set(cv2.CAP_PROP_POS_FRAMES, cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1)
-        ret, frame = cap.read()
-        cap.release()
-        
-        if ret:
-            # Convert to RGBA (4 channels)
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2BGRA)
-            return frame
-        return None
