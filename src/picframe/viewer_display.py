@@ -533,7 +533,7 @@ class ViewerDisplay:
     def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
          # if video is playing, we are done here
         video_playing = False
-        if self.__video_streamer is not None and (self.__video_streamer.is_playing() == True):
+        if self.is_video_playing():
             video_playing = True
             time.sleep(0.5)
             return (True, False, video_playing)  # now returns tuple with skip image flag and video_time added
@@ -670,6 +670,12 @@ class ViewerDisplay:
     def stop_video(self):
         if self.__video_streamer is not None:
             self.__video_streamer.stop()
+    
+    def is_video_playing(self):
+        if self.__video_streamer is not None and (self.__video_streamer.is_playing() == True):
+            return True
+        else:
+            return False
 
     def slideshow_stop(self):
         if self.__video_streamer is not None:
