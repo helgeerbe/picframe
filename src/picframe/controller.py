@@ -73,6 +73,8 @@ class Controller:
     @paused.setter
     def paused(self, val: bool):
         self.__paused = val
+        if self.__viewer.is_video_playing():
+            self.__viewer.pause_video(val)
         pic = self.__model.get_current_pics()[0]  # only refresh left text
         self.__viewer.reset_name_tm(pic, val, side=0, pair=self.__model.get_current_pics()[1] is not None)
         if self.__mqtt_config['use_mqtt']:
