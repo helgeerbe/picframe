@@ -43,7 +43,8 @@ dependencies = [
     "numpy",
     "ninepatch>=0.2.0",
     "pi_heif>=0.8.0",
-    "python-vlc"
+    "python-vlc",
+    "opencv-python"
 ]
 
 [project.urls]

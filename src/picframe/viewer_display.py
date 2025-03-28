@@ -310,8 +310,9 @@ class ViewerDisplay:
                     self.__video_streamer = VideoStreamer(self.__display_x, self.__display_y, self.__display.width, self.__display.height, pics[0].fname)
                 else:
                     self.__video_streamer.play(pics[0].fname)
-                im = np.zeros((100, 100, 4), dtype='uint8')
-                # im = self.__video_streamer.player.screenshot_raw() #np.zeros((100, 100, 4), dtype='uint8') # placeholder #TODO get final frame rather than early frame
+                im = self.__video_streamer.get_last_frame(pics[0].fname)
+                if im is None:
+                    im = np.zeros((100, 100, 4), dtype='uint8')
             else: # normal image or image pair
                 if self.__mat_images and self.__matter is None:
                     self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
@@ -650,5 +651,6 @@ class ViewerDisplay:
             self.__video_streamer.stop()
 
     def slideshow_stop(self):
-        self.stop_video()
+        if self.__video_streamer is not None:
+            self.__video_streamer.kill()
         self.__display.destroy()
