@@ -103,8 +103,11 @@ class VideoStreamer:
         # Create VLC instance and player
         self.__instance = vlc.Instance('--no-audio')
         self.player = self.__instance.media_player_new()
+
         if sys.platform != "darwin":
             self.player.set_xwindow(wminfo.info.x11.window)
+        aspect_ratio = f"{w}:{h}"
+        self.player.video_set_aspect_ratio(aspect_ratio)
         
         # Start video playback if a path is provided
         if video_path is not None:

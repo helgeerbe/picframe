@@ -7,6 +7,7 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageFile
 from picframe import mat_image, get_image_meta
 from datetime import datetime
+import cv2
 from picframe.video_streamer import VideoStreamer, VIDEO_EXTENSIONS, get_frame
 
 # supported display modes for display switch
@@ -548,15 +549,25 @@ class ViewerDisplay:
                     self.__logger.debug(f"loading video frames: {pics[0].fname} {pics[1].fname if pics[1] else ''}")
                     self.__video_path = pics[0].fname
                     # get first video frame
-                    im = get_frame(self.__video_path, frame_position=True)  
-                    if im is None:
-                        im = np.zeros((100, 100, 3), dtype='uint8')
-                    new_sfg = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
+                    im = get_frame(self.__video_path, frame_position=True) 
+                    try:
+                        im_resize = cv2.resize(im, (self.__display.width, self.__display.height), interpolation=cv2.INTER_LINEAR)
+                    except cv2.error as e:
+                        self.__logger.warning(f"OpenCV error: {e}")
+                        im_resize = im
+                    if im_resize is None:
+                        im_resize = np.zeros((100, 100, 3), dtype='uint8')
+                    new_sfg = pi3d.Texture(im_resize, blend=True, m_repeat=True, free_after_load=True)
                     # get last video frame
-                    im = get_frame(self.__video_path, frame_position=False)  
-                    if im is None:
-                        im = np.zeros((100, 100, 3), dtype='uint8')
-                    self.__last_frame_tex = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
+                    im = get_frame(self.__video_path, frame_position=False) 
+                    try:     
+                        im_resize = cv2.resize(im, (self.__display.width, self.__display.height), interpolation=cv2.INTER_LINEAR)
+                    except cv2.error as e:
+                        self.__logger.warning(f"OpenCV error: {e}")
+                        im_resize = im
+                    if im_resize is None:
+                        im_resize = np.zeros((100, 100, 3), dtype='uint8')
+                    self.__last_frame_tex = pi3d.Texture(im_resize, blend=True, m_repeat=True, free_after_load=True)
                 except Exception as e:
                     self.__logger.warning("Can't create video texs from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
                     self.__logger.warning("Cause: %s", e)
