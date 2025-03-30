@@ -1,53 +1,145 @@
-import vlc
-import sdl2
 import sys
 import logging
 import os
-import cv2
-import numpy as np
 from typing import Optional
+import numpy as np
+import vlc
+import sdl2
+import cv2
 
 VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
 
-def get_frame(video_path: str, frame_position: bool = True) -> Optional[np.ndarray]:
+
+def get_frame(video_path: str, display_width: int, display_height: int,
+              fit_display: bool = False) -> Optional[tuple[np.ndarray, np.ndarray]]:
     """
-    Retrieve a specific frame (first or last) of a video as a NumPy array with 3 channels (RGB).
+    Retrieve the first and last frames of a video as NumPy arrays with 3 channels (RGB).
+    Optionally resize the frames to fit the display dimensions or scale without distortion.
 
     Parameters:
     -----------
     video_path : str
         The path to the video file.
-    frame_position : bool
-        If True, retrieves the first frame. If False, retrieves the last frame.
+    display_width : int
+        The width of the display.
+    display_height : int
+        The height of the display.
+    fit_display : bool
+        If True, resize the frames to fit the display dimensions.
+        If False, scale without distortion.
 
     Returns:
     --------
-    Optional[np.ndarray]
-        The requested frame as a NumPy array, or None if an error occurs.
+    Optional[tuple[np.ndarray, np.ndarray]]
+        A tuple containing the first and last frames as NumPy arrays, or None if an error occurs.
     """
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        logging.getLogger("video_streamer").error(f"Error: Could not open video '{video_path}'")
-        return None
+    logger = logging.getLogger("video_streamer")
 
-    if not frame_position:  # If False, set to the last frame
+    def scale_frame(frame: np.ndarray) -> np.ndarray:
+        """
+        Scale the frame to fit the display without distortion and add black bars if necessary.
+        """
+        try:
+            frame_height, frame_width = frame.shape[:2]
+            aspect_ratio_frame = frame_width / frame_height
+            aspect_ratio_display = display_width / display_height
+
+            if aspect_ratio_frame > aspect_ratio_display:
+                # Fit to width
+                new_width = display_width
+                new_height = int(display_width / aspect_ratio_frame)
+            else:
+                # Fit to height
+                new_height = display_height
+                new_width = int(display_height * aspect_ratio_frame)
+
+            resized_frame = cv2.resize(frame, (new_width, new_height),
+                                       interpolation=cv2.INTER_LINEAR)
+
+            # Create a black canvas with display dimensions
+            canvas = np.zeros((display_height, display_width, 3), dtype=np.uint8)
+
+            # Center the resized frame on the canvas
+            y_offset = (display_height - new_height) // 2
+            x_offset = (display_width - new_width) // 2
+            canvas[y_offset:y_offset + new_height, x_offset:x_offset + new_width] = resized_frame
+
+            return canvas
+        except Exception as e:
+            logger.warning(f"OpenCV error while scaling frame: {e}")
+            return frame
+
+    def process_video_frame(frame: np.ndarray) -> Optional[np.ndarray]:
+        """
+        Process a video frame by converting it to RGB and resizing or scaling it.
+
+        Parameters:
+        -----------
+        frame : np.ndarray
+            The frame to process.
+
+        Returns:
+        --------
+        Optional[np.ndarray]
+            The processed frame, or None if an error occurs.
+        """
+        try:
+            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            if fit_display:
+                if frame.shape[1] != display_width or frame.shape[0] != display_height:
+                    try:
+                        frame = cv2.resize(frame, (display_width, display_height),
+                                           interpolation=cv2.INTER_LINEAR)
+                    except Exception as e:
+                        logger.warning("OpenCV error while resizing frame: %s", e)
+            elif frame.shape[1] != display_width or frame.shape[0] != display_height:
+                frame = scale_frame(frame)
+            return frame
+        except Exception as e:
+            logger.error("Error processing frame: %s", e)
+            return None
+
+    try:
+        cap = cv2.VideoCapture(video_path)
+        if not cap.isOpened():
+            logger.error("Error: Could not open video '%s'", video_path)
+            return None
+
+        # Retrieve the first frame
+        ret_first, frame_first = cap.read()
+        if ret_first and frame_first is not None:
+            processed_frame = process_video_frame(frame_first)
+            frame_first = processed_frame if processed_frame is not None else frame_first
+        else:
+            frame_first = None
+        if frame_first is None:
+            logger.error("Error processing the first frame.")
+            return None
+
+        # Retrieve the last frame
         cap.set(cv2.CAP_PROP_POS_FRAMES, cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1)
+        ret_last, frame_last = cap.read()
+        if ret_last and frame_last is not None:
+            processed_frame = process_video_frame(frame_last) 
+            frame_last = processed_frame if processed_frame is not None else frame_last
+        else:
+            frame_last = None
 
-    ret, frame = cap.read()
-    cap.release()
+        cap.release()
 
-    if ret:
-        # Convert from BGR to RGB
-        frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        return frame
+        if frame_first is not None and frame_last is not None:
+            return frame_first, frame_last
 
-    return None
+        return None
+    except Exception as e:
+        logger.error("OpenCV error: %s", e)
+        return None
 
 
 class VideoStreamer:
     """
     A class for streaming video using VLC and SDL2.
-    
+
     Attributes:
     -----------
     player : vlc.MediaPlayer
@@ -59,7 +151,8 @@ class VideoStreamer:
     __logger : logging.Logger
         Logger for debugging and error messages.
     """
-    def __init__(self, x: int, y: int, w: int, h: int, video_path: Optional[str] = None) -> None:
+    def __init__(self, x: int, y: int, w: int, h: int,
+                 video_path: Optional[str] = None, fit_display: bool = False) -> None:
         """
         Initializes the video streamer.
 
@@ -75,11 +168,13 @@ class VideoStreamer:
             The height of the SDL window.
         video_path : Optional[str]
             The path to the video file (optional). If provided, playback starts automatically.
+        fit_display : bool
+            If True, set the aspect ratio of the video to match the display dimensions.
         """
         self.player: Optional[vlc.MediaPlayer] = None
         self.__window: Optional[sdl2.SDL_Window] = None
         self.__instance: Optional[vlc.Instance] = None
-        
+
         self.__logger = logging.getLogger("video_streamer")
         self.__logger.debug("Initializing VideoStreamer")
 
@@ -87,10 +182,11 @@ class VideoStreamer:
             # Create SDL2 window
             self.__window = sdl2.SDL_CreateWindow(b"", x, y, w, h, sdl2.SDL_WINDOW_HIDDEN)
             if not self.__window:
-                self.__logger.error(f"Error creating window: {sdl2.SDL_GetError().decode('utf-8')}")
+                self.__logger.error("Error creating window: %s",
+                                    sdl2.SDL_GetError().decode('utf-8'))
                 return
             sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
-            
+
             # Retrieve window manager info
             wminfo = sdl2.SDL_SysWMinfo()
             sdl2.SDL_GetVersion(wminfo.version)
@@ -106,9 +202,11 @@ class VideoStreamer:
 
         if sys.platform != "darwin":
             self.player.set_xwindow(wminfo.info.x11.window)
-        aspect_ratio = f"{w}:{h}"
-        self.player.video_set_aspect_ratio(aspect_ratio)
-        
+
+        if fit_display:
+            aspect_ratio = f"{w}:{h}"
+            self.player.video_set_aspect_ratio(aspect_ratio)
+
         # Start video playback if a path is provided
         if video_path is not None:
             self.play(video_path)
@@ -127,16 +225,16 @@ class VideoStreamer:
             return
 
         if not os.path.exists(video_path):
-            self.__logger.error(f"Error: File '{video_path}' not found.")
+            self.__logger.error("Error: File '%s' not found.", video_path)
             return
 
         if self.__instance is None or self.player is None:
             self.__logger.error("Error: VLC instance or player is not initialized.")
             return
-        
+
         media = self.__instance.media_new_path(video_path)
         self.player.set_media(media)
-        self.__logger.debug(f"Playing video: {video_path}")
+        self.__logger.debug("Playing video: %s", video_path)
         sdl2.SDL_ShowWindow(self.__window)
         self.player.play()
 
@@ -152,7 +250,8 @@ class VideoStreamer:
         if self.player is None:
             return False
         state = self.player.get_state()
-        return state in [vlc.State.Opening, vlc.State.Playing, vlc.State.Paused, vlc.State.Buffering]
+        return state in [vlc.State.Opening, vlc.State.Playing,
+                         vlc.State.Paused, vlc.State.Buffering]
 
     def stop(self) -> None:
         """
@@ -160,7 +259,7 @@ class VideoStreamer:
         """
         if self.player is None:
             return
-        
+
         self.__logger.debug("Stopping video")
         self.player.stop()
         if self.__window:

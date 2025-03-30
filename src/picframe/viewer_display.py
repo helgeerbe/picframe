@@ -1,13 +1,13 @@
-import pi3d
 import time
 import subprocess
 import logging
 import os
-import numpy as np
-from PIL import Image, ImageFilter, ImageFile
-from picframe import mat_image, get_image_meta
+from typing import Optional, List, Tuple
 from datetime import datetime
-import cv2
+from PIL import Image, ImageFilter, ImageFile
+import numpy as np
+import pi3d
+from picframe import mat_image, get_image_meta
 from picframe.video_streamer import VideoStreamer, VIDEO_EXTENSIONS, get_frame
 
 # supported display modes for display switch
@@ -63,6 +63,7 @@ class ViewerDisplay:
         self.__text_bkg_hgt = config['text_bkg_hgt'] if 0 <= config['text_bkg_hgt'] <= 1 else 0.25
         self.__text_opacity = config['text_opacity']
         self.__fit = config['fit']
+        self.__video_fit_display = True  # TODO make configurable
         self.__geo_suppress_list = config['geo_suppress_list']
         self.__kenburns = config['kenburns']
         if self.__kenburns:
@@ -89,8 +90,8 @@ class ViewerDisplay:
         self.__text_bkg = None
         self.__sfg = None  # slide for background
         self.__sbg = None  # slide for foreground
-        self.__last_frame_tex = None # slide for last frame of video
-        self.__video_path = None # path to video file
+        self.__last_frame_tex = None  # slide for last frame of video
+        self.__video_path = None  # path to video file
         self.__next_tm = 0.0
         self.__name_tm = 0.0
         self.__in_transition = False
@@ -531,8 +532,66 @@ class ViewerDisplay:
                                           h=bkg_hgt, y=-int(self.__display.height) // 2 + bkg_hgt // 2, z=4.0)
             self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
-    def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
-         # if video is playing, we are done here
+    def __load_video_frames(self, video_path: str) -> Optional[tuple[pi3d.Texture, pi3d.Texture]]:
+        """
+        Load the first and last frames of a video and create textures.
+
+        Parameters:
+        -----------
+        video_path : str
+            The path to the video file.
+
+        Returns:
+        --------
+        Optional[tuple[pi3d.Texture, pi3d.Texture]]
+            A tuple containing textures for the first and last frames, or None if loading fails.
+        """
+        try:
+            self.__logger.debug("Loading video frames: %s", video_path)
+            frames = get_frame(video_path, self.__display.width, self.__display.height,
+                               fit_display=self.__video_fit_display)
+            if frames is not None:
+                frame_first, frame_last = frames
+                # Create textures for the first and last frames
+                first_frame_tex = pi3d.Texture(frame_first, blend=True, m_repeat=True,
+                                               free_after_load=True)
+                last_frame_tex = pi3d.Texture(frame_last, blend=True, m_repeat=True,
+                                              free_after_load=True)
+                return first_frame_tex, last_frame_tex
+            else:
+                self.__logger.warning("Failed to retrieve frames from video: %s", video_path)
+                return None
+        except Exception as e:
+            self.__logger.warning("Can't create video textures from file: %s", video_path)
+            self.__logger.warning("Cause: %s", e)
+            return None
+
+    def slideshow_is_running(self, pics: Optional[List[Optional[get_image_meta.GetImageMeta]]] = None,
+                             time_delay: float = 200.0, fade_time: float = 10.0,
+                             paused: bool = False) -> Tuple[bool, bool, bool]:
+        """
+        Handles the slideshow logic, including transitioning between images or videos.
+
+        Parameters:
+        -----------
+        pics : Optional[List[Optional[get_image_meta.GetImageMeta]]], optional
+            A list of pictures to display. The first item in the list is the primary image or video.
+        time_delay : float, optional
+            The time in seconds to display each image or video before transitioning to the next.
+        fade_time : float, optional
+            The duration of the fade transition between images or videos.
+        paused : bool, optional
+            If True, pauses the slideshow.
+
+        Returns:
+        --------
+        Tuple[bool, bool, bool]
+            A tuple containing:
+            - Whether the slideshow loop is running.
+            - Whether to skip the current image.
+            - Whether a video is currently playing.
+        """
+        # if video is playing, we are done here
         video_playing = False
         if self.is_video_playing():
             self.pause_video(paused)
@@ -545,32 +604,11 @@ class ViewerDisplay:
         if pics is not None:
             self.stop_video()
             if pics[0] and os.path.splitext(pics[0].fname)[1].lower() in VIDEO_EXTENSIONS:
-                try:
-                    self.__logger.debug(f"loading video frames: {pics[0].fname} {pics[1].fname if pics[1] else ''}")
-                    self.__video_path = pics[0].fname
-                    # get first video frame
-                    im = get_frame(self.__video_path, frame_position=True) 
-                    try:
-                        im_resize = cv2.resize(im, (self.__display.width, self.__display.height), interpolation=cv2.INTER_LINEAR)
-                    except cv2.error as e:
-                        self.__logger.warning(f"OpenCV error: {e}")
-                        im_resize = im
-                    if im_resize is None:
-                        im_resize = np.zeros((100, 100, 3), dtype='uint8')
-                    new_sfg = pi3d.Texture(im_resize, blend=True, m_repeat=True, free_after_load=True)
-                    # get last video frame
-                    im = get_frame(self.__video_path, frame_position=False) 
-                    try:     
-                        im_resize = cv2.resize(im, (self.__display.width, self.__display.height), interpolation=cv2.INTER_LINEAR)
-                    except cv2.error as e:
-                        self.__logger.warning(f"OpenCV error: {e}")
-                        im_resize = im
-                    if im_resize is None:
-                        im_resize = np.zeros((100, 100, 3), dtype='uint8')
-                    self.__last_frame_tex = pi3d.Texture(im_resize, blend=True, m_repeat=True, free_after_load=True)
-                except Exception as e:
-                    self.__logger.warning("Can't create video texs from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
-                    self.__logger.warning("Cause: %s", e)
+                self.__video_path = pics[0].fname
+                textures = self.__load_video_frames(self.__video_path)
+                if textures is not None:
+                    new_sfg, self.__last_frame_tex = textures
+                else:
                     new_sfg = None
             else: # normal image or image pair
                 new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
@@ -634,7 +672,11 @@ class ViewerDisplay:
             if self.__video_path is not None:
                 # start video stream
                 if self.__video_streamer is None:
-                    self.__video_streamer = VideoStreamer(self.__display_x, self.__display_y, self.__display.width, self.__display.height, self.__video_path)
+                    self.__video_streamer = VideoStreamer(
+                        self.__display_x, self.__display_y,
+                        self.__display.width, self.__display.height,
+                        self.__video_path, fit_display=self.__video_fit_display
+                    )
                 else:
                     self.__video_streamer.play(self.__video_path)
                 self.__video_path = None
@@ -643,8 +685,7 @@ class ViewerDisplay:
                     self.__last_frame_tex = None
                     self.__slide.set_textures([self.__sfg, self.__sbg])
 
-
-        skip_image = False # can add possible reasons to skip image below here
+        skip_image = False  # can add possible reasons to skip image below here
 
         self.__slide.draw()
         self.__draw_overlay()
@@ -680,19 +721,39 @@ class ViewerDisplay:
         return (loop_running, skip_image, video_playing)  # now returns tuple with skip image flag and video_time added
     
     def stop_video(self):
+        """
+        Stops the video playback if a video is currently playing.
+
+        This method stops the video stream and ensures that the video playback
+        is halted. It does nothing if no video streamer is active.
+        """
         if self.__video_streamer is not None:
             self.__video_streamer.stop()
-    
-    def is_video_playing(self):
-        if self.__video_streamer is not None and (self.__video_streamer.is_playing() == True):
+
+    def is_video_playing(self) -> bool:
+        """
+        Checks if a video is currently playing.
+
+        Returns:
+        --------
+        bool
+            True if a video is playing, False otherwise.
+        """
+        if self.__video_streamer is not None and self.__video_streamer.is_playing():
             return True
-        else:
-            return False
+        return False
 
     def pause_video(self, do_pause: bool):
+        """
+        Pauses or resumes the video playback.
+
+        Parameters:
+        -----------
+        do_pause : bool
+            If True, pauses the video. If False, resumes the video playback.
+        """
         if self.__video_streamer is not None:
             self.__video_streamer.player.set_pause(do_pause)
-
 
     def slideshow_stop(self):
         if self.__video_streamer is not None:
