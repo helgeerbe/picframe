@@ -117,13 +117,20 @@ def get_frame(video_path: str, display_width: int, display_height: int,
             return None
 
         # Retrieve the last frame
-        cap.set(cv2.CAP_PROP_POS_FRAMES, cap.get(cv2.CAP_PROP_FRAME_COUNT) - 1)
-        ret_last, frame_last = cap.read()
-        if ret_last and frame_last is not None:
-            processed_frame = process_video_frame(frame_last) 
-            frame_last = processed_frame if processed_frame is not None else frame_last
-        else:
-            frame_last = None
+        frame_last = None
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        for i in range(1, 11):  # Try the last 10 frames, cv2 has a bug with CAP_PROP_POS_FRAMES
+            cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames - i)
+            ret_last, temp_frame = cap.read()
+            if ret_last and temp_frame is not None:
+                processed_frame = process_video_frame(temp_frame)
+                frame_last = processed_frame if processed_frame is not None else temp_frame
+                if frame_last is not None:
+                    break
+
+        if frame_last is None:
+            logger.error("Error processing the last frame.")
+            return None
 
         cap.release()
 
