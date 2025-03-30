@@ -98,9 +98,12 @@ class Controller:
         self.__force_navigate = True
 
     def delete(self):
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
         self.__model.delete_file()
         self.next()  # TODO check needed to avoid skipping one as record has been deleted from model.__file_list
-        self.__next_tm = 0
 
     def set_show_text(self, txt_key=None, val="ON"):
         if val is True:  # allow to be called with boolean from httpserver
@@ -126,7 +129,10 @@ class Controller:
     def subdirectory(self, dir):
         self.__model.subdirectory = dir
         self.__model.force_reload()
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def date_from(self):
@@ -144,7 +150,10 @@ class Controller:
             # remove from where_clause
             self.__model.set_where_clause('date_from')
         self.__model.force_reload()
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def date_to(self):
@@ -161,7 +170,10 @@ class Controller:
         else:
             self.__model.set_where_clause('date_to')  # remove from where_clause
         self.__model.force_reload()
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def display_is_on(self):
@@ -190,7 +202,10 @@ class Controller:
     def shuffle(self, val: bool):
         self.__model.shuffle = val
         self.__model.force_reload()
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
         if self.__mqtt_config['use_mqtt']:
             self.publish_state()
 
@@ -201,7 +216,10 @@ class Controller:
     @fade_time.setter
     def fade_time(self, time):
         self.__model.fade_time = float(time)
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def time_delay(self):
@@ -214,7 +232,10 @@ class Controller:
         if time < 5.0:
             time = 5.0
         self.__model.time_delay = time
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def brightness(self):
@@ -233,7 +254,10 @@ class Controller:
     @matting_images.setter
     def matting_images(self, val):
         self.__viewer.set_matting_images(float(val))
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def location_filter(self):
@@ -242,7 +266,10 @@ class Controller:
     @location_filter.setter
     def location_filter(self, val):
         self.__model.location_filter = val
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def tags_filter(self):
@@ -251,7 +278,10 @@ class Controller:
     @tags_filter.setter
     def tags_filter(self, val):
         self.__model.tags_filter = val
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
