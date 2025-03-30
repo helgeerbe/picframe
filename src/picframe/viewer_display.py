@@ -63,7 +63,7 @@ class ViewerDisplay:
         self.__text_bkg_hgt = config['text_bkg_hgt'] if 0 <= config['text_bkg_hgt'] <= 1 else 0.25
         self.__text_opacity = config['text_opacity']
         self.__fit = config['fit']
-        self.__video_fit_display = True  # TODO make configurable
+        self.__video_fit_display = config['video_fit_display']
         self.__geo_suppress_list = config['geo_suppress_list']
         self.__kenburns = config['kenburns']
         if self.__kenburns:

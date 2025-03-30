@@ -25,6 +25,7 @@ DEFAULT_CONFIG = {
         'text_bkg_hgt': 0.25,
         'text_opacity': 1.0,
         'fit': False,
+        'video_fit_display': True,
         'kenburns': False,
         'display_x': 0,
         'display_y': 0,
