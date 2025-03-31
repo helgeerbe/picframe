@@ -6,9 +6,9 @@ from typing import Optional, List, Tuple
 from datetime import datetime
 from PIL import Image, ImageFilter, ImageFile
 import numpy as np
-import pi3d
+import pi3d # type: ignore
 from picframe import mat_image, get_image_meta
-from picframe.video_streamer import VideoStreamer, VIDEO_EXTENSIONS, get_frame
+from picframe.video_streamer import VideoStreamer, VIDEO_EXTENSIONS, VideoFrameExtractor
 
 # supported display modes for display switch
 dpms_mode = ("unsupported", "pi", "x_dpms")
@@ -120,7 +120,7 @@ class ViewerDisplay:
                     return True
                 else:
                     return False
-            except Exception as e:
+            except (FileNotFoundError, ValueError, OSError) as e:
                 self.__logger.debug("Display ON/OFF is vcgencmd, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
@@ -131,7 +131,7 @@ class ViewerDisplay:
                     return True
                 else:
                     return False
-            except Exception as e:
+            except (subprocess.SubprocessError, FileNotFoundError, ValueError, OSError) as e:
                 self.__logger.debug("Display ON/OFF is X with dpms enabled, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
@@ -142,7 +142,7 @@ class ViewerDisplay:
                     return True
                 else:
                     return False
-            except Exception as e:
+            except (subprocess.SubprocessError, FileNotFoundError, ValueError, OSError) as e:
                 self.__logger.debug("Display ON/OFF is wlr-randr, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
@@ -159,7 +159,7 @@ class ViewerDisplay:
                     subprocess.call(["vcgencmd", "display_power", "1"])
                 else:
                     subprocess.call(["vcgencmd", "display_power", "0"])
-            except Exception as e:
+            except (subprocess.SubprocessError, FileNotFoundError, ValueError, OSError) as e:
                 self.__logger.debug("Display ON/OFF is vcgencmd, but an error occured")
                 self.__logger.debug("Cause: %s", e)
         elif self.__display_power == 1:
@@ -168,7 +168,7 @@ class ViewerDisplay:
                     subprocess.call(["xset", "-display", ":0", "dpms", "force", "on"])
                 else:
                     subprocess.call(["xset", "-display", ":0", "dpms", "force", "off"])
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 self.__logger.debug("Display ON/OFF is xset via dpms, but an error occured")
                 self.__logger.debug("Cause: %s", e)
         elif self.__display_power == 2:
@@ -176,7 +176,7 @@ class ViewerDisplay:
                 wlr_randr_cmd = ["wlr-randr", "--output", "HDMI-A-1"]
                 wlr_randr_cmd.append('--on' if on_off else '--off')
                 subprocess.call(wlr_randr_cmd)
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 self.__logger.debug("Display ON/OFF is wlr-randr, but an error occured")
                 self.__logger.debug("Cause: %s", e)
         else:
@@ -548,15 +548,15 @@ class ViewerDisplay:
         """
         try:
             self.__logger.debug("Loading video frames: %s", video_path)
-            frames = get_frame(video_path, self.__display.width, self.__display.height,
-                               fit_display=self.__video_fit_display)
+            extractor = VideoFrameExtractor(
+                video_path, self.__display.width, self.__display.height, fit_display=self.__video_fit_display
+            )
+            frames = extractor.get_first_and_last_frames()
             if frames is not None:
                 frame_first, frame_last = frames
                 # Create textures for the first and last frames
-                first_frame_tex = pi3d.Texture(frame_first, blend=True, m_repeat=True,
-                                               free_after_load=True)
-                last_frame_tex = pi3d.Texture(frame_last, blend=True, m_repeat=True,
-                                              free_after_load=True)
+                first_frame_tex = pi3d.Texture(frame_first, blend=True, m_repeat=True, free_after_load=True)
+                last_frame_tex = pi3d.Texture(frame_last, blend=True, m_repeat=True, free_after_load=True)
                 return first_frame_tex, last_frame_tex
             else:
                 self.__logger.warning("Failed to retrieve frames from video: %s", video_path)
