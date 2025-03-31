@@ -17,7 +17,7 @@ viewer:
   text_opacity: 1.0                       # default=1.0 (0.0-1.0), alpha value of text overlay
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
-  video_fit_display: True                 # default=True, True => scale video to match display size (video may have distortion)
+  video_fit_display: False                # default=False, True => scale video to match display size (video may have distortion)
                                           #                False => scale video without distortion (video may have black bars)
   kenburns: False                         # default=False, will set fit->False and blur_edges->False
   display_x: 0                            # offset from left of screen (can be negative)
