@@ -1,0 +1,67 @@
+name: 'Repository Maintenance'
+
+on:
+    schedule:
+      - cron: '0 4 * * *'
+    workflow_dispatch:
+
+permissions:
+    issues: write
+    pull-requests: write
+    discussions: write
+
+concurrency:
+    group: lock
+
+jobs:
+    stale:
+        name: 'Stale'
+        runs-on: ubuntu-24.04
+        steps:
+          - uses: actions/stale@v9
+            with:
+                operations-per-run: 300
+                remove-stale-when-updated: true
+                days-before-issue-stale: 14
+                days-before-issue-close: 14 # days after the issue is marked as stale
+                stale-issue-message: >
+                    This issue has been automatically marked as stale because it has not had
+                    recent activity. It will be closed if no further activity occurs. Thank you
+                    for your contributions.
+                close-issue-message: >
+                    This issue has been automatically closed because it has not had
+                    recent activity. Please add a comment if you want to get this issue re-opened. Thank you
+                    for your contributions.
+                stale-issue-label: stale # adds a label
+                exempt-issue-labels: 'acknowledged, contribution needed' # exclude issues with label
+                days-before-pr-stale: 14
+                days-before-pr-close: -1 # never close prs
+                stale-pr-label: stale # adds a label
+                any-of-pr-labels: 'changes requested' # only consider prs with this label
+                stale-pr-message: >
+                    This pull-request has been automatically marked as stale because it has not had
+                    recent activity. It will be closed if no further activity occurs. Thank you
+                    for your contributions.
+
+    lock-threads:
+        name: 'Lock Old Threads'
+        runs-on: ubuntu-24.04
+        steps:
+          - uses: dessant/lock-threads@v5
+            with:
+                issue-inactive-days: '30'
+                pr-inactive-days: '30'
+                discussion-inactive-days: '30'
+                log-output: true
+                issue-comment: >
+                    This issue has been automatically locked since there
+                    has not been any recent activity after it was closed.
+                    Please open a new discussion or issue for related concerns.
+                pr-comment: >
+                    This pull request has been automatically locked since there
+                    has not been any recent activity after it was closed.
+                    Please open a new discussion or issue for related concerns.
+                discussion-comment: >
+                    This discussion has been automatically locked since there
+                    has not been any recent activity after it was closed.
+                    Please open a new discussion for related concerns.
