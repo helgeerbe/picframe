@@ -73,26 +73,37 @@ class Controller:
     @paused.setter
     def paused(self, val: bool):
         self.__paused = val
+        if self.__viewer.is_video_playing():
+            self.__viewer.pause_video(val)
         pic = self.__model.get_current_pics()[0]  # only refresh left text
         self.__viewer.reset_name_tm(pic, val, side=0, pair=self.__model.get_current_pics()[1] is not None)
         if self.__mqtt_config['use_mqtt']:
             self.publish_state()
 
     def next(self):
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
         self.__viewer.reset_name_tm()
         self.__force_navigate = True
 
     def back(self):
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
         self.__model.set_next_file_to_previous_file()
-        self.__next_tm = 0
         self.__viewer.reset_name_tm()
         self.__force_navigate = True
 
     def delete(self):
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
         self.__model.delete_file()
         self.next()  # TODO check needed to avoid skipping one as record has been deleted from model.__file_list
-        self.__next_tm = 0
 
     def set_show_text(self, txt_key=None, val="ON"):
         if val is True:  # allow to be called with boolean from httpserver
@@ -118,7 +129,10 @@ class Controller:
     def subdirectory(self, dir):
         self.__model.subdirectory = dir
         self.__model.force_reload()
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def date_from(self):
@@ -136,7 +150,10 @@ class Controller:
             # remove from where_clause
             self.__model.set_where_clause('date_from')
         self.__model.force_reload()
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def date_to(self):
@@ -153,7 +170,10 @@ class Controller:
         else:
             self.__model.set_where_clause('date_to')  # remove from where_clause
         self.__model.force_reload()
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def display_is_on(self):
@@ -182,7 +202,10 @@ class Controller:
     def shuffle(self, val: bool):
         self.__model.shuffle = val
         self.__model.force_reload()
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
         if self.__mqtt_config['use_mqtt']:
             self.publish_state()
 
@@ -193,7 +216,10 @@ class Controller:
     @fade_time.setter
     def fade_time(self, time):
         self.__model.fade_time = float(time)
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def time_delay(self):
@@ -206,7 +232,10 @@ class Controller:
         if time < 5.0:
             time = 5.0
         self.__model.time_delay = time
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def brightness(self):
@@ -225,7 +254,10 @@ class Controller:
     @matting_images.setter
     def matting_images(self, val):
         self.__viewer.set_matting_images(float(val))
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def location_filter(self):
@@ -234,7 +266,10 @@ class Controller:
     @location_filter.setter
     def location_filter(self, val):
         self.__model.location_filter = val
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     @property
     def tags_filter(self):
@@ -243,7 +278,10 @@ class Controller:
     @tags_filter.setter
     def tags_filter(self, val):
         self.__model.tags_filter = val
-        self.__next_tm = 0
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
 
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
@@ -290,16 +328,15 @@ class Controller:
                             image_attr[key] = pics[0].__dict__[field_name]  # TODO nicer using namedtuple for Pic
                     if self.__mqtt_config['use_mqtt']:
                         self.publish_state(pics[0].fname, image_attr)
-                video_extended = False
             self.__model.pause_looping = self.__viewer.is_in_transition()
-            (loop_running, skip_image, video_time) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
+            (loop_running, skip_image, video_playing) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
             if not loop_running:
                 break
-            if skip_image:
+            if skip_image or (video_extended and not video_playing):
                 self.__next_tm = 0
-            if video_time is not None and not video_extended:
+                video_extended = False
+            if video_playing:
                 video_extended = True
-                self.__next_tm += (video_time - time_delay)
             self.__interface_peripherals.check_input()
 
     def start(self):

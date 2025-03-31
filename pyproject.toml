@@ -30,6 +30,7 @@ classifiers=[
     "Programming Language :: Python :: 3",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
     "Topic :: Multimedia :: Graphics :: Viewers",
 ]
 dynamic = ["version"]
@@ -43,7 +44,8 @@ dependencies = [
     "numpy",
     "ninepatch>=0.2.0",
     "pi_heif>=0.8.0",
-    "mpv"
+    "python-vlc",
+    "opencv-python"
 ]
 
 [project.urls]

@@ -1,15 +1,14 @@
-import pi3d
 import time
 import subprocess
 import logging
 import os
-import numpy as np
-from PIL import Image, ImageFilter, ImageFile
-from picframe import mat_image, get_image_meta
+from typing import Optional, List, Tuple
 from datetime import datetime
-from picframe.video_streamer import VideoStreamer
-
-VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
+from PIL import Image, ImageFilter, ImageFile
+import numpy as np
+import pi3d # type: ignore
+from picframe import mat_image, get_image_meta
+from picframe.video_streamer import VideoStreamer, VIDEO_EXTENSIONS, VideoFrameExtractor
 
 # supported display modes for display switch
 dpms_mode = ("unsupported", "pi", "x_dpms")
@@ -64,6 +63,7 @@ class ViewerDisplay:
         self.__text_bkg_hgt = config['text_bkg_hgt'] if 0 <= config['text_bkg_hgt'] <= 1 else 0.25
         self.__text_opacity = config['text_opacity']
         self.__fit = config['fit']
+        self.__video_fit_display = config['video_fit_display']
         self.__geo_suppress_list = config['geo_suppress_list']
         self.__kenburns = config['kenburns']
         if self.__kenburns:
@@ -90,6 +90,8 @@ class ViewerDisplay:
         self.__text_bkg = None
         self.__sfg = None  # slide for background
         self.__sbg = None  # slide for foreground
+        self.__last_frame_tex = None  # slide for last frame of video
+        self.__video_path = None  # path to video file
         self.__next_tm = 0.0
         self.__name_tm = 0.0
         self.__in_transition = False
@@ -118,7 +120,7 @@ class ViewerDisplay:
                     return True
                 else:
                     return False
-            except Exception as e:
+            except (FileNotFoundError, ValueError, OSError) as e:
                 self.__logger.debug("Display ON/OFF is vcgencmd, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
@@ -129,7 +131,7 @@ class ViewerDisplay:
                     return True
                 else:
                     return False
-            except Exception as e:
+            except (subprocess.SubprocessError, FileNotFoundError, ValueError, OSError) as e:
                 self.__logger.debug("Display ON/OFF is X with dpms enabled, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
@@ -140,7 +142,7 @@ class ViewerDisplay:
                     return True
                 else:
                     return False
-            except Exception as e:
+            except (subprocess.SubprocessError, FileNotFoundError, ValueError, OSError) as e:
                 self.__logger.debug("Display ON/OFF is wlr-randr, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
@@ -157,7 +159,7 @@ class ViewerDisplay:
                     subprocess.call(["vcgencmd", "display_power", "1"])
                 else:
                     subprocess.call(["vcgencmd", "display_power", "0"])
-            except Exception as e:
+            except (subprocess.SubprocessError, FileNotFoundError, ValueError, OSError) as e:
                 self.__logger.debug("Display ON/OFF is vcgencmd, but an error occured")
                 self.__logger.debug("Cause: %s", e)
         elif self.__display_power == 1:
@@ -166,7 +168,7 @@ class ViewerDisplay:
                     subprocess.call(["xset", "-display", ":0", "dpms", "force", "on"])
                 else:
                     subprocess.call(["xset", "-display", ":0", "dpms", "force", "off"])
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 self.__logger.debug("Display ON/OFF is xset via dpms, but an error occured")
                 self.__logger.debug("Cause: %s", e)
         elif self.__display_power == 2:
@@ -174,7 +176,7 @@ class ViewerDisplay:
                 wlr_randr_cmd = ["wlr-randr", "--output", "HDMI-A-1"]
                 wlr_randr_cmd.append('--on' if on_off else '--off')
                 subprocess.call(wlr_randr_cmd)
-            except Exception as e:
+            except (ValueError, TypeError) as e:
                 self.__logger.debug("Display ON/OFF is wlr-randr, but an error occured")
                 self.__logger.debug("Cause: %s", e)
         else:
@@ -301,80 +303,70 @@ class ViewerDisplay:
         return (screen_aspect, image_aspect, diff_aspect)
 
     def __tex_load(self, pics, size=None):  # noqa: C901
-        if self.__video_streamer is not None:
-            self.__video_streamer.stop()
         try:
-            self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}") #<<<<<<
-            if pics[0] and os.path.splitext(pics[0].fname)[1].lower() in VIDEO_EXTENSIONS:
-                # start video stream
-                if self.__video_streamer is None:
-                    self.__video_streamer = VideoStreamer(pics[0].fname)
+            self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}")
+            if self.__mat_images and self.__matter is None:
+                self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
+                                                resource_folder=self.__mat_resource_folder,
+                                                mat_type=self.__mat_type,
+                                                outer_mat_color=self.__outer_mat_color,
+                                                inner_mat_color=self.__inner_mat_color,
+                                                outer_mat_border=self.__outer_mat_border,
+                                                inner_mat_border=self.__inner_mat_border,
+                                                outer_mat_use_texture=self.__outer_mat_use_texture,
+                                                inner_mat_use_texture=self.__inner_mat_use_texture)
+
+            # Load the image(s) and correct their orientation as necessary
+            if pics[0]:
+                im = get_image_meta.GetImageMeta.get_image_object(pics[0].fname)
+                if im is None:
+                    return None
+                if pics[0].orientation != 1:
+                    im = self.__orientate_image(im, pics[0])
+
+            if pics[1]:
+                im2 = get_image_meta.GetImageMeta.get_image_object(pics[1].fname)
+                if im2 is None:
+                    return None
+                if pics[1].orientation != 1:
+                    im2 = self.__orientate_image(im2, pics[1])
+
+            screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
+
+            if self.__mat_images and diff_aspect > self.__mat_images_tol:
+                if not pics[1]:
+                    im = self.__matter.mat_image((im,))
                 else:
-                    self.__video_streamer.play(pics[0].fname)
-                im = self.__video_streamer.player.screenshot_raw() #np.zeros((100, 100, 4), dtype='uint8') # placeholder #TODO get final frame rather than early frame
-            else: # normal image or image pair
-                if self.__mat_images and self.__matter is None:
-                    self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
-                                                    resource_folder=self.__mat_resource_folder,
-                                                    mat_type=self.__mat_type,
-                                                    outer_mat_color=self.__outer_mat_color,
-                                                    inner_mat_color=self.__inner_mat_color,
-                                                    outer_mat_border=self.__outer_mat_border,
-                                                    inner_mat_border=self.__inner_mat_border,
-                                                    outer_mat_use_texture=self.__outer_mat_use_texture,
-                                                    inner_mat_use_texture=self.__inner_mat_use_texture)
+                    im = self.__matter.mat_image((im, im2))
+            else:
+                if pics[1]:  # i.e portrait pair
+                    im = self.__create_image_pair(im, im2)
 
-                # Load the image(s) and correct their orientation as necessary
-                if pics[0]:
-                    im = get_image_meta.GetImageMeta.get_image_object(pics[0].fname)
-                    if im is None:
-                        return None
-                    if pics[0].orientation != 1:
-                        im = self.__orientate_image(im, pics[0])
+            (w, h) = im.size
+            screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
 
-                if pics[1]:
-                    im2 = get_image_meta.GetImageMeta.get_image_object(pics[1].fname)
-                    if im2 is None:
-                        return None
-                    if pics[1].orientation != 1:
-                        im2 = self.__orientate_image(im2, pics[1])
-
-                screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
-
-                if self.__mat_images and diff_aspect > self.__mat_images_tol:
-                    if not pics[1]:
-                        im = self.__matter.mat_image((im,))
-                    else:
-                        im = self.__matter.mat_image((im, im2))
-                else:
-                    if pics[1]:  # i.e portrait pair
-                        im = self.__create_image_pair(im, im2)
-
-                (w, h) = im.size
-                screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
-
-                if self.__blur_edges and size:
-                    if diff_aspect > 0.01:
-                        (sc_b, sc_f) = (size[1] / im.size[1], size[0] / im.size[0])
-                        if screen_aspect > image_aspect:
-                            (sc_b, sc_f) = (sc_f, sc_b)  # swap round
-                        (w, h) = (round(size[0] / sc_b / self.__blur_zoom), round(size[1] / sc_b / self.__blur_zoom))
-                        (x, y) = (round(0.5 * (im.size[0] - w)), round(0.5 * (im.size[1] - h)))
-                        box = (x, y, x + w, y + h)
-                        blr_sz = [int(x * 512 / size[0]) for x in size]
-                        im_b = im.resize(size, resample=0, box=box).resize(blr_sz)
-                        im_b = im_b.filter(ImageFilter.GaussianBlur(self.__blur_amount))
-                        im_b = im_b.resize(size, resample=Image.BICUBIC)
-                        im_b.putalpha(round(255 * self.__edge_alpha))  # to apply the same EDGE_ALPHA as the no blur method.
-                        im = im.resize([int(x * sc_f) for x in im.size], resample=Image.BICUBIC)
-                        """resize can use Image.LANCZOS (alias for Image.ANTIALIAS) for resampling
-                        for better rendering of high-contranst diagonal lines. NB downscaled large
-                        images are rescaled near the start of this try block if w or h > max_dimension
-                        so those lines might need changing too.
-                        """
-                        im_b.paste(im, box=(round(0.5 * (im_b.size[0] - im.size[0])),
-                                            round(0.5 * (im_b.size[1] - im.size[1]))))
-                        im = im_b  # have to do this as paste applies in place
+            if self.__blur_edges and size:
+                if diff_aspect > 0.01:
+                    (sc_b, sc_f) = (size[1] / im.size[1], size[0] / im.size[0])
+                    if screen_aspect > image_aspect:
+                        (sc_b, sc_f) = (sc_f, sc_b)  # swap round
+                    (w, h) = (round(size[0] / sc_b / self.__blur_zoom), round(size[1] / sc_b / self.__blur_zoom))
+                    (x, y) = (round(0.5 * (im.size[0] - w)), round(0.5 * (im.size[1] - h)))
+                    box = (x, y, x + w, y + h)
+                    blr_sz = [int(x * 512 / size[0]) for x in size]
+                    im_b = im.resize(size, resample=0, box=box).resize(blr_sz)
+                    im_b = im_b.filter(ImageFilter.GaussianBlur(self.__blur_amount))
+                    im_b = im_b.resize(size, resample=Image.BICUBIC)
+                    im_b.putalpha(round(255 * self.__edge_alpha))  # to apply the same EDGE_ALPHA as the no blur method.
+                    im = im.resize([int(x * sc_f) for x in im.size], resample=Image.BICUBIC)
+                    """resize can use Image.LANCZOS (alias for Image.ANTIALIAS) for resampling
+                    for better rendering of high-contranst diagonal lines. NB downscaled large
+                    images are rescaled near the start of this try block if w or h > max_dimension
+                    so those lines might need changing too.
+                    """
+                    im_b.paste(im, box=(round(0.5 * (im_b.size[0] - im.size[0])),
+                                        round(0.5 * (im_b.size[1] - im.size[1]))))
+                    im = im_b  # have to do this as paste applies in place
             tex = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
         except Exception as e:
             self.__logger.warning("Can't create tex from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
@@ -540,11 +532,86 @@ class ViewerDisplay:
                                           h=bkg_hgt, y=-int(self.__display.height) // 2 + bkg_hgt // 2, z=4.0)
             self.__text_bkg.set_draw_details(self.__flat_shader, [text_bkg_tex])
 
-    def slideshow_is_running(self, pics=None, time_delay=200.0, fade_time=10.0, paused=False):  # noqa: C901
+    def __load_video_frames(self, video_path: str) -> Optional[tuple[pi3d.Texture, pi3d.Texture]]:
+        """
+        Load the first and last frames of a video and create textures.
+
+        Parameters:
+        -----------
+        video_path : str
+            The path to the video file.
+
+        Returns:
+        --------
+        Optional[tuple[pi3d.Texture, pi3d.Texture]]
+            A tuple containing textures for the first and last frames, or None if loading fails.
+        """
+        try:
+            self.__logger.debug("Loading video frames: %s", video_path)
+            extractor = VideoFrameExtractor(
+                video_path, self.__display.width, self.__display.height, fit_display=self.__video_fit_display
+            )
+            frames = extractor.get_first_and_last_frames()
+            if frames is not None:
+                frame_first, frame_last = frames
+                # Create textures for the first and last frames
+                first_frame_tex = pi3d.Texture(frame_first, blend=True, m_repeat=True, free_after_load=True)
+                last_frame_tex = pi3d.Texture(frame_last, blend=True, m_repeat=True, free_after_load=True)
+                return first_frame_tex, last_frame_tex
+            else:
+                self.__logger.warning("Failed to retrieve frames from video: %s", video_path)
+                return None
+        except Exception as e:
+            self.__logger.warning("Can't create video textures from file: %s", video_path)
+            self.__logger.warning("Cause: %s", e)
+            return None
+
+    def slideshow_is_running(self, pics: Optional[List[Optional[get_image_meta.GetImageMeta]]] = None,
+                             time_delay: float = 200.0, fade_time: float = 10.0,
+                             paused: bool = False) -> Tuple[bool, bool, bool]:
+        """
+        Handles the slideshow logic, including transitioning between images or videos.
+
+        Parameters:
+        -----------
+        pics : Optional[List[Optional[get_image_meta.GetImageMeta]]], optional
+            A list of pictures to display. The first item in the list is the primary image or video.
+        time_delay : float, optional
+            The time in seconds to display each image or video before transitioning to the next.
+        fade_time : float, optional
+            The duration of the fade transition between images or videos.
+        paused : bool, optional
+            If True, pauses the slideshow.
+
+        Returns:
+        --------
+        Tuple[bool, bool, bool]
+            A tuple containing:
+            - Whether the slideshow loop is running.
+            - Whether to skip the current image.
+            - Whether a video is currently playing.
+        """
+        # if video is playing, we are done here
+        video_playing = False
+        if self.is_video_playing():
+            self.pause_video(paused)
+            video_playing = True
+            time.sleep(0.5)
+            return (True, False, video_playing)  # now returns tuple with skip image flag and video_time added
+
         loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
-            new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
+            self.stop_video()
+            if pics[0] and os.path.splitext(pics[0].fname)[1].lower() in VIDEO_EXTENSIONS:
+                self.__video_path = pics[0].fname
+                textures = self.__load_video_frames(self.__video_path)
+                if textures is not None:
+                    new_sfg, self.__last_frame_tex = textures
+                else:
+                    new_sfg = None
+            else: # normal image or image pair
+                new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             tm = time.time()
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + self.__show_text_tm  # text starts after slide transition
@@ -602,8 +669,23 @@ class ViewerDisplay:
             self.__in_transition = True  # set __in_transition True a few seconds *before* end of previous slide
         else:  # no transition effect safe to update database, resuffle etc
             self.__in_transition = False
+            if self.__video_path is not None:
+                # start video stream
+                if self.__video_streamer is None:
+                    self.__video_streamer = VideoStreamer(
+                        self.__display_x, self.__display_y,
+                        self.__display.width, self.__display.height,
+                        self.__video_path, fit_display=self.__video_fit_display
+                    )
+                else:
+                    self.__video_streamer.play(self.__video_path)
+                self.__video_path = None
+                if self.__last_frame_tex is not None:  # first time through
+                    self.__sfg = self.__last_frame_tex
+                    self.__last_frame_tex = None
+                    self.__slide.set_textures([self.__sfg, self.__sbg])
 
-        skip_image = False # can add possible reasons to skip image below here
+        skip_image = False  # can add possible reasons to skip image below here
 
         self.__slide.draw()
         self.__draw_overlay()
@@ -636,11 +718,42 @@ class ViewerDisplay:
             for block in self.__textblocks:
                 if block is not None:
                     block.sprite.draw()
+        return (loop_running, skip_image, video_playing)  # now returns tuple with skip image flag and video_time added
+    
+    def stop_video(self):
+        """
+        Stops the video playback if a video is currently playing.
 
-        video_time = None
-        if self.__video_streamer is not None and self.__video_streamer.duration is not None:
-            video_time = max(1.0, self.__video_streamer.duration - 0.5)
-        return (loop_running, skip_image, video_time)  # now returns tuple with skip image flag and video_time added
+        This method stops the video stream and ensures that the video playback
+        is halted. It does nothing if no video streamer is active.
+        """
+        if self.__video_streamer is not None:
+            self.__video_streamer.stop()
+
+    def is_video_playing(self) -> bool:
+        """
+        Checks if a video is currently playing.
+
+        Returns:
+        --------
+        bool
+            True if a video is playing, False otherwise.
+        """
+        if self.__video_streamer is not None and self.__video_streamer.is_playing():
+            return True
+        return False
+
+    def pause_video(self, do_pause: bool):
+        """
+        Pauses or resumes the video playback.
+
+        Parameters:
+        -----------
+        do_pause : bool
+            If True, pauses the video. If False, resumes the video playback.
+        """
+        if self.__video_streamer is not None:
+            self.__video_streamer.player.set_pause(do_pause)
 
     def slideshow_stop(self):
         if self.__video_streamer is not None:
