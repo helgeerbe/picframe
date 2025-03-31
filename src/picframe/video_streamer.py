@@ -203,7 +203,8 @@ class VideoStreamer:
 
         if sys.platform != "darwin":
             # Create SDL2 window
-            self.__window = sdl2.SDL_CreateWindow(b"", x, y, w, h, sdl2.SDL_WINDOW_HIDDEN)
+            self.__window = sdl2.SDL_CreateWindow(b"", x, y, w, h,
+                                                  sdl2.SDL_WINDOW_HIDDEN | sdl2.SDL_WINDOW_BORDERLESS)
             if not self.__window:
                 self.__logger.error("Error creating window: %s",
                                     sdl2.SDL_GetError().decode('utf-8'))
