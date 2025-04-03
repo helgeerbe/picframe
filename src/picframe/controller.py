@@ -349,10 +349,9 @@ class Controller:
             from picframe import interface_mqtt
             try:
                 self.__interface_mqtt = interface_mqtt.InterfaceMQTT(self, self.__mqtt_config)
-                self.__interface_mqtt.start()
-            except Exception:
-                self.__logger.error("Can't initialize mqtt. Stopping picframe")
-                sys.exit(1)
+            except Exception as e:
+                self.__logger.error("Can't initialize MQTT: %s. Continuing without MQTT.", e)
+                self.__interface_mqtt = None
 
         # start http server
         if self.__http_config['use_http']:

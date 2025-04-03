@@ -53,7 +53,7 @@ class VideoFrameExtractor:
     """
 
     def __init__(self, video_path: str, display_width: int, display_height:
-                 int, fit_display: bool = False):
+                 int, fit_display: bool = False) -> None:
         self.video_path = video_path
         self.display_width = display_width
         self.display_height = display_height
