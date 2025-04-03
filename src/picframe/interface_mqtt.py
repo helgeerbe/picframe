@@ -53,6 +53,7 @@ class InterfaceMQTT:
         self.__logger = logging.getLogger("interface_mqtt.InterfaceMQTT")
         self.__logger.info('creating an instance of InterfaceMQTT')
         self.__controller = controller
+        self.__controller.publish_state = self.publish_state
         self.__device_id = mqtt_config['device_id']
         self.__device_url = mqtt_config['device_url']
         self.__broker = mqtt_config['server']
@@ -91,7 +92,6 @@ class InterfaceMQTT:
             if self.__client is not None:
                 result = self.__client.connect(self.__broker, self.__port, keepalive=60)
                 self.__logger.debug("Connect result: %d", result)
-                self.__controller.publish_state = self.publish_state
                 self.__client.loop_start()
                 self.__connected = True
             else:
