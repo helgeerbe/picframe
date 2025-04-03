@@ -91,6 +91,7 @@ class InterfaceMQTT:
             if self.__client is not None:
                 result = self.__client.connect(self.__broker, self.__port, keepalive=60)
                 self.__logger.debug("Connect result: %d", result)
+                self.__controller.publish_state = self.publish_state
                 self.__client.loop_start()
                 self.__connected = True
             else:
