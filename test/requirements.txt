@@ -1,9 +1,0 @@
-Pillow>=9.0.0
-defusedxml
-pi3d>=2.49
-PyYAML
-paho-mqtt
-IPTCInfo3
-numpy
-ninepatch
-pi_heif>=0.8.0
