@@ -63,8 +63,8 @@ def test_connect_success(mock_mqtt_client, mock_controller, mqtt_config, caplog)
         mock_client_instance.connect.assert_called_once_with("home", 1883, keepalive=60)
         
         # Inspect the captured logs
-        assert "creating an instance of InterfaceMQTT" in caplog.text
-        assert "initialize mqtt client" in caplog.text
+        assert "Creating an instance of InterfaceMQTT" in caplog.text
+        assert "Initializing MQTT client" in caplog.text
    
         # Verify that the connection was successful
         assert mqtt_interface._InterfaceMQTT__connected is True
