@@ -2,7 +2,7 @@ import pytest
 import logging
 
 
-from src.picframe.get_image_meta import GetImageMeta
+from picframe.get_image_meta import GetImageMeta
 
 logger = logging.getLogger("test_get_image_data")
 logger.setLevel(logging.DEBUG)

@@ -1,6 +1,6 @@
 import pytest
 from unittest.mock import MagicMock, patch
-from src.picframe.interface_mqtt import InterfaceMQTT
+from picframe.interface_mqtt import InterfaceMQTT
 import paho.mqtt.client as mqtt
 
 import logging
