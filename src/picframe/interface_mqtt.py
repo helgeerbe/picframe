@@ -1,165 +1,242 @@
-"""MQTT interface of picframe."""
+"""MQTT interface of picframe.
+
+This module provides an interface for interacting with the image display
+via MQTT. It allows users to control and monitor the display remotely.
+
+Classes:
+--------
+InterfaceMQTT:
+    Handles MQTT communication, including publishing states, subscribing
+    to topics, and processing incoming messages.
+
+Dependencies:
+-------------
+- paho.mqtt.client: For MQTT communication.
+- picframe.controller: For controlling the image display.
+"""
 
 import logging
 import json
 import os
+import ssl
+from typing import Optional, List
 import paho.mqtt.client as mqtt
 from picframe import __version__
+from picframe.controller import Controller
 
 
 class InterfaceMQTT:
     """MQTT interface of picframe.
 
-    This interface interacts via mqtt with the user to steer the image display.
+    This interface interacts via MQTT with the user to steer the image display.
 
-    Attributes
-    ----------
-    controller : Controler
-        Controller for picframe
-
-    Methods
-    -------
-    __init__(self, controller, mqtt_config)
-        Initializes an instance of InterfaceMQTT.
-    start(self)
-        Starts the MQTT interface.
-    stop(self)
-        Stops the MQTT interface.
-    on_connect(self, client, userdata, flags, rc)
-        Callback function for MQTT connection.
-    __get_dev_element(self)
-        Returns the device element for MQTT configuration.
-    __setup_sensor(self, client, topic, icon, available_topic, has_attributes=False, entity_category=None)
-        Sets up a sensor for MQTT.
-    __setup_text(self, client, topic, icon, available_topic, entity_category=None)
-        Sets up a text entity for MQTT.
-    __setup_number(self, client, topic, min, max, step, icon, available_topic)
-        Sets up a number entity for MQTT.
+    Attributes:
+    -----------
+    controller : Controller
+        Controller for picframe.
     """
 
-    def __init__(self, controller, mqtt_config):
+    def __init__(self, controller: Controller, mqtt_config: dict) -> None:
         """
         Initializes an instance of InterfaceMQTT.
 
-        Args:
-            controller (Controller): The controller object.
-            mqtt_config (dict): A dictionary containing MQTT configuration parameters.
+        Parameters:
+        -----------
+        controller : Controller
+            The controller object.
+        mqtt_config : dict
+            A dictionary containing MQTT configuration parameters.
 
         Raises:
-            Exception: If MQTT setup fails.
-
+        -------
+        Exception:
+            If MQTT setup fails.
         """
         self.__logger = logging.getLogger("interface_mqtt.InterfaceMQTT")
-        self.__logger.info('creating an instance of InterfaceMQTT')
+        self.__logger.debug("Creating an instance of InterfaceMQTT")
         self.__controller = controller
-        try:
-            device_id = mqtt_config['device_id']
-            self.__client = mqtt.Client(client_id=device_id, clean_session=True)
-            login = mqtt_config['login']
-            password = mqtt_config['password']
-            self.__client.username_pw_set(login, password)
-            tls = mqtt_config['tls']
-            if tls:
-                self.__client.tls_set(tls)
-            server = mqtt_config['server']
-            port = mqtt_config['port']
-            self.__client.connect(server, port, 60)
-            self.__client.will_set("homeassistant/switch/"
-                                   + mqtt_config['device_id']
-                                   + "/available",
-                                   "offline", qos=0, retain=True)
-            self.__client.on_connect = self.on_connect
-            self.__client.on_message = self.on_message
-            self.__device_id = mqtt_config['device_id']
-            self.__device_url = mqtt_config['device_url']
-        except Exception as e:
-            self.__logger.error("MQTT not set up because of: {}".format(e))
-            raise
+        self.__controller.publish_state = self.publish_state
+        self.__device_id = mqtt_config["device_id"]
+        self.__device_url = mqtt_config["device_url"]
+        self.__broker = mqtt_config["server"]
+        self.__port = mqtt_config["port"]
+        self.__client_id = mqtt_config["device_id"]
+        self.__login = mqtt_config["login"]
+        self.__password = mqtt_config["password"]
+        self.__tls = mqtt_config["tls"]
+        self.__client: Optional[mqtt.Client] = None
+        self.__connected = False
+        self.__initialize_client()
+        self.__connect()
 
-    def start(self):
+    def __initialize_client(self) -> None:
         """
-        Starts the MQTT client and publishes the state.
+        Initialize the MQTT client and set up callbacks.
+        """
+        self.__logger.debug("Initializing MQTT client")
+        self.__client = mqtt.Client(
+            callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
+            client_id=self.__client_id,
+            clean_session=True,
+        )
+        self.__client.username_pw_set(self.__login, self.__password)
+        if self.__tls:
+            self.__client.tls_set(self.__tls)
+        self.__client.on_connect = self.__on_connect
+        self.__client.on_disconnect = self.__on_disconnect
+        self.__client.on_message = self.__on_message
 
-        This method sets the `publish_state` attribute of the controller and starts the MQTT client's loop.
+    def __connect(self) -> None:
+        """
+        Attempt to connect to the MQTT broker.
+        """
+        try:
+            self.__logger.info(
+                "Attempting to connect to MQTT broker at %s:%d", self.__broker, self.__port
+            )
+            if self.__client is not None:
+                result = self.__client.connect(self.__broker, self.__port, keepalive=60)
+                self.__logger.debug("Connect result: %d", result)
+                self.__client.loop_start()
+                self.__connected = True
+            else:
+                self.__logger.error("MQTT client is not initialized.")
+        except OSError as error:
+            self.__logger.warning("Network error while connecting to MQTT broker: %s", error)
+            self.__connected = False
+        except ssl.SSLError as error:
+            self.__logger.warning("SSL error while connecting to MQTT broker: %s", error)
+            self.__connected = False
+        except Exception as error:  # pylint: disable=broad-except
+            self.__logger.error("Unexpected error while connecting to MQTT broker: %s", error)
+            self.__connected = False
+
+    def __on_disconnect(
+        self,
+        _client: mqtt.Client,
+        _userdata: object,
+        _disconnect_flags: mqtt.DisconnectFlags,
+        reason_code: mqtt.ReasonCode | int | None,
+        _properties: Optional[mqtt.Properties] = None,
+    ) -> None:
+        """
+        Callback for when the client disconnects from the broker.
+
+        Parameters:
+        -----------
+        client : mqtt.Client
+            The MQTT client instance.
+        userdata : object
+            User-defined data of any type.
+        disconnect_flags : mqtt.DisconnectFlags
+            Flags indicating the reason for disconnection.
+        reason_code : mqtt.ReasonCode | int | None
+            The disconnection reason code.
+        properties : Optional[mqtt.Properties]
+            Additional properties sent by the broker.
+        """
+        if isinstance(reason_code, mqtt.ReasonCode):
+            reason_code_str = f"{reason_code} (value: {reason_code.value})"
+        else:
+            reason_code_str = str(reason_code)
+        self.__logger.warning("Disconnected from MQTT broker. Return code: %s", reason_code_str)
+        self.__connected = False
+
+    def stop(self) -> None:
+        """
+        Stops the MQTT client and clears the publish_state attribute.
 
         Raises:
-            Exception: If the MQTT client fails to start.
-
+        -------
+        Exception:
+            If the MQTT client fails to stop.
         """
         try:
-            self.__controller.publish_state = self.publish_state
-            self.__client.loop_start()
-        except Exception as e:
-            self.__logger.error("MQTT not started because of: {}".format(e))
-            raise
+            if hasattr(self.__controller, "publish_state"):
+                self.__controller.publish_state = None
+            else:
+                self.__logger.warning("Controller does not have a 'publish_state' attribute.")
+            if self.__client:
+                self.__client.loop_stop()
+        except Exception as error:  # pylint: disable=broad-except
+            self.__logger.error("MQTT stopping failed because of: %s", error)
 
-    def stop(self):
-        """
-        Returns a dictionary representing the device element.
-
-        The dictionary contains the following keys:
-        - ids: A list containing the device ID.
-        - name: The device ID.
-        - mdl: The model of the device, set to "PictureFrame".
-        - sw: The software version, set to the value of __version__.
-        - mf: The manufacturer of the device, set to "pi3d PictureFrame project".
-        - cu (optional): The device URL, only included if __device_url is set.
-
-        Returns:
-        A dictionary representing the device element.
-        """
-        try:
-            self.__controller.publish_state = None
-            self.__client.loop_stop()
-        except Exception as e:
-            self.__logger.error("MQTT stopping failed because of: {}".format(e))
-
-    def on_connect(self, client, userdata, flags, rc):
+    def __on_connect(
+        self,
+        client: mqtt.Client,
+        _userdata: object,
+        _flags: mqtt.ConnectFlags,
+        reason_code: mqtt.ReasonCode | int,
+        _properties: Optional[mqtt.Properties] = None,
+    ) -> None:
         """
         Callback function that is called when the client successfully connects to the MQTT broker.
 
         Parameters:
-            client (mqtt.Client): The MQTT client instance.
-            userdata: The user data passed to the client when connecting.
-            flags: Response flags sent by the broker.
-            rc (int): The connection result code.
-
-        Returns:
-            None
+        -----------
+        client : mqtt.Client
+            The MQTT client instance.
+        userdata : object
+            The user data passed to the client when connecting.
+        flags : mqtt.ConnectFlags
+            Response flags sent by the broker.
+        reason_code : mqtt.ReasonCode | int
+            The connection result code.
+        properties : Optional[mqtt.Properties]
+            Additional properties sent by the broker.
         """
-        if rc != 0:
-            self.__logger.warning("Can't connect with mqtt broker. Reason = {0}".format(rc))
+        if reason_code != 0:
+            if isinstance(reason_code, mqtt.ReasonCode):
+                reason_code_str = f"{reason_code} (value: {reason_code.value})"
+            else:
+                reason_code_str = str(reason_code)
+            self.__logger.warning(
+                "Can't connect with MQTT broker. Reason = %s", reason_code_str
+            )
+            self.__connected = False
             return
-        self.__logger.info('Connected with mqtt broker')
+        self.__logger.info("Connected with MQTT broker")
+        self.__connected = True
 
         # send last will and testament
         available_topic = "homeassistant/switch/" + self.__device_id + "/available"
         client.publish(available_topic, "online", qos=0, retain=True)
 
         # sensors
-        self.__setup_text(client, "date_from", "mdi:calendar-arrow-left", available_topic, entity_category="config")
-        self.__setup_text(client, "date_to", "mdi:calendar-arrow-right", available_topic, entity_category="config")
-        self.__setup_text(client, "location_filter", "mdi:map-search", available_topic, entity_category="config")
-        self.__setup_text(client, "tags_filter", "mdi:image-search", available_topic, entity_category="config")
-        self.__setup_sensor(client, "image_counter", "mdi:camera-burst", available_topic, entity_category="diagnostic")
+        self.__setup_text(client, "date_from", "mdi:calendar-arrow-left",
+                          available_topic, entity_category="config")
+        self.__setup_text(client, "date_to", "mdi:calendar-arrow-right",
+                          available_topic, entity_category="config")
+        self.__setup_text(client, "location_filter", "mdi:map-search",
+                          available_topic, entity_category="config")
+        self.__setup_text(client, "tags_filter", "mdi:image-search",
+                          available_topic, entity_category="config")
+        self.__setup_sensor(client, "image_counter", "mdi:camera-burst",
+                            available_topic, entity_category="diagnostic")
         self.__setup_sensor(client, "image", "mdi:file-image",
                             available_topic, has_attributes=True, entity_category="diagnostic")
 
         # numbers
-        self.__setup_number(client, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6", available_topic)
-        self.__setup_number(client, "time_delay", 1, 400, 1, "mdi:image-plus", available_topic)
-        self.__setup_number(client, "fade_time", 1, 50, 1, "mdi:image-size-select-large", available_topic)
-        self.__setup_number(client, "matting_images", 0.0, 1.0, 0.01, "mdi:image-frame", available_topic)
+        self.__setup_number(client, "brightness", 0.0, 1.0, 0.1, "mdi:brightness-6",
+                            available_topic)
+        self.__setup_number(client, "time_delay", 1, 400, 1, "mdi:image-plus",
+                            available_topic)
+        self.__setup_number(client, "fade_time", 1, 50, 1, "mdi:image-size-select-large",
+                            available_topic)
+        self.__setup_number(client, "matting_images", 0.0, 1.0, 0.01, "mdi:image-frame",
+                            available_topic)
 
         # selects
         _, dir_list = self.__controller.get_directory_list()
         dir_list.sort()
-        self.__setup_select(client, "directory", dir_list, "mdi:folder-multiple-image", available_topic, init=True)
+        self.__setup_select(client, "directory", dir_list, "mdi:folder-multiple-image",
+                            available_topic, init=True)
         command_topic = self.__device_id + "/directory"
         client.subscribe(command_topic, qos=0)
 
         # switches
-        self.__setup_switch(client, "text_refresh", "mdi:refresh", available_topic, entity_category="config")
+        self.__setup_switch(client, "text_refresh", "mdi:refresh",
+                            available_topic, entity_category="config")
         self.__setup_switch(client, "name_toggle", "mdi:subtitles", available_topic,
                             self.__controller.text_is_on("name"), entity_category="config")
         self.__setup_switch(client, "title_toggle", "mdi:subtitles", available_topic,
@@ -191,7 +268,7 @@ class InterfaceMQTT:
         client.subscribe(self.__device_id + "/purge_files", qos=0)  # close down without killing!
         client.subscribe(self.__device_id + "/stop", qos=0)  # close down without killing!
 
-    def __get_dev_element(self):
+    def __get_dev_element(self) -> dict:
         """
         Returns a dictionary representing the device element.
 
@@ -206,7 +283,7 @@ class InterfaceMQTT:
         Returns:
         A dictionary representing the device element.
         """
-        dev =  {
+        dev = {
             "ids": [self.__device_id],
             "name": self.__device_id,
             "mdl": "PictureFrame",
@@ -215,9 +292,17 @@ class InterfaceMQTT:
         }
         if self.__device_url:
             dev["cu"] = self.__device_url
-        return dev    
+        return dev
 
-    def __setup_sensor(self, client, topic, icon, available_topic, has_attributes=False, entity_category=None):
+    def __setup_sensor(
+        self,
+        client: mqtt.Client,
+        topic: str,
+        icon: str,
+        available_topic: str,
+        has_attributes: bool = False,
+        entity_category: Optional[str] = None
+    ) -> None:
         """
         Set up a sensor in Home Assistant.
 
@@ -235,25 +320,34 @@ class InterfaceMQTT:
         sensor_topic_head = "homeassistant/sensor/" + self.__device_id
         config_topic = sensor_topic_head + "_" + topic + "/config"
         name = self.__device_id + "_" + topic
-        dict = {"name": topic,
-                "icon": icon,
-                "value_template": "{{ value_json." + topic + "}}",
-                "avty_t": available_topic,
-                "uniq_id": name,
-                "dev": self.__get_dev_element()}
+        config_dict = {
+            "name": topic,
+            "icon": icon,
+            "value_template": "{{ value_json." + topic + "}}",
+            "avty_t": available_topic,
+            "uniq_id": name,
+            "dev": self.__get_dev_element()
+        }
         if has_attributes is True:
-            dict["state_topic"] = sensor_topic_head + "_" + topic + "/state"
-            dict["json_attributes_topic"] = sensor_topic_head + "_" + topic + "/attributes"
+            config_dict["state_topic"] = sensor_topic_head + "_" + topic + "/state"
+            config_dict["json_attributes_topic"] = sensor_topic_head + "_" + topic + "/attributes"
         else:
-            dict["state_topic"] = sensor_topic_head + "/state"
+            config_dict["state_topic"] = sensor_topic_head + "/state"
         if entity_category:
-            dict["entity_category"] = entity_category
+            config_dict["entity_category"] = entity_category
 
-        config_payload = json.dumps(dict)
+        config_payload = json.dumps(config_dict)
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(self.__device_id + "/" + topic, qos=0)
-    
-    def __setup_text(self, client, topic, icon, available_topic, entity_category=None):
+
+    def __setup_text(
+        self,
+        client: mqtt.Client,
+        topic: str,
+        icon: str,
+        available_topic: str,
+        entity_category: Optional[str] = None
+    ) -> None:
         """
         Sets up the text sensor configuration and publishes it to the MQTT broker.
 
@@ -270,22 +364,33 @@ class InterfaceMQTT:
         text_topic_head = "homeassistant/text/" + self.__device_id
         config_topic = text_topic_head + "_" + topic + "/config"
         name = self.__device_id + "_" + topic
-        dict = {"name": topic,
-                "icon": icon,
-                "value_template": "{{ value_json." + topic + "}}",
-                "state_topic": "homeassistant/sensor/" + self.__device_id + "/state",
-                "command_topic": text_topic_head + "_" + topic + "/cmd",
-                "avty_t": available_topic,
-                "uniq_id": name,
-                "dev": self.__get_dev_element()}
+        config_dict = {
+            "name": topic,
+            "icon": icon,
+            "value_template": "{{ value_json." + topic + "}}",
+            "state_topic": "homeassistant/sensor/" + self.__device_id + "/state",
+            "command_topic": text_topic_head + "_" + topic + "/cmd",
+            "avty_t": available_topic,
+            "uniq_id": name,
+            "dev": self.__get_dev_element()
+        }
         if entity_category:
-            dict["entity_category"] = entity_category
+            config_dict["entity_category"] = entity_category
 
-        config_payload = json.dumps(dict)
+        config_payload = json.dumps(config_dict)
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(self.__device_id + "/" + topic, qos=0)
 
-    def __setup_number(self, client, topic, min, max, step, icon, available_topic):
+    def __setup_number(
+        self,
+        client: mqtt.Client,
+        topic: str,
+        min_value: float,
+        max_value: float,
+        step: float,
+        icon: str,
+        available_topic: str
+    ) -> None:
         """
         Set up a number entity in Home Assistant.
 
@@ -307,8 +412,8 @@ class InterfaceMQTT:
         state_topic = "homeassistant/sensor/" + self.__device_id + "/state"
         name = self.__device_id + "_" + topic
         config_payload = json.dumps({"name": topic,
-                                     "min": min,
-                                     "max": max,
+                                     "min": min_value,
+                                     "max": max_value,
                                      "step": step,
                                      "icon": icon,
                                      "entity_category": "config",
@@ -321,7 +426,15 @@ class InterfaceMQTT:
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.subscribe(command_topic, qos=0)
 
-    def __setup_select(self, client, topic, options, icon, available_topic, init=False):
+    def __setup_select(
+        self,
+        client: mqtt.Client,
+        topic: str,
+        options: List[str],
+        icon: str,
+        available_topic: str,
+        init: bool = False
+    ) -> None:
         """
         Set up a select component in Home Assistant.
 
@@ -331,7 +444,8 @@ class InterfaceMQTT:
             options (list): The list of options for the select component.
             icon (str): The icon to be displayed for the select component.
             available_topic (str): The availability topic for the select component.
-            init (bool, optional): Whether to subscribe to the command topic during initialization. Defaults to False.
+            init (bool, optional): Whether to subscribe to the command topic during i
+                nitialization. Defaults to False.
         """
         select_topic_head = "homeassistant/select/" + self.__device_id
         config_topic = select_topic_head + "_" + topic + "/config"
@@ -353,8 +467,15 @@ class InterfaceMQTT:
         if init:
             client.subscribe(command_topic, qos=0)
 
-    def __setup_switch(self, client, topic, icon,
-                       available_topic, is_on=False, entity_category=None):
+    def __setup_switch(
+        self,
+        client: mqtt.Client,
+        topic: str,
+        icon: str,
+        available_topic: str,
+        is_on: bool = False,
+        entity_category: Optional[str] = None
+    ) -> None:
         """
         Sets up a switch in Home Assistant.
 
@@ -370,23 +491,25 @@ class InterfaceMQTT:
         config_topic = switch_topic_head + "_" + topic + "/config"
         command_topic = switch_topic_head + "_" + topic + "/set"
         state_topic = switch_topic_head + "_" + topic + "/state"
-        dict = {"name": topic,
-                "icon": icon,
-                "command_topic": command_topic,
-                "state_topic": state_topic,
-                "avty_t": available_topic,
-                "uniq_id": self.__device_id + "_" + topic,
-                "dev": self.__get_dev_element()}
+        config_dict = {
+            "name": topic,
+            "icon": icon,
+            "command_topic": command_topic,
+            "state_topic": state_topic,
+            "avty_t": available_topic,
+            "uniq_id": self.__device_id + "_" + topic,
+            "dev": self.__get_dev_element()
+        }
         if entity_category:
-            dict["entity_category"] = entity_category
-        config_payload = json.dumps(dict)
+            config_dict["entity_category"] = entity_category
+        config_payload = json.dumps(config_dict)
 
         client.subscribe(command_topic, qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
         client.publish(state_topic, "ON" if is_on else "OFF", qos=0, retain=True)
 
-    def __setup_button(self, client, topic, icon,
-                       available_topic, entity_category=None):
+    def __setup_button(self, client: mqtt.Client, topic: str, icon: str,
+                       available_topic: str, entity_category: Optional[str] = None) -> None:
         """
         Set up a button configuration for the Home Assistant integration.
 
@@ -403,21 +526,28 @@ class InterfaceMQTT:
         button_topic_head = "homeassistant/button/" + self.__device_id
         config_topic = button_topic_head + "_" + topic + "/config"
         command_topic = button_topic_head + "_" + topic + "/set"
-        dict = {"name": topic,
-                "icon": icon,
-                "command_topic": command_topic,
-                "payload_press": "ON",
-                "avty_t": available_topic,
-                "uniq_id": self.__device_id + "_" + topic,
-                "dev": self.__get_dev_element()}
+        config_dict = {
+            "name": topic,
+            "icon": icon,
+            "command_topic": command_topic,
+            "payload_press": "ON",
+            "avty_t": available_topic,
+            "uniq_id": self.__device_id + "_" + topic,
+            "dev": self.__get_dev_element()
+        }
         if entity_category:
-            dict["entity_category"] = entity_category
-        config_payload = json.dumps(dict)
+            config_dict["entity_category"] = entity_category
+        config_payload = json.dumps(config_dict)
 
         client.subscribe(command_topic, qos=0)
         client.publish(config_topic, config_payload, qos=0, retain=True)
 
-    def on_message(self, client, userdata, message):  # noqa: C901
+    def __on_message(
+        self,
+        client: mqtt.Client,
+        _userdata: object,
+        message: mqtt.MQTTMessage
+    ) -> None:
         """
         Callback function that is called when a message is received.
 
@@ -592,17 +722,29 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/stop":
             self.__controller.stop()
 
-    def publish_state(self, image=None, image_attr=None):
+    def publish_state(self, image: Optional[str] = None, image_attr: Optional[dict] = None) -> None:
         """
         Publishes the state of the device to the MQTT broker.
 
-        Args:
-            image (str, optional): The path to the image file. Defaults to None.
-            image_attr (dict, optional): The attributes of the image. Defaults to None.
-
-        Returns:
-            None
+        Parameters:
+        -----------
+        image : Optional[str], optional
+            The path to the image file. Defaults to None.
+        image_attr : Optional[dict], optional
+            The attributes of the image. Defaults to None.
         """
+        if self.__client is None:
+            self.__logger.warning("Cannot publish state. MQTT client is not initialized.")
+            return
+
+        if not self.__connected:
+            self.__logger.debug("Not connected to MQTT broker. Attempting to reconnect...")
+            self.__connect()
+
+        if not self.__connected:
+            self.__logger.warning("Cannot publish state. Not connected to MQTT broker.")
+            return
+
         sensor_topic_head = "homeassistant/sensor/" + self.__device_id
         switch_topic_head = "homeassistant/switch/" + self.__device_id
         available_topic = switch_topic_head + "/available"
@@ -622,7 +764,8 @@ class InterfaceMQTT:
             image_state_payload["image"] = tail
             image_state_topic = sensor_topic_head + "_image/state"
             self.__logger.info("Send image state: %s", image_state_payload)
-            self.__client.publish(image_state_topic, json.dumps(image_state_payload), qos=0, retain=False)
+            self.__client.publish(image_state_topic, json.dumps(image_state_payload),
+                                  qos=0, retain=False)
 
         # sensor
         # directory sensor
@@ -648,14 +791,15 @@ class InterfaceMQTT:
         # matting_images
         sensor_state_payload["matting_images"] = self.__controller.matting_images
 
-        # pulish sensors
+        # publish sensors
         dir_list.sort()
         self.__setup_select(self.__client, "directory", dir_list,
                             "mdi:folder-multiple-image", available_topic, init=False)
 
         self.__logger.info("Send sensor state: %s", sensor_state_payload)
         sensor_state_topic = sensor_topic_head + "/state"
-        self.__client.publish(sensor_state_topic, json.dumps(sensor_state_payload), qos=0, retain=False)
+        self.__client.publish(sensor_state_topic, json.dumps(sensor_state_payload),
+                              qos=0, retain=False)
 
         # publish state of switches
         # pause

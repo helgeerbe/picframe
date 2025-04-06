@@ -39,7 +39,7 @@ dependencies = [
     "defusedxml",
     "pi3d>=2.54",
     "PyYAML",
-    "paho-mqtt",
+    "paho-mqtt>=2.1.0",
     "IPTCInfo3",
     "numpy",
     "ninepatch>=0.2.0",

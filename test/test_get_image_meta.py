@@ -1,8 +1,8 @@
-import pytest
 import logging
-
-
-from src.picframe.get_image_meta import GetImageMeta
+import pytest
+# ensure that picframe is in the path
+# pip install -e .
+from picframe.get_image_meta import GetImageMeta
 
 logger = logging.getLogger("test_get_image_data")
 logger.setLevel(logging.DEBUG)

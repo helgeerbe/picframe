@@ -113,7 +113,7 @@ def main():
         return
     elif args.version:
         print("picframe version: ", __version__)
-        print("\nChecking required packages......")
+        print("\nChecking required packages......")  # TODO update list of packages
         required_packages = ['PIL',
                              'pi3d',
                              'yaml',
@@ -122,7 +122,9 @@ def main():
                              'numpy',
                              'ninepatch',
                              'pi_heif',
-                             'defusedxml']
+                             'defusedxml',
+                             'vlc',
+                             'cv2']
         check_packages(required_packages)
         return
     elif args.configfile:
