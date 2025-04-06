@@ -77,6 +77,9 @@ class ViewerDisplay:
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
         self.__display_power = int(config['display_power'])
+        self.__image_rotate = int(config['image_rotate'])
+        if self.__image_rotate not in [0, 90, 180, 270]:
+            self.__image_rotate = 0
         self.__use_sdl2 = config['use_sdl2']
         self.__use_glx = config['use_glx']
         self.__alpha = 0.0  # alpha - proportion front image to back
@@ -258,23 +261,31 @@ class ViewerDisplay:
 
     def __orientate_image(self, im, pic):
         ext = os.path.splitext(pic.fname)[1].lower()
-        if ext in ('.heif', '.heic'):  # heif and heic images are converted to PIL.Image obects and are alway in correct orienation # noqa: E501
-            return im
-        orientation = pic.orientation
-        if orientation == 2:
-            im = im.transpose(Image.FLIP_LEFT_RIGHT)
-        elif orientation == 3:
-            im = im.transpose(Image.ROTATE_180)  # rotations are clockwise
-        elif orientation == 4:
-            im = im.transpose(Image.FLIP_TOP_BOTTOM)
-        elif orientation == 5:
-            im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_90)
-        elif orientation == 6:
-            im = im.transpose(Image.ROTATE_270)
-        elif orientation == 7:
-            im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_270)
-        elif orientation == 8:
+
+        if ext not in ('.heif', '.heic'):  # heif and heic images are converted to PIL.Image obects and are alway in correct orienation # noqa: E501
+            orientation = pic.orientation
+            if orientation == 2:
+                im = im.transpose(Image.FLIP_LEFT_RIGHT)
+            elif orientation == 3:
+                im = im.transpose(Image.ROTATE_180)  # rotations are clockwise
+            elif orientation == 4:
+                im = im.transpose(Image.FLIP_TOP_BOTTOM)
+            elif orientation == 5:
+                im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_90)
+            elif orientation == 6:
+                im = im.transpose(Image.ROTATE_270)
+            elif orientation == 7:
+                im = im.transpose(Image.FLIP_LEFT_RIGHT).transpose(Image.ROTATE_270)
+            elif orientation == 8:
+                im = im.transpose(Image.ROTATE_90)
+
+        if self.__image_rotate == 90:
             im = im.transpose(Image.ROTATE_90)
+        elif self.__image_rotate == 180:
+            im = im.transpose(Image.ROTATE_180)
+        elif self.__image_rotate == 270:
+            im = im.transpose(Image.ROTATE_270)
+
         return im
 
     def __get_mat_image_control_values(self, mat_images_value):
@@ -321,15 +332,13 @@ class ViewerDisplay:
                 im = get_image_meta.GetImageMeta.get_image_object(pics[0].fname)
                 if im is None:
                     return None
-                if pics[0].orientation != 1:
-                    im = self.__orientate_image(im, pics[0])
+                im = self.__orientate_image(im, pics[0])
 
             if pics[1]:
                 im2 = get_image_meta.GetImageMeta.get_image_object(pics[1].fname)
                 if im2 is None:
                     return None
-                if pics[1].orientation != 1:
-                    im2 = self.__orientate_image(im2, pics[1])
+                im2 = self.__orientate_image(im2, pics[1])
 
             screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
 
