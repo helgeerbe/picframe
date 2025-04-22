@@ -24,10 +24,13 @@ import sys
 import logging
 import os
 from typing import Optional, Tuple
+import subprocess
+import json
 import numpy as np
 import vlc  # type: ignore
 import sdl2  # type: ignore
 import cv2
+
 
 VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
 
@@ -65,6 +68,77 @@ class VideoFrameExtractor:
             self.logger.error("Error: Could not open video '%s'", video_path)
             raise ValueError(f"Could not open video: {video_path}")
 
+    def _get_video_orientation(self) -> int:
+        """
+        Retrieves the orientation metadata for the video file using FFprobe.
+
+        Returns:
+        --------
+        int
+            The rotation angle (e.g., 0, 90, 180, 270). Defaults to 0 if no metadata is found.
+        """
+        try:
+            cmd = [
+                "ffprobe", "-v", "error", "-select_streams", "v:0",
+                "-show_entries", "side_data=rotation", "-of", "json", self.video_path
+            ]
+            result = subprocess.run(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+                text=True
+            )
+            metadata = json.loads(result.stdout)
+
+            # Check for rotation in side_data_list
+            streams = metadata.get("streams", [])
+            if streams and isinstance(streams[0], dict) and "side_data_list" in streams[0]:
+                side_data_list = streams[0]["side_data_list"]
+                if isinstance(side_data_list, list):
+                    for side_data in side_data_list:
+                        if "rotation" in side_data:
+                            return int(side_data["rotation"])
+
+            # Fallback to default if no rotation metadata is found
+            return 0
+        except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
+            self.logger.warning("Failed to retrieve orientation metadata: %s", e)
+            return 0
+
+    def _apply_orientation(self, frame: np.ndarray, rotation: int) -> np.ndarray:
+        """
+        Applies the orientation metadata to the frame.
+
+        Parameters:
+        -----------
+        frame : np.ndarray
+            The video frame.
+        rotation : int
+            The rotation angle (e.g., 0, 90, 180, 270).
+            Handles negative rotations by converting them to positive.
+
+        Returns:
+        --------
+        np.ndarray
+            The rotated frame.
+        """
+        # Normalize negative rotations to their positive equivalents
+        self.logger.info("Applying rotation: %d degrees", rotation)
+        rotation = rotation % 360
+        if rotation == 90:
+            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
+        elif rotation == 180:
+            frame = cv2.rotate(frame, cv2.ROTATE_180)
+        elif rotation == 270:
+            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
+        elif rotation == 0:
+            # No rotation needed
+            pass
+        else:
+            self.logger.warning("Unexpected rotation value: %d. No rotation applied.", rotation)
+        return frame
+
     def _scale_frame(self, frame: np.ndarray) -> np.ndarray:
         """
         Scale the frame to fit the display without distortion and add black bars if necessary.
@@ -101,9 +175,22 @@ class VideoFrameExtractor:
 
     def _process_video_frame(self, frame: np.ndarray) -> Optional[np.ndarray]:
         """
-        Process a video frame by converting it to RGB and resizing or scaling it.
+        Process a video frame by applying orientation, converting to RGB,
+        and resizing or scaling it.
+
+        Parameters:
+        -----------
+        frame : np.ndarray
+            The video frame.
+
+        Returns:
+        --------
+        Optional[np.ndarray]
+            The processed frame, or None if processing fails.
         """
         try:
+            rotation = self._get_video_orientation()  # Get orientation metadata
+            frame = self._apply_orientation(frame, rotation)  # Apply orientation
             frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
             if self.fit_display:
                 if frame.shape[1] != self.display_width or frame.shape[0] != self.display_height:
@@ -203,8 +290,9 @@ class VideoStreamer:
 
         if sys.platform != "darwin":
             # Create SDL2 window
-            self.__window = sdl2.SDL_CreateWindow(b"", x, y, w, h,
-                                                  sdl2.SDL_WINDOW_HIDDEN | sdl2.SDL_WINDOW_BORDERLESS)
+            self.__window = sdl2.SDL_CreateWindow(
+                b"", x, y, w, h,
+                sdl2.SDL_WINDOW_HIDDEN | sdl2.SDL_WINDOW_BORDERLESS)
             if not self.__window:
                 self.__logger.error("Error creating window: %s",
                                     sdl2.SDL_GetError().decode('utf-8'))
