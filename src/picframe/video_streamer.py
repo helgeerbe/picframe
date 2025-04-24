@@ -15,10 +15,11 @@ Classes:
 
 Dependencies:
 -------------
-- OpenCV (cv2): For video frame extraction and processing.
 - VLC (vlc): For video playback.
 - SDL2 (sdl2): For creating a video playback window.
 - NumPy (np): For handling video frame data.
+- PIL (Pillow): For image processing.
+- subprocess: For running external commands (FFmpeg and FFprobe).
 """
 import sys
 import logging
@@ -29,8 +30,7 @@ import json
 import numpy as np
 import vlc  # type: ignore
 import sdl2  # type: ignore
-import cv2
-
+from PIL import Image
 
 VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
 
@@ -49,201 +49,222 @@ class VideoFrameExtractor:
         The height of the display.
     fit_display : bool
         Whether to resize frames to fit the display dimensions.
-    cap : cv2.VideoCapture
-        The OpenCV video capture instance.
     logger : logging.Logger
         Logger for debugging and error messages.
     """
 
-    def __init__(self, video_path: str, display_width: int, display_height:
-                 int, fit_display: bool = False) -> None:
+    def __init__(self, video_path: str, display_width: int, display_height: int,
+                 fit_display: bool = False) -> None:
+        """
+        Initializes the VideoFrameExtractor.
+
+        Parameters:
+        -----------
+        video_path : str
+            The path to the video file.
+        display_width : int
+            The width of the display.
+        display_height : int
+            The height of the display.
+        fit_display : bool, optional
+            Whether to resize frames to fit the display dimensions. Defaults to False.
+        """
         self.video_path = video_path
         self.display_width = display_width
         self.display_height = display_height
         self.fit_display = fit_display
-        self.cap = cv2.VideoCapture(video_path)
         self.logger = logging.getLogger("VideoFrameExtractor")
 
-        if not self.cap.isOpened():
-            self.logger.error("Error: Could not open video '%s'", video_path)
-            raise ValueError(f"Could not open video: {video_path}")
-
-    def _get_video_orientation(self) -> int:
+    def _get_video_info(self) -> Tuple[int, int, float, int]:
         """
-        Retrieves the orientation metadata for the video file using FFprobe.
+        Retrieves metadata about the video file using FFprobe.
+
+        This method extracts the video's width, height, duration, and rotation angle
+        by running an FFprobe command and parsing its JSON output.
 
         Returns:
         --------
-        int
-            The rotation angle (e.g., 0, 90, 180, 270). Defaults to 0 if no metadata is found.
+        Tuple[int, int, float, int]:
+            A tuple containing:
+            - width (int): The width of the video in pixels.
+            - height (int): The height of the video in pixels.
+            - duration (float): The duration of the video in seconds.
+            - rotation (int): The rotation angle of the video (e.g., 0, 90, 180, 270).
+
+        If the metadata cannot be retrieved, the method returns (0, 0, 0.0, 0).
         """
         try:
             cmd = [
-                "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "stream_side_data=rotation", "-of", "json", self.video_path
+                "ffprobe", "-v", "error",
+                "-select_streams", "v:0",
+                "-show_entries", "stream=width,height,duration",
+                "-show_entries", "stream_side_data=rotation",
+                "-of", "json",
+                self.video_path
             ]
-            result = subprocess.run(
-                cmd,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                check=True,
-                text=True
-            )
-            metadata = json.loads(result.stdout)
+            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                    text=True, check=True)
+            info = json.loads(result.stdout)
 
-            # Check for rotation in side_data_list
-            streams = metadata.get("streams", [])
-            if streams and isinstance(streams[0], dict) and "side_data_list" in streams[0]:
-                side_data_list = streams[0]["side_data_list"]
-                if isinstance(side_data_list, list):
-                    for side_data in side_data_list:
-                        if "rotation" in side_data:
-                            return int(side_data["rotation"])
+            stream = info["streams"][0]
+            width = stream.get("width")
+            height = stream.get("height")
+            duration = float(stream.get("duration"))
+            rotation = 0
+            for item in stream.get("side_data_list", []):
+                if "rotation" in item:
+                    rotation = int(item["rotation"])
+                    break
 
-            # Fallback to default if no rotation metadata is found
-            return 0
+            return width, height, duration, rotation
         except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
-            self.logger.warning("Failed to retrieve orientation metadata: %s", e)
-            return 0
+            self.logger.warning("Failed to retrieve video metadata: %s", e)
+            return 0, 0, 0, 0
 
-    def _apply_orientation(self, frame: np.ndarray, rotation: int) -> np.ndarray:
+    def _scale_frame(self, frame: Image.Image) -> Image.Image:
         """
-        Applies the orientation metadata to the frame.
+        Scale the frame to fit the display without distortion and add black bars if necessary.
 
         Parameters:
         -----------
-        frame : np.ndarray
-            The video frame.
-        rotation : int
-            The rotation angle (e.g., 0, 90, 180, 270).
-            Handles negative rotations by converting them to positive.
+        frame : Image.Image
+            The video frame as a Pillow Image object.
 
         Returns:
         --------
-        np.ndarray
-            The rotated frame.
+        Image.Image
+            The scaled frame with black bars added if necessary.
         """
-        # Normalize negative rotations to their positive equivalents
-        self.logger.info("Applying rotation: %d degrees", rotation)
-        rotation = rotation % 360
-        if rotation == 90:
-            frame = cv2.rotate(frame, cv2.ROTATE_90_COUNTERCLOCKWISE)
-        elif rotation == 180:
-            frame = cv2.rotate(frame, cv2.ROTATE_180)
-        elif rotation == 270:
-            frame = cv2.rotate(frame, cv2.ROTATE_90_CLOCKWISE)
-        elif rotation == 0:
-            # No rotation needed
-            pass
+        frame_width, frame_height = frame.size
+        aspect_ratio_frame = frame_width / frame_height
+        aspect_ratio_display = self.display_width / self.display_height
+
+        if aspect_ratio_frame > aspect_ratio_display:
+            # Fit to width
+            new_width = self.display_width
+            new_height = int(self.display_width / aspect_ratio_frame)
         else:
-            self.logger.warning("Unexpected rotation value: %d. No rotation applied.", rotation)
-        return frame
+            # Fit to height
+            new_height = self.display_height
+            new_width = int(self.display_height * aspect_ratio_frame)
 
-    def _scale_frame(self, frame: np.ndarray) -> np.ndarray:
+        # Resize the frame
+        resized_frame = frame.resize((new_width, new_height), resample=Image.Resampling.BICUBIC)
+
+        # Create a black canvas with display dimensions
+        canvas = Image.new("RGB", (self.display_width, self.display_height), "black")
+
+        # Center the resized frame on the canvas
+        x_offset = (self.display_width - new_width) // 2
+        y_offset = (self.display_height - new_height) // 2
+        canvas.paste(resized_frame, (x_offset, y_offset))
+
+        return canvas
+
+    def _process_video_frame(self, frame: Image.Image) -> Image.Image:
         """
-        Scale the frame to fit the display without distortion and add black bars if necessary.
-        """
-        try:
-            frame_height, frame_width = frame.shape[:2]
-            aspect_ratio_frame = frame_width / frame_height
-            aspect_ratio_display = self.display_width / self.display_height
-
-            if aspect_ratio_frame > aspect_ratio_display:
-                # Fit to width
-                new_width = self.display_width
-                new_height = int(self.display_width / aspect_ratio_frame)
-            else:
-                # Fit to height
-                new_height = self.display_height
-                new_width = int(self.display_height * aspect_ratio_frame)
-
-            resized_frame = cv2.resize(frame, (new_width, new_height),
-                                       interpolation=cv2.INTER_LINEAR)
-
-            # Create a black canvas with display dimensions
-            canvas = np.zeros((self.display_height, self.display_width, 3), dtype=np.uint8)
-
-            # Center the resized frame on the canvas
-            y_offset = (self.display_height - new_height) // 2
-            x_offset = (self.display_width - new_width) // 2
-            canvas[y_offset:y_offset + new_height, x_offset:x_offset + new_width] = resized_frame
-
-            return canvas
-        except cv2.error as e:  # pylint: disable=E0712
-            self.logger.warning("OpenCV error while scaling frame: %s", e)
-            return frame
-
-    def _process_video_frame(self, frame: np.ndarray) -> Optional[np.ndarray]:
-        """
-        Process a video frame by applying orientation, converting to RGB,
-        and resizing or scaling it.
+        Process a video frame by resizing or scaling it.
 
         Parameters:
         -----------
-        frame : np.ndarray
-            The video frame.
+        frame : Image.Image
+            The video frame as a Pillow Image object.
+
+        Returns:
+        --------
+        Image.Image
+            The processed frame.
+        """
+        width, height = frame.size
+        if self.fit_display:
+            if width != self.display_width or height != self.display_height:
+                frame = frame.resize((self.display_width, self.display_height),
+                                     resample=Image.Resampling.BICUBIC)
+        elif width != self.display_width or height != self.display_height:
+            frame = self._scale_frame(frame)
+        return frame
+
+    def _get_frame_as_numpy(self, width: int, height: int,
+                            seek_time: float) -> Optional[np.ndarray]:
+        """
+        Retrieve a frame from the video at a specific time.
+
+        Parameters:
+        -----------
+        width : int
+            The width of the video frame.
+        height : int
+            The height of the video frame.
+        seek_time : float
+            The time in seconds to seek to in the video.
 
         Returns:
         --------
         Optional[np.ndarray]
-            The processed frame, or None if processing fails.
+            The video frame as a NumPy array, or None if retrieval fails.
         """
         try:
-            rotation = self._get_video_orientation()  # Get orientation metadata
-            frame = self._apply_orientation(frame, rotation)  # Apply orientation
-            frame = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            if self.fit_display:
-                if frame.shape[1] != self.display_width or frame.shape[0] != self.display_height:
-                    try:
-                        frame = cv2.resize(frame, (self.display_width,
-                                                   self.display_height),
-                                           interpolation=cv2.INTER_LINEAR)
-                    except cv2.error as e:  # pylint: disable=E0712
-                        self.logger.warning("OpenCV error while resizing frame: %s", e)
-            elif frame.shape[1] != self.display_width or frame.shape[0] != self.display_height:
-                frame = self._scale_frame(frame)
+            # Build ffmpeg command
+            cmd = [
+                "ffmpeg",
+                "-ss", str(seek_time) if seek_time else "0",  # seek time if specified
+                "-i", self.video_path,
+                "-vframes", "1",
+                "-f", "image2pipe",
+                "-pix_fmt", "rgb24",
+                "-vcodec", "rawvideo",
+                "-"
+            ]
+
+            # Run ffmpeg and capture output
+            process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                     check=True)
+
+            # Convert raw bytes to numpy array
+            frame = np.frombuffer(process.stdout, dtype=np.uint8).reshape((height, width, 3))
+
             return frame
-        except (cv2.error, ValueError, TypeError) as e:  # pylint: disable=E0712
-            self.logger.error("Error processing frame: %s", e)
+        except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
+            self.logger.warning("Failed to retrieve video frame: %s", e)
             return None
 
-    def get_first_and_last_frames(self) -> Optional[Tuple[np.ndarray, np.ndarray]]:
+    def get_first_and_last_frames(self) -> Optional[Tuple[Image.Image, Image.Image]]:
         """
-        Retrieve the first and last frames of the video as NumPy arrays.
+        Retrieve the first and last frames of the video as Pillow Image objects.
+
+        Returns:
+        --------
+        Optional[Tuple[Image.Image, Image.Image]]:
+            A tuple containing the first and last frames of the video as Pillow Image objects,
+            or None if retrieval fails.
         """
-        try:
-            # Retrieve the first frame
-            self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to the first frame
-            ret_first, frame_first = self.cap.read()
-            if not ret_first or frame_first is None:
-                self.logger.error("Error retrieving the first frame.")
-                return None
+        v_width, v_height, v_duration, v_rotation = self._get_video_info()  # Get video metadata
+        if v_width == 0 or v_height == 0:
+            self.logger.error("Error: Invalid video dimensions.")
+            return None
+        if v_duration == 0:
+            self.logger.error("Error: Invalid video duration.")
+            return None
+        if v_rotation not in [0, 90, -90, 180, -180, 270, -270]:
+            self.logger.error("Error: Invalid video rotation.")
+            return None
 
-            processed_frame = self._process_video_frame(frame_first)
-            if processed_frame is not None:
-                frame_first = processed_frame
-            else:
-                self.logger.error("Error processing the first frame.")
-                return None
+        # Adjust width and height for portrait videos
+        if v_rotation in [90, 270, -90, -270]:
+            v_width, v_height = v_height, v_width
 
-            # Retrieve the last frame
-            total_frames = int(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            frame_last = None
-            for i in range(1, 11):  # Try the last 10 frames
-                self.cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames - i)
-                ret_last, temp_frame = self.cap.read()
-                if ret_last and temp_frame is not None:
-                    frame_last = self._process_video_frame(temp_frame)
-                    if frame_last is not None:
-                        break
+        first_frame = self._get_frame_as_numpy(v_width, v_height, 0)
+        last_frame = self._get_frame_as_numpy(v_width, v_height, v_duration - 0.1)
+        if first_frame is not None and last_frame is not None:
+            first_image = Image.fromarray(first_frame)
+            last_image = Image.fromarray(last_frame)
+            first_image = self._process_video_frame(first_image)
+            last_image = self._process_video_frame(last_image)
+            return first_image, last_image
 
-            if frame_last is None:
-                self.logger.error("Error retrieving the last frame.")
-                return None
-
-            return frame_first, frame_last
-        finally:
-            self.cap.release()
+        else:
+            self.logger.error("Error: Could not retrieve one or both frames.")
+            return None
 
 
 class VideoStreamer:
@@ -252,7 +273,7 @@ class VideoStreamer:
 
     Attributes:
     -----------
-    player : vlc.MediaPlayer
+    player : Optional[vlc.MediaPlayer]
         The VLC media player instance.
     __window : Optional[sdl2.SDL_Window]
         The SDL2 window for video playback.
@@ -261,8 +282,9 @@ class VideoStreamer:
     __logger : logging.Logger
         Logger for debugging and error messages.
     """
-    def __init__(self, x: int, y: int, w: int, h: int,
-                 video_path: Optional[str] = None, fit_display: bool = False) -> None:
+
+    def __init__(self, x: int, y: int, w: int, h: int, video_path: Optional[str] = None,
+                 fit_display: bool = False) -> None:
         """
         Initializes the video streamer.
 
@@ -276,10 +298,12 @@ class VideoStreamer:
             The width of the SDL window.
         h : int
             The height of the SDL window.
-        video_path : Optional[str]
-            The path to the video file (optional). If provided, playback starts automatically.
-        fit_display : bool
+        video_path : Optional[str], optional
+            The path to the video file. If provided, playback starts automatically.
+            Defaults to None.
+        fit_display : bool, optional
             If True, set the aspect ratio of the video to match the display dimensions.
+            Defaults to False.
         """
         self.player: Optional[vlc.MediaPlayer] = None
         self.__window: Optional[sdl2.SDL_Window] = None
