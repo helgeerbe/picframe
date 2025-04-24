@@ -80,7 +80,7 @@ class VideoFrameExtractor:
         try:
             cmd = [
                 "ffprobe", "-v", "error", "-select_streams", "v:0",
-                "-show_entries", "side_data=rotation", "-of", "json", self.video_path
+                "-show_entries", "stream_side_data=rotation", "-of", "json", self.video_path
             ]
             result = subprocess.run(
                 cmd,
