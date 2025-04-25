@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Optional, Tuple
 from datetime import datetime
 
+
 @dataclass
 class VideoMetadata:
     """
