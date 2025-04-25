@@ -31,6 +31,7 @@ import numpy as np
 import vlc  # type: ignore
 import sdl2  # type: ignore
 from PIL import Image
+from .video_metadata import VideoMetadata
 
 VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
 
@@ -75,23 +76,15 @@ class VideoFrameExtractor:
         self.fit_display = fit_display
         self.logger = logging.getLogger("VideoFrameExtractor")
 
-    def _get_video_info(self) -> Tuple[int, int, float, int]:
+    def _get_video_info(self) -> VideoMetadata:
         """
         Retrieves metadata about the video file using FFprobe.
 
-        This method extracts the video's width, height, duration, and rotation angle
-        by running an FFprobe command and parsing its JSON output.
-
         Returns:
         --------
-        Tuple[int, int, float, int]:
-            A tuple containing:
-            - width (int): The width of the video in pixels.
-            - height (int): The height of the video in pixels.
-            - duration (float): The duration of the video in seconds.
-            - rotation (int): The rotation angle of the video (e.g., 0, 90, 180, 270).
-
-        If the metadata cannot be retrieved, the method returns (0, 0, 0.0, 0).
+        VideoMetadata
+            A dataclass containing the video metadata.
+            Returns VideoMetadata(0, 0, 0.0, 0) if metadata retrieval fails.
         """
         try:
             cmd = [
@@ -107,19 +100,30 @@ class VideoFrameExtractor:
             info = json.loads(result.stdout)
 
             stream = info["streams"][0]
-            width = stream.get("width")
-            height = stream.get("height")
-            duration = float(stream.get("duration"))
+            width = stream.get("width", 0)
+            height = stream.get("height", 0)
+            duration = float(stream.get("duration", 0))
+
+            # Get rotation
             rotation = 0
             for item in stream.get("side_data_list", []):
                 if "rotation" in item:
                     rotation = int(item["rotation"])
                     break
 
-            return width, height, duration, rotation
+            # Adjust rotation for portrait videos
+            if rotation in [90, 270, -90, -270]:
+                width, height = height, width
+
+            return VideoMetadata(
+                width=width,
+                height=height,
+                duration=duration,
+                rotation=rotation,
+            )
         except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
             self.logger.warning("Failed to retrieve video metadata: %s", e)
-            return 0, 0, 0, 0
+            return VideoMetadata(0, 0, 0.0, 0)
 
     def _scale_frame(self, frame: Image.Image) -> Image.Image:
         """
@@ -184,17 +188,15 @@ class VideoFrameExtractor:
             frame = self._scale_frame(frame)
         return frame
 
-    def _get_frame_as_numpy(self, width: int, height: int,
+    def _get_frame_as_numpy(self, dimensions: Tuple[int, int],
                             seek_time: float) -> Optional[np.ndarray]:
         """
         Retrieve a frame from the video at a specific time.
 
         Parameters:
         -----------
-        width : int
-            The width of the video frame.
-        height : int
-            The height of the video frame.
+        dimensions : Tuple[int, int]
+            The dimensions of the video frame (width, height).
         seek_time : float
             The time in seconds to seek to in the video.
 
@@ -221,6 +223,7 @@ class VideoFrameExtractor:
                                      check=True)
 
             # Convert raw bytes to numpy array
+            width, height = dimensions
             frame = np.frombuffer(process.stdout, dtype=np.uint8).reshape((height, width, 3))
 
             return frame
@@ -229,32 +232,20 @@ class VideoFrameExtractor:
             return None
 
     def get_first_and_last_frames(self) -> Optional[Tuple[Image.Image, Image.Image]]:
-        """
-        Retrieve the first and last frames of the video as Pillow Image objects.
-
-        Returns:
-        --------
-        Optional[Tuple[Image.Image, Image.Image]]:
-            A tuple containing the first and last frames of the video as Pillow Image objects,
-            or None if retrieval fails.
-        """
-        v_width, v_height, v_duration, v_rotation = self._get_video_info()  # Get video metadata
-        if v_width == 0 or v_height == 0:
+        """Retrieve the first and last frames of the video as Pillow Image objects."""
+        metadata = self._get_video_info()
+        if metadata.width == 0 or metadata.height == 0:
             self.logger.error("Error: Invalid video dimensions.")
             return None
-        if v_duration == 0:
+        if metadata.duration == 0:
             self.logger.error("Error: Invalid video duration.")
             return None
-        if v_rotation not in [0, 90, -90, 180, -180, 270, -270]:
+        if metadata.rotation not in [0, 90, -90, 180, -180, 270, -270]:
             self.logger.error("Error: Invalid video rotation.")
             return None
 
-        # Adjust width and height for portrait videos
-        if v_rotation in [90, 270, -90, -270]:
-            v_width, v_height = v_height, v_width
-
-        first_frame = self._get_frame_as_numpy(v_width, v_height, 0)
-        last_frame = self._get_frame_as_numpy(v_width, v_height, v_duration - 0.1)
+        first_frame = self._get_frame_as_numpy(metadata.dimensions, 0)
+        last_frame = self._get_frame_as_numpy(metadata.dimensions, metadata.duration - 0.1)
         if first_frame is not None and last_frame is not None:
             first_image = Image.fromarray(first_frame)
             last_image = Image.fromarray(last_frame)
