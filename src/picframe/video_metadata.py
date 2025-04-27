@@ -25,14 +25,10 @@ class VideoMetadata:
         The title of the video from metadata.
     caption : Optional[str]
         The caption/subtitle of the video.
-    description : Optional[str]
-        The description/comment of the video.
     creation_date : Optional[datetime]
         The creation date of the video or file creation date as fallback.
     gps_coords : Optional[Tuple[float, float]]
         The GPS coordinates (latitude, longitude) where the video was taken.
-    location : Optional[str]
-        The location name derived from GPS coordinates.
     """
     width: int
     height: int
@@ -40,10 +36,8 @@ class VideoMetadata:
     rotation: int
     title: Optional[str] = None
     caption: Optional[str] = None
-    description: Optional[str] = None
     creation_date: Optional[datetime] = None
     gps_coords: Optional[Tuple[float, float]] = None
-    location: Optional[str] = None
 
     @property
     def is_portrait(self) -> bool:

@@ -669,7 +669,7 @@ class ViewerDisplay:
             self.__in_transition = True  # set __in_transition True a few seconds *before* end of previous slide
         else:  # no transition effect safe to update database, resuffle etc
             self.__in_transition = False
-            if self.__video_path is not None:
+            if self.__video_path is not None and tm > self.__name_tm:
                 # start video stream
                 if self.__video_streamer is None:
                     self.__video_streamer = VideoStreamer(

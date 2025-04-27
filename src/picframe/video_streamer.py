@@ -38,6 +38,124 @@ from .video_metadata import VideoMetadata
 VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
 
 
+def get_video_info(video_path: str) -> VideoMetadata:
+    """Retrieves metadata about the video file using FFprobe."""
+    logger = logging.getLogger("get_video_info")
+    logger.setLevel(logging.DEBUG)  # Set logging level to DEBUG
+    start_time = time.time()
+    try:
+        cmd = [
+            "ffprobe", "-v", "error",
+            "-select_streams", "v:0",
+            "-show_entries", "stream=width,height,duration",
+            "-show_entries", "stream_side_data=rotation",
+            "-show_entries", "format_tags=title,description,comment,caption,creation_time,location,location-eng,com.apple.quicktime.location.ISO6709",
+            "-show_entries", "format_tags=com.android.version",
+            "-of", "json",
+            video_path
+        ]
+        result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True, check=True)
+        info = json.loads(result.stdout)
+
+        stream = info["streams"][0]
+        width = stream.get("width", 0)
+        height = stream.get("height", 0)
+        duration = float(stream.get("duration", 0))
+
+        # Get rotation
+        rotation = 0
+        for item in stream.get("side_data_list", []):
+            if "rotation" in item:
+                rotation = int(item["rotation"])
+                break
+
+        # Get metadata from format tags
+        tags = info.get("format", {}).get("tags", {})
+
+        # Extract metadata fields
+        title = tags.get("title")
+        
+        # Try different fields that might contain description
+        caption = (
+            tags.get("caption") or
+            tags.get("description") or
+            tags.get("comment") or
+            tags.get("com.apple.quicktime.description") 
+        )
+
+        # Extract creation date
+        creation_date = None
+        date_str = tags.get("creation_time")
+        if date_str:
+            try:
+                creation_date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
+            except ValueError:
+                try:
+                    creation_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    logger.warning("Could not parse creation date: %s", date_str)
+
+        # Fall back to file creation time if no metadata date available
+        if creation_date is None:
+            try:
+                file_ctime = os.path.getctime(video_path)
+                creation_date = datetime.fromtimestamp(file_ctime)
+                logger.debug("Using file creation time: %s", creation_date)
+            except OSError as e:
+                logger.warning("Could not get file creation time: %s", e)
+
+        # Extract GPS coordinates
+        gps_coords = None
+
+        # Try different location formats
+        loc_str = (
+            tags.get("location") or
+            tags.get("location-eng") or
+            tags.get("com.apple.quicktime.location.ISO6709")
+        )
+        if loc_str:
+            try:
+                # Parse ISO6709 format: ±DD.DDDD±DDD.DDDD+HHH.HHH/
+                if '/' in loc_str:
+                    # Split at each sign and remove trailing slash
+                    parts = loc_str.strip('/').replace('+', ' +').replace('-', ' -').split()
+                    if len(parts) >= 2:  # At least latitude and longitude
+                        lat = float(parts[0])
+                        lon = float(parts[1])
+                        gps_coords = (lat, lon)
+            except ValueError:
+                logger.warning("Could not parse GPS coordinates: %s", loc_str)
+
+        metadata = VideoMetadata(
+            width=width,
+            height=height,
+            duration=duration,
+            rotation=rotation,
+            title=title,
+            caption=caption,
+            creation_date=creation_date,
+            gps_coords=gps_coords,
+        )
+
+        elapsed = time.time() - start_time
+        logger.debug("Video metadata extraction for %s took %.3f seconds", video_path, elapsed)
+        logger.debug("Video metadata: %s", {
+            'dimensions': f"{metadata.width}x{metadata.height}",
+            'duration': f"{metadata.duration:.1f}s",
+            'rotation': metadata.rotation,
+            'title': metadata.title,
+            'caption': metadata.caption,
+            'creation_date': metadata.creation_date,
+            'gps': metadata.gps_coords
+        })
+        return metadata
+    except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
+        elapsed = time.time() - start_time
+        logger.warning("Failed to retrieve video metadata in %.3f seconds: %s", elapsed, e)
+        return VideoMetadata(0, 0, 0.0, 0)
+
+
 class VideoFrameExtractor:
     """
     A class to extract the first and last frames of a video and process them.
@@ -79,122 +197,6 @@ class VideoFrameExtractor:
         self.logger = logging.getLogger("VideoFrameExtractor")
         self.logger.setLevel(logging.DEBUG)  # Set logging level to DEBUG
 
-    def _get_video_info(self) -> VideoMetadata:
-        """Retrieves metadata about the video file using FFprobe."""
-        start_time = time.time()
-        try:
-            cmd = [
-                "ffprobe", "-v", "error",
-                "-select_streams", "v:0",
-                "-show_entries", "stream=width,height,duration",
-                "-show_entries", "stream_side_data=rotation",
-                "-show_entries", "format_tags=title,description,comment,caption,creation_time,location,location-eng,com.apple.quicktime.location.ISO6709",
-                "-show_entries", "format_tags=com.android.version",
-                "-of", "json",
-                self.video_path
-            ]
-            result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                    text=True, check=True)
-            info = json.loads(result.stdout)
-
-            stream = info["streams"][0]
-            width = stream.get("width", 0)
-            height = stream.get("height", 0)
-            duration = float(stream.get("duration", 0))
-
-            # Get rotation
-            rotation = 0
-            for item in stream.get("side_data_list", []):
-                if "rotation" in item:
-                    rotation = int(item["rotation"])
-                    break
-
-            # Get metadata from format tags
-            tags = info.get("format", {}).get("tags", {})
-
-            # Extract metadata fields
-            title = tags.get("title")
-            caption = tags.get("caption")
-            # Try different fields that might contain description
-            description = (
-                tags.get("description") or
-                tags.get("comment") or
-                tags.get("com.apple.quicktime.description")
-            )
-
-            # Extract creation date
-            creation_date = None
-            date_str = tags.get("creation_time")
-            if date_str:
-                try:
-                    creation_date = datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S.%fZ")
-                except ValueError:
-                    try:
-                        creation_date = datetime.strptime(date_str, "%Y-%m-%d %H:%M:%S")
-                    except ValueError:
-                        self.logger.warning("Could not parse creation date: %s", date_str)
-
-            # Fall back to file creation time if no metadata date available
-            if creation_date is None:
-                try:
-                    file_ctime = os.path.getctime(self.video_path)
-                    creation_date = datetime.fromtimestamp(file_ctime)
-                    self.logger.debug("Using file creation time: %s", creation_date)
-                except OSError as e:
-                    self.logger.warning("Could not get file creation time: %s", e)
-
-            # Extract GPS coordinates
-            gps_coords = None
-            location = None
-
-            # Try different location formats
-            loc_str = (
-                tags.get("location") or
-                tags.get("location-eng") or
-                tags.get("com.apple.quicktime.location.ISO6709")
-            )
-            if loc_str:
-                try:
-                    # Parse ISO6709 format: ±DD.DDDD±DDD.DDDD+HHH.HHH/
-                    if '/' in loc_str:
-                        # Split at each sign and remove trailing slash
-                        parts = loc_str.strip('/').replace('+', ' +').replace('-', ' -').split()
-                        if len(parts) >= 2:  # At least latitude and longitude
-                            lat = float(parts[0])
-                            lon = float(parts[1])
-                            gps_coords = (lat, lon)
-                except ValueError:
-                    self.logger.warning("Could not parse GPS coordinates: %s", loc_str)
-
-            metadata = VideoMetadata(
-                width=width,
-                height=height,
-                duration=duration,
-                rotation=rotation,
-                title=title,
-                caption=caption,
-                description=description,
-                creation_date=creation_date,
-                gps_coords=gps_coords,
-                location=location
-            )
-
-            elapsed = time.time() - start_time
-            self.logger.debug("Video metadata extraction for %s took %.3f seconds", self.video_path, elapsed)
-            self.logger.debug("Video metadata: %s", {
-                'dimensions': f"{metadata.width}x{metadata.height}",
-                'duration': f"{metadata.duration:.1f}s",
-                'rotation': metadata.rotation,
-                'title': metadata.title,
-                'caption': metadata.caption,
-                'creation_date': metadata.creation_date,
-                'gps': metadata.gps_coords
-            })
-            return metadata
-        except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
-            elapsed = time.time() - start_time
-            self.logger.warning("Failed to retrieve video metadata in %.3f seconds: %s", elapsed, e)
-            return VideoMetadata(0, 0, 0.0, 0)
 
     def _scale_frame(self, frame: Image.Image) -> Image.Image:
         """
@@ -305,7 +307,7 @@ class VideoFrameExtractor:
     def get_first_and_last_frames(self) -> Optional[Tuple[Image.Image, Image.Image]]:
         """Retrieve the first and last frames of the video as Pillow Image objects."""
         start_time = time.time()
-        metadata = self._get_video_info()
+        metadata = get_video_info(self.video_path)
         if metadata.width == 0 or metadata.height == 0:
             self.logger.error("Error: Invalid video dimensions.")
             return None
