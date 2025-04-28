@@ -20,9 +20,27 @@ except ImportError:
     register_heif_opener = None
 
 EXTENSIONS = [".jpg", ".jpeg", ".png"]
+EXTENSION_TO_MIMETYPE = {
+    # Videos
+    '.mp4': 'video/mp4',
+    '.mkv': 'video/x-matroska',
+    '.flv': 'video/x-flv',
+    '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo',
+    '.webm': 'video/webm',
+    '.hevc': 'video/mp4',  # HEVC usually wrapped in MP4 container
+
+    # Images
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png'
+}
 if register_heif_opener is not None:
     EXTENSIONS += [".heif", ".heic"]
-
+    EXTENSION_TO_MIMETYPE.update({
+        '.heif': 'image/heif',
+        '.heic': 'image/heic'
+    })
 
 def heif_to_jpg(fname):
     try:
@@ -82,13 +100,14 @@ class RequestHandler(BaseHTTPRequestHandler):
                 else:
                     html_page = "index.html"
                 _, extension = os.path.splitext(html_page)
-                if html_page == "current_image" or extension.lower() in EXTENSIONS:
+                if html_page == "current_image" or html_page == "current_image_original" or extension.lower() in EXTENSIONS:
                     # NB homeassistant needs to pass url ending in an image extension
                     # in order to trigger streaming whatever is the currently showing image
-                    content_type = "image"
                     page = self.server._controller.get_current_path()
-                    _, extension = os.path.splitext(page)  # as current_image may be heic
-                    if extension.lower() in ('.heic', '.heif'):
+                    extension = os.path.splitext(page)[1].lower()
+                    content_type = EXTENSION_TO_MIMETYPE.get(extension, 'application/octet-stream')
+                    if html_page != "current_image_original" and extension in ('.heic', '.heif'):
+                        # as current_image may be heic
                         page = heif_to_jpg(page)
                 else:
                     page = os.path.join(self.server._html_path, html_page)
@@ -97,6 +116,9 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if os.path.isfile(page):
                     self.send_response(200)
                     self.send_header('Content-type', content_type)
+                    filename = os.path.basename(page)
+                    filename_encoded = urlparse.quote(filename)
+                    self.send_header('Content-Disposition', f'inline; filename="{filename}"; filename*=utf-8\'\'{filename_encoded}')
                     # TODO check if html or js - in which case application/javascript
                     # really should filter out attempts to render all other file types (jpg etc?)
                     self.end_headers()
