@@ -51,7 +51,7 @@ def get_video_info(video_path: str) -> VideoMetadata:
             "-show_entries", "stream=width,height,duration",
             "-show_entries", "stream_side_data=rotation",
             "-show_entries", "format_tags=title,description,comment,caption,creation_time,location",
-            "-show_entries", "location-eng,com.apple.quicktime.location.ISO6709",
+            "-show_entries", "format_tags=location-eng,com.apple.quicktime.location.ISO6709",
             "-show_entries", "format_tags=com.apple.quicktime.make,com.apple.quicktime.model",
             "-show_entries", "format_tags=com.android.version",
             # Add more show_entries if needed for extra fields
@@ -377,10 +377,40 @@ class VideoFrameExtractor:
             first_image = self._process_video_frame(first_image)
             last_image = self._process_video_frame(last_image)
             return first_image, last_image
-        else:
-            elapsed = time.time() - start_time
-            self.logger.error("Failed to retrieve frames in %.3f seconds", elapsed)
+
+        elapsed = time.time() - start_time
+        self.logger.error("Failed to retrieve frames in %.3f seconds", elapsed)
+        return None
+
+    def get_first_frame_as_image(self) -> Optional[Image.Image]:
+        """Retrieve the first frame of the video as unscalled Pillow Image objects."""
+        start_time = time.time()
+        # TODO: to avoid double call we shoud add specific video metadata to db
+        metadata = get_video_info(self.video_path) 
+        if metadata.width == 0 or metadata.height == 0:
+            self.logger.error("Error: Invalid video dimensions.")
             return None
+        if metadata.duration == 0:
+            self.logger.error("Error: Invalid video duration.")
+            return None
+        if metadata.rotation not in [0, 90, -90, 180, -180, 270, -270]:
+            self.logger.error("Error: Invalid video rotation.")
+            return None
+
+        frame_start_time = time.time()
+        first_frame = self._get_frame_as_numpy(metadata.dimensions, 0)
+        first_frame_time = time.time() - frame_start_time
+
+        if first_frame is not None:
+            self.logger.debug("Frame extraction times for %s:", self.video_path)
+            self.logger.debug("  First frame: %.3f seconds", first_frame_time)
+            first_image = Image.fromarray(first_frame)
+            return first_image
+
+        elapsed = time.time() - start_time
+        self.logger.error("Failed to retrieve first frame in %.3f seconds", elapsed)
+        return None
+
 
 
 class VideoStreamer:
