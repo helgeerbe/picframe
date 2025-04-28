@@ -4,12 +4,12 @@ import time
 import logging
 import threading
 from picframe import get_image_meta
+from picframe.video_streamer import VIDEO_EXTENSIONS, get_video_info
 
 
 class ImageCache:
 
     EXTENSIONS = ['.png', '.jpg', '.jpeg', '.heif', '.heic']
-    VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
     EXIF_TO_FIELD = {'EXIF FNumber': 'f_number',
                      'Image Make': 'make',
                      'Image Model': 'model',
@@ -380,7 +380,7 @@ class ImageCache:
         for dir, _date in modified_folders:
             for file in os.listdir(dir):
                 base, extension = os.path.splitext(file)
-                if (extension.lower() in (ImageCache.EXTENSIONS + ImageCache.VIDEO_EXTENSIONS)
+                if (extension.lower() in (ImageCache.EXTENSIONS + VIDEO_EXTENSIONS)
                         # have to filter out all the Apple junk
                         and '.AppleDouble' not in dir and not file.startswith('.')):
                     full_file = os.path.join(dir, file)
@@ -402,7 +402,12 @@ class ImageCache:
         base, extension = os.path.splitext(file_only)
 
         # Get the file's meta info and build the INSERT statement dynamically
-        meta = self.__get_exif_info(file)
+        meta = {}
+        ext = os.path.splitext(file)[1].lower()
+        if ext in VIDEO_EXTENSIONS: # no exif info available
+            meta = self.__get_video_info(file)
+        else:
+            meta = self.__get_exif_info(file)
         meta_insert = self.__get_meta_sql_from_dict(meta)
         vals = list(meta.values())
         vals.insert(0, file)
@@ -468,9 +473,6 @@ class ImageCache:
             self.__purge_files = False
 
     def __get_exif_info(self, file_path_name):
-        ext = os.path.splitext(file_path_name)[1].lower()
-        if ext in ImageCache.VIDEO_EXTENSIONS: # no exif info available
-            return {'width': 100, 'height': 100} # return early with min info for videos TODO duration available in video_info
         exifs = get_image_meta.GetImageMeta(file_path_name)
         # Dict to store interesting EXIF data
         # Note, the 'key' must match a field in the 'meta' table
@@ -478,7 +480,7 @@ class ImageCache:
 
         e['orientation'] = exifs.get_orientation()
 
-        width, height = exifs.get_size()
+        width, height = exifs.size
         ext = os.path.splitext(file_path_name)[1].lower()
         if ext not in ('.heif', '.heic') and e['orientation'] in (5, 6, 7, 8):
             width, height = height, width  # swap values
@@ -518,6 +520,59 @@ class ImageCache:
         e['tags'] = exifs.get_exif('IPTC Keywords')
         e['title'] = exifs.get_exif('IPTC Object Name')
         e['caption'] = exifs.get_exif('IPTC Caption/Abstract')
+
+        return e
+
+    def __get_video_info(self, file_path_name: str) -> dict:
+        """
+        Extracts metadata information from a video file.
+
+        This method retrieves video metadata using the `get_video_info` function and 
+        organizes it into a dictionary. The metadata includes dimensions, orientation, 
+        and other optional EXIF and IPTC data if available.
+
+        Args:
+            file_path_name (str): The full path to the video file.
+
+        Returns:
+            dict: A dictionary containing the meta keys.
+            Note, the 'key' must match a field in the 'meta' table
+        """
+        meta = get_video_info(file_path_name)
+
+        # Dict to store interesting EXIF data
+        # Note, the 'key' must match a field in the 'meta' table
+        e: dict = {}
+
+        # Orientation is set to 1 by default, as video files rarely have this info.
+        e['orientation'] = 1
+
+        width, height = meta.dimensions
+        e['width'] = width
+        e['height'] = height
+
+        # Attempt to retrieve additional metadata if available in meta
+        e['f_number'] = getattr(meta, 'f_number', None)
+        e['make'] = getattr(meta, 'make', None)
+        e['model'] = getattr(meta, 'model', None)
+        e['exposure_time'] = getattr(meta, 'exposure_time', None)
+        e['iso'] = getattr(meta, 'iso', None)
+        e['focal_length'] = getattr(meta, 'focal_length', None)
+        e['rating'] = getattr(meta, 'rating', None)
+        e['lens'] = getattr(meta, 'lens', None)
+        e['exif_datetime'] = meta.exif_datetime if not None else os.path.getmtime(file_path_name)
+
+        if meta.gps_coords is not None:
+            lat, lon = meta.gps_coords
+        else:
+            lat, lon = None, None
+        e['latitude'] = round(lat, 4) if lat is not None else lat  # TODO sqlite requires (None,) to insert NULL
+        e['longitude'] = round(lon, 4) if lon is not None else lon
+
+        # IPTC
+        e['tags'] = getattr(meta, 'tags', None)
+        e['title'] = getattr(meta, 'title', None)
+        e['caption'] = getattr(meta, 'caption', None)
 
         return e
 

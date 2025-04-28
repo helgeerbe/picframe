@@ -6,6 +6,8 @@ import logging
 import json
 import threading
 import base64
+import io
+from PIL import Image
 
 try:
     from http.server import BaseHTTPRequestHandler, HTTPServer  # py3
@@ -20,13 +22,30 @@ except ImportError:
     register_heif_opener = None
 
 EXTENSIONS = [".jpg", ".jpeg", ".png"]
+EXTENSION_TO_MIMETYPE = {
+    # Videos
+    '.mp4': 'video/mp4',
+    '.mkv': 'video/x-matroska',
+    '.flv': 'video/x-flv',
+    '.mov': 'video/quicktime',
+    '.avi': 'video/x-msvideo',
+    '.webm': 'video/webm',
+    '.hevc': 'video/mp4',  # HEVC usually wrapped in MP4 container
+
+    # Images
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png'
+}
 if register_heif_opener is not None:
     EXTENSIONS += [".heif", ".heic"]
-
+    EXTENSION_TO_MIMETYPE.update({
+        '.heif': 'image/heif',
+        '.heic': 'image/heic'
+    })
 
 def heif_to_jpg(fname):
     try:
-        from PIL import Image
         try:
             from pi_heif import register_heif_opener
             register_heif_opener()
@@ -36,12 +55,37 @@ def heif_to_jpg(fname):
         image = Image.open(fname)
         if image.mode not in ("RGB", "RGBA"):
             image = image.convert("RGB")
-        image.save("/dev/shm/temp.jpg")  # default 75% quality
-        return "/dev/shm/temp.jpg"
+        buf = io.BytesIO()
+        image.save(buf, format="JPEG")  # default 75% quality
+        buf.seek(0)
+        return buf.read()
     except Exception:
         logger = logging.getLogger("interface_http.heif_to_jpg")
         logger.warning("Failed attempt to convert %s \n** Have you installed pi_heif? **", fname)
-        return ""  # this will not render as a page and will generate error TODO serve specific page with explicit error
+        return b""  # this will not render as a page and will generate error TODO serve specific page with explicit error
+
+
+def frame_to_jpg(fname):
+    logger = logging.getLogger("interface_http.frame_to_jpg")
+    try:
+        from picframe.video_streamer import VideoFrameExtractor
+
+        extractor = VideoFrameExtractor(fname, 1, 1, fit_display=False)
+        image = extractor.get_first_frame_as_image()
+        if image is None:
+            logger.warning("Failed to extract frames from %s \n** Have you installed ffmpeg? **", fname)
+            return b""
+
+        if image.mode not in ("RGB", "RGBA"):
+            image = image.convert("RGB")
+        buf = io.BytesIO()
+        image.save(buf, format="JPEG")  # default 75% quality
+        buf.seek(0)
+        return buf.read()
+    except Exception:
+        logger.warning("Failed attempt to convert %s \n** Have you installed ffmpeg? **", fname)
+        return b""  # this will not render as a page and will generate error TODO serve specific page with explicit error
+
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -82,27 +126,53 @@ class RequestHandler(BaseHTTPRequestHandler):
                 else:
                     html_page = "index.html"
                 _, extension = os.path.splitext(html_page)
-                if html_page == "current_image" or extension.lower() in EXTENSIONS:
+                if extension not in [".html", ".js", ".css"]:
                     # NB homeassistant needs to pass url ending in an image extension
                     # in order to trigger streaming whatever is the currently showing image
-                    content_type = "image"
-                    page = self.server._controller.get_current_path()
-                    _, extension = os.path.splitext(page)  # as current_image may be heic
-                    if extension.lower() in ('.heic', '.heif'):
-                        page = heif_to_jpg(page)
+                    if html_page in ["current_image", "current_image_original"]:
+                        page = self.server._controller.get_current_path()
+                    else:
+                        page = os.path.join(self.server._pic_dir, html_page)
+                    extension = os.path.splitext(page)[1].lower()
+                    content_type = EXTENSION_TO_MIMETYPE.get(extension, 'application/octet-stream')
+                    if html_page != "current_image_original":
+                        from picframe.video_streamer import VIDEO_EXTENSIONS
+                        if extension in ('.heic', '.heif'):
+                            # as current_image may be heic
+                            page_bytes = heif_to_jpg(page)
+                            content_type = EXTENSION_TO_MIMETYPE['.jpg']
+                            is_bytes = True
+                        elif extension in VIDEO_EXTENSIONS:
+                            # as current_image may be video
+                            page_bytes = frame_to_jpg(page)
+                            content_type = EXTENSION_TO_MIMETYPE['.jpg']
+                            is_bytes = True
+                        else:
+                            is_bytes = False
+                    else:
+                        is_bytes = False
                 else:
                     page = os.path.join(self.server._html_path, html_page)
                     content_type = "text/html"
+                    is_bytes = False
                 page = urlparse.unquote(page)
-                if os.path.isfile(page):
+                if (not is_bytes and os.path.isfile(page)) or is_bytes:
                     self.send_response(200)
                     self.send_header('Content-type', content_type)
+                    filename = os.path.basename(page)
+                    if is_bytes:
+                        filename += ".jpg"
+                    filename_encoded = urlparse.quote(filename)
+                    self.send_header('Content-Disposition', f'inline; filename="{filename}"; filename*=utf-8\'\'{filename_encoded}')
                     # TODO check if html or js - in which case application/javascript
                     # really should filter out attempts to render all other file types (jpg etc?)
                     self.end_headers()
-                    with open(page, "rb") as f:
-                        page_bytes = f.read()
+                    if is_bytes:
                         self.wfile.write(page_bytes)
+                    else:
+                        with open(page, "rb") as f:
+                            page_bytes = f.read()
+                            self.wfile.write(page_bytes)
                     self.connection.close()
                     page_ok = True
             else:  # server type request - get or set info
