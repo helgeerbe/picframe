@@ -4,8 +4,7 @@ import time
 import logging
 import threading
 from picframe import get_image_meta
-from .video_metadata import VideoMetadata
-from picframe.video_streamer import VIDEO_EXTENSIONS, VideoFrameExtractor, get_video_info
+from picframe.video_streamer import VIDEO_EXTENSIONS, get_video_info
 
 
 class ImageCache:
@@ -524,30 +523,44 @@ class ImageCache:
 
         return e
 
-    def __get_video_info(self, file_path_name):
+    def __get_video_info(self, file_path_name: str) -> dict:
+        """
+        Extracts metadata information from a video file.
+
+        This method retrieves video metadata using the `get_video_info` function and 
+        organizes it into a dictionary. The metadata includes dimensions, orientation, 
+        and other optional EXIF and IPTC data if available.
+
+        Args:
+            file_path_name (str): The full path to the video file.
+
+        Returns:
+            dict: A dictionary containing the meta keys.
+            Note, the 'key' must match a field in the 'meta' table
+        """
         meta = get_video_info(file_path_name)
 
         # Dict to store interesting EXIF data
         # Note, the 'key' must match a field in the 'meta' table
-        e = {}
+        e: dict = {}
 
-        # e['orientation'] = exifs.get_orientation()
+        # Orientation is set to 1 by default, as video files rarely have this info.
+        e['orientation'] = 1
 
         width, height = meta.dimensions
+        e['width'] = width
+        e['height'] = height
 
-        # e['f_number'] = exifs.get_exif('EXIF FNumber')
-        # e['make'] = exifs.get_exif('Image Make')
-        # e['model'] = exifs.get_exif('Image Model')
-        # e['exposure_time'] = exifs.get_exif('EXIF ExposureTime')
-        # e['iso'] = exifs.get_exif('EXIF ISOSpeedRatings')
-        # e['focal_length'] = exifs.get_exif('EXIF FocalLength')
-        # e['rating'] = exifs.get_exif('Image Rating')
-        # e['lens'] = exifs.get_exif('EXIF LensModel')
-        e['exif_datetime'] = meta.exif_datetime
- 
-        # If we still don't have a date/time, just use the file's modificaiton time
-        if e['exif_datetime'] is None:
-            e['exif_datetime'] = os.path.getmtime(file_path_name)
+        # Attempt to retrieve additional metadata if available in meta
+        e['f_number'] = getattr(meta, 'f_number', None)
+        e['make'] = getattr(meta, 'make', None)
+        e['model'] = getattr(meta, 'model', None)
+        e['exposure_time'] = getattr(meta, 'exposure_time', None)
+        e['iso'] = getattr(meta, 'iso', None)
+        e['focal_length'] = getattr(meta, 'focal_length', None)
+        e['rating'] = getattr(meta, 'rating', None)
+        e['lens'] = getattr(meta, 'lens', None)
+        e['exif_datetime'] = meta.exif_datetime if not None else os.path.getmtime(file_path_name)
 
         if meta.gps_coords is not None:
             lat, lon = meta.gps_coords
@@ -557,9 +570,9 @@ class ImageCache:
         e['longitude'] = round(lon, 4) if lon is not None else lon
 
         # IPTC
-        # e['tags'] = exifs.get_exif('IPTC Keywords')
-        e['title'] = meta.title
-        e['caption'] = meta.caption
+        e['tags'] = getattr(meta, 'tags', None)
+        e['title'] = getattr(meta, 'title', None)
+        e['caption'] = getattr(meta, 'caption', None)
 
         return e
 

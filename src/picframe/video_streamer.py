@@ -22,17 +22,18 @@ Dependencies:
 - subprocess: For running external commands (FFmpeg and FFprobe).
 """
 import sys
-import logging
-import os
 from typing import Optional, Tuple
-import time
 from datetime import datetime
-import subprocess
 import json
+import logging
+import subprocess
+import os
+import time
 import numpy as np
 import vlc  # type: ignore
 import sdl2  # type: ignore
 from PIL import Image
+
 from .video_metadata import VideoMetadata
 
 VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
@@ -49,8 +50,12 @@ def get_video_info(video_path: str) -> VideoMetadata:
             "-select_streams", "v:0",
             "-show_entries", "stream=width,height,duration",
             "-show_entries", "stream_side_data=rotation",
-            "-show_entries", "format_tags=title,description,comment,caption,creation_time,location,location-eng,com.apple.quicktime.location.ISO6709",
+            "-show_entries", "format_tags=title,description,comment,caption,creation_time,location",
+            "-show_entries", "location-eng,com.apple.quicktime.location.ISO6709",
+            "-show_entries", "format_tags=com.apple.quicktime.make,com.apple.quicktime.model",
             "-show_entries", "format_tags=com.android.version",
+            # Add more show_entries if needed for extra fields
+            "-show_entries", "stream_tags=make,model,lens,iso_speed,exposure_time,f_number,focal_length,rating",
             "-of", "json",
             video_path
         ]
@@ -72,16 +77,15 @@ def get_video_info(video_path: str) -> VideoMetadata:
 
         # Get metadata from format tags
         tags = info.get("format", {}).get("tags", {})
+        stream_tags = stream.get("tags", {})
 
         # Extract metadata fields
         title = tags.get("title")
-        
-        # Try different fields that might contain description
         caption = (
             tags.get("caption") or
             tags.get("description") or
             tags.get("comment") or
-            tags.get("com.apple.quicktime.description") 
+            tags.get("com.apple.quicktime.description")
         )
 
         # Extract creation date
@@ -107,8 +111,6 @@ def get_video_info(video_path: str) -> VideoMetadata:
 
         # Extract GPS coordinates
         gps_coords = None
-
-        # Try different location formats
         loc_str = (
             tags.get("location") or
             tags.get("location-eng") or
@@ -127,6 +129,25 @@ def get_video_info(video_path: str) -> VideoMetadata:
             except ValueError:
                 logger.warning("Could not parse GPS coordinates: %s", loc_str)
 
+        # --- Additional fields extraction ---
+        # Try to extract from stream_tags, fallback to None if not present
+        f_number = stream_tags.get("f_number")
+        make = (
+            stream_tags.get("make") or
+            tags.get("com.apple.quicktime.make")
+        )
+        model = (
+            stream_tags.get("model") or
+            tags.get("com.apple.quicktime.model")
+        )
+        lens = stream_tags.get("lens")
+        iso = stream_tags.get("iso_speed")
+        exposure_time = stream_tags.get("exposure_time")
+        focal_length = stream_tags.get("focal_length")
+        rating = stream_tags.get("rating")
+        # tags field (IPTC) is not standard in video, but try to get from format tags
+        iptc_tags = tags.get("keywords") or tags.get("tags")
+
         metadata = VideoMetadata(
             width=width,
             height=height,
@@ -136,6 +157,15 @@ def get_video_info(video_path: str) -> VideoMetadata:
             caption=caption,
             creation_date=creation_date,
             gps_coords=gps_coords,
+            f_number=f_number,
+            make=make,
+            model=model,
+            exposure_time=exposure_time,
+            iso=iso,
+            focal_length=focal_length,
+            rating=rating,
+            lens=lens,
+            tags=iptc_tags,
         )
 
         elapsed = time.time() - start_time
@@ -147,7 +177,16 @@ def get_video_info(video_path: str) -> VideoMetadata:
             'title': metadata.title,
             'caption': metadata.caption,
             'creation_date': metadata.creation_date,
-            'gps': metadata.gps_coords
+            'gps': metadata.gps_coords,
+            'f_number': metadata.f_number,
+            'make': metadata.make,
+            'model': metadata.model,
+            'lens': metadata.lens,
+            'iso': metadata.iso,
+            'exposure_time': metadata.exposure_time,
+            'focal_length': metadata.focal_length,
+            'rating': metadata.rating,
+            'tags': metadata.tags,
         })
         return metadata
     except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
@@ -196,7 +235,6 @@ class VideoFrameExtractor:
         self.fit_display = fit_display
         self.logger = logging.getLogger("VideoFrameExtractor")
         self.logger.setLevel(logging.DEBUG)  # Set logging level to DEBUG
-
 
     def _scale_frame(self, frame: Image.Image) -> Image.Image:
         """
@@ -307,7 +345,8 @@ class VideoFrameExtractor:
     def get_first_and_last_frames(self) -> Optional[Tuple[Image.Image, Image.Image]]:
         """Retrieve the first and last frames of the video as Pillow Image objects."""
         start_time = time.time()
-        metadata = get_video_info(self.video_path)
+        # TODO: to avoid double call we shoud add specific video metadata to db
+        metadata = get_video_info(self.video_path) 
         if metadata.width == 0 or metadata.height == 0:
             self.logger.error("Error: Invalid video dimensions.")
             return None
