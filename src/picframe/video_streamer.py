@@ -22,7 +22,8 @@ Dependencies:
 - subprocess: For running external commands (FFmpeg and FFprobe).
 """
 import sys
-from typing import Optional, Tuple
+import threading
+from typing import Optional, Tuple, cast
 from datetime import datetime
 import json
 import logging
@@ -37,6 +38,8 @@ from PIL import Image
 from .video_metadata import VideoMetadata
 
 VIDEO_EXTENSIONS = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc']
+
+_image_file_lock = threading.Lock()
 
 
 def get_video_info(video_path: str) -> VideoMetadata:
@@ -343,10 +346,28 @@ class VideoFrameExtractor:
             return None
 
     def get_first_and_last_frames(self) -> Optional[Tuple[Image.Image, Image.Image]]:
-        """Retrieve the first and last frames of the video as Pillow Image objects."""
-        start_time = time.time()
-        # TODO: to avoid double call we shoud add specific video metadata to db
-        metadata = get_video_info(self.video_path) 
+        """Retrieve the first and last frames of the video as Pillow Image objects.
+        Save/load them as .1.frame and .2.frame JPEGs next to the video file.
+        """
+        base, _ = os.path.splitext(self.video_path)
+        first_path = base + ".1.frame"
+        last_path = base + ".2.frame"
+
+        # Attempt to load the frames from the disk
+        if os.path.exists(first_path) and os.path.exists(last_path):
+            try:
+                with _image_file_lock:
+                    first_image = cast(Image.Image, Image.open(first_path))
+                    last_image = cast(Image.Image, Image.open(last_path))
+                first_image = self._process_video_frame(first_image)
+                last_image = self._process_video_frame(last_image)
+                return first_image, last_image
+            except (OSError, IOError, ValueError) as e:
+                self.logger.warning("Could not load cached frames: %s", e)
+                # Fallback: recreate them
+
+        # If not available, extract and save them
+        metadata = get_video_info(self.video_path)
         if metadata.width == 0 or metadata.height == 0:
             self.logger.error("Error: Invalid video dimensions.")
             return None
@@ -357,60 +378,56 @@ class VideoFrameExtractor:
             self.logger.error("Error: Invalid video rotation.")
             return None
 
-        frame_start_time = time.time()
         first_frame = self._get_frame_as_numpy(metadata.dimensions, 0)
-        first_frame_time = time.time() - frame_start_time
-
-        frame_start_time = time.time()
         last_frame = self._get_frame_as_numpy(metadata.dimensions, metadata.duration - 0.1)
-        last_frame_time = time.time() - frame_start_time
 
         if first_frame is not None and last_frame is not None:
-            total_time = time.time() - start_time
-            self.logger.debug("Frame extraction times for %s:", self.video_path)
-            self.logger.debug("  First frame: %.3f seconds", first_frame_time)
-            self.logger.debug("  Last frame: %.3f seconds", last_frame_time)
-            self.logger.debug("  Total processing: %.3f seconds", total_time)
 
             first_image = Image.fromarray(first_frame)
             last_image = Image.fromarray(last_frame)
+            # save as JPEG
+            try:
+                with _image_file_lock:
+                    first_image.save(first_path, format="JPEG")
+                    last_image.save(last_path, format="JPEG")
+            except (OSError, IOError, ValueError) as e:
+                self.logger.warning("Could not save frames: %s", e)
+
             first_image = self._process_video_frame(first_image)
             last_image = self._process_video_frame(last_image)
             return first_image, last_image
 
-        elapsed = time.time() - start_time
-        self.logger.error("Failed to retrieve frames in %.3f seconds", elapsed)
+        self.logger.error("Failed to retrieve frames seconds")
         return None
 
-    def get_first_frame_as_image(self) -> Optional[Image.Image]:
-        """Retrieve the first frame of the video as unscalled Pillow Image objects."""
-        start_time = time.time()
-        # TODO: to avoid double call we shoud add specific video metadata to db
-        metadata = get_video_info(self.video_path) 
-        if metadata.width == 0 or metadata.height == 0:
-            self.logger.error("Error: Invalid video dimensions.")
-            return None
-        if metadata.duration == 0:
-            self.logger.error("Error: Invalid video duration.")
-            return None
-        if metadata.rotation not in [0, 90, -90, 180, -180, 270, -270]:
-            self.logger.error("Error: Invalid video rotation.")
-            return None
+    @staticmethod
+    def get_first_frame_as_image(video_path: str) -> Optional[Image.Image]:
+        """
+        Retrieve the first frame of a video as an unscaled Pillow Image object.
 
-        frame_start_time = time.time()
-        first_frame = self._get_frame_as_numpy(metadata.dimensions, 0)
-        first_frame_time = time.time() - frame_start_time
+        This method attempts to load the first frame of the specified video from a 
+        cached file on disk. If the cached frame exists and can be loaded, it is 
+        returned as a Pillow Image object. Otherwise, the method returns None.
 
-        if first_frame is not None:
-            self.logger.debug("Frame extraction times for %s:", self.video_path)
-            self.logger.debug("  First frame: %.3f seconds", first_frame_time)
-            first_image = Image.fromarray(first_frame)
-            return first_image
+        Args:
+            video_path (str): The file path to the video.
 
-        elapsed = time.time() - start_time
-        self.logger.error("Failed to retrieve first frame in %.3f seconds", elapsed)
+        Returns:
+            Optional[Image.Image]: The first frame of the video as a Pillow Image 
+            object if successful, or None if the frame could not be loaded.
+        """
+        base, _ = os.path.splitext(video_path)
+        path = base + ".1.frame"
+
+        # Attempt to load the frames from the disk
+        if os.path.exists(path):
+            try:
+                with _image_file_lock:
+                    image = cast(Image.Image, Image.open(path))
+                return image
+            except (OSError, IOError, ValueError) as e:
+                logging.getLogger("VideoFrameExtractor").warning("Could not load cached frame: %s", e)
         return None
-
 
 
 class VideoStreamer:
