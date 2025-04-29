@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
+from typing import Optional
 import time
 import os
 import logging
@@ -44,7 +45,27 @@ if register_heif_opener is not None:
         '.heic': 'image/heic'
     })
 
-def heif_to_jpg(fname):
+
+def heif_to_image(fname: str) -> Optional[Image.Image]:
+    """
+    Converts a HEIF image file to a PIL Image object.
+
+    This function attempts to use the `pi_heif` library to register a HEIF opener
+    for handling HEIF image files. If the library is not installed, it logs a warning
+    and skips the conversion.
+
+    Args:
+        fname (str): The file path to the HEIF image.
+
+    Returns:
+        PIL.Image.Image: The converted image as a PIL Image object. If the conversion
+        fails, the function logs a warning and returns None.
+
+    Notes:
+        - The function ensures the image is in "RGB" mode. If the image is not in
+          "RGB" or "RGBA" mode, it will be converted to "RGB".
+        - Ensure the `pi_heif` library is installed to enable HEIF image handling.
+    """
     try:
         try:
             from pi_heif import register_heif_opener
@@ -55,37 +76,52 @@ def heif_to_jpg(fname):
         image = Image.open(fname)
         if image.mode not in ("RGB", "RGBA"):
             image = image.convert("RGB")
-        buf = io.BytesIO()
-        image.save(buf, format="JPEG")  # default 75% quality
-        buf.seek(0)
-        return buf.read()
-    except Exception:
+        return image
+    except (OSError, IOError) as e:
         logger = logging.getLogger("interface_http.heif_to_jpg")
-        logger.warning("Failed attempt to convert %s \n** Have you installed pi_heif? **", fname)
-        return b""  # this will not render as a page and will generate error TODO serve specific page with explicit error
+        logger.warning("Failed attempt to convert %s due to %s \n** Have you installed pi_heif? **", fname, e)
+        return None
 
 
-def frame_to_jpg(fname):
+def frame_to_image(fname: str) -> Optional[Image.Image]:
+    """
+    Converts the first frame of a video file to an image.
+
+    This function attempts to extract the first frame of a video file
+    using the `VideoFrameExtractor` from the `picframe.video_streamer` module.
+    If the extraction is successful, it ensures the image is in RGB mode
+    before returning it. If the extraction fails or an error occurs, it logs
+    a warning and returns either an empty byte string or None.
+
+    Args:
+        fname (str): The file path to the video file.
+
+    Returns:
+        PIL.Image.Image or bytes or None: The extracted image in RGB mode if successful,
+        an empty byte string if the frame extraction fails, or None if an exception occurs.
+
+    Notes:
+        - Ensure that `ffmpeg` is installed and available in the system for
+          `VideoFrameExtractor` to work correctly.
+        - Logs warnings if the frame extraction or conversion fails.
+    """
     logger = logging.getLogger("interface_http.frame_to_jpg")
     try:
         from picframe.video_streamer import VideoFrameExtractor
-
-        extractor = VideoFrameExtractor(fname, 1, 1, fit_display=False)
-        image = extractor.get_first_frame_as_image()
+        image = VideoFrameExtractor.get_first_frame_as_image(fname)
         if image is None:
             logger.warning("Failed to extract frames from %s \n** Have you installed ffmpeg? **", fname)
-            return b""
+            return None
 
         if image.mode not in ("RGB", "RGBA"):
             image = image.convert("RGB")
-        buf = io.BytesIO()
-        image.save(buf, format="JPEG")  # default 75% quality
-        buf.seek(0)
-        return buf.read()
-    except Exception:
-        logger.warning("Failed attempt to convert %s \n** Have you installed ffmpeg? **", fname)
-        return b""  # this will not render as a page and will generate error TODO serve specific page with explicit error
-
+        return image
+    except ImportError:
+        logger.warning("Failed to import required module for converting %s \n** Have you installed ffmpeg? **", fname)
+        return None
+    except (OSError, IOError) as e:
+        logger.warning("Failed attempt to convert %s due to %s \n** Have you installed ffmpeg? **", fname, e)
+        return None
 
 
 class RequestHandler(BaseHTTPRequestHandler):
@@ -127,24 +163,33 @@ class RequestHandler(BaseHTTPRequestHandler):
                     html_page = "index.html"
                 _, extension = os.path.splitext(html_page)
                 if extension not in [".html", ".js", ".css"]:
-                    # NB homeassistant needs to pass url ending in an image extension
-                    # in order to trigger streaming whatever is the currently showing image
-                    if html_page in ["current_image", "current_image_original"]:
-                        page = self.server._controller.get_current_path()
-                    else:
-                        page = os.path.join(self.server._pic_dir, html_page)
+                    page = self.server._controller.get_current_path()
                     extension = os.path.splitext(page)[1].lower()
                     content_type = EXTENSION_TO_MIMETYPE.get(extension, 'application/octet-stream')
                     if html_page != "current_image_original":
                         from picframe.video_streamer import VIDEO_EXTENSIONS
                         if extension in ('.heic', '.heif'):
                             # as current_image may be heic
-                            page_bytes = heif_to_jpg(page)
+                            image = heif_to_image(page)
+                            if image is not None:
+                                buf = io.BytesIO()
+                                image.save(buf, format="JPEG")
+                                buf.seek(0)
+                                page_bytes = buf.read()
+                            else:
+                                page_bytes = b""
                             content_type = EXTENSION_TO_MIMETYPE['.jpg']
                             is_bytes = True
                         elif extension in VIDEO_EXTENSIONS:
                             # as current_image may be video
-                            page_bytes = frame_to_jpg(page)
+                            image = frame_to_image(page)
+                            if image is not None:
+                                buf = io.BytesIO()
+                                image.save(buf, format="JPEG")
+                                buf.seek(0)
+                                page_bytes = buf.read()
+                            else:
+                                page_bytes = b""
                             content_type = EXTENSION_TO_MIMETYPE['.jpg']
                             is_bytes = True
                         else:
