@@ -753,7 +753,7 @@ class ViewerDisplay:
             If True, pauses the video. If False, resumes the video playback.
         """
         if self.__video_streamer is not None:
-            self.__video_streamer.player.set_pause(do_pause)
+            self.__video_streamer.pause(do_pause)
 
     def slideshow_stop(self):
         if self.__video_streamer is not None:
