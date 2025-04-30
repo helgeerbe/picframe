@@ -27,14 +27,16 @@ def main():
     # Initialize SDL2 and create window
     sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO)
     window = sdl2.SDL_CreateWindow(
-        b"Video Player",
+        b"",
         args.x, args.y,
         args.w, args.h,
-        sdl2.SDL_WINDOW_HIDDEN | sdl2.SDL_WINDOW_BORDERLESS
+        sdl2.SDL_WINDOW_HIDDEN | sdl2.SDL_WINDOW_BORDERLESS | sdl2.SDL_WINDOW_FULLSCREEN
     )
     if not window:
         logger.error("Error creating window: %s",sdl2.SDL_GetError().decode('utf-8'))
         return
+    
+    sdl2.SDL_SetWindowFullscreen(window, sdl2.SDL_WINDOW_FULLSCREEN)
     
     # Set window properties
     sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
@@ -51,6 +53,7 @@ def main():
     vlc_args = ['--no-audio']
     instance = vlc.Instance(vlc_args)
     player = instance.media_player_new()
+    player.set_fullscreen(True)
 
     # Set the VLC player to use the SDL2 window
     if sys.platform == "darwin":

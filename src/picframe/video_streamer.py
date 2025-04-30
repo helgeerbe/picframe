@@ -514,6 +514,9 @@ class VideoStreamer:
             return
         self._send_command(f"load {video_path}")
 
+        while not self.is_playing():
+            time.sleep(0.1)
+
     def is_playing(self) -> bool:
         """
         Checks if a video is currently playing.
