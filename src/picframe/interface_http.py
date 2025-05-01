@@ -204,6 +204,8 @@ class RequestHandler(BaseHTTPRequestHandler):
                 if (not is_bytes and os.path.isfile(page)) or is_bytes:
                     self.send_response(200)
                     self.send_header('Content-type', content_type)
+                    file_size = os.path.getsize(page)
+                    self.send_header('Content-Length', str(file_size))
                     filename = os.path.basename(page)
                     if is_bytes:
                         filename += ".jpg"
@@ -215,9 +217,13 @@ class RequestHandler(BaseHTTPRequestHandler):
                     if is_bytes:
                         self.wfile.write(page_bytes)
                     else:
+                        # Stream the file in chunks
                         with open(page, "rb") as f:
-                            page_bytes = f.read()
-                            self.wfile.write(page_bytes)
+                            while True:
+                                chunk = f.read(64 * 1024)  # 64 KB chunks
+                                if not chunk:
+                                    break
+                                self.wfile.write(chunk)
                     self.connection.close()
                     page_ok = True
             else:  # server type request - get or set info
