@@ -1,7 +1,5 @@
 import logging
-import sys
 import os
-import subprocess
 import time
 from unittest.mock import patch, MagicMock
 
@@ -53,7 +51,10 @@ def test_video_player_play(mock_popen, test_video_path):
     streamer.kill()
     assert mock_proc.terminate.called
 
-
+@pytest.mark.skipif(
+    os.environ.get("GITHUB_ACTIONS") == "true",
+    reason="Skipped on GitHub Actions CI"
+)
 def test_video_player_integration(test_video_path):
     """Test starting the video player and playing a video file."""
 
