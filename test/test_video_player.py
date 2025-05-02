@@ -26,10 +26,9 @@ def test_video_player_play(mock_popen, test_video_path):
     mock_proc.stdout = MagicMock()
     # Simulate the player sending state messages
     mock_proc.stdout.__iter__.return_value = iter([
-        "STATE:STOPPED\n",
         "STATE:PLAYING\n",
-        "STATE:STOPPED\n",
         "STATE:ENDED\n"
+        "STATE:STOPPED\n",
     ])
     mock_proc.poll.return_value = None
     mock_popen.return_value = mock_proc
@@ -44,7 +43,6 @@ def test_video_player_play(mock_popen, test_video_path):
     # Check that the correct commands were sent to the player
     calls = [call[0][0] for call in mock_proc.stdin.write.call_args_list]
     assert any("load" in c for c in calls)
-    assert any("play" in c for c in calls)
 
     # Simulate stopping the video
     streamer.stop()
@@ -64,6 +62,7 @@ def test_video_player_integration(test_video_path):
 
     # Create the VideoStreamer and play a video
     streamer = VideoStreamer(0, 0, 320, 240, fit_display=False)
+    assert streamer.player_alive()
     streamer.play(test_video_path)
     time.sleep(3)  # Allow some time for the player to start
     streamer.pause(True)
@@ -72,4 +71,6 @@ def test_video_player_integration(test_video_path):
     streamer.pause(False)
     time.sleep(2)  # Allow some time for the player to start
     streamer.stop()
+    assert streamer.is_playing() is False
     streamer.kill()
+    assert streamer.player_alive() is False

@@ -671,7 +671,7 @@ class ViewerDisplay:
             self.__in_transition = False
             if self.__video_path is not None and tm > self.__name_tm:
                 # start video stream
-                if self.__video_streamer is None:
+                if self.__video_streamer is None or not self.__video_streamer.player_alive:
                     self.__video_streamer = VideoStreamer(
                         self.__display_x, self.__display_y,
                         self.__display.width, self.__display.height,

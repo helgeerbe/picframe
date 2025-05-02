@@ -445,8 +445,7 @@ class VideoStreamer:
         self._is_playing = False
         self._proc_stderr = None
         self._stderr_thread = None
-        self._state_thread = None
-        
+        self._state_thread = None   
 
         # Start the external player process
         cmd = [
@@ -479,6 +478,20 @@ class VideoStreamer:
         if video_path is not None:
             self.play(video_path)
 
+    def player_alive(self) -> bool:
+        """
+        Check if the external player process is still running.
+
+        Returns:
+        --------
+        bool
+            True if the player process is running, False otherwise.
+        """
+        if self._proc is None or self._proc.poll() is not None:
+            self.__logger.error("Player process is not alive.")
+            return False
+        return True
+
     def _send_command(self, command: str) -> None:
         if self._proc_stdin:
             self._proc_stdin.write(command + "\n")
@@ -491,21 +504,25 @@ class VideoStreamer:
             line = line.strip()
             if line == "STATE:PLAYING":
                 self._is_playing = True
-            elif line == "STATE:PAUSED":
-                self._is_playing = True
             elif line == "STATE:ENDED":
                 self._is_playing = False
-            elif line == "STATE:QUIT":
-                self._is_playing = False
-            # ... handle other state messages as needed ...
-    
+
     def _listen_stderr(self):
         if not self._proc_stderr:
             return
         for line in self._proc_stderr:
-            self.__logger.info(f"[player] {line.strip()}")
+            self.__logger.debug("[player] %s", line.strip())
 
     def play(self, video_path: Optional[str]) -> None:
+        """
+        Starts video playback by loading the specified video file.
+
+        Parameters:
+        -----------
+        video_path : Optional[str]
+            The file path to the video to be played. If None or the file does not exist,
+            an error is logged and playback does not start.
+        """
         if video_path is None:
             self.__logger.error("Error: No video path provided.")
             return
@@ -514,7 +531,12 @@ class VideoStreamer:
             return
         self._send_command(f"load {video_path}")
 
+        timeout = 5  # seconds
+        start_time = time.time()
         while not self.is_playing():
+            if time.time() - start_time > timeout:
+                self.__logger.error("Timeout: Video did not start playing within 5 seconds.")
+                break
             time.sleep(0.1)
 
     def is_playing(self) -> bool:
@@ -527,23 +549,29 @@ class VideoStreamer:
             True if the video is playing, False otherwise.
         """
         return self._is_playing
-    
+
     def pause(self, do_pause: bool) -> None:
         """
-        Pauses or resumes video playback by sending the appropriate command to the external player process.
+        Pauses or resumes video playback by sending the appropriate
+        command to the external player process.
         """
         if do_pause:
             self._send_command("pause")
         else:
             self._send_command("resume")
 
-
     def stop(self) -> None:
         """
         Stops video playback by sending a stop command to the external player process.
         """
         self._send_command("stop")
-        self._is_playing = False
+        timeout = 5  # seconds
+        start_time = time.time()
+        while self.is_playing():
+            if time.time() - start_time > timeout:
+                self.__logger.error("Timeout: Video did not stop within 5 seconds.")
+                break
+            time.sleep(0.1)
 
     def kill(self) -> None:
         """

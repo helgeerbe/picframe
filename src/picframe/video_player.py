@@ -1,172 +1,223 @@
+"""
+This module provides a `VideoPlayer` class that manages video playback 
+in a dedicated SDL2 window using VLC.
+"""
 import sys
 import argparse
-import vlc
-import os
-import sdl2
 import ctypes
-import time
 import logging
 import select
+from typing import Optional
+import os
+import vlc  # type: ignore
+import sdl2  # type: ignore
 
 
-def main():
-    # Set up logging
-    logging.basicConfig(level=logging.DEBUG)
-    logger = logging.getLogger("video_player")
-    logger.debug("Starting video player")
 
-    # Parse command line arguments
-    parser = argparse.ArgumentParser()
+class VideoPlayer:
+    """
+    VideoPlayer manages video playback in a dedicated SDL2 window using VLC.
+    It communicates via stdin/stdout for commands and state, and is designed
+    to be controlled by an external process (e.g., VideoStreamer).
+
+    Supported commands (via stdin):
+        - load <path>: Load a video file and start playback
+        - pause: Pause playback
+        - resume: Resume playback 
+        - stop: Stop playback and hide window
+
+    State changes are sent to stdout as:
+        STATE:PLAYING, STATE:ENDED, etc.
+    """
+
+    def __init__(self, x: int, y: int, w: int, h: int, fit_display: bool = False) -> None:
+        self.logger = logging.getLogger("video_player")
+        self.logger.debug("Initializing VideoPlayer")
+        self.window: Optional[ctypes.c_void_p] = None
+        self.player: Optional[vlc.MediaPlayer] = None
+        self.instance: Optional[vlc.Instance] = None
+        self.event = sdl2.SDL_Event()
+        self.last_state: Optional[str] = None
+        self.current_media: Optional[vlc.Media] = None
+        self.x = x
+        self.y = y
+        self.w = w
+        self.h = h
+        self.fit_display = fit_display
+
+    def setup(self) -> bool:
+        """Initialize SDL2, create window, and set up VLC player."""
+        sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO)
+        self.window = sdl2.SDL_CreateWindow(
+            b"Video Player",
+            self.x, self.y,
+            self.w, self.h,
+            sdl2.SDL_WINDOW_HIDDEN | sdl2.SDL_WINDOW_BORDERLESS
+        )
+        if not self.window:
+            self.logger.error("Error creating window: %s", sdl2.SDL_GetError().decode('utf-8'))
+            return False
+
+        sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
+
+        # Get window info for embedding
+        wm_info = sdl2.SDL_SysWMinfo()
+        sdl2.SDL_VERSION(wm_info.version)
+        if not sdl2.SDL_GetWindowWMInfo(self.window, ctypes.byref(wm_info)):
+            self.logger.error("Error: Could not get window information! SDL Error: %s",
+                              sdl2.SDL_GetError().decode('utf-8'))
+            sdl2.SDL_DestroyWindow(self.window)
+            return False
+        if not hasattr(wm_info, 'info'):
+            self.logger.error("Error: wm_info structure does not have 'info' attribute!")
+            sdl2.SDL_DestroyWindow(self.window)
+            return False
+
+        # Initialize VLC
+        vlc_args = ['--no-audio']
+        try:
+            self.instance = vlc.Instance(vlc_args)
+            self.player = self.instance.media_player_new()
+        except Exception as e:  # pylint: disable=broad-except
+            self.logger.error("Failed to initialize VLC instance: %s", e)
+            self.instance = None
+            self.player = None
+            sdl2.SDL_DestroyWindow(self.window)
+            return False
+
+        # Set the VLC player to use the SDL2 window
+        if sys.platform == "darwin":
+            try:
+                if sdl2.SDL_GetWindowWMInfo(self.window, ctypes.byref(wm_info)):
+                    from rubicon.objc import ObjCInstance  # type: ignore  # pylint: disable=import-outside-toplevel
+                    nswindow_ptr = wm_info.info.cocoa.window
+                    nswindow = ObjCInstance(ctypes.c_void_p(nswindow_ptr))
+                    nsview = nswindow.contentView
+                    self.player.set_nsobject(nsview.ptr.value)
+                    self.logger.debug("Set NSView: %s", nsview)
+                else:
+                    self.logger.error("Error: Could not get window information!")
+                    self.player.set_nsobject(None)
+            except Exception as e:  # pylint: disable=broad-except
+                self.logger.error("Could not set NSView: %s", e)
+                self.player.set_nsobject(None)
+        elif sys.platform.startswith("linux"):
+            if wm_info.subsystem == sdl2.SDL_SYSWM_X11:
+                xid = wm_info.info.x11.window
+                self.logger.debug("X11 window ID: %s", xid)
+                self.player.set_xwindow(xid)
+            else:
+                self.logger.error("VLC embedding not supported on: %s", wm_info.subsystem)
+        elif sys.platform == "win32":
+            self.player.set_hwnd(sdl2.SDL_GetWindowID(self.window))
+
+        if self.fit_display:
+            aspect_ratio = f"{self.w}:{self.h}"
+            self.player.video_set_aspect_ratio(aspect_ratio)
+
+        return True
+
+    def _poll_events(self) -> bool:
+        """Poll SDL2 events, return False if quit event is received."""
+        while sdl2.SDL_PollEvent(ctypes.byref(self.event)):
+            if self.event.type == sdl2.SDL_QUIT:
+                return False
+        return True
+
+    def _send_state(self, state: str) -> None:
+        """Send state to stdout only if it changed."""
+        if state != self.last_state:
+            self.logger.info("State changed to: %s", state)
+            print(f"STATE:{state}", flush=True)
+            self.last_state = state
+
+    def run(self) -> None:
+        """Main event loop: handle commands and playback state."""
+        if not self.player:
+            self.logger.error("Player not initialized, cannot run.")
+            return
+        try:
+            while True:
+                self._poll_events()
+                # Check player state
+                state = self.player.get_state()
+                if state in [vlc.State.Ended, vlc.State.Stopped,
+                             vlc.State.Error, vlc.State.NothingSpecial]:
+                    sdl2.SDL_HideWindow(self.window)
+                    self.player.stop()
+                    self.player.set_media(None)
+                    self._send_state("ENDED")
+                if state in [vlc.State.Opening, vlc.State.Playing,
+                             vlc.State.Paused, vlc.State.Buffering]:
+                    sdl2.SDL_ShowWindow(self.window)
+                    self._send_state("PLAYING")
+                # Wait for up to 0.1s for input, but keep polling events
+                rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
+                if rlist:
+                    line = sys.stdin.readline()
+                    if not line:
+                        break
+                    cmd = line.strip().split()
+                    if not cmd:
+                        continue
+                    self._handle_command(cmd)
+        finally:
+            sdl2.SDL_DestroyWindow(self.window)
+            sdl2.SDL_Quit()
+
+    def _handle_command(self, cmd: list[str]) -> None:
+        """Handle a command received from stdin."""
+        if not self.instance or not self.player:
+            self.logger.error("Player not initialized, cannot handle_command.")
+            return
+        if cmd[0] == "load" and len(cmd) > 1:
+            media_path = " ".join(cmd[1:])
+            if os.path.exists(media_path):
+                self.player.stop()
+                self.player.set_media(None)
+                media = self.instance.media_new_path(media_path)
+                self.player.set_media(media)
+                sdl2.SDL_ShowWindow(self.window)
+                self.player.play()
+        elif cmd[0] == "pause":
+            if self.player.get_state() == vlc.State.Playing:
+                self.player.pause()
+        elif cmd[0] == "resume":
+            if self.player.get_state() == vlc.State.Paused:
+                self.player.pause()
+        elif cmd[0] == "stop":
+            sdl2.SDL_HideWindow(self.window)
+            self.player.stop()
+            self.player.set_media(None)
+
+
+def parse_args() -> argparse.Namespace:
+    """
+    Parse command-line arguments for the video player.
+
+    Returns:
+        argparse.Namespace: Parsed arguments including window position,
+        size, and display fitting option.
+    """
+    parser = argparse.ArgumentParser(description="SDL2/VLC Video Player")
     parser.add_argument("--x", type=int, default=0)
     parser.add_argument("--y", type=int, default=0)
     parser.add_argument("--w", type=int, default=640)
     parser.add_argument("--h", type=int, default=480)
     parser.add_argument("--fit_display", action="store_true")
-    args = parser.parse_args()
-
-    # Initialize SDL2 and create window
-    sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO)
-    window = sdl2.SDL_CreateWindow(
-        b"",
-        args.x, args.y,
-        args.w, args.h,
-        sdl2.SDL_WINDOW_HIDDEN | sdl2.SDL_WINDOW_BORDERLESS 
-    )
-    if not window:
-        logger.error("Error creating window: %s",sdl2.SDL_GetError().decode('utf-8'))
-        return
-    
-    # Set window properties
-    sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
-
-    # Get the ACTUAL window info from SDL
-    wm_info = sdl2.SDL_SysWMinfo()
-    sdl2.SDL_VERSION(wm_info.version)
-    if not sdl2.SDL_GetWindowWMInfo(window, ctypes.byref(wm_info)):
-        logger.error("Error: Could not get window information!")
-        sdl2.SDL_DestroyWindow(window)
-        return
-
-    # Initialize VLC
-    vlc_args = ['--no-audio']
-    instance = vlc.Instance(vlc_args)
-    player = instance.media_player_new()
-    # player.set_fullscreen(True)
-
-    # Set the VLC player to use the SDL2 window
-    if sys.platform == "darwin":
-        try:
-            if sdl2.SDL_GetWindowWMInfo(window, ctypes.byref(wm_info)):
-                # Use PyObjC to get the NSView from the NSWindow pointer
-                from rubicon.objc import ObjCInstance
-                nswindow_ptr = wm_info.info.cocoa.window
-                nswindow = ObjCInstance(ctypes.c_void_p(nswindow_ptr))
-                nsview = nswindow.contentView
-                player.set_nsobject(nsview.ptr.value)
-                logger.debug("Set NSView: %s", nsview)
-            else:
-                logger.error("Error: Could not get window information!")
-                player.set_nsobject(None)
-        except Exception as e:
-            logger.error("Could not set NSView: %s", e)
-            player.set_nsobject(None)
-    elif sys.platform.startswith("linux"):
-        if wm_info.subsystem == sdl2.SDL_SYSWM_X11:
-            xid = wm_info.info.x11.window
-            logger.debug("X11 window ID: %s", xid)
-            player.set_xwindow(xid)
-        else:
-            logger.error("VLC embedding not supported on: %s", wm_info.subsystem)
-    elif sys.platform == "win32":
-        player.set_hwnd(sdl2.SDL_GetWindowID(window))
-
-    # Set aspect ratio if fit_display is requested
-    if args.fit_display:
-        aspect_ratio = f"{args.w}:{args.h}"
-        player.video_set_aspect_ratio(aspect_ratio)
-
-    event = sdl2.SDL_Event()
-
-    def poll_events():
-        while sdl2.SDL_PollEvent(ctypes.byref(event)):
-            if event.type == sdl2.SDL_QUIT:
-                return False
-        return True
-
-    last_state = None  # Track the last state sent
-
-    def send_state(state):
-        nonlocal last_state
-        if state != last_state:
-            logger.info(f"State changed to: {state}")
-            print(f"STATE:{state}", flush=True)
-            last_state = state
+    return parser.parse_args()
 
 
-    # media_path = "test/videos/SampleVideo_720x480_1mb.mp4"
-    # media = instance.media_new_path(media_path)
-    # player.set_media(media)
-    # sdl2.SDL_ShowWindow(window)
-    # player.play()
-
-    # while True:
-    #     poll_events()
-    #     if player.get_state() == vlc.State.Ended:
-    #         send_state("ENDED")
-    #         break
-    # return
-
-    while True:
-        poll_events()
-        # Also check player state
-        state = player.get_state()
-        if state == vlc.State.Ended:
-            sdl2.SDL_HideWindow(window)
-            player.stop()
-            player.set_media(None) 
-            send_state("ENDED")
-        if state in [vlc.State.Opening, vlc.State.Playing,
-                     vlc.State.Paused, vlc.State.Buffering]:
-            sdl2.SDL_ShowWindow(window)
-            send_state("PLAYING")
-        # Wait for up to 0.1s for input, but keep polling events
-        rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
-        if rlist:
-            line = sys.stdin.readline()
-            if not line:
-                break
-            cmd = line.strip().split()
-            if not cmd:
-                continue
-            if cmd[0] == "load" and len(cmd) > 1:
-                media_path = " ".join(cmd[1:])
-                if os.path.exists(media_path):
-                    player.stop()
-                    player.set_media(None) 
-                    media = instance.media_new_path(media_path)
-                    player.set_media(media)
-                    sdl2.SDL_ShowWindow(window)
-                    player.play()
-            elif cmd[0] == "pause":
-                player.pause()
-            elif cmd[0] == "resume":
-                if player.get_state() == vlc.State.Paused:
-                    player.pause() 
-            elif cmd[0] == "stop":
-                sdl2.SDL_HideWindow(window)
-                player.stop()
-                player.set_media(None) 
-                send_state("ENDED")
-            elif cmd[0] == "quit":
-                sdl2.SDL_HideWindow(window)
-                player.stop()
-                player.set_media(None) 
-                send_state("QUIT")
-                break
-            # Optionally, add more commands as needed
-    # Cleanup SDL2
-    sdl2.SDL_DestroyWindow(window)
-    sdl2.SDL_Quit()
+def main() -> None:
+    """
+    Entry point for the video player application.
+    Initializes logging, parses arguments, sets up the video player, and starts the event loop.
+    """
+    logging.basicConfig(level=logging.DEBUG)
+    args = parse_args()
+    player = VideoPlayer(args.x, args.y, args.w, args.h, args.fit_display)
+    if player.setup():
+        player.run()
 
 
 if __name__ == "__main__":
