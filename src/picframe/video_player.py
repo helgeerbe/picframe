@@ -148,7 +148,11 @@ class VideoPlayer:
                     self.player.set_media(None)
                     self._send_state("ENDED")
                 elif state in [vlc.State.Playing, vlc.State.Paused]:
-                    sdl2.SDL_ShowWindow(self.window)
+                    # Show window only if not already visible
+                    if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
+                        sdl2.SDL_ShowWindow(self.window)
+                        # Wait until the window is actually shown
+                        sdl2.SDL_PumpEvents()
                     self._send_state("PLAYING")
                 elif state in [vlc.State.Opening,
                                vlc.State.Buffering,
