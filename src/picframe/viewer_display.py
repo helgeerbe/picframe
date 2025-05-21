@@ -597,6 +597,10 @@ class ViewerDisplay:
         if self.is_video_playing():
             self.pause_video(paused)
             video_playing = True
+            if self.__last_frame_tex is not None:  # first time through
+                self.__sfg = self.__last_frame_tex
+                self.__last_frame_tex = None
+                self.__slide.set_textures([self.__sfg, self.__sbg])
             self.__slide.draw()
             return (loop_running, False, video_playing)  # now returns tuple with skip image flag and video_time added
 
@@ -680,10 +684,6 @@ class ViewerDisplay:
                 else:
                     self.__video_streamer.play(self.__video_path)
                 self.__video_path = None
-                if self.__last_frame_tex is not None:  # first time through
-                    self.__sfg = self.__last_frame_tex
-                    self.__last_frame_tex = None
-                    self.__slide.set_textures([self.__sfg, self.__sbg])
 
         skip_image = False  # can add possible reasons to skip image below here
 
