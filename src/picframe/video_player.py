@@ -138,18 +138,22 @@ class VideoPlayer:
         try:
             while True:
                 self._poll_events()
-                # Check player state
+                # Check player state ignore opening and buffering
+                # to avoid flickering
                 state = self.player.get_state()
                 if state in [vlc.State.Ended, vlc.State.Stopped,
-                             vlc.State.Error, vlc.State.NothingSpecial]:
+                             vlc.State.Error]:
                     sdl2.SDL_HideWindow(self.window)
                     self.player.stop()
                     self.player.set_media(None)
                     self._send_state("ENDED")
-                if state in [vlc.State.Opening, vlc.State.Playing,
-                             vlc.State.Paused, vlc.State.Buffering]:
+                elif state in [vlc.State.Playing, vlc.State.Paused]:
                     sdl2.SDL_ShowWindow(self.window)
                     self._send_state("PLAYING")
+                elif state in [vlc.State.Opening,
+                               vlc.State.Buffering,
+                               vlc.State.NothingSpecial]:
+                    sdl2.SDL_HideWindow(self.window)
                 # Wait for up to 0.1s for input, but keep polling events
                 rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
                 if rlist:
