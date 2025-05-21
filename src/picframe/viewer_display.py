@@ -597,7 +597,6 @@ class ViewerDisplay:
         if self.is_video_playing():
             self.pause_video(paused)
             video_playing = True
-            time.sleep(0.5)
             self.__slide.draw()
             return (loop_running, False, video_playing)  # now returns tuple with skip image flag and video_time added
 
