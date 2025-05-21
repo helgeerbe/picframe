@@ -1,5 +1,5 @@
 """
-This module provides a `VideoPlayer` class that manages video playback 
+This module provides a `VideoPlayer` class that manages video playback
 in a dedicated SDL2 window using VLC.
 """
 import sys
@@ -13,7 +13,6 @@ import vlc  # type: ignore
 import sdl2  # type: ignore
 
 
-
 class VideoPlayer:
     """
     VideoPlayer manages video playback in a dedicated SDL2 window using VLC.
@@ -23,7 +22,7 @@ class VideoPlayer:
     Supported commands (via stdin):
         - load <path>: Load a video file and start playback
         - pause: Pause playback
-        - resume: Resume playback 
+        - resume: Resume playback
         - stop: Stop playback and hide window
 
     State changes are sent to stdout as:
