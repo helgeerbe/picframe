@@ -3,6 +3,7 @@ This module provides a `VideoPlayer` class that manages video playback
 in a dedicated SDL2 window using VLC.
 """
 import sys
+import time
 import argparse
 import ctypes
 import logging
@@ -152,7 +153,17 @@ class VideoPlayer:
                     if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_ShowWindow(self.window)
                         # Wait until the window is actually shown
-                        sdl2.SDL_PumpEvents()
+                        shown = False
+                        event = sdl2.SDL_Event()
+                        start_time = time.time()
+                        timeout = 2  # seconds
+                        while not shown and (time.time() - start_time) < timeout:
+                            while sdl2.SDL_PollEvent(ctypes.byref(event)) != 0:
+                                if (event.type == sdl2.SDL_WINDOWEVENT and
+                                        event.window.event == sdl2.SDL_WINDOWEVENT_SHOWN):
+                                    shown = True
+                                    break
+                            time.sleep(0.01)
                     self._send_state("PLAYING")
                 elif state in [vlc.State.Opening,
                                vlc.State.Buffering,
