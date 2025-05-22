@@ -494,8 +494,12 @@ class VideoStreamer:
 
     def _send_command(self, command: str) -> None:
         if self._proc_stdin:
-            self._proc_stdin.write(command + "\n")
-            self._proc_stdin.flush()
+            try:
+                self._proc_stdin.write(command + "\n")
+                self._proc_stdin.flush()
+            except (BrokenPipeError, OSError) as e:
+                self.__logger.error("Player process is not alive: %s", e)
+                self._proc_stdin = None
 
     def _listen_state(self):
         if not self._proc_stdout:

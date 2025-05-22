@@ -156,7 +156,7 @@ class VideoPlayer:
                         shown = False
                         event = sdl2.SDL_Event()
                         start_time = time.time()
-                        timeout = 2  # seconds
+                        timeout = 4  # seconds
                         while not shown and (time.time() - start_time) < timeout:
                             while sdl2.SDL_PollEvent(ctypes.byref(event)) != 0:
                                 if (event.type == sdl2.SDL_WINDOWEVENT and
@@ -164,6 +164,10 @@ class VideoPlayer:
                                     shown = True
                                     break
                             time.sleep(0.01)
+                        if (time.time() - start_time) >= timeout:
+                            self.logger.warning("Player window not shown within %d seconds.", timeout)
+                        else:
+                            time.sleep(0.05)  # Give the compositor a moment to actually draw the window
                     self._send_state("PLAYING")
                 elif state in [vlc.State.Opening,
                                vlc.State.Buffering,
