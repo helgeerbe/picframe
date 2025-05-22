@@ -144,7 +144,8 @@ class VideoPlayer:
                 state = self.player.get_state()
                 if state in [vlc.State.Ended, vlc.State.Stopped,
                              vlc.State.Error]:
-                    sdl2.SDL_HideWindow(self.window)
+                    if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
+                        sdl2.SDL_HideWindow(self.window)
                     self.player.stop()
                     self.player.set_media(None)
                     self._send_state("ENDED")
@@ -167,12 +168,14 @@ class VideoPlayer:
                         if (time.time() - start_time) >= timeout:
                             self.logger.warning("Player window not shown within %d seconds.", timeout)
                         else:
-                            time.sleep(0.05)  # Give the compositor a moment to actually draw the window
+                            time.sleep(0.1)  # Give the compositor a moment to actually draw the window
                     self._send_state("PLAYING")
                 elif state in [vlc.State.Opening,
                                vlc.State.Buffering,
                                vlc.State.NothingSpecial]:
-                    sdl2.SDL_HideWindow(self.window)
+                    if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
+                        sdl2.SDL_HideWindow(self.window)
+                    self._send_state("ENDED")
                 # Wait for up to 0.1s for input, but keep polling events
                 rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
                 if rlist:
@@ -208,7 +211,8 @@ class VideoPlayer:
             if self.player.get_state() == vlc.State.Paused:
                 self.player.pause()
         elif cmd[0] == "stop":
-            sdl2.SDL_HideWindow(self.window)
+            if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
+                sdl2.SDL_HideWindow(self.window)
             self.player.stop()
             self.player.set_media(None)
 
