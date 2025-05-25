@@ -573,7 +573,9 @@ class VideoStreamer:
         start_time = time.time()
         while self.is_playing():
             if time.time() - start_time > timeout:
-                self.__logger.error("Timeout: Video did not stop within 5 seconds.")
+                self.__logger.error("Timeout: Video did not stop within 5 seconds. Kill process.")
+                self.__logger.debug("Killing player process due to timeout.")
+                self.kill
                 break
             time.sleep(0.1)
 
