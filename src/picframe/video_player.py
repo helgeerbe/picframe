@@ -154,7 +154,7 @@ class VideoPlayer:
                     if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_ShowWindow(self.window)
                         sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
-                        sdl2.SDL_WarpMouseInWindow(self.window, self.w, self.h)
+                        sdl2.SDL_WarpMouseInWindow(self.window, self.w - 1, self.h - 1)
                         # Wait until the window is actually shown
                         shown = False
                         event = sdl2.SDL_Event()
