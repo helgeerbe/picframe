@@ -94,7 +94,6 @@ class ViewerDisplay:
         self.__video_path = None  # path to video file
         self.__next_tm = 0.0
         self.__name_tm = 0.0
-        self.__video_tm = 0.0  # time when video started playing
         self.__in_transition = False
         self.__matter = None
         self.__prev_clock_time = None
@@ -598,7 +597,7 @@ class ViewerDisplay:
         if self.is_video_playing():
             self.pause_video(paused)
             video_playing = True
-            if self.__last_frame_tex is not None and (time.time() - self.__video_tm) > 2:  # first time through
+            if self.__last_frame_tex is not None:  # first time through
                 self.__sfg = self.__last_frame_tex
                 self.__last_frame_tex = None
                 self.__slide.set_textures([self.__sfg, self.__sbg])
@@ -684,7 +683,6 @@ class ViewerDisplay:
                     )
                 else:
                     self.__video_streamer.play(self.__video_path)
-                self.__video_tm = tm
                 self.__video_path = None
 
         skip_image = False  # can add possible reasons to skip image below here
