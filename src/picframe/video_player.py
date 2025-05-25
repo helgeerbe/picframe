@@ -153,6 +153,7 @@ class VideoPlayer:
                     # Show window only if not already visible
                     if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_ShowWindow(self.window)
+                        sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
                         # Wait until the window is actually shown
                         shown = False
                         event = sdl2.SDL_Event()
@@ -202,7 +203,6 @@ class VideoPlayer:
                 self.player.set_media(None)
                 media = self.instance.media_new_path(media_path)
                 self.player.set_media(media)
-                sdl2.SDL_ShowWindow(self.window)
                 self.player.play()
         elif cmd[0] == "pause":
             if self.player.get_state() == vlc.State.Playing:
