@@ -58,11 +58,6 @@ class VideoPlayer:
             self.logger.error("Error creating window: %s", sdl2.SDL_GetError().decode('utf-8'))
             return False
 
-        # Create a blank cursor and set it
-        blank = sdl2.SDL_CreateCursor(
-            (ctypes.c_uint8 * 8)(), (ctypes.c_uint8 * 8)(), 8, 8, 0, 0
-        )
-        sdl2.SDL_SetCursor(blank)
         sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
 
         # Get window info for embedding
@@ -159,6 +154,7 @@ class VideoPlayer:
                     if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_ShowWindow(self.window)
                         sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
+                        sdl2.SDL_WarpMouseInWindow(self.window, self.w, self.h)
                         # Wait until the window is actually shown
                         shown = False
                         event = sdl2.SDL_Event()
