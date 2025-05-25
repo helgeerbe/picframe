@@ -150,14 +150,11 @@ class VideoPlayer:
                     self.player.set_media(None)
                     self._send_state("ENDED")
                 elif state in [vlc.State.Playing, vlc.State.Paused]:
-                    visible = sdl2.SDL_ShowCursor(sdl2.SDL_QUERY)
-                    if visible == sdl2.SDL_ENABLE:
-                        self.logger.warning("Cursor is visible")
-                        sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
                     # Show window only if not already visible
                     if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_ShowWindow(self.window)
                         sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
+                        sdl2.SDL_WarpMouseInWindow(self.window, 0, 0)
                         # Wait until the window is actually shown
                         shown = False
                         event = sdl2.SDL_Event()
