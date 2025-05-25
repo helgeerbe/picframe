@@ -170,7 +170,7 @@ class VideoPlayer:
                         else:
                             time.sleep(0.1)  # Give the compositor a moment to actually draw the window
                     sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
-                    sdl2.SDL_WarpMouseInWindow(self.window, 0, 0)
+                    sdl2.SDL_WarpMouseInWindow(self.window, self.w - 1, self.h - 1)
                     self._send_state("PLAYING")
                 elif state in [vlc.State.Opening,
                                vlc.State.Buffering,
