@@ -153,6 +153,7 @@ class VideoPlayer:
                     # Show window only if not already visible
                     if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_ShowWindow(self.window)
+                        sdl2.SDL_RaiseWindow(self.window)
                         sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
                         # Wait until the window is actually shown
                         shown = False
