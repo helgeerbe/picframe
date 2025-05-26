@@ -558,8 +558,8 @@ class VideoStreamer:
         bool
             True if the video is playing, False otherwise.
         """
-        if self.player_alive():
-            return self._is_playing
+        if self._is_playing and self.player_alive():
+            return True
         return False
 
     def pause(self, do_pause: bool) -> None:
