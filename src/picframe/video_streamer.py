@@ -488,7 +488,11 @@ class VideoStreamer:
             True if the player process is running, False otherwise.
         """
         if self._proc is None or self._proc.poll() is not None:
-            self.__logger.error("Player process is not alive.")
+            self.__logger.debug("Player process is not alive.")
+            self._proc = None
+            self._proc_stdin = None
+            self._proc_stdout = None
+            self._is_playing = False
             return False
         return True
 
@@ -535,11 +539,13 @@ class VideoStreamer:
             return
         self._send_command(f"load {video_path}")
 
-        timeout = 5  # seconds
+        timeout = 10  # seconds
         start_time = time.time()
         while not self.is_playing():
             if time.time() - start_time > timeout:
-                self.__logger.error("Timeout: Video did not start playing within 5 seconds.")
+                self.__logger.error("Timeout: Video did not start playing within %d seconds. Kill player.", timeout)
+                self.__logger.debug("Killing player process due to timeout.")
+                self.kill()
                 break
             time.sleep(0.1)
 
@@ -552,7 +558,9 @@ class VideoStreamer:
         bool
             True if the video is playing, False otherwise.
         """
-        return self._is_playing
+        if self.player_alive():
+            return self._is_playing
+        return False
 
     def pause(self, do_pause: bool) -> None:
         """
@@ -573,9 +581,9 @@ class VideoStreamer:
         start_time = time.time()
         while self.is_playing():
             if time.time() - start_time > timeout:
-                self.__logger.error("Timeout: Video did not stop within 5 seconds. Kill process.")
+                self.__logger.error("Timeout: Video did not stop within %d seconds. Kill player.", timeout)
                 self.__logger.debug("Killing player process due to timeout.")
-                self.kill
+                self.kill()
                 break
             time.sleep(0.1)
 
@@ -583,7 +591,7 @@ class VideoStreamer:
         """
         Stops video playback and terminates the external player process.
         """
-        self.stop()
+        self.__logger.debug("Killing player process")
         if self._proc:
             self._proc.terminate()
             try:
