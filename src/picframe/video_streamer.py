@@ -51,6 +51,7 @@ def get_video_info(video_path: str) -> VideoMetadata:
             "-select_streams", "v:0",
             "-show_entries", "stream=width,height,duration",
             "-show_entries", "stream_side_data=rotation",
+            "-show_entries", "format=duration",
             "-show_entries", "format_tags=title,description,comment,caption,creation_time,location",
             "-show_entries", "format_tags=location-eng,com.apple.quicktime.location.ISO6709",
             "-show_entries", "format_tags=com.apple.quicktime.make,com.apple.quicktime.model",
@@ -67,7 +68,6 @@ def get_video_info(video_path: str) -> VideoMetadata:
         stream = info["streams"][0]
         width = stream.get("width", 0)
         height = stream.get("height", 0)
-        duration = float(stream.get("duration", 0))
 
         # Get rotation
         rotation = 0
@@ -76,8 +76,20 @@ def get_video_info(video_path: str) -> VideoMetadata:
                 rotation = int(item["rotation"])
                 break
 
+        # Get metadata from format
+        format_sec = info.get("format", {})
+
+        # Get duration from stream or format
+        # Default duration to 0.0 if not found
+        duration = 0.0
+        duration = (
+            float(stream.get("duration", 0)) or
+            float(format_sec.get("duration", 0)) or
+            duration
+        )
+
         # Get metadata from format tags
-        tags = info.get("format", {}).get("tags", {})
+        tags = format_sec.get("tags", {})
         stream_tags = stream.get("tags", {})
 
         # Extract metadata fields
