@@ -169,14 +169,9 @@ class VideoPlayer:
                             self.logger.warning("Player window not shown within %d seconds.", timeout)
                         else:
                             # Wait a bit longer to ensure compositor has mapped the window
-                            time.sleep(0.2)
-                            # Double-check the window is shown before warping mouse
-                            if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
-                                self.logger.debug("Player window  shown after waiting.")
-                                sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
-                                sdl2.SDL_WarpMouseInWindow(self.window, self.w - 1, self.h - 1)
-                            else:
-                                self.logger.warning("Player window not shown after waiting.")
+                            time.sleep(0.3)
+                            sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
+                            sdl2.SDL_WarpMouseInWindow(self.window, self.w - 1, self.h - 1)
                     self._send_state("PLAYING")
                 elif state in [vlc.State.Opening,
                                vlc.State.Buffering,
