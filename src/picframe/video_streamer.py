@@ -541,13 +541,18 @@ class VideoStreamer:
 
         timeout = 10  # seconds
         start_time = time.time()
-        while not self.is_playing():
-            if time.time() - start_time > timeout:
-                self.__logger.error("Timeout: Video did not start playing within %d seconds. Kill player.", timeout)
-                self.__logger.debug("Killing player process due to timeout.")
-                self.kill()
-                break
-            time.sleep(0.1)
+        try:
+            while not self.is_playing():
+                if time.time() - start_time > timeout:
+                    # Raise exception if player fails to start in time
+                    raise RuntimeError(f"Video player did not start within {timeout} seconds")
+                time.sleep(0.1)
+        except RuntimeError as e:
+            self.__logger.error("Exception during video player start: %s", e)
+            self.kill()
+            return
+        elapsed = time.time() - start_time
+        self.__logger.info("Video player started in %.3f seconds.", elapsed)
 
     def is_playing(self) -> bool:
         """
