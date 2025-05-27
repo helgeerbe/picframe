@@ -415,15 +415,15 @@ class VideoFrameExtractor:
         """
         Retrieve the first frame of a video as an unscaled Pillow Image object.
 
-        This method attempts to load the first frame of the specified video from a 
-        cached file on disk. If the cached frame exists and can be loaded, it is 
+        This method attempts to load the first frame of the specified video from a
+        cached file on disk. If the cached frame exists and can be loaded, it is
         returned as a Pillow Image object. Otherwise, the method returns None.
 
         Args:
             video_path (str): The file path to the video.
 
         Returns:
-            Optional[Image.Image]: The first frame of the video as a Pillow Image 
+            Optional[Image.Image]: The first frame of the video as a Pillow Image
             object if successful, or None if the frame could not be loaded.
         """
         base, _ = os.path.splitext(video_path)
@@ -457,7 +457,7 @@ class VideoStreamer:
         self._is_playing = False
         self._proc_stderr = None
         self._stderr_thread = None
-        self._state_thread = None   
+        self._state_thread = None
 
         # Start the external player process
         cmd = [
