@@ -150,29 +150,35 @@ class VideoPlayer:
                     self.player.set_media(None)
                     self._send_state("ENDED")
                 elif state in [vlc.State.Playing, vlc.State.Paused]:
+                    self._send_state("PLAYING")
                     # Show window only if not already visible
                     if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_ShowWindow(self.window)
                         # Wait until the window is actually shown
                         shown = False
-                        event = sdl2.SDL_Event()
                         start_time = time.time()
                         timeout = 4  # seconds
+                        window_id = sdl2.SDL_GetWindowID(self.window)  # Get window ID once
                         while not shown and (time.time() - start_time) < timeout:
-                            while sdl2.SDL_PollEvent(ctypes.byref(event)) != 0:
-                                if (event.type == sdl2.SDL_WINDOWEVENT and
-                                        event.window.event == sdl2.SDL_WINDOWEVENT_SHOWN):
+                            while sdl2.SDL_PollEvent(ctypes.byref(self.event)) != 0:
+                                if (self.event.type == sdl2.SDL_WINDOWEVENT and
+                                        self.event.window.event == sdl2.SDL_WINDOWEVENT_SHOWN and
+                                        self.event.window.windowID == window_id):
                                     shown = True
                                     break
+                            if shown:  # If event found, break outer loop
+                                break
                             time.sleep(0.01)
-                        if (time.time() - start_time) >= timeout:
-                            self.logger.warning("Player window not shown within %d seconds.", timeout)
+
+                        if not shown:  # If timeout occurred
+                            self.logger.warning(
+                                "Player window not shown within %d seconds.", timeout
+                                )
                         else:
                             # Wait a bit longer to ensure compositor has mapped the window
                             time.sleep(0.3)
                             sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
                             sdl2.SDL_WarpMouseInWindow(self.window, self.w - 1, self.h - 1)
-                    self._send_state("PLAYING")
                 elif state in [vlc.State.Opening,
                                vlc.State.Buffering,
                                vlc.State.NothingSpecial]:
