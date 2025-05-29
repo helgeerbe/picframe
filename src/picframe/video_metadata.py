@@ -39,6 +39,7 @@ class VideoMetadata:
     """
     width: int
     height: int
+    sample_aspect_ratio: str
     duration: float
     rotation: int
     title: Optional[str] = None

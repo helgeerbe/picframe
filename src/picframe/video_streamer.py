@@ -49,7 +49,7 @@ def get_video_info(video_path: str) -> VideoMetadata:
         cmd = [
             "ffprobe", "-v", "error",
             "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,duration",
+            "-show_entries", "stream=width,height,duration,sample_aspect_ratio",
             "-show_entries", "stream_side_data=rotation",
             "-show_entries", "format=duration",
             "-show_entries", "format_tags=title,description,comment,caption,creation_time,location",
@@ -68,6 +68,7 @@ def get_video_info(video_path: str) -> VideoMetadata:
         stream = info["streams"][0]
         width = stream.get("width", 0)
         height = stream.get("height", 0)
+        sample_aspect_ratio = stream.get("sample_aspect_ratio", "1:1")
 
         # Get rotation
         rotation = 0
@@ -164,6 +165,7 @@ def get_video_info(video_path: str) -> VideoMetadata:
         metadata = VideoMetadata(
             width=width,
             height=height,
+            sample_aspect_ratio=sample_aspect_ratio,
             duration=duration,
             rotation=rotation,
             title=title,
@@ -355,6 +357,23 @@ class VideoFrameExtractor:
             self.logger.warning("Failed to retrieve video frame: %s", e)
             return None
 
+    def _apply_sample_aspect_ratio(self, image: Image.Image, sar: str) -> Image.Image:
+        """
+        If sample_aspect_ratio is not 1:1, scale the image accordingly.
+        """
+        if sar and sar != "1:1":
+            try:
+                num_str, den_str = sar.split(":")
+                num = float(num_str)
+                den = float(den_str)
+                if num > 0 and den > 0 and num != den:
+                    width, height = image.size
+                    new_width = int(round(width * num / den))
+                    image = image.resize((new_width, height), resample=Image.Resampling.BICUBIC)
+            except (ValueError, AttributeError, TypeError) as e:
+                self.logger.warning("Could not apply sample_aspect_ratio %s: %s", sar, e)
+        return image
+
     def get_first_and_last_frames(self) -> Optional[Tuple[Image.Image, Image.Image]]:
         """Retrieve the first and last frames of the video as Pillow Image objects.
         Save/load them as .1.frame and .2.frame JPEGs next to the video file.
@@ -391,10 +410,15 @@ class VideoFrameExtractor:
         first_frame = self._get_frame_as_numpy(metadata.dimensions, 0)
         last_frame = self._get_frame_as_numpy(metadata.dimensions, metadata.duration - 0.1)
 
+        sar = getattr(metadata, "sample_aspect_ratio", "1:1")
+
         if first_frame is not None and last_frame is not None:
 
             first_image = Image.fromarray(first_frame)
             last_image = Image.fromarray(last_frame)
+            # Apply sample_aspect_ratio scaling if needed
+            first_image = self._apply_sample_aspect_ratio(first_image, sar)
+            last_image = self._apply_sample_aspect_ratio(last_image, sar)
             # save as JPEG
             try:
                 with _image_file_lock:

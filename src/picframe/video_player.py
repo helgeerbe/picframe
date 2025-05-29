@@ -48,7 +48,6 @@ class VideoPlayer:
         self.cmd_queue: queue.Queue[str] = queue.Queue()
         self.stdin_thread = threading.Thread(target=self._stdin_reader, daemon=True)
 
-
     def setup(self) -> bool:
         """Initialize SDL2, create window, and set up VLC player."""
         sdl2.SDL_Init(sdl2.SDL_INIT_VIDEO)
@@ -154,6 +153,7 @@ class VideoPlayer:
         if not self.player:
             self.logger.error("Player not initialized, cannot run.")
             return
+        self.stdin_thread.start()
         try:
             while True:
                 self._poll_events()
