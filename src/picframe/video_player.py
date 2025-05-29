@@ -7,7 +7,8 @@ import time
 import argparse
 import ctypes
 import logging
-import select
+import threading
+import queue
 from typing import Optional
 import os
 import vlc  # type: ignore
@@ -44,6 +45,9 @@ class VideoPlayer:
         self.w = w
         self.h = h
         self.fit_display = fit_display
+        self.cmd_queue: queue.Queue[str] = queue.Queue()
+        self.stdin_thread = threading.Thread(target=self._stdin_reader, daemon=True)
+
 
     def setup(self) -> bool:
         """Initialize SDL2, create window, and set up VLC player."""
@@ -131,6 +135,20 @@ class VideoPlayer:
             print(f"STATE:{state}", flush=True)
             self.last_state = state
 
+    def _stdin_reader(self):
+        """
+        Continuously reads lines from standard input and places them into the command queue.
+
+        This method runs an infinite loop, reading input from sys.stdin line by line.
+        Each line read is put into the cmd_queue for further processing.
+        The loop exits when an empty line is encountered (EOF).
+        """
+        while True:
+            line = sys.stdin.readline()
+            if not line:
+                break
+            self.cmd_queue.put(line)
+
     def run(self) -> None:
         """Main event loop: handle commands and playback state."""
         if not self.player:
@@ -185,12 +203,12 @@ class VideoPlayer:
                     if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_HideWindow(self.window)
                     self._send_state("ENDED")
-                # Wait for up to 0.1s for input, but keep polling events
-                rlist, _, _ = select.select([sys.stdin], [], [], 0.1)
-                if rlist:
-                    line = sys.stdin.readline()
-                    if not line:
-                        break
+                # check for commands in the queue
+                try:
+                    line = self.cmd_queue.get_nowait()
+                except queue.Empty:
+                    line = None
+                if line:
                     cmd = line.strip().split()
                     if not cmd:
                         continue
