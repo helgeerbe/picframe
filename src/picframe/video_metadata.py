@@ -5,6 +5,7 @@ from typing import Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime
 
+
 @dataclass
 class VideoMetadata:
     """
@@ -14,12 +15,14 @@ class VideoMetadata:
     Attributes:
         width (int): The width of the video in pixels.
         height (int): The height of the video in pixels.
+        sample_aspect_ratio (str): Indication for non square pixels, so image must be scaled
         duration (float): The duration of the video in seconds.
         rotation (int): The rotation of the video in degrees (e.g., 0, 90, 180, 270).
         title (Optional[str]): The title of the video, if available.
         caption (Optional[str]): The caption or description of the video, if available.
         creation_date (Optional[datetime]): The creation date of the video.
-        gps_coords (Optional[Tuple[float, float]]): The GPS coordinates where the video was recorded.
+        gps_coords (Optional[Tuple[float, float]]):
+           The GPS coordinates where the video was recorded.
         f_number (Optional[Any]): The f-number (aperture) of the camera used to record the video.
         make (Optional[str]): The make (manufacturer) of the camera used to record the video.
         model (Optional[str]): The model of the camera used to record the video.
@@ -32,13 +35,14 @@ class VideoMetadata:
 
     Properties:
         is_portrait (bool): Indicates whether the video is in portrait orientation.
-        dimensions (tuple[int, int]): The dimensions of the video as a (width, height) tuple, 
+        dimensions (tuple[int, int]): The dimensions of the video as a (width, height) tuple,
             adjusted for rotation.
-        exif_datetime (Optional[float]): The creation date as a Unix timestamp, for compatibility 
+        exif_datetime (Optional[float]): The creation date as a Unix timestamp, for compatibility
             with image metadata.
     """
     width: int
     height: int
+    sample_aspect_ratio: str
     duration: float
     rotation: int
     title: Optional[str] = None

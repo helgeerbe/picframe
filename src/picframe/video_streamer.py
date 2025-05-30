@@ -31,8 +31,6 @@ import subprocess
 import os
 import time
 import numpy as np
-import vlc  # type: ignore
-import sdl2  # type: ignore
 from PIL import Image
 
 from .video_metadata import VideoMetadata
@@ -51,8 +49,9 @@ def get_video_info(video_path: str) -> VideoMetadata:
         cmd = [
             "ffprobe", "-v", "error",
             "-select_streams", "v:0",
-            "-show_entries", "stream=width,height,duration",
+            "-show_entries", "stream=width,height,duration,sample_aspect_ratio",
             "-show_entries", "stream_side_data=rotation",
+            "-show_entries", "format=duration",
             "-show_entries", "format_tags=title,description,comment,caption,creation_time,location",
             "-show_entries", "format_tags=location-eng,com.apple.quicktime.location.ISO6709",
             "-show_entries", "format_tags=com.apple.quicktime.make,com.apple.quicktime.model",
@@ -69,7 +68,7 @@ def get_video_info(video_path: str) -> VideoMetadata:
         stream = info["streams"][0]
         width = stream.get("width", 0)
         height = stream.get("height", 0)
-        duration = float(stream.get("duration", 0))
+        sample_aspect_ratio = stream.get("sample_aspect_ratio", "1:1")
 
         # Get rotation
         rotation = 0
@@ -78,8 +77,20 @@ def get_video_info(video_path: str) -> VideoMetadata:
                 rotation = int(item["rotation"])
                 break
 
+        # Get metadata from format
+        format_sec = info.get("format", {})
+
+        # Get duration from stream or format
+        # Default duration to 0.0 if not found
+        duration = 0.0
+        duration = (
+            float(stream.get("duration", 0)) or
+            float(format_sec.get("duration", 0)) or
+            duration
+        )
+
         # Get metadata from format tags
-        tags = info.get("format", {}).get("tags", {})
+        tags = format_sec.get("tags", {})
         stream_tags = stream.get("tags", {})
 
         # Extract metadata fields
@@ -154,6 +165,7 @@ def get_video_info(video_path: str) -> VideoMetadata:
         metadata = VideoMetadata(
             width=width,
             height=height,
+            sample_aspect_ratio=sample_aspect_ratio,
             duration=duration,
             rotation=rotation,
             title=title,
@@ -195,7 +207,7 @@ def get_video_info(video_path: str) -> VideoMetadata:
     except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
         elapsed = time.time() - start_time
         logger.warning("Failed to retrieve video metadata in %.3f seconds: %s", elapsed, e)
-        return VideoMetadata(0, 0, 0.0, 0)
+        return VideoMetadata(0, 0, "1:1", 0.0, 0)
 
 
 class VideoFrameExtractor:
@@ -345,6 +357,23 @@ class VideoFrameExtractor:
             self.logger.warning("Failed to retrieve video frame: %s", e)
             return None
 
+    def _apply_sample_aspect_ratio(self, image: Image.Image, sar: str) -> Image.Image:
+        """
+        If sample_aspect_ratio is not 1:1, scale the image accordingly.
+        """
+        if sar and sar != "1:1":
+            try:
+                num_str, den_str = sar.split(":")
+                num = float(num_str)
+                den = float(den_str)
+                if num > 0 and den > 0 and num != den:
+                    width, height = image.size
+                    new_width = int(round(width * num / den))
+                    image = image.resize((new_width, height), resample=Image.Resampling.BICUBIC)
+            except (ValueError, AttributeError, TypeError) as e:
+                self.logger.warning("Could not apply sample_aspect_ratio %s: %s", sar, e)
+        return image
+
     def get_first_and_last_frames(self) -> Optional[Tuple[Image.Image, Image.Image]]:
         """Retrieve the first and last frames of the video as Pillow Image objects.
         Save/load them as .1.frame and .2.frame JPEGs next to the video file.
@@ -381,10 +410,15 @@ class VideoFrameExtractor:
         first_frame = self._get_frame_as_numpy(metadata.dimensions, 0)
         last_frame = self._get_frame_as_numpy(metadata.dimensions, metadata.duration - 0.1)
 
+        sar = getattr(metadata, "sample_aspect_ratio", "1:1")
+
         if first_frame is not None and last_frame is not None:
 
             first_image = Image.fromarray(first_frame)
             last_image = Image.fromarray(last_frame)
+            # Apply sample_aspect_ratio scaling if needed
+            first_image = self._apply_sample_aspect_ratio(first_image, sar)
+            last_image = self._apply_sample_aspect_ratio(last_image, sar)
             # save as JPEG
             try:
                 with _image_file_lock:
@@ -405,15 +439,15 @@ class VideoFrameExtractor:
         """
         Retrieve the first frame of a video as an unscaled Pillow Image object.
 
-        This method attempts to load the first frame of the specified video from a 
-        cached file on disk. If the cached frame exists and can be loaded, it is 
+        This method attempts to load the first frame of the specified video from a
+        cached file on disk. If the cached frame exists and can be loaded, it is
         returned as a Pillow Image object. Otherwise, the method returns None.
 
         Args:
             video_path (str): The file path to the video.
 
         Returns:
-            Optional[Image.Image]: The first frame of the video as a Pillow Image 
+            Optional[Image.Image]: The first frame of the video as a Pillow Image
             object if successful, or None if the frame could not be loaded.
         """
         base, _ = os.path.splitext(video_path)
@@ -432,110 +466,129 @@ class VideoFrameExtractor:
 
 class VideoStreamer:
     """
-    A class for streaming video using VLC and SDL2.
-
-    Attributes:
-    -----------
-    player : Optional[vlc.MediaPlayer]
-        The VLC media player instance.
-    __window : Optional[sdl2.SDL_Window]
-        The SDL2 window for video playback.
-    __instance : Optional[vlc.Instance]
-        The VLC instance.
-    __logger : logging.Logger
-        Logger for debugging and error messages.
+    A class for streaming video using an external player process.
+    Communicates with video_player.py via stdin/stdout pipes.
     """
 
     def __init__(self, x: int, y: int, w: int, h: int, video_path: Optional[str] = None,
                  fit_display: bool = False) -> None:
-        """
-        Initializes the video streamer.
-
-        Parameters:
-        -----------
-        x : int
-            The x-coordinate of the SDL window.
-        y : int
-            The y-coordinate of the SDL window.
-        w : int
-            The width of the SDL window.
-        h : int
-            The height of the SDL window.
-        video_path : Optional[str], optional
-            The path to the video file. If provided, playback starts automatically.
-            Defaults to None.
-        fit_display : bool, optional
-            If True, set the aspect ratio of the video to match the display dimensions.
-            Defaults to False.
-        """
-        self.player: Optional[vlc.MediaPlayer] = None
-        self.__window: Optional[sdl2.SDL_Window] = None
-        self.__instance: Optional[vlc.Instance] = None
-
         self.__logger = logging.getLogger("video_streamer")
         self.__logger.debug("Initializing VideoStreamer")
 
-        if sys.platform != "darwin":
-            # Create SDL2 window
-            self.__window = sdl2.SDL_CreateWindow(
-                b"", x, y, w, h,
-                sdl2.SDL_WINDOW_HIDDEN | sdl2.SDL_WINDOW_BORDERLESS)
-            if not self.__window:
-                self.__logger.error("Error creating window: %s",
-                                    sdl2.SDL_GetError().decode('utf-8'))
-                return
-            sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
+        self._proc = None
+        self._proc_stdin = None
+        self._proc_stdout = None
+        self._is_playing = False
+        self._proc_stderr = None
+        self._stderr_thread = None
+        self._state_thread = None
 
-            # Retrieve window manager info
-            wminfo = sdl2.SDL_SysWMinfo()
-            sdl2.SDL_GetVersion(wminfo.version)
-            if sdl2.SDL_GetWindowWMInfo(self.__window, wminfo) == 0:
-                self.__logger.error("Can't get SDL WM info.")
-                sdl2.SDL_DestroyWindow(self.__window)
-                self.__window = None
-                return
-
-        # Create VLC instance and player
-        self.__instance = vlc.Instance('--no-audio')
-        self.player = self.__instance.media_player_new()
-
-        if sys.platform != "darwin":
-            self.player.set_xwindow(wminfo.info.x11.window)
-
+        # Start the external player process
+        cmd = [
+            sys.executable,
+            os.path.join(os.path.dirname(__file__), "video_player.py"),
+            "--x", str(x), "--y", str(y), "--w", str(w), "--h", str(h)
+        ]
         if fit_display:
-            aspect_ratio = f"{w}:{h}"
-            self.player.video_set_aspect_ratio(aspect_ratio)
+            cmd.append("--fit_display")
+        self._proc = subprocess.Popen(
+            cmd,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            bufsize=1,
+            universal_newlines=True
+        )
+        self._proc_stdin = self._proc.stdin
+        self._proc_stdout = self._proc.stdout
+        self._proc_stderr = self._proc.stderr
 
-        # Start video playback if a path is provided
+        # Start a thread to listen for state updates from the player
+        self._state_thread = threading.Thread(target=self._listen_state, daemon=True)
+        self._state_thread.start()
+
+        # Start a thread to listen for stderr output from the player
+        self._stderr_thread = threading.Thread(target=self._listen_stderr, daemon=True)
+        self._stderr_thread.start()
+
         if video_path is not None:
             self.play(video_path)
 
+    def player_alive(self) -> bool:
+        """
+        Check if the external player process is still running.
+
+        Returns:
+        --------
+        bool
+            True if the player process is running, False otherwise.
+        """
+        if self._proc is None or self._proc.poll() is not None:
+            self.__logger.debug("Player process is not alive.")
+            self._proc = None
+            self._proc_stdin = None
+            self._proc_stdout = None
+            self._is_playing = False
+            return False
+        return True
+
+    def _send_command(self, command: str) -> None:
+        if self._proc_stdin:
+            try:
+                self._proc_stdin.write(command + "\n")
+                self._proc_stdin.flush()
+            except (BrokenPipeError, OSError) as e:
+                self.__logger.error("Player process is not alive: %s", e)
+                self._proc_stdin = None
+
+    def _listen_state(self):
+        if not self._proc_stdout:
+            return
+        for line in self._proc_stdout:
+            line = line.strip()
+            if line == "STATE:PLAYING":
+                self._is_playing = True
+            elif line == "STATE:ENDED":
+                self._is_playing = False
+
+    def _listen_stderr(self):
+        if not self._proc_stderr:
+            return
+        for line in self._proc_stderr:
+            self.__logger.debug("[player] %s", line.strip())
+
     def play(self, video_path: Optional[str]) -> None:
         """
-        Plays a video file.
+        Starts video playback by loading the specified video file.
 
         Parameters:
         -----------
         video_path : Optional[str]
-            The path to the video file. If None or invalid, playback will not start.
+            The file path to the video to be played. If None or the file does not exist,
+            an error is logged and playback does not start.
         """
         if video_path is None:
             self.__logger.error("Error: No video path provided.")
             return
-
         if not os.path.exists(video_path):
             self.__logger.error("Error: File '%s' not found.", video_path)
             return
+        self._send_command(f"load {video_path}")
 
-        if self.__instance is None or self.player is None:
-            self.__logger.error("Error: VLC instance or player is not initialized.")
+        timeout = 10  # seconds
+        start_time = time.time()
+        try:
+            while not self.is_playing():
+                if time.time() - start_time > timeout:
+                    # Raise exception if player fails to start in time
+                    raise RuntimeError(f"Video player did not start within {timeout} seconds")
+                time.sleep(0.1)
+        except RuntimeError as e:
+            self.__logger.error("Exception during video player start: %s", e)
+            self.kill()
             return
-
-        media = self.__instance.media_new_path(video_path)
-        self.player.set_media(media)
-        self.__logger.debug("Playing video: %s", video_path)
-        sdl2.SDL_ShowWindow(self.__window)
-        self.player.play()
+        elapsed = time.time() - start_time
+        self.__logger.info("Video player started in %.3f seconds.", elapsed)
 
     def is_playing(self) -> bool:
         """
@@ -546,37 +599,47 @@ class VideoStreamer:
         bool
             True if the video is playing, False otherwise.
         """
-        if self.player is None:
-            return False
-        state = self.player.get_state()
-        return state in [vlc.State.Opening, vlc.State.Playing,
-                         vlc.State.Paused, vlc.State.Buffering]
+        if self._is_playing and self.player_alive():
+            return True
+        return False
+
+    def pause(self, do_pause: bool) -> None:
+        """
+        Pauses or resumes video playback by sending the appropriate
+        command to the external player process.
+        """
+        if do_pause:
+            self._send_command("pause")
+        else:
+            self._send_command("resume")
 
     def stop(self) -> None:
         """
-        Stops video playback and hides the SDL window.
+        Stops video playback by sending a stop command to the external player process.
         """
-        if self.player is None:
-            return
-
-        self.__logger.debug("Stopping video")
-        self.player.stop()
-        if self.__window:
-            sdl2.SDL_HideWindow(self.__window)
-        self.__logger.debug("Releasing media")
-        if self.player.get_media() is not None:
-            self.player.get_media().release()
+        self._send_command("stop")
+        timeout = 5  # seconds
+        start_time = time.time()
+        while self.is_playing():
+            if time.time() - start_time > timeout:
+                self.__logger.error("Timeout: Video did not stop within %d seconds. Kill player.", timeout)
+                self.__logger.debug("Killing player process due to timeout.")
+                self.kill()
+                break
+            time.sleep(0.1)
 
     def kill(self) -> None:
         """
-        Stops video playback and destroys the SDL window and VLC instance.
+        Stops video playback and terminates the external player process.
         """
-        self.__logger.debug("Killing VideoStreamer")
-        self.stop()
-        if self.__window:
-            sdl2.SDL_DestroyWindow(self.__window)
-            self.__window = None
-        if self.__instance:
-            self.__instance.release()
-            self.__instance = None
-        self.player = None
+        self.__logger.debug("Killing player process")
+        if self._proc:
+            self._proc.terminate()
+            try:
+                self._proc.wait(timeout=2)
+            except subprocess.TimeoutExpired:
+                self._proc.kill()
+        self._proc = None
+        self._proc_stdin = None
+        self._proc_stdout = None
+        self._is_playing = False

@@ -6,7 +6,7 @@ from typing import Optional, List, Tuple
 from datetime import datetime
 from PIL import Image, ImageFilter, ImageFile
 import numpy as np
-import pi3d # type: ignore
+import pi3d  # type: ignore
 from picframe import mat_image, get_image_meta
 from picframe.video_streamer import VideoStreamer, VIDEO_EXTENSIONS, VideoFrameExtractor
 
@@ -204,11 +204,11 @@ class ViewerDisplay:
 
     def set_brightness(self, val):
         self.__slide.unif[55] = val  # take immediate effect
-        if self.__clock_overlay: # will be set to None if not text
+        if self.__clock_overlay:  # will be set to None if not text
             self.__clock_overlay.sprite.set_alpha(val)
         if self.__image_overlay:
             self.__image_overlay.set_alpha(val)
-        for txt in self.__textblocks: # must be list
+        for txt in self.__textblocks:  # must be list
             if txt:
                 txt.sprite.set_alpha(val)
 
@@ -306,15 +306,16 @@ class ViewerDisplay:
         try:
             self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}")
             if self.__mat_images and self.__matter is None:
-                self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
-                                                resource_folder=self.__mat_resource_folder,
-                                                mat_type=self.__mat_type,
-                                                outer_mat_color=self.__outer_mat_color,
-                                                inner_mat_color=self.__inner_mat_color,
-                                                outer_mat_border=self.__outer_mat_border,
-                                                inner_mat_border=self.__inner_mat_border,
-                                                outer_mat_use_texture=self.__outer_mat_use_texture,
-                                                inner_mat_use_texture=self.__inner_mat_use_texture)
+                self.__matter = mat_image.MatImage(
+                    display_size=(self.__display.width, self.__display.height),
+                    resource_folder=self.__mat_resource_folder,
+                    mat_type=self.__mat_type,
+                    outer_mat_color=self.__outer_mat_color,
+                    inner_mat_color=self.__inner_mat_color,
+                    outer_mat_border=self.__outer_mat_border,
+                    inner_mat_border=self.__inner_mat_border,
+                    outer_mat_use_texture=self.__outer_mat_use_texture,
+                    inner_mat_use_texture=self.__inner_mat_use_texture)
 
             # Load the image(s) and correct their orientation as necessary
             if pics[0]:
@@ -508,11 +509,12 @@ class ViewerDisplay:
         return self.__in_transition
 
     def slideshow_start(self):
-        self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
-                                             w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
-                                             display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR | pi3d.DISPLAY_CONFIG_NO_FRAME,
-                                             background=self.__background, use_glx=self.__use_glx,
-                                             use_sdl2=self.__use_sdl2)
+        self.__display = pi3d.Display.create(
+            x=self.__display_x, y=self.__display_y,
+            w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
+            display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR | pi3d.DISPLAY_CONFIG_NO_FRAME,
+            background=self.__background, use_glx=self.__use_glx,
+            use_sdl2=self.__use_sdl2)
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
@@ -591,15 +593,19 @@ class ViewerDisplay:
             - Whether to skip the current image.
             - Whether a video is currently playing.
         """
+        loop_running = self.__display.loop_running()
         # if video is playing, we are done here
         video_playing = False
         if self.is_video_playing():
             self.pause_video(paused)
             video_playing = True
-            time.sleep(0.5)
-            return (True, False, video_playing)  # now returns tuple with skip image flag and video_time added
+            if self.__last_frame_tex is not None:  # first time through
+                self.__sfg = self.__last_frame_tex
+                self.__last_frame_tex = None
+                self.__slide.set_textures([self.__sfg, self.__sbg])
+            self.__slide.draw()
+            return (loop_running, False, video_playing)  # now returns tuple with skip image flag and video_time added
 
-        loop_running = self.__display.loop_running()
         tm = time.time()
         if pics is not None:
             self.stop_video()
@@ -610,7 +616,7 @@ class ViewerDisplay:
                     new_sfg, self.__last_frame_tex = textures
                 else:
                     new_sfg = None
-            else: # normal image or image pair
+            else:  # normal image or image pair
                 new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             tm = time.time()
             self.__next_tm = tm + time_delay
@@ -671,7 +677,7 @@ class ViewerDisplay:
             self.__in_transition = False
             if self.__video_path is not None and tm > self.__name_tm:
                 # start video stream
-                if self.__video_streamer is None:
+                if self.__video_streamer is None or not self.__video_streamer.player_alive():
                     self.__video_streamer = VideoStreamer(
                         self.__display_x, self.__display_y,
                         self.__display.width, self.__display.height,
@@ -680,10 +686,6 @@ class ViewerDisplay:
                 else:
                     self.__video_streamer.play(self.__video_path)
                 self.__video_path = None
-                if self.__last_frame_tex is not None:  # first time through
-                    self.__sfg = self.__last_frame_tex
-                    self.__last_frame_tex = None
-                    self.__slide.set_textures([self.__sfg, self.__sbg])
 
         skip_image = False  # can add possible reasons to skip image below here
 
@@ -753,7 +755,7 @@ class ViewerDisplay:
             If True, pauses the video. If False, resumes the video playback.
         """
         if self.__video_streamer is not None:
-            self.__video_streamer.player.set_pause(do_pause)
+            self.__video_streamer.pause(do_pause)
 
     def slideshow_stop(self):
         if self.__video_streamer is not None:
