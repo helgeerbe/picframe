@@ -85,17 +85,17 @@ class Controller:
             self.__viewer.stop_video()
         else:
             self.__next_tm = 0
+            self.__force_navigate = True
         self.__viewer.reset_name_tm()
-        self.__force_navigate = True
-
+        
     def back(self):
         if self.__viewer.is_video_playing():
             self.__viewer.stop_video()
         else:
             self.__next_tm = 0
+            self.__force_navigate = True
         self.__model.set_next_file_to_previous_file()
         self.__viewer.reset_name_tm()
-        self.__force_navigate = True
 
     def delete(self):
         if self.__viewer.is_video_playing():

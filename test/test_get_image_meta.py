@@ -72,7 +72,7 @@ def test_exifs_jpg():
         assert val == "2020:01:30 20:01:28"
         val = exifs.get_exif('Image Model')
         assert val == "ILCE-7RM3"
-        width, height = exifs.get_size()
+        width, height = exifs.size
         assert width == 1920
         assert height == 1200
         val = exifs.get_exif('Image Make')
@@ -108,7 +108,7 @@ def test_exifs_heic():
         orientation = exifs.get_orientation()
         assert orientation == 1
 
-        width, height = exifs.get_size()
+        width, height = exifs.size
         assert height == 4032
         assert width == 3024
 
