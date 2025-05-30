@@ -207,7 +207,7 @@ def get_video_info(video_path: str) -> VideoMetadata:
     except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
         elapsed = time.time() - start_time
         logger.warning("Failed to retrieve video metadata in %.3f seconds: %s", elapsed, e)
-        return VideoMetadata(0, 0, 0.0, 0)
+        return VideoMetadata(0, 0, "1:1", 0.0, 0)
 
 
 class VideoFrameExtractor:

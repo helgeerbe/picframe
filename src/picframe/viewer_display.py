@@ -6,7 +6,7 @@ from typing import Optional, List, Tuple
 from datetime import datetime
 from PIL import Image, ImageFilter, ImageFile
 import numpy as np
-import pi3d # type: ignore
+import pi3d  # type: ignore
 from picframe import mat_image, get_image_meta
 from picframe.video_streamer import VideoStreamer, VIDEO_EXTENSIONS, VideoFrameExtractor
 
@@ -204,11 +204,11 @@ class ViewerDisplay:
 
     def set_brightness(self, val):
         self.__slide.unif[55] = val  # take immediate effect
-        if self.__clock_overlay: # will be set to None if not text
+        if self.__clock_overlay:  # will be set to None if not text
             self.__clock_overlay.sprite.set_alpha(val)
         if self.__image_overlay:
             self.__image_overlay.set_alpha(val)
-        for txt in self.__textblocks: # must be list
+        for txt in self.__textblocks:  # must be list
             if txt:
                 txt.sprite.set_alpha(val)
 
@@ -306,15 +306,16 @@ class ViewerDisplay:
         try:
             self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}")
             if self.__mat_images and self.__matter is None:
-                self.__matter = mat_image.MatImage(display_size=(self.__display.width, self.__display.height),
-                                                resource_folder=self.__mat_resource_folder,
-                                                mat_type=self.__mat_type,
-                                                outer_mat_color=self.__outer_mat_color,
-                                                inner_mat_color=self.__inner_mat_color,
-                                                outer_mat_border=self.__outer_mat_border,
-                                                inner_mat_border=self.__inner_mat_border,
-                                                outer_mat_use_texture=self.__outer_mat_use_texture,
-                                                inner_mat_use_texture=self.__inner_mat_use_texture)
+                self.__matter = mat_image.MatImage(
+                    display_size=(self.__display.width, self.__display.height),
+                    resource_folder=self.__mat_resource_folder,
+                    mat_type=self.__mat_type,
+                    outer_mat_color=self.__outer_mat_color,
+                    inner_mat_color=self.__inner_mat_color,
+                    outer_mat_border=self.__outer_mat_border,
+                    inner_mat_border=self.__inner_mat_border,
+                    outer_mat_use_texture=self.__outer_mat_use_texture,
+                    inner_mat_use_texture=self.__inner_mat_use_texture)
 
             # Load the image(s) and correct their orientation as necessary
             if pics[0]:
@@ -508,11 +509,12 @@ class ViewerDisplay:
         return self.__in_transition
 
     def slideshow_start(self):
-        self.__display = pi3d.Display.create(x=self.__display_x, y=self.__display_y,
-                                             w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
-                                             display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR | pi3d.DISPLAY_CONFIG_NO_FRAME,
-                                             background=self.__background, use_glx=self.__use_glx,
-                                             use_sdl2=self.__use_sdl2)
+        self.__display = pi3d.Display.create(
+            x=self.__display_x, y=self.__display_y,
+            w=self.__display_w, h=self.__display_h, frames_per_second=self.__fps,
+            display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR | pi3d.DISPLAY_CONFIG_NO_FRAME,
+            background=self.__background, use_glx=self.__use_glx,
+            use_sdl2=self.__use_sdl2)
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self.__shader)
         self.__slide = pi3d.Sprite(camera=camera, w=self.__display.width, h=self.__display.height, z=5.0)
@@ -614,7 +616,7 @@ class ViewerDisplay:
                     new_sfg, self.__last_frame_tex = textures
                 else:
                     new_sfg = None
-            else: # normal image or image pair
+            else:  # normal image or image pair
                 new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
             tm = time.time()
             self.__next_tm = tm + time_delay
