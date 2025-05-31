@@ -82,48 +82,6 @@ def heif_to_image(fname: str) -> Optional[Image.Image]:
         logger.warning("Failed attempt to convert %s due to %s \n** Have you installed pi_heif? **", fname, e)
         return None
 
-
-def frame_to_image(fname: str) -> Optional[Image.Image]:
-    """
-    Converts the first frame of a video file to an image.
-
-    This function attempts to extract the first frame of a video file
-    using the `VideoFrameExtractor` from the `picframe.video_streamer` module.
-    If the extraction is successful, it ensures the image is in RGB mode
-    before returning it. If the extraction fails or an error occurs, it logs
-    a warning and returns either an empty byte string or None.
-
-    Args:
-        fname (str): The file path to the video file.
-
-    Returns:
-        PIL.Image.Image or bytes or None: The extracted image in RGB mode if successful,
-        an empty byte string if the frame extraction fails, or None if an exception occurs.
-
-    Notes:
-        - Ensure that `ffmpeg` is installed and available in the system for
-          `VideoFrameExtractor` to work correctly.
-        - Logs warnings if the frame extraction or conversion fails.
-    """
-    logger = logging.getLogger("interface_http.frame_to_jpg")
-    try:
-        from picframe.video_streamer import VideoFrameExtractor
-        image = VideoFrameExtractor.get_first_frame_as_image(fname)
-        if image is None:
-            logger.warning("Failed to extract frames from %s \n** Have you installed ffmpeg? **", fname)
-            return None
-
-        if image.mode not in ("RGB", "RGBA"):
-            image = image.convert("RGB")
-        return image
-    except ImportError:
-        logger.warning("Failed to import required module for converting %s \n** Have you installed ffmpeg? **", fname)
-        return None
-    except (OSError, IOError) as e:
-        logger.warning("Failed attempt to convert %s due to %s \n** Have you installed ffmpeg? **", fname, e)
-        return None
-
-
 class RequestHandler(BaseHTTPRequestHandler):
 
     def do_AUTHHEAD(self):
@@ -182,16 +140,10 @@ class RequestHandler(BaseHTTPRequestHandler):
                             is_bytes = True
                         elif extension in VIDEO_EXTENSIONS:
                             # as current_image may be video
-                            image = frame_to_image(page)
-                            if image is not None:
-                                buf = io.BytesIO()
-                                image.save(buf, format="JPEG")
-                                buf.seek(0)
-                                page_bytes = buf.read()
-                            else:
-                                page_bytes = b""
+                            file = os.path.splitext(page)[0]
+                            page = file + ".1.frame"
                             content_type = EXTENSION_TO_MIMETYPE['.jpg']
-                            is_bytes = True
+                            is_bytes = False
                         else:
                             is_bytes = False
                     else:
