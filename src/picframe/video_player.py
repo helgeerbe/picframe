@@ -47,6 +47,10 @@ class VideoPlayer:
         self.fit_display = fit_display
         self.cmd_queue: queue.Queue[str] = queue.Queue()
         self.stdin_thread = threading.Thread(target=self._stdin_reader, daemon=True)
+        self._vlc_event_manager = None
+        self._vlc_event_callbacks_registered = False
+        self._show_window_request = False
+        self._hide_window_request = False
 
     def setup(self) -> bool:
         """Initialize SDL2, create window, and set up VLC player."""
@@ -118,7 +122,56 @@ class VideoPlayer:
             aspect_ratio = f"{self.w}:{self.h}"
             self.player.video_set_aspect_ratio(aspect_ratio)
 
+        # Register VLC event callbacks
+        self._vlc_event_manager = self.player.event_manager()
+        self._register_vlc_events()
+
         return True
+
+    def _register_vlc_events(self):
+        """Attach VLC event callbacks for playback state changes."""
+        if self._vlc_event_manager and not self._vlc_event_callbacks_registered:
+            self._vlc_event_manager.event_attach(vlc.EventType.MediaPlayerPlaying, self._on_vlc_playing)
+            self._vlc_event_manager.event_attach(vlc.EventType.MediaPlayerStopped, self._on_vlc_stopped)
+            self._vlc_event_manager.event_attach(vlc.EventType.MediaPlayerEndReached, self._on_vlc_ended)
+            self._vlc_event_manager.event_attach(vlc.EventType.MediaPlayerEncounteredError, self._on_vlc_error)
+            self._vlc_event_callbacks_registered = True
+
+    def _on_vlc_playing(self, event):
+        self._send_state("PLAYING")
+        self._show_window_request = True
+
+    def _on_vlc_stopped(self, event: vlc.Event) -> None:
+        """
+        VLC event handler for MediaPlayerStopped.
+
+        Args:
+            event (vlc.Event): VLC event object.
+        """
+        self._hide_window_request = True
+        self._send_state("ENDED")
+
+    def _on_vlc_ended(self, event: vlc.Event) -> None:
+        """
+        VLC event handler for MediaPlayerEndReached.
+
+        Args:
+            event (vlc.Event): VLC event object.
+        """
+        self._hide_window_request = True
+        self._send_state("ENDED")
+
+    def _on_vlc_error(self, event: vlc.Event) -> None:
+        """
+        VLC event handler for MediaPlayerEncounteredError.
+
+        Args:
+            event (vlc.Event): VLC event object.
+        """
+        self._hide_window_request = True
+        if self.player:
+            self.player.stop()
+        self._send_state("ENDED")
 
     def _poll_events(self) -> bool:
         """Poll SDL2 events, return False if quit event is received."""
@@ -149,61 +202,31 @@ class VideoPlayer:
             self.cmd_queue.put(line)
 
     def run(self) -> None:
-        """Main event loop: handle commands and playback state."""
+        """Main event loop: handle SDL2 events and commands."""
         if not self.player:
             self.logger.error("Player not initialized, cannot run.")
             return
         self.stdin_thread.start()
         try:
-            while True:
-                self._poll_events()
-                # Check player state ignore opening and buffering
-                # to avoid flickering
-                state = self.player.get_state()
-                if state in [vlc.State.Ended, vlc.State.Stopped,
-                             vlc.State.Error]:
-                    if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
-                        sdl2.SDL_HideWindow(self.window)
-                    self.player.stop()
-                    self.player.set_media(None)
-                    self._send_state("ENDED")
-                elif state in [vlc.State.Playing, vlc.State.Paused]:
-                    self._send_state("PLAYING")
-                    # Show window only if not already visible
+            running = True
+            while running:
+                running = self._poll_events()
+
+                # Handle window show/hide requests from VLC callbacks
+                if self._show_window_request:
                     if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_ShowWindow(self.window)
-                        # Wait until the window is actually shown
-                        shown = False
-                        start_time = time.time()
-                        timeout = 4  # seconds
-                        window_id = sdl2.SDL_GetWindowID(self.window)  # Get window ID once
-                        while not shown and (time.time() - start_time) < timeout:
-                            while sdl2.SDL_PollEvent(ctypes.byref(self.event)) != 0:
-                                if (self.event.type == sdl2.SDL_WINDOWEVENT and
-                                        self.event.window.event == sdl2.SDL_WINDOWEVENT_SHOWN and
-                                        self.event.window.windowID == window_id):
-                                    shown = True
-                                    break
-                            if shown:  # If event found, break outer loop
-                                break
-                            time.sleep(0.01)
+                        self._wait_for_window_shown(timeout=4.0)
+                        sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
+                        sdl2.SDL_WarpMouseInWindow(self.window, self.w - 1, self.h - 1)
+                    self._show_window_request = False
 
-                        if not shown:  # If timeout occurred
-                            self.logger.warning(
-                                "Player window not shown within %d seconds.", timeout
-                                )
-                        else:
-                            # Wait a bit longer to ensure compositor has mapped the window
-                            time.sleep(0.3)
-                            sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
-                            sdl2.SDL_WarpMouseInWindow(self.window, self.w - 1, self.h - 1)
-                elif state in [vlc.State.Opening,
-                               vlc.State.Buffering,
-                               vlc.State.NothingSpecial]:
+                if self._hide_window_request:
                     if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_HideWindow(self.window)
-                    self._send_state("ENDED")
-                # check for commands in the queue
+                    self._hide_window_request = False
+
+                # Only handle commands
                 try:
                     line = self.cmd_queue.get_nowait()
                 except queue.Empty:
@@ -214,6 +237,8 @@ class VideoPlayer:
                         continue
                     self._handle_command(cmd)
         finally:
+            if self.player:
+                self.player.stop()
             sdl2.SDL_DestroyWindow(self.window)
             sdl2.SDL_Quit()
 
@@ -226,7 +251,6 @@ class VideoPlayer:
             media_path = " ".join(cmd[1:])
             if os.path.exists(media_path):
                 self.player.stop()
-                self.player.set_media(None)
                 media = self.instance.media_new_path(media_path)
                 self.player.set_media(media)
                 self.player.play()
@@ -240,7 +264,32 @@ class VideoPlayer:
             if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                 sdl2.SDL_HideWindow(self.window)
             self.player.stop()
-            self.player.set_media(None)
+
+    def _wait_for_window_shown(self, timeout: float = 4.0) -> bool:
+        """Wait for the SDL_WINDOWEVENT_SHOWN event for this window."""
+        start_time = time.time()
+        window_id = sdl2.SDL_GetWindowID(self.window)
+        shown = False
+        while not shown and (time.time() - start_time) < timeout:
+            while sdl2.SDL_PollEvent(ctypes.byref(self.event)) != 0:
+                if (
+                    self.event.type == sdl2.SDL_WINDOWEVENT and
+                    self.event.window.event == sdl2.SDL_WINDOWEVENT_SHOWN and
+                    self.event.window.windowID == window_id
+                ):
+                    shown = True
+                    break
+            if shown:
+                break
+            time.sleep(0.01)
+        if not shown:  # If timeout occurred
+            self.logger.warning(
+                "Player window not shown within %d seconds.", timeout
+                )
+        else:
+            # Wait a bit longer to ensure compositor has mapped the window
+            time.sleep(0.3)
+        return shown
 
 
 def parse_args() -> argparse.Namespace:
@@ -265,7 +314,6 @@ def main() -> None:
     Entry point for the video player application.
     Initializes logging, parses arguments, sets up the video player, and starts the event loop.
     """
-    logging.basicConfig(level=logging.DEBUG)
     args = parse_args()
     player = VideoPlayer(args.x, args.y, args.w, args.h, args.fit_display)
     if player.setup():
