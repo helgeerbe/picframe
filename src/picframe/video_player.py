@@ -138,6 +138,7 @@ class VideoPlayer:
             self._vlc_event_callbacks_registered = True
 
     def _on_vlc_playing(self, event):
+        self.logger.debug("VLC event: MediaPlayerPlaying")
         self._send_state("PLAYING")
         self._show_window_request = True
 
@@ -148,6 +149,7 @@ class VideoPlayer:
         Args:
             event (vlc.Event): VLC event object.
         """
+        self.logger.debug("VLC event: MediaPlayerStopped")
         self._hide_window_request = True
         self._send_state("ENDED")
 
@@ -158,6 +160,7 @@ class VideoPlayer:
         Args:
             event (vlc.Event): VLC event object.
         """
+        self.logger.debug("VLC event: MediaPlayerEndReached")
         self._hide_window_request = True
         self._send_state("ENDED")
 
@@ -168,6 +171,7 @@ class VideoPlayer:
         Args:
             event (vlc.Event): VLC event object.
         """
+        self.logger.error("VLC event: MediaPlayerEncounteredError")
         self._hide_window_request = True
         if self.player:
             self.player.stop()
@@ -211,6 +215,14 @@ class VideoPlayer:
             running = True
             while running:
                 running = self._poll_events()
+
+                state = self.player.get_state() if self.player else None
+                if (
+                    state is not None and
+                    state not in [vlc.State.Error, vlc.State.Stopped, vlc.State.Ended, vlc.State.Playing] and
+                    self.last_state == "PLAYING"
+                ):
+                    self.logger.debug("Current VLC state: %s, but my state is PLAYING", state)
 
                 # Handle window show/hide requests from VLC callbacks
                 if self._show_window_request:
