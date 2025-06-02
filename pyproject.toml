@@ -3,8 +3,8 @@ requires = ["setuptools", "versioneer[toml]", "tomli; python_version < '3.11'"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "picframe"
-description = "Picture frame viewer powered by raspberry with homeassistant integration"
+name = "Aspect-picframe"
+description = "Picture frame viewer powered by raspberry with homeassistant integration forked for The Aspect Frame"
 keywords = [
     "picframe", 
     "viewer", 
@@ -13,12 +13,13 @@ keywords = [
     "homeassistant", 
     "hass"]
 authors = [
-  { name = "Helge Erbe", email = "helge@erbehome.de"  },
+  { name = "Doug Krugman", email = "dkrugman@gmail.com" },
+  { name = "Helge Erbe" },
   { name = "Paddy Gaunt" },
   { name = "Jeff Godfrey" },
 ]
 maintainers = [
-  { name = "Helge Erbe", email = "helge@erbehome.de"  },
+  { name = "Doug Krugman", email = "dkrugman@gmail.com"  },
 ]
 readme = "README.md"
 license = {text = "MIT"}
@@ -49,7 +50,8 @@ dependencies = [
 ]
 
 [project.urls]
-"Homepage" = "https://github.com/helgeerbe/picframe"
+"Homepage" = "https://github.com/dkrugman/picframe"
+"Bug Tracker" = "https://github.com/dkrugman/picframe/issues"
 
 [project.scripts]
 picframe = "picframe.start:main"
