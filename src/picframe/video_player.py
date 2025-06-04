@@ -81,7 +81,7 @@ class VideoPlayer:
             return False
 
         # Initialize VLC
-        vlc_args = ['--no-audio']
+        vlc_args = ['--no-audio', '--quiet', '--verbose=0']
         try:
             self.instance = vlc.Instance(vlc_args)
             self.player = self.instance.media_player_new()
@@ -219,7 +219,7 @@ class VideoPlayer:
                 state = self.player.get_state() if self.player else None
                 if (
                     state is not None and
-                    state not in [vlc.State.Error, vlc.State.Stopped, vlc.State.Ended, vlc.State.Playing] and
+                    state not in [vlc.State.Playing] and
                     self.last_state == "PLAYING"
                 ):
                     self.logger.debug("Current VLC state: %s, but my state is PLAYING", state)
@@ -327,6 +327,7 @@ def main() -> None:
     Initializes logging, parses arguments, sets up the video player, and starts the event loop.
     """
     args = parse_args()
+    logging.basicConfig(level=logging.DEBUG)  # TODO add level as argument
     player = VideoPlayer(args.x, args.y, args.w, args.h, args.fit_display)
     if player.setup():
         player.run()
