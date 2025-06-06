@@ -225,7 +225,7 @@ class VideoPlayer:
             return False
 
         current_time = self.player.get_time()
-        now = time.time()‚
+        now = time.time()
 
         if current_time == self.last_time:
             # No progress, check if we've been stuck for more than 3 seconds
