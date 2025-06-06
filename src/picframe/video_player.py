@@ -47,10 +47,12 @@ class VideoPlayer:
         self.fit_display = fit_display
         self.cmd_queue: queue.Queue[str] = queue.Queue()
         self.stdin_thread = threading.Thread(target=self._stdin_reader, daemon=True)
-        self._vlc_event_manager = None
-        self._vlc_event_callbacks_registered = False
-        self._show_window_request = False
-        self._hide_window_request = False
+        self._vlc_event_manager: Optional[vlc.EventManager] = None
+        self._vlc_event_callbacks_registered: bool = False
+        self._show_window_request: bool = False
+        self._hide_window_request: bool = False
+        self.last_time: int = 0
+        self._last_progress_time: float = 0.0
 
     def setup(self) -> bool:
         """Initialize SDL2, create window, and set up VLC player."""
@@ -141,6 +143,8 @@ class VideoPlayer:
         self.logger.debug("VLC event: MediaPlayerPlaying")
         self._send_state("PLAYING")
         self._show_window_request = True
+        self.last_time = 0
+        self._last_progress_time = time.time()
 
     def _on_vlc_stopped(self, event: vlc.Event) -> None:
         """
@@ -205,6 +209,41 @@ class VideoPlayer:
                 break
             self.cmd_queue.put(line)
 
+    def check_video_progress(self) -> bool:
+        """
+        Checks the progress of the currently playing video and determines if the player is stuck.
+
+        This method monitors the playback time of the video player. If the playback time does not advance
+        for more than 3 seconds, or if the player reports that no media is loaded, it is considered stuck,
+        and playback is stopped.
+
+        Returns:
+            bool: True if the video is progressing normally, False if the player is stuck or not initialized.
+        """
+        if not self.player:
+            self.logger.error("Player not initialized, cannot check video progress.")
+            return False
+
+        current_time = self.player.get_time()
+        now = time.time()‚
+
+        if current_time == self.last_time:
+            # No progress, check if we've been stuck for more than 3 seconds
+            if now - self._last_progress_time > 3.0:
+                self.logger.error("vlc is stuck while playing for more than 3 seconds. Stopping it!")
+                self.player.stop()
+                return False
+        elif current_time == -1:  # VLC returns -1 if no media is loaded
+            self.logger.warning("No media loaded or media is invalid.")
+            self.player.stop()
+            return False
+        else:
+            # Progress detected, reset timer
+            self._last_progress_time = now
+
+        self.last_time = current_time
+        return True
+
     def run(self) -> None:
         """Main event loop: handle SDL2 events and commands."""
         if not self.player:
@@ -218,11 +257,10 @@ class VideoPlayer:
 
                 state = self.player.get_state() if self.player else None
                 if (
-                    state is not None and
-                    state not in [vlc.State.Playing] and
+                    state == vlc.State.Playing and
                     self.last_state == "PLAYING"
                 ):
-                    self.logger.debug("Current VLC state: %s, but my state is PLAYING", state)
+                    self.check_video_progress()
 
                 # Handle window show/hide requests from VLC callbacks
                 if self._show_window_request:
