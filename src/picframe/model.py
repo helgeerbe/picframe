@@ -167,7 +167,8 @@ class Model:
             except yaml.YAMLError as exc:
                 self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
         root_logger = logging.getLogger()
-        root_logger.setLevel(self.get_model_config()['log_level'])  # set root logger
+        level = getattr(logging, self.get_model_config()['log_level'].upper(), logging.WARNING)
+        root_logger.setLevel(level)
         log_file = self.get_model_config()['log_file']
         if log_file != '':
             filehandler = logging.FileHandler(log_file)  # NB default appending so needs monitoring

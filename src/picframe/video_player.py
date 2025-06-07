@@ -358,6 +358,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--w", type=int, default=640)
     parser.add_argument("--h", type=int, default=480)
     parser.add_argument("--fit_display", action="store_true")
+    parser.add_argument("--log_level", type=str, default="info", choices=["debug", "info", "warning", "error", "critical"],
+                        help="Set the logging level (default: info)")
     return parser.parse_args()
 
 
@@ -367,7 +369,8 @@ def main() -> None:
     Initializes logging, parses arguments, sets up the video player, and starts the event loop.
     """
     args = parse_args()
-    logging.basicConfig(level=logging.DEBUG)  # TODO add level as argument
+    log_level = getattr(logging, args.log_level.upper(), logging.INFO)
+    logging.basicConfig(level=log_level)
     player = VideoPlayer(args.x, args.y, args.w, args.h, args.fit_display)
     if player.setup():
         player.run()
