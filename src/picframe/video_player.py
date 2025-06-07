@@ -53,7 +53,7 @@ class VideoPlayer:
         self._hide_window_request: bool = False
         self._last_time: int = 0
         self._last_progress_time: float = 0.0
-        self._startup: bool = False
+        self._startup: bool = True
 
     def setup(self) -> bool:
         """Initialize SDL2, create window, and set up VLC player."""
@@ -229,7 +229,7 @@ class VideoPlayer:
         now = time.time()
 
         if not self._startup and current_time == self._last_time:
-            # No progress, check if we've been stuck for more than 3 seconds
+            # No progress, check if we've been stuck for more than 9 seconds
             if now - self._last_progress_time > 9.0:
                 self.logger.error("vlc is stuck while playing for more than 9 seconds. Stopping it!")
                 self.logger.debug("vlc current time: %d, last time: %d", current_time, self._last_time)
@@ -242,7 +242,7 @@ class VideoPlayer:
         else:
             # Progress detected, reset timer
             self._last_progress_time = now
-            if self._startup and current_time != self._last_time:
+            if self._startup and current_time > 0:
                 self.logger.debug("Video started playing.")
                 self.logger.debug("vlc current time: %d", current_time)
                 self._send_state("PLAYING")
