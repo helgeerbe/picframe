@@ -261,10 +261,7 @@ class VideoPlayer:
                 running = self._poll_events()
 
                 state = self.player.get_state() if self.player else None
-                if (
-                    state == vlc.State.Playing and
-                    self.last_state == "PLAYING"
-                ):
+                if state == vlc.State.Playing:
                     self.check_video_progress()
 
                 # Handle window show/hide requests from VLC callbacks
