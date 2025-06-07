@@ -232,6 +232,7 @@ class VideoPlayer:
             # No progress, check if we've been stuck for more than 3 seconds
             if now - self._last_progress_time > 9.0:
                 self.logger.error("vlc is stuck while playing for more than 9 seconds. Stopping it!")
+                self.logger.debug("vlc current time: %d, last time: %d", current_time, self._last_time)
                 self.player.stop()
                 return False
         elif current_time == -1:  # VLC returns -1 if no media is loaded
@@ -241,8 +242,9 @@ class VideoPlayer:
         else:
             # Progress detected, reset timer
             self._last_progress_time = now
-            if self._startup:
+            if self._startup and current_time != self._last_time:
                 self.logger.debug("Video started playing.")
+                self.logger.debug("vlc current time: %d", current_time)
                 self._send_state("PLAYING")
                 self._startup = False
 
