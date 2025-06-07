@@ -229,9 +229,9 @@ class VideoPlayer:
         now = time.time()
 
         if not self._startup and current_time == self._last_time:
-            # No progress, check if we've been stuck for more than 9 seconds
-            if now - self._last_progress_time > 9.0:
-                self.logger.error("vlc is stuck while playing for more than 9 seconds. Stopping it!")
+            # No progress, check if we've been stuck for more than 3 seconds
+            if now - self._last_progress_time > 3.0:
+                self.logger.error("vlc is stuck while playing for more than 3 seconds. Stopping it!")
                 self.logger.debug("vlc current time: %d, last time: %d", current_time, self._last_time)
                 self.player.stop()
                 return False
@@ -262,10 +262,6 @@ class VideoPlayer:
             while running:
                 running = self._poll_events()
 
-                state = self.player.get_state() if self.player else None
-                if state == vlc.State.Playing:
-                    self.check_video_progress()
-
                 # Handle window show/hide requests from VLC callbacks
                 if self._show_window_request:
                     if not sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
@@ -279,6 +275,10 @@ class VideoPlayer:
                     if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
                         sdl2.SDL_HideWindow(self.window)
                     self._hide_window_request = False
+
+                state = self.player.get_state() if self.player else None
+                if state == vlc.State.Playing:
+                    self.check_video_progress()
 
                 # Only handle commands
                 try:
