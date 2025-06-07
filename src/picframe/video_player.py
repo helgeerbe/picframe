@@ -51,8 +51,9 @@ class VideoPlayer:
         self._vlc_event_callbacks_registered: bool = False
         self._show_window_request: bool = False
         self._hide_window_request: bool = False
-        self.last_time: int = 0
+        self._last_time: int = 0
         self._last_progress_time: float = 0.0
+        self._startup: bool = False
 
     def setup(self) -> bool:
         """Initialize SDL2, create window, and set up VLC player."""
@@ -141,10 +142,10 @@ class VideoPlayer:
 
     def _on_vlc_playing(self, event):
         self.logger.debug("VLC event: MediaPlayerPlaying")
-        self._send_state("PLAYING")
         self._show_window_request = True
-        self.last_time = 0
+        self._last_time = 0
         self._last_progress_time = time.time()
+        self._startup = True
 
     def _on_vlc_stopped(self, event: vlc.Event) -> None:
         """
@@ -227,7 +228,7 @@ class VideoPlayer:
         current_time = self.player.get_time()
         now = time.time()
 
-        if current_time == self.last_time:
+        if not self._startup and current_time == self._last_time:
             # No progress, check if we've been stuck for more than 3 seconds
             if now - self._last_progress_time > 3.0:
                 self.logger.error("vlc is stuck while playing for more than 3 seconds. Stopping it!")
@@ -240,8 +241,12 @@ class VideoPlayer:
         else:
             # Progress detected, reset timer
             self._last_progress_time = now
+            if self._startup:
+                self.logger.debug("Video started playing.")
+                self._send_state("PLAYING")
+                self._startup = False
 
-        self.last_time = current_time
+        self._last_time = current_time
         return True
 
     def run(self) -> None:
