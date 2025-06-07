@@ -270,6 +270,10 @@ class VideoPlayer:
                         sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
                         sdl2.SDL_WarpMouseInWindow(self.window, self.w - 1, self.h - 1)
                     self._show_window_request = False
+                
+                if sdl2.SDL_ShowCursor(sdl2.SDL_QUERY) == 1:
+                    self.logger.debug("Mouse pointer is visible, hiding it.")
+                    sdl2.SDL_ShowCursor(sdl2.SDL_DISABLE)
 
                 if self._hide_window_request:
                     if sdl2.SDL_GetWindowFlags(self.window) & sdl2.SDL_WINDOW_SHOWN:
@@ -340,9 +344,6 @@ class VideoPlayer:
             self.logger.warning(
                 "Player window not shown within %d seconds.", timeout
                 )
-        else:
-            # Wait a bit longer to ensure compositor has mapped the window
-            time.sleep(1)
         return shown
 
 
