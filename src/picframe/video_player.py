@@ -342,7 +342,7 @@ class VideoPlayer:
                 )
         else:
             # Wait a bit longer to ensure compositor has mapped the window
-            time.sleep(0.5)
+            time.sleep(1)
         return shown
 
 
