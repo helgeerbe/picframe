@@ -230,8 +230,8 @@ class VideoPlayer:
 
         if not self._startup and current_time == self._last_time:
             # No progress, check if we've been stuck for more than 3 seconds
-            if now - self._last_progress_time > 3.0:
-                self.logger.error("vlc is stuck while playing for more than 3 seconds. Stopping it!")
+            if now - self._last_progress_time > 9.0:
+                self.logger.error("vlc is stuck while playing for more than 9 seconds. Stopping it!")
                 self.player.stop()
                 return False
         elif current_time == -1:  # VLC returns -1 if no media is loaded
