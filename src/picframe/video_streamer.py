@@ -595,7 +595,6 @@ class VideoStreamer:
             return
         elapsed = time.time() - start_time
         self.__logger.info("Video player started in %.3f seconds.", elapsed)
-        time.sleep(1.0)  # Give some time so last frame is displayed
 
     def is_playing(self) -> bool:
         """
