@@ -581,7 +581,7 @@ class VideoStreamer:
             return
         self._send_command(f"load {video_path}")
 
-        timeout = 10  # seconds
+        timeout = 15  # seconds
         start_time = time.time()
         try:
             while not self.is_playing():
