@@ -17,8 +17,11 @@ class GetImageMeta:
         self.__logger = logging.getLogger("get_image_meta.GetImageMeta")
         self.__tags = {}
         self.__filename = filename  # in case no exif data in which case needed for size
+        self.__image_width: int = 0
+        self.__image_height: int = 0
         image = self.get_image_object(filename)
         if image:
+            self.__image_width, self.__image_height = image.size
             exif = image.getexif()
             self.__do_image_tags(exif)
             self.__do_exif_tags(exif)
@@ -31,6 +34,11 @@ class GetImageMeta:
             except Exception as e:
                 xmp = {}
                 self.__logger.warning("PILL getxmp() failed: %s -> %s", filename, e)
+ 
+    @property
+    def size(self) -> tuple[int, int]:
+        """Returns the (width, height) tuple of the image."""
+        return (self.__image_width, self.__image_height)
 
     def __do_image_tags(self, exif):
         tags = {
@@ -218,13 +226,6 @@ class GetImageMeta:
         except Exception as e:
             self.__logger.warning("get_exif failed on %s -> %s", self.__filename, e)
             return None
-
-    def get_size(self):
-        try:  # corrupt image file might crash app
-            return GetImageMeta.get_image_object(self.__filename).size
-        except Exception as e:
-            self.__logger.warning("get_size failed on %s -> %s", self.__filename, e)
-            return (0, 0)
 
     @staticmethod
     def get_image_object(fname):
