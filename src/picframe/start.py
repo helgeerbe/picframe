@@ -118,8 +118,7 @@ def main():
                              'ninepatch',
                              'pi_heif',
                              'defusedxml',
-                             'vlc',
-                             'cv2']
+                             'vlc']
         check_packages(required_packages)
         return
     elif args.configfile:
