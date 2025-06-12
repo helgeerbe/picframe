@@ -13,14 +13,12 @@ from picframe.video_streamer import VideoStreamer, VIDEO_EXTENSIONS, VideoFrameE
 # supported display modes for display switch
 dpms_mode = ("unsupported", "pi", "x_dpms")
 
-
 # utility functions with no dependency on ViewerDisplay properties
 def txt_to_bit(txt):
     txt_map = {"title": 1, "caption": 2, "name": 4, "date": 8, "location": 16, "folder": 32}
     if txt in txt_map:
         return txt_map[txt]
     return 0
-
 
 def parse_show_text(txt):
     show_text = 0
@@ -30,11 +28,11 @@ def parse_show_text(txt):
             show_text |= txt_to_bit(txt_key)
     return show_text
 
-
 class ViewerDisplay:
 
     def __init__(self, config):
         self.__logger = logging.getLogger("viewer_display.ViewerDisplay")
+        self.__logger.debug('ViewerDisplay starting')
         self.__blur_amount = config['blur_amount']
         self.__blur_zoom = config['blur_zoom']
         self.__blur_edges = config['blur_edges']
@@ -706,12 +704,14 @@ class ViewerDisplay:
             alpha = max(0.0, min(1.0, ramp_pt * (1.0 - abs(1.0 - 2.0 * dt))))  # function only run if image alpha is 1.0 so can use 1.0 - abs... # noqa: E501
 
             # if we have text, set it's current alpha value to fade in/out
+            show_bkg = False
             for block in self.__textblocks:
                 if block is not None:
                     block.sprite.set_alpha(alpha)
-
-            # if we have a text background to render (and we currently have text), set its alpha and draw it
-            if self.__text_bkg_hgt and any(block is not None for block in self.__textblocks):  # only draw background if text there # noqa: E501
+                    if self.__text_bkg_hgt:
+                        show_bkg = True  
+            
+            if show_bkg:  # only draw background if text 
                 self.__text_bkg.set_alpha(alpha)
                 self.__text_bkg.draw()
 

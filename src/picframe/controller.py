@@ -44,6 +44,7 @@ class Controller:
 
     def __init__(self, model, viewer):
         self.__logger = logging.getLogger("controller.Controller")
+        self.__logger.setLevel(model.get_model_config()['log_level']) # set controller logger to model level
         self.__logger.info('creating an instance of Controller')
         self.__model = model
         self.__viewer = viewer
@@ -312,6 +313,7 @@ class Controller:
                 self.__next_tm = tm + self.__model.time_delay
                 self.__force_navigate = False
                 pics = self.__model.get_next_file()
+                self.__logger.info('NEXT file: %s', pics[0].fname if pics and len(pics) > 0 else 'None')
                 if pics[0] is None:
                     self.__next_tm = 0  # skip this image file moved or otherwise not on db
                     pics = None  # signal slideshow_is_running not to load new image
@@ -381,9 +383,13 @@ class Controller:
             self.__interface_mqtt.stop()
         if self.__interface_http:
             self.__interface_http.stop()
-        self.__model.stop_image_chache()  # close db tidily (blocks till closed)
+        self.__model.stop_image_cache()  # close db tidily (blocks till closed)
         self.__viewer.slideshow_stop()  # do this last
 
     def __signal_handler(self, sig, frame):
+        if sig == signal.SIGINT:
+            self.__logger.info('Ctrl-c pressed, stopping picframe...')
+        else:
+            self.__logger.warning('Signal %s received, stopping picframe...', sig)
         print('You pressed Ctrl-c!')
         self.keep_looping = False

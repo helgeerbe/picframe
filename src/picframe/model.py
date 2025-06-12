@@ -114,6 +114,18 @@ DEFAULT_CONFIG = {
             'power_down': {'enable': False, 'label': 'Power down', 'shortcut': 'p'}
         },
     },
+    'aspect': {
+        'use_aspect': True,  # Set to True to use aspect ratio
+        'min_rotation_interval': 30,    # minimum time in seconds between rotations
+        'set_size': 10, # number of images in each orientation  
+        'width': 2894,  # width of the display in pixels
+        'height': 2160,  # height of the display in pixels
+        'Nixplay': { 'URL': 'https://www.nixplay.com/api/v1/playlists', 'acct_id': '', 'acct_pwd': '' }, 
+        'Cropolla': { 'URL': 'https://cropolla.com/api/a', 'acct_id': '', 'acct_pwd': '' },
+        'GooglePhotos': { 'URL': 'https://photoslibrary.googleapis.com/v1/mediaItems', 'acct_id': '', 'acct_pwd': '' }, 
+        'Flickr': { 'URL': 'https://api.flickr.com/services/rest/', 'acct_id': '', 'acct_pwd': '' }, 
+        'ApplePhotos': { 'URL': 'https://photos.apple.com/api/v1/playlists', 'acct_id': '', 'acct_pwd': '' } 
+    }
 }
 
 
@@ -151,24 +163,30 @@ class Pic:  # TODO could this be done more elegantly with namedtuple
 class Model:
 
     def __init__(self, configfile=DEFAULT_CONFIGFILE):
+        logging.basicConfig(level=logging.DEBUG)
         self.__logger = logging.getLogger("model.Model")
-        self.__logger.debug('creating an instance of Model')
+        # self.__logger.debug('creating an instance of Model')
         self.__config = DEFAULT_CONFIG
         self.__last_file_change = 0.0
         configfile = os.path.expanduser(configfile)
-        self.__logger.info("Open config file: %s:", configfile)
+        # self.__logger.info("Open config file: %s:", configfile)
         with open(configfile, 'r') as stream:
             try:
                 conf = yaml.safe_load(stream)
-                for section in ['viewer', 'model', 'mqtt', 'http', 'peripherals']:
-                    self.__config[section] = {**DEFAULT_CONFIG[section], **conf[section]}
-
-                self.__logger.debug('config data = %s', self.__config)
+                for section in ['viewer', 'model', 'mqtt', 'http', 'peripherals','aspect']:
+                    if section not in conf:
+                       pass 
+                       # self.__logger.warning("Config file %s does not contain section '%s'. Skipping sec.", configfile, section)
+                    else:
+                        self.__config[section] = {**DEFAULT_CONFIG[section], **conf[section]}
+                # self.__logger.debug('config data = %s', self.__config)
             except yaml.YAMLError as exc:
                 self.__logger.error("Can't parse yaml config file: %s: %s", configfile, exc)
+        model_config = self.get_model_config()  # alias for brevity as used several times below
+        self.__logger.setLevel(model_config['log_level']) # set model logger
         root_logger = logging.getLogger()
-        root_logger.setLevel(self.get_model_config()['log_level'])  # set root logger
-        log_file = self.get_model_config()['log_file']
+        root_logger.setLevel(model_config['root_log_level'])  # set root logger
+        log_file = model_config['log_file']
         if log_file != '':
             filehandler = logging.FileHandler(log_file)  # NB default appending so needs monitoring
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
@@ -185,7 +203,7 @@ class Model:
         self.__current_pics = (None, None)  # this hold a tuple of (pic, None) or two pic objects if portrait pairs
         self.__num_run_through = 0
 
-        model_config = self.get_model_config()  # alias for brevity as used several times below
+        
         try:
             locale.setlocale(locale.LC_TIME, model_config['locale'])
         except Exception:
@@ -205,8 +223,7 @@ class Model:
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
         self.__sort_cols = model_config['sort_cols']
         self.__col_names = None
-        # init where clauses through setters
-        self.__where_clauses = {}
+        self.__where_clauses = {}   # init where clauses through setters
         self.location_filter = model_config['location_filter']
         self.tags_filter = model_config['tags_filter']
 
@@ -234,6 +251,11 @@ class Model:
 
     def get_peripherals_config(self):
         return self.__config['peripherals']
+    
+    def get_aspect_config(self):
+        if 'aspect' not in self.__config:
+            self.__config['aspect'] = {}
+        return self.__config['aspect']
 
     @property
     def fade_time(self):
@@ -314,7 +336,9 @@ class Model:
 
     def __build_filter(self, val, field):
         if val.count("(") != val.count(")"):
-            return None  # this should clear the filter and not raise an error
+            self.__logger.error("Unbalanced brackets in filter: %s", val)
+            self.__logger.error("Filter not applied") 
+            return None
         val = val.replace(";", "").replace("'", "").replace("%", "").replace('"', '')  # SQL scrambling
         tokens = ("(", ")", "AND", "OR", "NOT")  # now copes with NOT
         val_split = val.replace("(", " ( ").replace(")", " ) ").split()  # so brackets not joined to words
@@ -347,7 +371,7 @@ class Model:
     def pause_looping(self, val):
         self.__image_cache.pause_looping(val)
 
-    def stop_image_chache(self):
+    def stop_image_cache(self):
         self.__image_cache.stop()
 
     def purge_files(self):
@@ -370,11 +394,15 @@ class Model:
         self.__reload_files = True
 
     def set_next_file_to_previous_file(self):
-        self.__file_index = (self.__file_index - 2) % self.__number_of_files  # TODO deleting last image results in ZeroDivisionError # noqa: E501
-
-    def get_next_file(self):
+        if self.__number_of_files > 0:
+            self.__file_index = (self.__file_index - 2) % self.__number_of_files
+        else:
+            self.__file_index = 0  # reset to zero if no files available
+            self.__logger.warning("No files available, setting file index to 0") 
+            
+    def get_next_file(self):  # MAIN LOOP: keep getting next file  
         missing_images = 0
-
+        self.__logger.debug("get_next_file called, number of files:  %s. File Index: %s", self.__number_of_files, self.__file_index)
         # loop until we acquire a valid image set
         while True:
             pic1 = None
@@ -382,6 +410,7 @@ class Model:
 
             # Reload the playlist if requested
             if self.__reload_files:
+                self.__logger.debug("Reloading files from image cache")
                 for _i in range(5):  # give image_cache chance on first load if a large directory
                     self.__get_files()
                     missing_images = 0
@@ -393,6 +422,7 @@ class Model:
             # Also, set the reload_files flag so we'll check for new files on the next pass...
             if self.__number_of_files == 0 or missing_images >= self.__number_of_files:
                 pic1 = Pic(self.__no_files_img, 0, 0)
+                self.__logger.warning("No Images. Reload requested")
                 self.__reload_files = True
                 break
 
@@ -400,15 +430,19 @@ class Model:
             #   If it's time to shuffle, set a flag to do so
             #   Loop back, which will reload and shuffle if necessary
             if self.__file_index == self.__number_of_files:
+
                 self.__num_run_through += 1
                 if self.shuffle and self.__num_run_through >= self.get_model_config()['reshuffle_num']:
+                    self.__logger.info("Reshuffling files after {} runs through".format(self.__num_run_through))
                     self.__reload_files = True
-                self.__file_index = 0
-                continue
+                    self.__file_index = 0
+                    continue
 
             # Load the current image set
             file_ids = self.__file_list[self.__file_index]
+            self.__logger.debug("Loading file set: %s", file_ids)
             pic_row = self.__image_cache.get_file_info(file_ids[0])
+            self.__logger.debug("pic_row: %s", pic_row)
             pic1 = Pic(**pic_row) if pic_row is not None else None
             if len(file_ids) == 2:
                 pic_row = self.__image_cache.get_file_info(file_ids[1])
@@ -468,10 +502,13 @@ class Model:
 
     def __get_files(self):
         if self.subdirectory != "":
+            self.__logger.debug("Using subdirectory: %s", self.subdirectory)
             picture_dir = os.path.join(self.__pic_dir, self.subdirectory)  # TODO catch, if subdirecotry does not exist
         else:
             picture_dir = self.__pic_dir
         where_list = ["fname LIKE '{}/%'".format(picture_dir)]  # TODO / on end to stop 'test' also selecting test1 test2 etc  # noqa: E501
+        self.__logger.debug("Using picture directory: %s", picture_dir)
+        self.__logger.debug("Using where clauses: %s", self.__where_clauses)
         where_list.extend(self.__where_clauses.values())
 
         if len(where_list) > 0:

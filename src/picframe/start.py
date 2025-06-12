@@ -9,7 +9,6 @@ from picframe import model, viewer_display, controller, __version__
 
 PICFRAME_DATA_DIR = 'picframe_data'
 
-
 def copy_files(pkgdir, dest, target):
     try:
         fullpath = os.path.join(pkgdir,  target)
@@ -18,7 +17,6 @@ def copy_files(pkgdir, dest, target):
         copytree(fullpath,  destination)
     except Exception:
         raise
-
 
 def create_config(root):
     fullpath_root = os.path.join(root,  PICFRAME_DATA_DIR)
@@ -66,7 +64,6 @@ def create_config(root):
     except Exception:
         raise
 
-
 def check_packages(packages):
     for package in packages:
         try:
@@ -81,12 +78,10 @@ def check_packages(packages):
         except ImportError:
             print(package, ': Not found!')
 
-
 def main():
-    logging.basicConfig(stream=sys.stdout, level=logging.INFO)
+    logging.basicConfig(stream=sys.stdout, level=logging.WARNING, format="%(asctime)s %(levelname)s [%(pathname)s:%(lineno)d] %(message)s")
     logger = logging.getLogger("start.py")
-    logger.info('starting %s', sys.argv)
-
+    logger.info('-------------------> starting %s', sys.argv)
     parser = argparse.ArgumentParser()
     group = parser.add_mutually_exclusive_group()
     group.add_argument("-i", "--initialize",
@@ -132,12 +127,12 @@ def main():
     else:
         m = model.Model()
 
+    logger.debug('-------------------> model initialized with config: %s', m.get_model_config())
     v = viewer_display.ViewerDisplay(m.get_viewer_config())
     c = controller.Controller(m, v)
     c.start()
     c.loop()
     c.stop()
-
 
 if __name__ == "__main__":
     main()

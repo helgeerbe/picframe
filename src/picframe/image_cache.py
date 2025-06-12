@@ -88,6 +88,7 @@ class ImageCache:
 
         # While we have files to process and looping isn't paused
         while self.__modified_files and not self.__pause_looping:
+            self.__logger.debug('Found %d new files on disk', len(self.__modified_files))
             file = self.__modified_files.pop(0)
             self.__logger.debug('Inserting: %s', file)
             self.__insert_file(file)
