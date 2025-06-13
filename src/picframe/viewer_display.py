@@ -84,7 +84,7 @@ class ViewerDisplay:
         self.__flat_shader = None
         self.__xstep = None
         self.__ystep = None
-        self.__textblocks = [None, None]
+        self.__textblock = None
         self.__text_bkg = None
         self.__sfg = None  # slide for background
         self.__sbg = None  # slide for foreground
@@ -194,10 +194,10 @@ class ViewerDisplay:
     def text_is_on(self, txt_key):
         return self.__show_text & txt_to_bit(txt_key)
 
-    def reset_name_tm(self, pic=None, paused=None, side=0, pair=False):
+    def reset_name_tm(self, pic=None, paused=None):
         # only extend i.e. if after initial fade in
         if pic is not None and paused is not None:  # text needs to be refreshed
-            self.__make_text(pic, paused, side, pair)
+            self.__make_text(pic, paused)
         self.__name_tm = max(self.__name_tm, time.time() + self.__show_text_tm)
 
     def set_brightness(self, val):
@@ -206,9 +206,8 @@ class ViewerDisplay:
             self.__clock_overlay.sprite.set_alpha(val)
         if self.__image_overlay:
             self.__image_overlay.set_alpha(val)
-        for txt in self.__textblocks:  # must be list
-            if txt:
-                txt.sprite.set_alpha(val)
+        if self.__textblock:  
+            __textblock.sprite.set_alpha(val)
 
     def get_brightness(self):
         return round(self.__slide.unif[55], 2)  # this will still give 32/64 bit differences sometimes, as will the float(format()) system # noqa: E501
@@ -239,20 +238,6 @@ class ViewerDisplay:
     @clock_is_on.setter
     def clock_is_on(self, val):
         self.__show_clock = val
-
-    # Concatenate the specified images horizontally. Clip the taller
-    # image to the height of the shorter image.
-    def __create_image_pair(self, im1, im2):
-        sep = 8  # separation between the images
-        # scale widest image to same width as narrower to avoid drastic cropping on mismatched images
-        if im1.width > im2.width:
-            im1 = im1.resize((im2.width, int(im1.height * im2.width / im1.width)), resample=Image.BICUBIC)
-        else:
-            im2 = im2.resize((im1.width, int(im2.height * im1.width / im2.width)), resample=Image.BICUBIC)
-        dst = Image.new('RGB', (im1.width + im2.width + sep, min(im1.height, im2.height)))
-        dst.paste(im1, (0, 0))
-        dst.paste(im2, (im1.width + sep, 0))
-        return dst
 
     def __orientate_image(self, im, pic):
         ext = os.path.splitext(pic.fname)[1].lower()
@@ -300,9 +285,9 @@ class ViewerDisplay:
             diff_aspect = 1 - (screen_aspect / image_aspect)
         return (screen_aspect, image_aspect, diff_aspect)
 
-    def __tex_load(self, pics, size=None):  # noqa: C901
+    def __tex_load(self, pic, size=None):  # noqa: C901
         try:
-            self.__logger.debug(f"loading images: {pics[0].fname} {pics[1].fname if pics[1] else ''}")
+            self.__logger.debug(f"loading image: {pic.fname}")
             if self.__mat_images and self.__matter is None:
                 self.__matter = mat_image.MatImage(
                     display_size=(self.__display.width, self.__display.height),
@@ -316,31 +301,18 @@ class ViewerDisplay:
                     inner_mat_use_texture=self.__inner_mat_use_texture)
 
             # Load the image(s) and correct their orientation as necessary
-            if pics[0]:
-                im = get_image_meta.GetImageMeta.get_image_object(pics[0].fname)
+            if pic:
+                im = get_image_meta.GetImageMeta.get_image_object(pic.fname)
                 if im is None:
                     return None
-                if pics[0].orientation != 1:
-                    im = self.__orientate_image(im, pics[0])
-
-            if pics[1]:
-                im2 = get_image_meta.GetImageMeta.get_image_object(pics[1].fname)
-                if im2 is None:
-                    return None
-                if pics[1].orientation != 1:
-                    im2 = self.__orientate_image(im2, pics[1])
+                if pic.orientation != 1:
+                    im = self.__orientate_image(im, pic)
 
             screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
 
             if self.__mat_images and diff_aspect > self.__mat_images_tol:
-                if not pics[1]:
-                    im = self.__matter.mat_image((im,))
-                else:
-                    im = self.__matter.mat_image((im, im2))
-            else:
-                if pics[1]:  # i.e portrait pair
-                    im = self.__create_image_pair(im, im2)
-
+                im = self.__matter.mat_image(im)
+ 
             (w, h) = im.size
             screen_aspect, image_aspect, diff_aspect = self.__get_aspect_diff(size, im.size)
 
@@ -368,15 +340,14 @@ class ViewerDisplay:
                     im = im_b  # have to do this as paste applies in place
             tex = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
         except Exception as e:
-            self.__logger.warning("Can't create tex from file: \"%s\" or \"%s\"", pics[0].fname, pics[1])
+            self.__logger.warning("Can't create tex from file: %s", pic.fname)
             self.__logger.warning("Cause: %s", e)
             tex = None
             # raise # only re-raise errors here while debugging
         return tex
 
-    def __make_text(self, pic, paused, side=0, pair=False):  # noqa: C901
-        # if side 0 and pair False then this is a full width text and put into
-        # __textblocks[0] otherwise it is half width and put into __textblocks[position]
+    def __make_text(self, pic, paused):  # noqa: C901
+        # this is a full width text and put into __textblock
         info_strings = []
         if pic is not None and (self.__show_text > 0 or paused):  # was SHOW_TEXT_TM > 0.0
             if (self.__show_text & 1) == 1 and pic.title is not None:  # title
@@ -407,10 +378,7 @@ class ViewerDisplay:
 
         block = None
         if len(final_string) > 0:
-            if side == 0 and not pair:
-                c_rng = self.__display.width - 100  # range for x loc from L to R justified
-            else:
-                c_rng = self.__display.width * 0.5 - 100  # range for x loc from L to R justified
+            c_rng = self.__display.width - 100  # range for x loc from L to R justified
             opacity = int(255 * float(self.__text_opacity) * self.get_brightness())
             block = pi3d.FixedString(self.__font_file, final_string, shadow_radius=3, font_size=self.__show_text_sz,
                                      shader=self.__flat_shader, justify=self.__text_justify, width=c_rng,
@@ -420,16 +388,11 @@ class ViewerDisplay:
                 adj_x *= -1
             elif self.__text_justify == "C":
                 adj_x = 0
-            if side == 0 and not pair:  # i.e. full width
-                x = adj_x
-            else:
-                x = adj_x + int(self.__display.width * 0.25 * (-1.0 if side == 0 else 1.0))
+            x = adj_x
             y = (block.sprite.height - self.__display.height + self.__show_text_sz) // 2
             block.sprite.position(x, y, 0.1)
             block.sprite.set_alpha(0.0)
-        if side == 0:
-            self.__textblocks[1] = None
-        self.__textblocks[side] = block
+        self.__textblock = block
 
     def __draw_clock(self):
         current_time = datetime.now().strftime(self.__clock_format)
@@ -520,7 +483,7 @@ class ViewerDisplay:
         self.__slide.unif[47] = self.__edge_alpha
         self.__slide.unif[54] = float(self.__blend_type)
         self.__slide.unif[55] = 1.0  # brightness
-        self.__textblocks = [None, None]
+        self.__textblock = None
         self.__flat_shader = pi3d.Shader("uv_flat")
 
         if self.__text_bkg_hgt:
@@ -566,7 +529,7 @@ class ViewerDisplay:
             self.__logger.warning("Cause: %s", e)
             return None
 
-    def slideshow_is_running(self, pics: Optional[List[Optional[get_image_meta.GetImageMeta]]] = None,
+    def slideshow_is_running(self, pic: Optional[List[Optional[get_image_meta.GetImageMeta]]] = None,
                              time_delay: float = 200.0, fade_time: float = 10.0,
                              paused: bool = False) -> Tuple[bool, bool, bool]:
         """
@@ -574,8 +537,8 @@ class ViewerDisplay:
 
         Parameters:
         -----------
-        pics : Optional[List[Optional[get_image_meta.GetImageMeta]]], optional
-            A list of pictures to display. The first item in the list is the primary image or video.
+        pic : Optional[List[Optional[get_image_meta.GetImageMeta]]], optional
+            Picture to display.
         time_delay : float, optional
             The time in seconds to display each image or video before transitioning to the next.
         fade_time : float, optional
@@ -605,17 +568,17 @@ class ViewerDisplay:
             return (loop_running, False, video_playing)  # now returns tuple with skip image flag and video_time added
 
         tm = time.time()
-        if pics is not None:
+        if pic is not None:
             self.stop_video()
-            if pics[0] and os.path.splitext(pics[0].fname)[1].lower() in VIDEO_EXTENSIONS:
-                self.__video_path = pics[0].fname
+            if pic and os.path.splitext(pic.fname)[1].lower() in VIDEO_EXTENSIONS:
+                self.__video_path = pic.fname
                 textures = self.__load_video_frames(self.__video_path)
                 if textures is not None:
                     new_sfg, self.__last_frame_tex = textures
                 else:
                     new_sfg = None
-            else:  # normal image or image pair
-                new_sfg = self.__tex_load(pics, (self.__display.width, self.__display.height))
+            else:  # normal image
+                new_sfg = self.__tex_load(pic, (self.__display.width, self.__display.height))
             tm = time.time()
             self.__next_tm = tm + time_delay
             self.__name_tm = tm + fade_time + self.__show_text_tm  # text starts after slide transition
@@ -631,11 +594,9 @@ class ViewerDisplay:
                 self.__delta_alpha = 1.0  # else jump alpha from 0 to 1 in one frame
             # set the file name as the description
             if self.__show_text_tm > 0.0:
-                for i, pic in enumerate(pics):
-                    self.__make_text(pic, paused, i, pics[1] is not None)  # send even if pic is None to clear previous text # noqa: E501
+                self.__make_text(pic, paused)  # send even if pic is None to clear previous text # noqa: E501
             else:  # could have a NO IMAGES selected and being drawn
-                for block in range(2):
-                    self.__textblocks[block] = None
+                self.__textblock = None
 
             if self.__sbg is None:  # first time through
                 self.__sbg = self.__sfg
@@ -707,19 +668,17 @@ class ViewerDisplay:
 
             # if we have text, set it's current alpha value to fade in/out
             show_bkg = False
-            for block in self.__textblocks:
-                if block is not None:
-                    block.sprite.set_alpha(alpha)
-                    if self.__text_bkg_hgt:
-                        show_bkg = True  
+            if self.__textblock:
+                self.__textblock.sprite.set_alpha(alpha)
+                if self.__text_bkg_hgt:
+                    show_bkg = True  
             
             if show_bkg:  # only draw background if text 
                 self.__text_bkg.set_alpha(alpha)
                 self.__text_bkg.draw()
 
-            for block in self.__textblocks:
-                if block is not None:
-                    block.sprite.draw()
+            if self.__textblock is not None:
+                self.__textblock.sprite.draw()
         return (loop_running, skip_image, video_playing)  # now returns tuple with skip image flag and video_time added
     
     def stop_video(self):
