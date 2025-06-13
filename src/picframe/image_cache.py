@@ -119,7 +119,6 @@ class ImageCache:
     def get_file_info(self, file_id):
         if not file_id:
             return None
-        self.__logger.error('Getting file info for file_id %s', file_id)
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
         row = self.__db.execute(sql).fetchone()
         try:

@@ -311,7 +311,7 @@ class Controller:
                 self.__next_tm = tm + self.__model.time_delay
                 self.__force_navigate = False
                 pic = self.__model.get_next_file()
-                self.__logger.info('NEXT file: %s', pic.fname if pic and len(pic) > 0 else 'None')
+                self.__logger.info('NEXT file: %s', pic.fname if pic else 'None')
                 if pic is None:
                     self.__next_tm = 0  # skip this image file moved or otherwise not on db
                     pic = None  # signal slideshow_is_running not to load new image

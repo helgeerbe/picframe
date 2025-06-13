@@ -156,7 +156,7 @@ class Pic:  # TODO could this be done more elegantly with namedtuple
         self.tags = tags
         self.caption = caption
         self.title = title
-
+        
 
 class Model:
 
@@ -435,7 +435,7 @@ class Model:
                     continue
 
             # Load the current image
-            file_id = self.__file_list[self.__file_index]
+            file_id = self.__file_list[self.__file_index][0]
             self.__logger.debug("Loading file: %s", file_id)
             pic_row = self.__image_cache.get_file_info(file_id)
             self.__logger.debug("pic_row: %s", pic_row)
