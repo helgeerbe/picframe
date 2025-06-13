@@ -76,8 +76,8 @@ class Controller:
         self.__paused = val
         if self.__viewer.is_video_playing():
             self.__viewer.pause_video(val)
-        pic = self.__model.get_current_pics()[0]  # only refresh left text
-        self.__viewer.reset_name_tm(pic, val, side=0, pair=self.__model.get_current_pics()[1] is not None)
+        pic = self.__model.get_current_pic() 
+        self.__viewer.reset_name_tm(pic, val)
         if self.__mqtt_config['use_mqtt']:
             self.publish_state()
 
@@ -110,14 +110,12 @@ class Controller:
         if val is True:  # allow to be called with boolean from httpserver
             val = "ON"
         self.__viewer.set_show_text(txt_key, val)
-        for (side, pic) in enumerate(self.__model.get_current_pics()):
-            if pic is not None:
-                self.__viewer.reset_name_tm(pic, self.paused, side, self.__model.get_current_pics()[1] is not None)
+        if pic is not None:
+            self.__viewer.reset_name_tm(pic, self.paused)
 
     def refresh_show_text(self):
-        for (side, pic) in enumerate(self.__model.get_current_pics()):
-            if pic is not None:
-                self.__viewer.reset_name_tm(pic, self.paused, side, self.__model.get_current_pics()[1] is not None)
+        if pic is not None:
+            self.__viewer.reset_name_tm(pic, self.paused)
 
     def purge_files(self):
         self.__model.purge_files()
@@ -295,7 +293,7 @@ class Controller:
         return actual_dir, dir_list
 
     def get_current_path(self):
-        (pic, _) = self.__model.get_current_pics()
+        (pic, _) = self.__model.get_current_pic()
         return pic.fname
 
     def loop(self):  # TODO exit loop gracefully and call image_cache.stop()
@@ -308,30 +306,30 @@ class Controller:
             fade_time = self.__model.fade_time
 
             tm = time.time()
-            pics = None  # get_next_file returns a tuple of two in case paired portraits have been specified
+            pic = None  
             if not self.paused and tm > self.__next_tm or self.__force_navigate:
                 self.__next_tm = tm + self.__model.time_delay
                 self.__force_navigate = False
-                pics = self.__model.get_next_file()
-                self.__logger.info('NEXT file: %s', pics[0].fname if pics and len(pics) > 0 else 'None')
-                if pics[0] is None:
+                pic = self.__model.get_next_file()
+                self.__logger.info('NEXT file: %s', pic.fname if pic and len(pic) > 0 else 'None')
+                if pic is None:
                     self.__next_tm = 0  # skip this image file moved or otherwise not on db
-                    pics = None  # signal slideshow_is_running not to load new image
+                    pic = None  # signal slideshow_is_running not to load new image
                 else:
                     image_attr = {}
                     for key in self.__model.get_model_config()['image_attr']:
                         if key == 'PICFRAME GPS':
-                            image_attr['latitude'] = pics[0].latitude
-                            image_attr['longitude'] = pics[0].longitude
+                            image_attr['latitude'] = pic.latitude
+                            image_attr['longitude'] = pic.longitude
                         elif key == 'PICFRAME LOCATION':
-                            image_attr['location'] = pics[0].location
+                            image_attr['location'] = pic.location
                         else:
                             field_name = self.__model.EXIF_TO_FIELD[key]
-                            image_attr[key] = pics[0].__dict__[field_name]  # TODO nicer using namedtuple for Pic
+                            image_attr[key] = pic.__dict__[field_name]  # TODO nicer using namedtuple for Pic
                     if self.__mqtt_config['use_mqtt']:
-                        self.publish_state(pics[0].fname, image_attr)
+                        self.publish_state(pic.fname, image_attr)
             self.__model.pause_looping = self.__viewer.is_in_transition()
-            (loop_running, skip_image, video_playing) = self.__viewer.slideshow_is_running(pics, time_delay, fade_time, self.__paused)
+            (loop_running, skip_image, video_playing) = self.__viewer.slideshow_is_running(pic, time_delay, fade_time, self.__paused)
             if not loop_running:
                 break
             if skip_image or (video_extended and not video_playing):

@@ -23,7 +23,7 @@ class ImageCache:
                      'IPTC Caption/Abstract': 'caption',
                      'IPTC Object Name': 'title'}
 
-    def __init__(self, picture_dir, follow_links, db_file, geo_reverse, update_interval, portrait_pairs=False):
+    def __init__(self, picture_dir, follow_links, db_file, geo_reverse, update_interval):
         # TODO these class methods will crash if Model attempts to instantiate this using a
         # different version from the latest one - should this argument be taken out?
         self.__modified_folders = []
@@ -36,7 +36,6 @@ class ImageCache:
         self.__db_file = db_file
         self.__geo_reverse = geo_reverse
         self.__update_interval = update_interval
-        self.__portrait_pairs = portrait_pairs  # TODO have a function to turn this on and off?
         self.__db = self.__create_open_db(self.__db_file)
         self.__db_write_lock = threading.Lock()  # lock to serialize db writes between threads
         # NB this is where the required schema is set
@@ -111,46 +110,16 @@ class ImageCache:
         cursor = self.__db.cursor()
         cursor.row_factory = None  # we don't want the "sqlite3.Row" setting from the db here...
         try:
-            if not self.__portrait_pairs:  # TODO SQL insertion? Does it matter in this app?
-                sql = """SELECT file_id FROM all_data WHERE {0} ORDER BY {1}
-                    """.format(where_clause, sort_clause)
-                return cursor.execute(sql).fetchall()
-            else:  # make two SELECTS
-                sql = """SELECT
-                            CASE
-                                WHEN is_portrait = 0 THEN file_id
-                                ELSE -1
-                            END
-                            FROM all_data WHERE {0} ORDER BY {1}
-                                        """.format(where_clause, sort_clause)
-                full_list = cursor.execute(sql).fetchall()
-                sql = """SELECT file_id FROM all_data
-                            WHERE ({0}) AND is_portrait = 1 ORDER BY {1}
-                                        """.format(where_clause, sort_clause)
-                pair_list = cursor.execute(sql).fetchall()
-                newlist = []
-                skip_portrait_slot = False
-                for i in range(len(full_list)):
-                    if full_list[i][0] != -1:
-                        newlist.append(full_list[i])
-                    elif skip_portrait_slot:
-                        skip_portrait_slot = False
-                        continue
-                    elif pair_list:
-                        elem = pair_list.pop(0)
-                        if pair_list:
-                            elem += pair_list.pop(0)
-                            # Here, we just doubled-up a set of portrait images.
-                            # Skip the next available "portrait slot" as it's unneeded.
-                            skip_portrait_slot = True
-                        newlist.append(elem)
-                return newlist
+            sql = """SELECT file_id FROM all_data WHERE {0} ORDER BY {1}
+            """.format(where_clause, sort_clause)
+            return cursor.execute(sql).fetchall()
         except Exception:
             return []
 
     def get_file_info(self, file_id):
         if not file_id:
             return None
+        self.__logger.error('Getting file info for file_id %s', file_id)
         sql = "SELECT * FROM all_data where file_id = {0}".format(file_id)
         row = self.__db.execute(sql).fetchone()
         try:

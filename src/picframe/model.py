@@ -57,7 +57,6 @@ DEFAULT_CONFIG = {
         'geo_suppress_list': [],
     },
     'model': {
-
         'pic_dir': '~/Pictures',
         'no_files_img': '~/picframe_data/data/no_pictures.jpg',
         'follow_links': False,
@@ -78,7 +77,6 @@ DEFAULT_CONFIG = {
                      ['country']],
         'geo_key': 'this_needs_to@be_changed',  # use your email address
         'db_file': '~/picframe_data/data/pictureframe.db3',
-        'portrait_pairs': False,
         'deleted_pictures': '~/DeletedPictures',
         'update_interval': 2.0,
         'log_level': 'WARNING',
@@ -196,11 +194,11 @@ class Model:
                     root_logger.removeHandler(hdlr)
             root_logger.addHandler(filehandler)      # set the new handler
 
-        self.__file_list = []  # this is now a list of tuples i.e (file_id1,) or (file_id1, file_id2)
+        self.__file_list = None  # NO LONGER a list of tuples
         self.__number_of_files = 0  # this is shortcut for len(__file_list)
         self.__reload_files = True
         self.__file_index = 0  # pointer to next position in __file_list
-        self.__current_pics = (None, None)  # this hold a tuple of (pic, None) or two pic objects if portrait pairs
+        self.__current_pic = None 
         self.__num_run_through = 0
 
         
@@ -217,8 +215,7 @@ class Model:
                                                     model_config['follow_links'],
                                                     os.path.expanduser(model_config['db_file']),
                                                     self.__geo_reverse,
-                                                    model_config['update_interval'],
-                                                    model_config['portrait_pairs'])
+                                                    model_config['update_interval'])
         self.__deleted_pictures = model_config['deleted_pictures']
         self.__no_files_img = os.path.expanduser(model_config['no_files_img'])
         self.__sort_cols = model_config['sort_cols']
@@ -405,8 +402,7 @@ class Model:
         self.__logger.debug("get_next_file called, number of files:  %s. File Index: %s", self.__number_of_files, self.__file_index)
         # loop until we acquire a valid image set
         while True:
-            pic1 = None
-            pic2 = None
+            pic = None
 
             # Reload the playlist if requested
             if self.__reload_files:
@@ -421,7 +417,7 @@ class Model:
             # If we don't have any files to show, prepare the "no images" image
             # Also, set the reload_files flag so we'll check for new files on the next pass...
             if self.__number_of_files == 0 or missing_images >= self.__number_of_files:
-                pic1 = Pic(self.__no_files_img, 0, 0)
+                pic = Pic(self.__no_files_img, 0, 0)
                 self.__logger.warning("No Images. Reload requested")
                 self.__reload_files = True
                 break
@@ -438,39 +434,30 @@ class Model:
                     self.__file_index = 0
                     continue
 
-            # Load the current image set
-            file_ids = self.__file_list[self.__file_index]
-            self.__logger.debug("Loading file set: %s", file_ids)
-            pic_row = self.__image_cache.get_file_info(file_ids[0])
+            # Load the current image
+            file_id = self.__file_list[self.__file_index]
+            self.__logger.debug("Loading file: %s", file_id)
+            pic_row = self.__image_cache.get_file_info(file_id)
             self.__logger.debug("pic_row: %s", pic_row)
-            pic1 = Pic(**pic_row) if pic_row is not None else None
-            if len(file_ids) == 2:
-                pic_row = self.__image_cache.get_file_info(file_ids[1])
-                pic2 = Pic(**pic_row) if pic_row is not None else None
-
-            # Verify the images in the selected image set actually exist on disk
-            # Blank out missing references and swap positions if necessary to try and get
-            # a valid image in the first slot.
-            if pic1 and not os.path.isfile(pic1.fname):
-                pic1 = None
-            if pic2 and not os.path.isfile(pic2.fname):
-                pic2 = None
-            if (not pic1 and pic2):
-                pic1, pic2 = pic2, pic1
-
+            pic = Pic(**pic_row) if pic_row is not None else None
+            
+            # Verify the image actually exists on disk
+            if pic and not os.path.isfile(pic.fname):
+                pic = None
+            
             # Increment the image index for next time
             self.__file_index += 1
 
-            # If pic1 is valid here, everything is OK. Break out of the loop and return the set
-            if pic1:
+            # If pic is valid here, everything is OK. Break out of the loop and return the set
+            if pic:
                 break
 
-            # Here, pic1 is undefined. That's a problem. Loop back and get another image set.
+            # Here, pic is undefined. That's a problem. Loop back and get another image.
             # Track the number of times we've looped back so we can abort if we don't have *any* images to display
             missing_images += 1
 
-        self.__current_pics = (pic1, pic2)
-        return self.__current_pics
+        self.__current_pic = pic
+        return self.__current_pic
 
     def get_number_of_files(self):
         return sum(
@@ -478,12 +465,12 @@ class Model:
                     for pics in self.__file_list
                 )
 
-    def get_current_pics(self):
-        return self.__current_pics
+    def get_current_pic(self):
+        return self.__current_pic
 
     def delete_file(self):
-        # delete the current pic. If it's a portrait pair then only the left one will be deleted
-        pic = self.__current_pics[0]
+        # delete the current pic.
+        pic = self.__current_pic
         if pic is None:
             return None
         f_to_delete = pic.fname
