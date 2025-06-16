@@ -43,7 +43,6 @@ _image_file_lock = threading.Lock()
 def get_video_info(video_path: str) -> VideoMetadata:
     """Retrieves metadata about the video file using FFprobe."""
     logger = logging.getLogger("get_video_info")
-    logger.setLevel(logging.DEBUG)  # Set logging level to DEBUG
     start_time = time.time()
     try:
         cmd = [
@@ -249,7 +248,6 @@ class VideoFrameExtractor:
         self.display_height = display_height
         self.fit_display = fit_display
         self.logger = logging.getLogger("VideoFrameExtractor")
-        self.logger.setLevel(logging.DEBUG)  # Set logging level to DEBUG
 
     def _scale_frame(self, frame: Image.Image) -> Image.Image:
         """
@@ -483,11 +481,19 @@ class VideoStreamer:
         self._stderr_thread = None
         self._state_thread = None
 
+        # Determine log level name for child process
+        log_level = logging.getLevelName(self.__logger.getEffectiveLevel())
+        if isinstance(log_level, int):
+            # getLevelName returns int if unknown, fallback to INFO
+            log_level = "INFO"
+        log_level_str = str(log_level).lower()
+
         # Start the external player process
         cmd = [
             sys.executable,
             os.path.join(os.path.dirname(__file__), "video_player.py"),
-            "--x", str(x), "--y", str(y), "--w", str(w), "--h", str(h)
+            "--x", str(x), "--y", str(y), "--w", str(w), "--h", str(h),
+            "--log_level", log_level_str
         ]
         if fit_display:
             cmd.append("--fit_display")
@@ -575,7 +581,7 @@ class VideoStreamer:
             return
         self._send_command(f"load {video_path}")
 
-        timeout = 10  # seconds
+        timeout = 15  # seconds
         start_time = time.time()
         try:
             while not self.is_playing():
