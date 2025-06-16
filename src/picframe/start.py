@@ -1,10 +1,5 @@
-import logging
-import argparse
-import os
-import locale
-import sys
+import sys, os, logging, locale, argparse
 from shutil import copytree
-
 from picframe import model, viewer_display, controller, __version__
 
 PICFRAME_DATA_DIR = 'picframe_data'

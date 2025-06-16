@@ -1,11 +1,6 @@
 """Controller of picframe."""
 
-import logging
-import time
-import signal
-import sys
-import ssl
-
+import logging, time, signal, ssl
 
 def make_date(txt):
     dt = (txt.replace('/', ':')
@@ -15,7 +10,6 @@ def make_date(txt):
           .split(':'))
     dt_tuple = tuple(int(i) for i in dt)  # TODO catch badly formed dates?
     return time.mktime(dt_tuple + (0, 0, 0, 0, 0, 0))
-
 
 class Controller:
     """Controller of picframe.
@@ -30,7 +24,6 @@ class Controller:
     viewer : ViewerDisplay
         viewer of picframe representing the display
 
-
     Methods
     -------
     paused
@@ -41,7 +34,6 @@ class Controller:
         Show previous image.
 
     """
-
     def __init__(self, model, viewer):
         self.__logger = logging.getLogger("controller.Controller")
         self.__logger.setLevel(model.get_model_config()['log_level']) # set controller logger to model level

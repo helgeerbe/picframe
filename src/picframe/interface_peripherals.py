@@ -1,15 +1,7 @@
-import inspect
-import logging
-import subprocess
-import sys
-import time
-import typing
+import logging, sys, time, subprocess, inspect, typing, pi3d #type: ignore
 import numpy as np
-import pi3d
-
 
 logger = logging.getLogger(__name__)
-
 
 class InterfacePeripherals:
     """Opens connections to peripheral interfaces and reacts to their state to handle user input.
@@ -334,7 +326,6 @@ class InterfacePeripherals:
         logger.info("navigation: next picture")
         self.controller.next()
 
-
 class IPMenuItem(pi3d.MenuItem):
     """Wrapper around pi3d.MenuItem that implements `action` method.
     In the future, this class can be extended to support toggling of multiple text labels
@@ -342,7 +333,6 @@ class IPMenuItem(pi3d.MenuItem):
 
     A subclass must imlement class variable `config_name` that matches its name in the configuration.
     """
-
     config_name = ""
 
     def __init__(self, ip: "InterfacePeripherals", gui: "pi3d.Gui", text: str, shortcut: str) -> None:
@@ -363,7 +353,6 @@ class IPMenuItem(pi3d.MenuItem):
         """
         raise NotImplementedError
 
-
 class PauseMenuItem(IPMenuItem):
     """Pauses or unpauses the playback.
     Navigation to previous or next picture is possible also when the playback is paused.
@@ -374,7 +363,6 @@ class PauseMenuItem(IPMenuItem):
     def action(self):
         self.ip.controller.paused = not self.ip.controller.paused
 
-
 class DisplayOffMenuItem(IPMenuItem):
     """Turns off the display. When the display is off,
     any input from the selected peripheral device will turn it back on.
@@ -384,7 +372,6 @@ class DisplayOffMenuItem(IPMenuItem):
 
     def action(self):
         self.ip.controller.display_is_on = False
-
 
 class LocationMenuItem(IPMenuItem):
     """Shows or hides location information."""
@@ -397,7 +384,6 @@ class LocationMenuItem(IPMenuItem):
         else:
             self.ip.controller.set_show_text("location", "ON")
 
-
 class ExitMenuItem(IPMenuItem):
     """Exits the program."""
 
@@ -405,7 +391,6 @@ class ExitMenuItem(IPMenuItem):
 
     def action(self):
         self.ip.controller.stop()
-
 
 class PowerDownMenuItem(IPMenuItem):
     """Exits the program and shuts down the device. Uses sudo."""

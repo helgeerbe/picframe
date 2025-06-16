@@ -98,6 +98,7 @@ model:
   location_filter: ""                     # default="" filter clause for image location
   tags_filter: ""                         # default="" filter clause for image tags
   log_level: "WARNING"                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
+  root_log_level: "ERROR"                 # default=ERROR, log level for installed modules 
   log_file: ""                            # default="" for debugging set this to the path to a file. NB logging messages will
                                           # appended indefinitely so don't forget this. You will need to tidy it up later
 
@@ -145,3 +146,33 @@ peripherals:
       enable: False                       # default=False
       label: "Power down"                 # default="Power down"
       shortcut: "p"                       # default="p"
+
+aspect:
+  enable: True                           # default=True
+  min_rotation_interval: 30,              # minimum time in seconds between rotations
+  set_size: 10,                           # number of images in each orientation  
+  width: 2894,                            # width of the display in pixels
+  height: 2160,                           # height of the display in pixels
+  services:
+    Nixplay: 
+      login_url: "https://api.nixplay.com/www-login/"
+      acct_name: "user"
+      acct_pwd: "password"
+      playlist_url: "https://api.nixplay.com/v3/playlists"
+      aspect_identifier: "OLED"
+    Cropolla: 
+      api_url: "https://cropolla.com/api/a"
+      api_id: "id"
+      api_key: "key"        
+    GooglePhotos: 
+      media_url: "https://photoslibrary.googleapis.com/v1/mediaItems"
+      acct_id: "idr"
+      acct_pwd: "password" 
+    Flickr: 
+      api_url: "https://api.flickr.com/services/rest/"
+      api_id: "id"
+      api_key: "key" 
+    ApplePhotos: 
+      api_url: "https://photos.apple.com/api/v1/playlists"
+      acct_name: "user"
+      acct_pwd:  "password"  

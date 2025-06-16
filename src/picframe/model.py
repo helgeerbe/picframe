@@ -1,9 +1,5 @@
-import yaml
-import os
-import time
-import logging
-import locale
-from picframe import geo_reverse, image_cache
+import os, time, yaml, logging, locale
+from picframe import geo_reverse, image_cache, import_photos
 
 DEFAULT_CONFIGFILE = "~/picframe_data/config/configuration.yaml"
 DEFAULT_CONFIG = {
@@ -113,16 +109,16 @@ DEFAULT_CONFIG = {
         },
     },
     'aspect': {
-        'use_aspect': True,  # Set to True to use aspect ratio
+        'enable': True,  # Set to True for Aspect frames 
         'min_rotation_interval': 30,    # minimum time in seconds between rotations
         'set_size': 10, # number of images in each orientation  
         'width': 2894,  # width of the display in pixels
         'height': 2160,  # height of the display in pixels
-        'Nixplay': { 'URL': 'https://www.nixplay.com/api/v1/playlists', 'acct_id': '', 'acct_pwd': '' }, 
-        'Cropolla': { 'URL': 'https://cropolla.com/api/a', 'acct_id': '', 'acct_pwd': '' },
-        'GooglePhotos': { 'URL': 'https://photoslibrary.googleapis.com/v1/mediaItems', 'acct_id': '', 'acct_pwd': '' }, 
-        'Flickr': { 'URL': 'https://api.flickr.com/services/rest/', 'acct_id': '', 'acct_pwd': '' }, 
-        'ApplePhotos': { 'URL': 'https://photos.apple.com/api/v1/playlists', 'acct_id': '', 'acct_pwd': '' } 
+        'Nixplay': { 'login_url': 'https://api.nixplay.com/www-login/', 'acct_name': 'user', 'acct_pwd': 'password', 'playlist_url': 'https://api.nixplay.com/v3/playlists', 'aspect_identifier': 'OLED' }, 
+        'Cropolla': { 'api_url': 'https://cropolla.com/api/a', 'api_id': 'id', 'api_key': 'key' },
+        'GooglePhotos': { 'media_url': 'https://photoslibrary.googleapis.com/v1/mediaItems', 'acct_id': 'id', 'acct_pwd': 'password' }, 
+        'Flickr': { 'api_url': 'https://api.flickr.com/services/rest/', 'api_id': 'id', 'api_key': 'key' }, 
+        'ApplePhotos': { 'playlist_url': 'https://photos.apple.com/api/v1/playlists', 'acct_name': 'user', 'acct_pwd': 'password' } 
     }
 }
 
