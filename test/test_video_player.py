@@ -55,8 +55,10 @@ def test_video_player_play(mock_popen, test_video_path):
     os.environ.get("GITHUB_ACTIONS") == "true",
     reason="Skipped on GitHub Actions CI"
 )
-def test_video_player_integration(test_video_path):
+def test_video_player_integration(test_video_path, caplog):
     """Test starting the video player and playing a video file."""
+
+    caplog.set_level(logging.DEBUG)
 
     # Import here to avoid circular import issues
     from picframe.video_streamer import VideoStreamer
