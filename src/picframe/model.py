@@ -179,8 +179,9 @@ class Model:
         model_config = self.get_model_config()  # alias for brevity as used several times below
         self.__logger.setLevel(model_config['log_level']) # set model logger
         root_logger = logging.getLogger()
-        root_logger.setLevel(model_config['root_log_level'])  # set root logger
-        log_file = model_config['log_file']
+        level = getattr(logging, self.get_model_config()['log_level'].upper(), logging.WARNING)
+        root_logger.setLevel(level)
+        log_file = self.get_model_config()['log_file']
         if log_file != '':
             filehandler = logging.FileHandler(log_file)  # NB default appending so needs monitoring
             formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
