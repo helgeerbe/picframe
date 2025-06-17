@@ -286,7 +286,7 @@ class VideoPlayer:
 
                 # Only handle commands
                 try:
-                    line = self.cmd_queue.get_nowait()
+                    line = self.cmd_queue.get(timeout=0.1) 
                 except queue.Empty:
                     line = None
                 if line:
