@@ -516,8 +516,22 @@ class Model:
 
     def __get_weighted_sample(self, where_clause):
         """
-        Get photos using age-weighted sampling instead of recent_n binary sorting.
-        Photos are weighted by age percentile with exponential decay.
+        Selects photos using age-based weighting instead of simple recent/old grouping.
+        
+        This creates a more natural photo viewing experience by:
+        - Giving newer photos a higher probability of being selected
+        - Still showing older photos (preventing them from being forgotten)
+        - Using smooth probability curves instead of hard cutoffs
+        
+        How it works:
+        1. Calculates each photo's "age rank" from newest (0%) to oldest (100%)
+        2. Applies exponential decay weighting (newer = much higher weight)
+        3. Randomly selects photos based on these weights
+        
+        The 'recency_bias' setting controls how strongly it favors newer photos:
+        - Value of 1: Creates balanced selection between old and new photos
+        - Value of 2: Provides moderate preference for recent photos (default)
+        - Value of 3: Creates strong preference for recent photos
         """
         # Get all files with their timestamps
         cursor = self.__image_cache._ImageCache__db.cursor()
