@@ -528,10 +528,10 @@ class Model:
         2. Applies exponential decay weighting (newer = much higher weight)
         3. Randomly selects photos based on these weights
         
-        The 'recency_bias' setting controls how strongly it favors newer photos:
-        - Value of 1: Creates balanced selection between old and new photos
-        - Value of 2: Provides moderate preference for recent photos (default)
-        - Value of 3: Creates strong preference for recent photos
+        The 'recency_bias' setting controls how strongly it favours newer photos:
+        - A value of 1.0: Creates balanced selection between old and new photos
+        - A value of 2.0: Provides moderate preference for recent photos (default)
+        - A value of 3.0: Creates strong preference for recent photos
         """
         # Get all files with their timestamps
         cursor = self.__image_cache._ImageCache__db.cursor()
