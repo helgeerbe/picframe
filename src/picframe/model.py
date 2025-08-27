@@ -3,6 +3,8 @@ import os
 import time
 import logging
 import locale
+import math
+import random
 from picframe import geo_reverse, image_cache
 
 DEFAULT_CONFIGFILE = "~/picframe_data/config/configuration.yaml"
@@ -63,6 +65,8 @@ DEFAULT_CONFIG = {
         'follow_links': False,
         'subdirectory': '',
         'recent_n': 3,
+        'age_weighted_sampling': False,
+        'recency_bias': 2.0,
         'reshuffle_num': 1,
         'time_delay': 200.0,
         'fade_time': 10.0,
@@ -480,28 +484,120 @@ class Model:
         else:
             where_clause = "1"
 
-        sort_list = []
-        recent_n = self.get_model_config()["recent_n"]
-        if recent_n > 0:
-            sort_list.append("last_modified < {:.0f}".format(time.time() - 3600 * 24 * recent_n))
-
-        if self.shuffle:
-            sort_list.append("RANDOM()")
+        model_config = self.get_model_config()
+        age_weighted_sampling = model_config.get("age_weighted_sampling", False)
+        
+        if age_weighted_sampling:
+            # Use age-weighted sampling instead of recent_n binary sorting
+            self.__file_list = self.__get_weighted_sample(where_clause)
         else:
-            if self.__col_names is None:
-                self.__col_names = self.__image_cache.get_column_names()  # do this once
-            for col in self.__sort_cols.split(","):
-                colsplit = col.split()
-                if colsplit[0] in self.__col_names and (len(colsplit) == 1 or colsplit[1].upper() in ("ASC", "DESC")):
-                    sort_list.append(col)
-            sort_list.append("fname ASC")  # always finally sort on this in case nothing else to sort on or sort_cols is "" # noqa: E501
-        sort_clause = ",".join(sort_list)
+            # Original logic with recent_n
+            sort_list = []
+            recent_n = model_config["recent_n"]
+            if recent_n > 0:
+                sort_list.append("last_modified < {:.0f}".format(time.time() - 3600 * 24 * recent_n))
 
-        self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
+            if self.shuffle:
+                sort_list.append("RANDOM()")
+            else:
+                if self.__col_names is None:
+                    self.__col_names = self.__image_cache.get_column_names()  # do this once
+                for col in self.__sort_cols.split(","):
+                    colsplit = col.split()
+                    if colsplit[0] in self.__col_names and (len(colsplit) == 1 or colsplit[1].upper() in ("ASC", "DESC")):
+                        sort_list.append(col)
+                sort_list.append("fname ASC")  # always finally sort on this in case nothing else to sort on or sort_cols is "" # noqa: E501
+            sort_clause = ",".join(sort_list)
+            self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
         self.__number_of_files = len(self.__file_list)
         self.__file_index = 0
         self.__num_run_through = 0
         self.__reload_files = False
+
+    def __get_weighted_sample(self, where_clause):
+        """
+        Get photos using age-weighted sampling instead of recent_n binary sorting.
+        Photos are weighted by age percentile with exponential decay.
+        """
+        # Get all files with their timestamps
+        cursor = self.__image_cache._ImageCache__db.cursor()
+        cursor.row_factory = None
+        
+        if not self.__image_cache._ImageCache__portrait_pairs:
+            sql = """SELECT file_id, last_modified FROM all_data WHERE {0}""".format(where_clause)
+            rows = cursor.execute(sql).fetchall()
+            file_data = [(row[0], row[1]) for row in rows]
+        else:
+            # Handle portrait pairs - simplified for now, using same logic as original
+            sql = """SELECT
+                        CASE
+                            WHEN is_portrait = 0 THEN file_id
+                            ELSE -1
+                        END as file_id,
+                        last_modified
+                        FROM all_data WHERE {0}""".format(where_clause)
+            rows = cursor.execute(sql).fetchall()
+            file_data = [(row[0], row[1]) for row in rows if row[0] != -1]
+        
+        if len(file_data) == 0:
+            return []
+        
+        # Calculate age percentiles and weights
+        timestamps = [data[1] for data in file_data]
+        min_time = min(timestamps)
+        max_time = max(timestamps)
+        time_range = max_time - min_time
+        
+        if time_range == 0:
+            # All photos have same timestamp, treat equally
+            weights = [1.0] * len(file_data)
+        else:
+            recency_bias = self.get_model_config().get("recency_bias", 2.0)
+            weights = []
+            for _, timestamp in file_data:
+                # Calculate age percentile (0.0 = newest, 1.0 = oldest)
+                age_percentile = (max_time - timestamp) / time_range
+                # Calculate weight using exponential decay
+                weight = math.exp(-age_percentile * recency_bias)
+                weights.append(weight)
+        
+        # Weighted sampling without replacement
+        sampled_files = []
+        remaining_files = list(range(len(file_data)))
+        remaining_weights = weights[:]
+        
+        # Sample all files with their computed probabilities
+        while remaining_files:
+            # Normalize weights to probabilities
+            total_weight = sum(remaining_weights)
+            if total_weight == 0:
+                break
+                
+            probabilities = [w / total_weight for w in remaining_weights]
+            
+            # Sample one file
+            rand_val = random.random()
+            cumulative_prob = 0
+            selected_idx = 0
+            
+            for i, prob in enumerate(probabilities):
+                cumulative_prob += prob
+                if rand_val <= cumulative_prob:
+                    selected_idx = i
+                    break
+            
+            # Add selected file to result
+            file_idx = remaining_files[selected_idx]
+            if not self.__image_cache._ImageCache__portrait_pairs:
+                sampled_files.append((file_data[file_idx][0],))
+            else:
+                sampled_files.append((file_data[file_idx][0],))  # Simplified for now
+            
+            # Remove from remaining
+            remaining_files.pop(selected_idx)
+            remaining_weights.pop(selected_idx)
+        
+        return sampled_files
 
     def __generate_random_string(self, length):
         random_bytes = os.urandom(length // 2)
