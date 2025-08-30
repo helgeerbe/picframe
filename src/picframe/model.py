@@ -522,16 +522,23 @@ class Model:
         - Giving newer photos a higher probability of being selected
         - Still showing older photos (preventing them from being forgotten)
         - Using smooth probability curves instead of hard cutoffs
+        - Optionally limiting the sample size to force more frequent re-shuffling
         
         How it works:
         1. Calculates each photo's "age rank" from newest (0%) to oldest (100%)
         2. Applies exponential decay weighting (newer = much higher weight)
         3. Randomly selects photos based on these weights
+        4. Limits selection to sample_limit photos if specified
         
-        The 'recency_bias' setting controls how strongly it favours newer photos:
-        - A value of 1.0: Creates balanced selection between old and new photos
-        - A value of 2.0: Provides moderate preference for recent photos (default)
-        - A value of 3.0: Creates strong preference for recent photos
+        Configuration options:
+        - 'recency_bias': Controls how strongly it favours newer photos:
+          * A value of 1.0: Creates balanced selection between old and new photos
+          * A value of 2.0: Provides moderate preference for recent photos (default)
+          * A value of 3.0: Creates strong preference for recent photos
+        - 'sample_limit': Optional limit on number of photos to sample:
+          * If None (default): Samples all available photos
+          * If set to N: Samples only N photos, causing more frequent re-shuffling
+          * Useful for devices with large photo collections to increase variety
         """
         # Get all files with their timestamps
         cursor = self.__image_cache._ImageCache__db.cursor()
@@ -575,13 +582,17 @@ class Model:
                 weight = math.exp(-age_percentile * recency_bias)
                 weights.append(weight)
         
+        # Check for optional sample limit
+        sample_limit = self.get_model_config().get("sample_limit", None)
+        max_samples = len(file_data) if sample_limit is None else min(sample_limit, len(file_data))
+        
         # Weighted sampling without replacement
         sampled_files = []
         remaining_files = list(range(len(file_data)))
         remaining_weights = weights[:]
         
-        # Sample all files with their computed probabilities
-        while remaining_files:
+        # Sample files with their computed probabilities (up to sample_limit)
+        while remaining_files and len(sampled_files) < max_samples:
             # Normalize weights to probabilities
             total_weight = sum(remaining_weights)
             if total_weight == 0:

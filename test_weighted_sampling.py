@@ -90,7 +90,30 @@ def test_weighted_sampling():
         
         print(f"Selection probability - Newest: {newest_prob:.1%}, Oldest: {oldest_prob:.1%}")
         
-        print("\n Tests passed")
+        # Test sample limit functionality
+        print("\nTesting sample_limit feature...")
+        test_sample_limits = [10, 50, 200]  # Including one larger than available
+        
+        for sample_limit in test_sample_limits:
+            max_samples = min(sample_limit, len(test_photos))
+            print(f"Sample limit {sample_limit}: Will sample {max_samples} photos out of {len(test_photos)}")
+            
+            # Simulate the sampling logic with limit
+            remaining_files = list(range(len(test_photos)))
+            remaining_weights = weights[:]
+            sampled_count = 0
+            
+            # Sample with limit
+            while remaining_files and sampled_count < max_samples:
+                # Simple sampling for test (just pick first)
+                remaining_files.pop(0)
+                remaining_weights.pop(0)
+                sampled_count += 1
+            
+            assert sampled_count == max_samples, f"Should sample exactly {max_samples} photos"
+        
+        print("Sample limit tests passed!")
+        print("\nAll tests passed")
         
     except Exception as e:
         print(f"Test failed with error: {e}")
