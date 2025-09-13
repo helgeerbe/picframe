@@ -98,6 +98,7 @@ model:
   portrait_pairs: False
   location_filter: ""                     # default="" filter clause for image location
   tags_filter: ""                         # default="" filter clause for image tags
+  tags_exclude: ""                        # default="" filter clause for excluding image tags
   log_level: "WARNING"                    # default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL
   log_file: ""                            # default="" for debugging set this to the path to a file. NB logging messages will
                                           # appended indefinitely so don't forget this. You will need to tidy it up later

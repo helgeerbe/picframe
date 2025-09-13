@@ -283,6 +283,18 @@ class Controller:
         else:
             self.__next_tm = 0
 
+    @property
+    def tags_exclude(self):
+        return self.__model.tags_exclude
+
+    @tags_exclude.setter
+    def tags_exclude(self, val):
+        self.__model.tags_exclude = val
+        if self.__viewer.is_video_playing():
+            self.__viewer.stop_video()
+        else:
+            self.__next_tm = 0
+
     def text_is_on(self, txt_key):
         return self.__viewer.text_is_on(txt_key)
 

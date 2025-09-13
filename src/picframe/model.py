@@ -85,6 +85,7 @@ DEFAULT_CONFIG = {
         'log_file': '',
         'location_filter': '',
         'tags_filter': '',
+        'tags_exclude': '',
     },
     'mqtt': {
         'use_mqtt': False,  # Set tue true, to enable mqtt
@@ -210,6 +211,7 @@ class Model:
         self.__where_clauses = {}
         self.location_filter = model_config['location_filter']
         self.tags_filter = model_config['tags_filter']
+        self.tags_exclude = model_config['tags_exclude']
 
     def get_viewer_config(self):
         return self.__config['viewer']
@@ -311,6 +313,22 @@ class Model:
             self.set_where_clause("tags_filter", self.__build_filter(val, "tags"))
         else:
             self.set_where_clause("tags_filter")  # remove from where_clause
+        self.__reload_files = True
+
+    @property
+    def tags_exclude(self):
+        return self.__config['model']['tags_exclude']
+
+    @tags_exclude.setter
+    def tags_exclude(self, val):
+        self.__config['model']['tags_exclude'] = val
+        if len(val) > 0:
+            ftr = self.__build_filter(val, "tags")
+            if ftr:
+                ftr = "(tags IS NULL OR NOT {})".format(ftr)
+            self.set_where_clause("tags_exclude", ftr)
+        else:
+            self.set_where_clause("tags_exclude")  # remove from where_clause
         self.__reload_files = True
 
     def __build_filter(self, val, field):

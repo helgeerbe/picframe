@@ -211,6 +211,8 @@ class InterfaceMQTT:
                           available_topic, entity_category="config")
         self.__setup_text(client, "tags_filter", "mdi:image-search",
                           available_topic, entity_category="config")
+        self.__setup_text(client, "tags_exclude", "mdi:image-search-outline",
+                          available_topic, entity_category="config")
         self.__setup_sensor(client, "image_counter", "mdi:camera-burst",
                             available_topic, entity_category="diagnostic")
         self.__setup_sensor(client, "image", "mdi:file-image",
@@ -713,6 +715,10 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/tags_filter":
             self.__logger.info("Recieved tags filter: %s", msg)
             self.__controller.tags_filter = msg
+        # tags exclude filter
+        elif message.topic == self.__device_id + "/tags_exclude":
+            self.__logger.info("Recieved tags exclude filter: %s", msg)
+            self.__controller.tags_exclude = msg
 
         # set the flag to purge files from database
         elif message.topic == self.__device_id + "/purge_files":
@@ -781,6 +787,8 @@ class InterfaceMQTT:
         sensor_state_payload["location_filter"] = self.__controller.location_filter
         # tags_filter
         sensor_state_payload["tags_filter"] = self.__controller.tags_filter
+        # tags_exclude
+        sensor_state_payload["tags_exclude"] = self.__controller.tags_exclude
         # number state
         # time_delay
         sensor_state_payload["time_delay"] = self.__controller.time_delay
