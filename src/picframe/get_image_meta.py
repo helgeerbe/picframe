@@ -95,7 +95,10 @@ class GetImageMeta:
             try:
                 val = self.__find_xmp_key('description', xmp)
                 if val:
-                    val = val['Alt']['li']['text']
+                    if (isinstance(val, dict) and 'Alt' in val and
+                        isinstance(val['Alt'], dict) and 'li' in val['Alt'] and
+                        isinstance(val['Alt']['li'], dict) and 'text' in val['Alt']['li']):
+                        val = val['Alt']['li']['text']
                     if val and isinstance(val, str) and len(val) > 0:
                         self.__tags['IPTC Caption/Abstract'] = val
             except KeyError:
@@ -104,12 +107,22 @@ class GetImageMeta:
             try:
                 val = self.__find_xmp_key('subject', xmp)
                 if val:
-                    val = val['Bag']['li']
-                    if val and isinstance(val, list) and len(val) > 0:
+                    if isinstance(val, dict):
+                        if ('Bag' in val and
+                            isinstance(val['Bag'], dict) and 'li' in val['Bag']):
+                            val = val['Bag']['li']
+                        elif ('Seq' in val and
+                            isinstance(val['Seq'], dict) and 'li' in val['Seq']):
+                            val = val['Seq']['li']
+                    if val:
                         tags = ''
-                        for tag in val:
-                            tags += tag + ","
-                        self.__tags['IPTC Keywords'] = tags
+                        if isinstance(val, list):
+                            for tag in val:
+                                tags += tag + ","
+                        elif isinstance(val, str):
+                            tags = val + ","
+                        if tags:
+                            self.__tags['IPTC Keywords'] = tags
             except KeyError:
                 pass
         except Exception as e:
