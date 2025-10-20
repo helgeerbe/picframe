@@ -62,6 +62,8 @@ class ViewerDisplay:
         self.__text_justify = config['text_justify'].upper()
         self.__text_bkg_hgt = config['text_bkg_hgt'] if 0 <= config['text_bkg_hgt'] <= 1 else 0.25
         self.__text_opacity = config['text_opacity']
+        self.__text_x_margin = config['text_x_margin']
+        self.__text_y_margin = config['text_y_margin']
         self.__fit = config['fit']
         self.__video_fit_display = config['video_fit_display']
         self.__geo_suppress_list = config['geo_suppress_list']
@@ -410,9 +412,9 @@ class ViewerDisplay:
         block = None
         if len(final_string) > 0:
             if side == 0 and not pair:
-                c_rng = self.__display.width - 100  # range for x loc from L to R justified
+                c_rng = self.__display.width - self.__text_x_margin  # range for x loc from L to R justified
             else:
-                c_rng = self.__display.width * 0.5 - 100  # range for x loc from L to R justified
+                c_rng = self.__display.width * 0.5 - self.__text_x_margin  # range for x loc from L to R justified
             opacity = int(255 * float(self.__text_opacity) * self.get_brightness())
             block = pi3d.FixedString(self.__font_file, final_string, shadow_radius=3, font_size=self.__show_text_sz,
                                      shader=self.__flat_shader, justify=self.__text_justify, width=c_rng,
@@ -426,7 +428,7 @@ class ViewerDisplay:
                 x = adj_x
             else:
                 x = adj_x + int(self.__display.width * 0.25 * (-1.0 if side == 0 else 1.0))
-            y = (block.sprite.height - self.__display.height + self.__show_text_sz) // 2
+            y = (block.sprite.height - self.__display.height + self.__show_text_sz) // 2 + self.__text_y_margin
             block.sprite.position(x, y, 0.1)
             block.sprite.set_alpha(0.0)
         if side == 0:

@@ -15,6 +15,8 @@ viewer:
   text_justify: "L"                       # text justification L, C or R
   text_bkg_hgt: 0.25                      # default=0.25 (0.0-1.0), percentage of screen height for text background texture
   text_opacity: 1.0                       # default=1.0 (0.0-1.0), alpha value of text overlay
+  text_x_margin: 100                      # default=100 pixels in from edge of screen or half screen if portrait pairs
+  text_y_margin: 0                        # default=0 this is additional margin to half the font height. A negative value would move text down
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
   video_fit_display: False                # default=False, True => scale video to match display size (video may have distortion)

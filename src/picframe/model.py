@@ -24,6 +24,8 @@ DEFAULT_CONFIG = {
         'text_justify': 'L',
         'text_bkg_hgt': 0.25,
         'text_opacity': 1.0,
+        'text_x_margin': 100,
+        'text_y_margin': 0,
         'fit': False,
         'video_fit_display': True,
         'kenburns': False,
