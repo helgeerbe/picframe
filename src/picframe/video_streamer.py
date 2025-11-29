@@ -521,8 +521,8 @@ class VideoStreamer:
         # Start a thread to check _listen_state not waiting too long for STATE message
         # listening for lines from stdout is a blocking read so that thread can't spot
         # that it's got stuck!! PG Nov 2025
-        self._stderr_thread = threading.Thread(target=self._player_killer, daemon=True)
-        self._stderr_thread.start()
+        self._killer_thread = threading.Thread(target=self._player_killer, daemon=True)
+        self._killer_thread.start()
 
         if video_path is not None:
             self.play(video_path)
