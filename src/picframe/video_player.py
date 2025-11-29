@@ -112,7 +112,7 @@ class VideoPlayer:
                 self.logger.error("Could not set NSView: %s", e)
                 self.player.set_nsobject(None)
         elif sys.platform.startswith("linux"):
-            if wm_info.subsystem == sdl2.SDL_SYSWM_X11:
+            if wm_info.subsystem in (sdl2.SDL_SYSWM_X11, sdl2.SDL_SYSWM_KMSDRM): # KMSDRM needed for Pi zero
                 xid = wm_info.info.x11.window
                 self.logger.debug("X11 window ID: %s", xid)
                 self.player.set_xwindow(xid)

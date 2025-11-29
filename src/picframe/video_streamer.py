@@ -480,6 +480,7 @@ class VideoStreamer:
         self._proc_stderr = None
         self._stderr_thread = None
         self._state_thread = None
+        self._state_check_tm = None
 
         # Determine log level name for child process
         log_level = logging.getLevelName(self.__logger.getEffectiveLevel())
@@ -515,6 +516,12 @@ class VideoStreamer:
 
         # Start a thread to listen for stderr output from the player
         self._stderr_thread = threading.Thread(target=self._listen_stderr, daemon=True)
+        self._stderr_thread.start()
+
+        # Start a thread to check _listen_state not waiting too long for STATE message
+        # listening for lines from stdout is a blocking read so that thread can't spot
+        # that it's got stuck!! PG Nov 2025
+        self._stderr_thread = threading.Thread(target=self._player_killer, daemon=True)
         self._stderr_thread.start()
 
         if video_path is not None:
@@ -556,6 +563,12 @@ class VideoStreamer:
                 self._is_playing = True
             elif line == "STATE:ENDED":
                 self._is_playing = False
+            self._state_check_tm = time.time() # STATE message should happen at < 3s intervals
+
+    def _player_killer(self):
+        if self._state_check_tm is not None and (time.time() - self._state_check_tm) > 10.0:
+            self.__logger.debug("Suspicious lapse in STATE messages from VideoPlayer")
+            self.kill()
 
     def _listen_stderr(self):
         if not self._proc_stderr:
@@ -581,7 +594,7 @@ class VideoStreamer:
             return
         self._send_command(f"load {video_path}")
 
-        timeout = 15  # seconds
+        timeout = 60  # seconds
         start_time = time.time()
         try:
             while not self.is_playing():
