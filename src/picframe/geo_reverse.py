@@ -7,8 +7,9 @@ URL = "https://nominatim.openstreetmap.org/reverse?format=geojson&lat={}&lon={}&
 
 
 class GeoReverse:
-    def __init__(self, geo_key, zoom=18, key_list=None):
+    def __init__(self, load_geoloc, geo_key, zoom=18, key_list=None):
         self.__logger = logging.getLogger("geo_reverse.GeoReverse")
+        self.__load_geoloc = load_geoloc
         self.__geo_key = geo_key
         self.__zoom = zoom
         self.__key_list = key_list
@@ -16,6 +17,8 @@ class GeoReverse:
         self.__language = locale.getlocale()[0][:2]
 
     def get_address(self, lat, lon):
+        if not self.__load_geoloc or self.__geo_key == "this_needs_to@be_changed":
+            return ""
         try:
             with urllib.request.urlopen(URL.format(lat, lon, self.__zoom, self.__geo_key, self.__language),
                                         timeout=3.0) as req:

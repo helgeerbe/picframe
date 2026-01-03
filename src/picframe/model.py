@@ -196,7 +196,8 @@ class Model:
         self.__pic_dir = os.path.expanduser(model_config['pic_dir'])
         self.__subdirectory = os.path.expanduser(model_config['subdirectory'])
         self.__load_geoloc = model_config['load_geoloc']
-        self.__geo_reverse = geo_reverse.GeoReverse(model_config['geo_key'],
+        self.__geo_reverse = geo_reverse.GeoReverse(model_config['load_geoloc'],
+                                                    model_config['geo_key'],
                                                     key_list=self.get_model_config()['key_list'])
         self.__image_cache = image_cache.ImageCache(self.__pic_dir,
                                                     model_config['follow_links'],

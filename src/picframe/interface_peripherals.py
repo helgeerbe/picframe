@@ -83,11 +83,6 @@ class InterfacePeripherals:
             self.__timestamp = time.time()
             self.__update_pointer_position()
 
-            #if self.__input_type == "touch":
-            #    self.__handle_touch_input()
-
-            #elif self.__input_type == "mouse":
-            #    self.__handle_mouse_input()
             self.__handle_mouse_input() # use this for both
 
             # Autohide menu
@@ -140,8 +135,8 @@ class InterfacePeripherals:
     def __get_mouse(self) -> typing.Optional["pi3d.Mouse"]:
         if self.__input_type in ["touch", "mouse"]:
             mouse = pi3d.Mouse(
-                use_x=True,
-                restrict=self.__input_type == "mouse",
+                use_x=False, #not used with sdl2 mouse TODO remove
+                restrict=True, #more natural with touch, doesn't impact mouse really
                 width=self.__viewer.display_width,
                 height=self.__viewer.display_height,
             )
@@ -204,7 +199,7 @@ class InterfacePeripherals:
         back_sprite = pi3d.ImageSprite(
             texture,
             self.__gui.shader,
-            w=self.__viewer.display_width // 2,
+            w=self.__viewer.display_width // 8,
             h=self.__viewer.display_height,
             x=0,
             y=0,
@@ -213,7 +208,7 @@ class InterfacePeripherals:
         next_sprite = pi3d.ImageSprite(
             texture,
             self.__gui.shader,
-            w=self.__viewer.display_width // 2,
+            w=self.__viewer.display_width // 8,
             h=self.__viewer.display_height,
             x=0,
             y=0,
@@ -231,7 +226,7 @@ class InterfacePeripherals:
         next_area = pi3d.util.Gui.Widget(
             self.__gui,
             next_sprite,
-            x=0,
+            x=self.__viewer.display_width * 3 // 8,
             y=self.__viewer.display_height // 2 - 1,
             callback=self.__go_next,
             shortcut="d",
@@ -291,6 +286,8 @@ class InterfacePeripherals:
 
     def __handle_mouse_input(self) -> None:
         if self.__pointer_moved():
+            # Show or hide menu
+            self.menu_is_on = True #always show menu when mouse moves
             if self.__input_type == "mouse":
                 self.__gui.show_pointer = True
             if self.__timestamp > self.__last_check_display_on + 2.0: # this @getter is potentially expensive to run so will slow the mouse
@@ -299,9 +296,8 @@ class InterfacePeripherals:
                     self.controller.display_is_on = True
         elif (self.__timestamp - self.__last_pointer_time) > 3.0:
             self.__gui.show_pointer = False
+            self.menu_is_on = False
 
-        # Show or hide menu
-        self.menu_is_on = self.__pointer_position[1] > self.__viewer.display_height // 2 - self.__menu_height
 
         # Detect click
         button = self.__mouse.button_status()
