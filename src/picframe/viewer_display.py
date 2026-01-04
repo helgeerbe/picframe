@@ -79,6 +79,7 @@ class ViewerDisplay:
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
         self.__display_power = int(config['display_power'])
+        self.__display_hdmi = config['display_hdmi']
         self.__use_sdl2 = config['use_sdl2']
         self.__use_glx = config['use_glx']
         self.__alpha = 0.0  # alpha - proportion front image to back
@@ -175,7 +176,7 @@ class ViewerDisplay:
                 self.__logger.debug("Cause: %s", e)
         elif self.__display_power == 2:
             try:  # try wlr-randr for RPi5 with wayland desktop
-                wlr_randr_cmd = ["wlr-randr", "--output", "HDMI-A-1"]
+                wlr_randr_cmd = ["wlr-randr", "--output", self.__display_hdmi]
                 wlr_randr_cmd.append('--on' if on_off else '--off')
                 subprocess.call(wlr_randr_cmd)
             except (ValueError, TypeError) as e:

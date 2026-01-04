@@ -34,6 +34,7 @@ DEFAULT_CONFIG = {
         'display_w': None,
         'display_h': None,
         'display_power': 2,
+        'display_hdmi': "HDMI-A-1",
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'use_sdl2': True,
         'test_key': 'test_value',
