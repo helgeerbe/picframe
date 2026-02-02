@@ -54,9 +54,9 @@ function refreshPage() {
             }
         } else if (element.type === "bool") {
             if (value == true || value === "true" || value === "True" || value === "ON") {
-                value = "true";
+                value = true;
             } else {
-                value = "false";
+                value = false;
             }
         }
         docElement.value = value; //TODO have some fields not changed by ids.val?

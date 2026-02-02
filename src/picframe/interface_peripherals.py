@@ -294,7 +294,7 @@ class InterfacePeripherals:
                 self.__last_check_display_on = self.__timestamp
                 if not self.controller.display_is_on:
                     self.controller.display_is_on = True
-        elif (self.__timestamp - self.__last_pointer_time) > 3.0:
+        elif (self.__timestamp - self.__last_pointer_time) > self.__menu_autohide_tm:
             self.__gui.show_pointer = False
             self.menu_is_on = False
 

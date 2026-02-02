@@ -80,6 +80,7 @@ class ViewerDisplay:
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
         self.__display_power = int(config['display_power'])
         self.__display_hdmi = config['display_hdmi']
+        self.__display_drmcard = None
         self.__use_sdl2 = config['use_sdl2']
         self.__use_glx = config['use_glx']
         self.__alpha = 0.0  # alpha - proportion front image to back
@@ -149,6 +150,23 @@ class ViewerDisplay:
                 self.__logger.debug("Display ON/OFF is wlr-randr, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
+        elif self.__display_power == 3:
+            if self.__display_drmcard is None:
+                card_list = [0, 1, 2] #might it ever be 2?
+            else:
+                card_list = [self.__display_drmcard]
+            for c in card_list:
+                try:
+                    output = subprocess.check_output(["cat", f"/sys/class/drm/card{c}-{self.__display_hdmi}/status"])
+                    self.__display_drmcard = c #didn't trigger FileNotFoundError so this is a valid card num
+                    if output[:9] == b'connected':
+                        return True
+                    else:
+                        return False #presume disconnected
+                except (subprocess.SubprocessError, FileNotFoundError, ValueError, OSError) as e:
+                    self.__logger.debug("Display ON/OFF is drm_card_status, but an error occurred")
+                    self.__logger.debug("Cause: %s", e)
+            return True
         else:
             self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
             return True
@@ -181,6 +199,16 @@ class ViewerDisplay:
                 subprocess.call(wlr_randr_cmd)
             except (ValueError, TypeError) as e:
                 self.__logger.debug("Display ON/OFF is wlr-randr, but an error occured")
+                self.__logger.debug("Cause: %s", e)
+        elif self.__display_power == 3:
+            try:  # try sending on or off to drm card status
+                if self.__display_drmcard is None:
+                    _ison = self.display_is_on() # should find card num
+                on_off_txt = 'on' if on_off else 'off'
+                drm_card_cmd = f"echo {on_off_txt} | sudo tee /sys/class/drm/card{self.__display_drmcard}-{self.__display_hdmi}/status"
+                os.system(drm_card_cmd)
+            except (ValueError, TypeError) as e:
+                self.__logger.debug("Display ON/OFF is drm_card, but an error occured")
                 self.__logger.debug("Cause: %s", e)
         else:
             self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
