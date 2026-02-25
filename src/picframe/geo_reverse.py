@@ -20,8 +20,9 @@ class GeoReverse:
         if not self.__load_geoloc or self.__geo_key == "this_needs_to@be_changed":
             return ""
         try:
-            with urllib.request.urlopen(URL.format(lat, lon, self.__zoom, self.__geo_key, self.__language),
-                                        timeout=3.0) as req:
+            headers = {'User-Agent': 'MyApp/1.0', 'Authorization': 'Basic'}
+            rqst = urllib.request.Request(URL.format(lat, lon, self.__zoom, self.__geo_key, self.__language), headers=headers)
+            with urllib.request.urlopen(rqst, timeout=3.0) as req:
                 data = json.loads(req.read().decode())
             adr = data['features'][0]['properties']['address']
             # some experimentation might be needed to get a good set of alternatives in key_list
