@@ -61,6 +61,7 @@ class ImageCache:
         self.__db_write_lock.release()
         self.__db.close()
         self.__shutdown_completed = True
+        self.__logger.info('ImageCache shutdown completed')
 
     def pause_looping(self, value):
         self.__pause_looping = value
@@ -83,14 +84,22 @@ class ImageCache:
         if not self.__modified_files:
             self.__logger.debug('No unprocessed files in memory, checking disk')
             self.__modified_folders = self.__get_modified_folders()
-            self.__modified_files = self.__get_modified_files(self.__modified_folders)
-            self.__logger.debug('Found %d new files on disk', len(self.__modified_files))
+            num_modified_folders = len(self.__modified_folders)
+            self.__logger.info('Found %d new/modifled folders on disk', num_modified_folders)
+            if num_modified_folders:
+                self.__modified_files = self.__get_modified_files(self.__modified_folders)
+                self.__logger.info('Found %d new/modifled files on disk', len(self.__modified_files))
+            else:
+                self.__modified_files = []
 
         # While we have files to process and looping isn't paused
         while self.__modified_files and not self.__pause_looping:
             file = self.__modified_files.pop(0)
             self.__logger.debug('Inserting: %s', file)
-            self.__insert_file(file)
+            try:
+                self.__insert_file(file)
+            except OSError:
+                self.__logger.warning("File '%s' does not exists or is inaccessible", file)
 
         # If we've process all files in the current collection, update the cached folder info
         if not self.__modified_files:
@@ -122,6 +131,7 @@ class ImageCache:
                             END
                             FROM all_data WHERE {0} ORDER BY {1}
                                         """.format(where_clause, sort_clause)
+                self.__logger.debug("SQL query: %s", sql)
                 full_list = cursor.execute(sql).fetchall()
                 sql = """SELECT file_id FROM all_data
                             WHERE ({0}) AND is_portrait = 1 ORDER BY {1}
@@ -361,7 +371,12 @@ class ImageCache:
             if os.path.basename(dir):
                 if os.path.basename(dir)[0] == '.':
                     continue  # ignore hidden folders
-            mod_tm = int(os.stat(dir).st_mtime)
+            try:
+                mod_tm = int(os.stat(dir).st_mtime)
+            except:
+                # This folder must have been removed since the walk
+                self.__logger.warning("Folder '%s' no longer exists", dir)
+                continue
             found = self.__db.execute(sql_select, (dir,)).fetchone()
             if not found or found['last_modified'] < mod_tm or found['missing'] == 1:
                 out_of_date_folders.append((dir, mod_tm))
@@ -384,7 +399,12 @@ class ImageCache:
                         # have to filter out all the Apple junk
                         and '.AppleDouble' not in dir and not file.startswith('.')):
                     full_file = os.path.join(dir, file)
-                    mod_tm = os.path.getmtime(full_file)
+                    try:
+                        mod_tm = os.path.getmtime(full_file)
+                    except:
+                        # This file must have been removed since the listdir
+                        self.__logger.warning("File '%s' no longer exists", full_file)
+                        continue
                     found = self.__db.execute(sql_select, (base, extension.lstrip("."), dir, mod_tm)).fetchone()
                     if not found:
                         out_of_date_files.append(full_file)
@@ -427,11 +447,17 @@ class ImageCache:
         self.__db_write_lock.release()
 
     def __update_folder_info(self, folder_collection):
+        if not folder_collection:
+            return
         update_data = []
+        insert_data = []
+        sql_insert = "INSERT OR IGNORE INTO folder(name) VALUES(?)"
         sql = "UPDATE folder SET last_modified = ?, missing = 0 WHERE name = ?"
         for folder, modtime in folder_collection:
+            insert_data.append((folder,))
             update_data.append((modtime, folder))
         self.__db_write_lock.acquire()
+        self.__db.executemany(sql_insert, insert_data)
         self.__db.executemany(sql, update_data)
         self.__db_write_lock.release()
 
@@ -442,8 +468,12 @@ class ImageCache:
 
     def __purge_missing_files_and_folders(self):
         # Find folders in the db that are no longer on disk
+        self.__logger.debug('Checking for orphaned folders in cache')
         folder_id_list = []
-        for row in self.__db.execute('SELECT folder_id, name from folder'):
+        sql = 'SELECT folder_id, name from folder'
+        if not self.__purge_files:
+            sql += ' where missing = 0'
+        for row in self.__db.execute(sql):
             if not os.path.exists(row['name']):
                 folder_id_list.append([row['folder_id']])
 
@@ -452,8 +482,10 @@ class ImageCache:
         if len(folder_id_list):
             self.__db_write_lock.acquire()
             if self.__purge_files:
+                self.__logger.info('Purging %d orphaned folders in cache', len(folder_id_list))
                 self.__db.executemany('DELETE FROM folder WHERE folder_id = ?', folder_id_list)
             else:
+                self.__logger.info('Marking %d orphaned folders in cache', len(folder_id_list))
                 self.__db.executemany('UPDATE folder SET missing = 1 WHERE folder_id = ?', folder_id_list)
             self.__db_write_lock.release()
 
@@ -466,6 +498,7 @@ class ImageCache:
 
             # Delete any non-existent files from the db. Note, this will automatically
             # remove matching records from the 'meta' table as well.
+            self.__logger.info('Purging %d orphaned files in cache', len(file_id_list))
             if len(file_id_list):
                 self.__db_write_lock.acquire()
                 self.__db.executemany('DELETE FROM file WHERE file_id = ?', file_id_list)
