@@ -11,6 +11,8 @@
 
 ## Recent Changes
 
+*   [2026-04-28 11:14:00] - Initialized the `v2-dev` branch, pushed to origin, and successfully generated all Phase 1-4 WBS tasks as GitHub Issues using the GitHub CLI, applying the `next gen` label to each. The primary codebase refactoring phase has officially commenced.
+*   [2026-04-28 10:17:00] - Manage the Picframe 2.0 modernization within the existing repository using a dedicated, long-lived feature branch (`v2-dev`).
 *   [2026-04-28 10:09:00] - Migrated the Work Breakdown Structure (WBS) to GitHub Issues. Created issue and PR templates to enforce the Definition of Done and ensure all modernization tasks are labeled with `next gen`.
 *   [2026-04-28 09:53:00] - Updated architecture documentation and implementation guidelines to enforce strict versioning for all database schemas (`config.db3` and `media_cache.db3`) and establish a standardized migration mechanism.
 *   [2026-04-28 09:26:00] - Successfully completed Phase 0 (Video Handoff PoC), proving GStreamer is a solid solution for GPU-accelerated video playback with seamless pi3d handoff. The PoC also provides valuable hints for the later replacement of the VLC player.
