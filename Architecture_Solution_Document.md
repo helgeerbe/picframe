@@ -36,15 +36,19 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Concept:** Configuration and media metadata are strictly separated into `config.db3` (persistent user settings) and `media_cache.db3` (ephemeral media metadata).
 *   **Reasoning & Benefits:** Prevents lifecycle conflicts. Rebuilding the media cache (which happens frequently) will never risk corrupting user configuration. The Repository Pattern abstracts the SQLite implementation, allowing the business logic to interact with simple Python objects rather than SQL queries.
 
-### 2.7 Decoupling Presentation from Domain Logic (SRP)
+### 2.7 Database Schema Versioning & Migrations
+*   **Concept:** Strict versioning is enforced for all database schemas (`config.db3` and `media_cache.db3`). A standardized migration mechanism handles schema changes sequentially.
+*   **Reasoning & Benefits:** Guarantees forward compatibility and data integrity across system updates. By tracking the `schema_version` and applying sequential SQL migration scripts, the system can safely upgrade existing databases without data loss or corruption, mirroring the robust update functionalities of modern applications.
+
+### 2.8 Decoupling Presentation from Domain Logic (SRP)
 *   **Concept:** The Presentation Layer (`Pi3dRenderer`) is strictly a "dumb" component responsible only for drawing pixels. It receives a `RenderCommand` and executes it. All domain logic, including metadata extraction and publication, is handled by the `PlaybackEngine`.
 *   **Reasoning & Benefits:** Violations of the Single Responsibility Principle (SRP), such as having the render loop extract and publish metadata, cause unpredictable latency and frame drops. By shifting this responsibility to the `PlaybackEngine`, the Main Thread remains unblocked. The `PlaybackEngine` retrieves an immutable `MediaItem` DTO from the `PlaylistManager`, instructs the renderer, and immediately publishes a `MediaChangedEvent` to the Event Bus. Background threads (FastAPI, MQTT) consume this event asynchronously, ensuring network I/O never pollutes the synchronous render loop.
 
-### 2.8 Asynchronous Media Monitoring
+### 2.9 Asynchronous Media Monitoring
 *   **Concept:** A dedicated `MediaMonitorService` (utilizing `watchdog`) runs in a background thread to detect file system changes (Create, Modify, Delete) in configured media directories. It publishes immutable `FileChangeEvent` DTOs to the Event Bus.
 *   **Reasoning & Benefits:** Eliminates the need for synchronous, blocking directory scans during playback. When a `FileChangeEvent` is consumed by the Media Orchestrator, it asynchronously triggers the `MetadataExtractor` to update the ephemeral `media_cache.db3` and signals the `PlaylistManager` to adjust the active playlist. This ensures the system reacts to new media in real-time without interrupting the render loop.
 
-### 2.9 Hardware Abstraction Layer (HAL) & Cross-Platform Ports
+### 2.10 Hardware Abstraction Layer (HAL) & Cross-Platform Ports
 *   **Concept:** To support native execution across Raspberry Pi (Wayland/X11), Ubuntu, and macOS, OS-specific interactions are abstracted behind strict Port interfaces (e.g., `IDisplayPower`, `IHardwareInput`, `ISystemManager`).
 *   **Reasoning & Benefits:** The core application logic must remain OS-agnostic. By defining Ports in the Application layer and implementing OS-specific Adapters in the Infrastructure layer (e.g., `WaylandDisplayPower`, `MacDisplayPower`, `MockHardwareInput`), the Composition Root (`main.py`) can detect the host OS at startup and inject the correct concrete implementation. This prevents `if os.name == '...'` spaghetti code from polluting the domain logic and allows developers to run and test the core engine on macOS/Ubuntu without requiring physical Raspberry Pi hardware.
 
@@ -181,7 +185,7 @@ To ensure system resilience, the `PlaybackEngine` will implement a global except
 
 ## 5. Work Breakdown Structure (WBS)
 
-*Note: This WBS is structured into Vertical Slices. Each phase delivers a functional, testable increment of the product, ensuring continuous usability rather than relying on a final "big bang" integration.*
+*Note: This WBS is structured into Vertical Slices. Each phase delivers a functional, testable increment of the product, ensuring continuous usability rather than relying on a final "big bang" integration. All tasks below are tracked via GitHub Issues and must be labeled with `next gen`.*
 
 ### Phase 0: Technical Spike (Video Handoff PoC)
 *Goal: De-risk the most complex technical challenge by proving the seamless EGL/OpenGL context handoff between pi3d and GStreamer on target hardware before building the full architecture.*
@@ -224,3 +228,52 @@ To ensure system resilience, the `PlaybackEngine` will implement a global except
 - [ ] **Task 4.4:** Define the `ISystemManager` port and implement OS-specific adapters for reboot/shutdown commands.
 - [ ] **Task 4.5:** Implement the Configuration Migration Adapter (YAML to `config.db3`).
 - [ ] **Task 4.6:** Comprehensive integration testing, verify "Poison Pill" error handling, and clean up legacy code (remove VLC dependencies, old `setup.py`).
+
+## 6. Phase 1: Core Image MVP Architecture & Implementation Plan
+
+### 6.1 Architectural Focus (The "Walking Skeleton")
+Phase 1 establishes the foundational Clean Architecture and Event-Driven backbone. The goal is not feature parity, but a robust, end-to-end flow for image playback.
+*   **Domain Layer:** `PlaybackEngine` and `PlaylistManager` will be implemented as pure Python classes, fully testable without hardware.
+*   **Application Layer:** The `PriorityQueue` Event Bus will be established as the sole communication mechanism.
+*   **Infrastructure Layer:** SQLite repositories will replace YAML. The legacy `ViewerDisplay` will be stripped of all orchestration logic, becoming a pure `Pi3dRenderer` adapter that only responds to `RenderCommand`s.
+
+### 6.2 Detailed Work Breakdown Structure (Phase 1)
+*   **Task 1.1: Modernize Packaging & Tooling**
+    *   1.1.1: Create `pyproject.toml` (PEP 621) with `setuptools_scm`.
+    *   1.1.2: Configure `ruff` (linting/formatting), `mypy` (strict type checking), and `pytest`.
+    *   1.1.3: Remove legacy `setup.py`, `setup.cfg`, `versioneer.py`, and `tox.ini`.
+*   **Task 1.2: Core Event Bus Implementation**
+    *   1.2.1: Define immutable Event DTOs (`CommandEvent`, `StateEvent`, `RenderCommand`, `MediaChangedEvent`).
+    *   1.2.2: Implement `PriorityQueueEventBus` adhering to `IEventPublisher` and `IEventSubscriber` protocols.
+*   **Task 1.3: Dual-Database Repositories & Migrations**
+    *   1.3.1: Define `IConfigRepository` and `IMediaRepository` interfaces.
+    *   1.3.2: Design SQLite schemas for `config.db3` and `media_cache.db3`, including a `schema_version` table.
+    *   1.3.3: Implement the standardized migration mechanism to apply sequential SQL updates.
+    *   1.3.4: Implement concrete SQLite adapters with connection pooling/thread safety.
+*   **Task 1.4: Unified Metadata Extractor (Images)**
+    *   1.4.1: Define `MediaItem` domain model.
+    *   1.4.2: Implement `ImageMetadataStrategy` using `PIL` and `exifread`.
+*   **Task 1.5: Playlist & Image Processing**
+    *   1.5.1: Implement `PlaylistManager` (querying DB, shuffling, history tracking).
+    *   1.5.2: Implement `ImageProcessingService` (matting, resizing, caching logic).
+*   **Task 1.6: Pi3dRenderer Refactoring**
+    *   1.6.1: Extract OpenGL/pi3d drawing logic from legacy `ViewerDisplay`.
+    *   1.6.2: Implement `execute(RenderCommand)` interface. Ensure it runs synchronously in the main thread.
+*   **Task 1.7: PlaybackEngine & Composition Root**
+    *   1.7.1: Implement `PlaybackEngine` state machine (IDLE, PLAYING, TRANSITIONING).
+    *   1.7.2: Create `main.py` to instantiate all components, inject dependencies, and start the Event Bus and Render loops.
+
+### 6.3 Comprehensive Test Strategy
+*   **Unit Testing (Domain & Application):** 100% coverage required for `PlaybackEngine`, `PlaylistManager`, and `EventBus`. These will be tested using a `MockRenderer` and `MockRepositories` to ensure state transitions and queue priorities function correctly without hardware dependencies.
+*   **Integration Testing (Infrastructure):** SQLite repositories will be tested against in-memory databases (`:memory:`) to verify schema correctness and query logic.
+*   **Pi3d & GStreamer Integration Testing (Phase 1 & Forward-Looking):**
+    *   *Automated Headless Testing:* Utilize `xvfb-run` (X Virtual Framebuffer) or a headless Wayland compositor (`wayland-headless`) in CI to run the `Pi3dRenderer` without a physical display, ensuring OpenGL context creation doesn't crash.
+    *   *Handoff Verification:* Create a specific integration test script that simulates the Phase 0 PoC flow (Image -> Video First Frame -> Video -> Video Last Frame -> Image) using dummy media. This script will monitor the Event Bus for the correct sequence of `RenderCommand`s and `StateEvent`s.
+    *   *Visual Regression:* For critical rendering paths, implement frame-capture tests where the output buffer is saved to a PNG and compared against a known-good baseline image using structural similarity (SSIM).
+
+### 6.4 Readiness Review & Prerequisites
+Before coding commences on Phase 1, the following prerequisites must be met:
+1.  **Database Schemas:** Exact SQL schema definitions for `config.db3` and `media_cache.db3` must be documented and approved.
+2.  **Event Dictionary:** A comprehensive list of all Event DTOs, their payloads, and their priority levels must be defined.
+3.  **CI/CD Pipeline:** A basic GitHub Actions workflow must be established to enforce the Definition of Done (running `ruff`, `mypy`, and `pytest` on every PR).
+4.  **Development Environment:** Ensure all developers have access to the required system packages (e.g., `libegl1`, `libgles2`) for local testing, even if using headless mode.
