@@ -8,10 +8,12 @@
 
 ## Current Focus
 
-*   Phase 1: Core Image MVP (The "Walking Skeleton") - Modernizing packaging and setting up the core event-driven architecture.
+*   Phase 1: Core Image MVP (The "Walking Skeleton") - Preparing for Task 1.4: Unified MetadataExtractor (Images).
 
 ## Recent Changes
 
+*   [2026-04-28 13:10:00] - Completed Task 1.3 (Issue #598): Implemented Dual-Database Repositories (`SQLiteConfigRepository`, `SQLiteMediaRepository`) and a standardized `MigrationManager`. All code is fully tested, type-checked, and documented.
+*   [2026-04-28 13:00:00] - Started Task 1.3 (Issue #598): Dual-Database Repositories & Migrations.
 *   [2026-04-28 12:25:00] - Completed Task 1.2 (Issue #597): Implemented the thread-safe `PriorityQueue` Event Bus with `IEventPublisher`/`IEventSubscriber` interfaces and defined core Immutable DTO `Events`.
 *   [2026-04-28 12:11:00] - Completed Task 1.1 (Issue #596): Modernized packaging to PEP 621 using `pyproject.toml` and `setuptools_scm`. Removed legacy packaging files and macOS dependencies.
 *   [2026-04-28 11:37:00] - Updated memory bank to reflect that GitHub Issues and the GitHub Project board are the authoritative source of truth for project state and task tracking. Added detailed subtasks to all Phase 1 GitHub issues.
