@@ -34,7 +34,13 @@ It is optional, but recommended to be updated as the project evolves.
 
 ## Testing Patterns
 
-*
+* [2026-04-28 12:33:00] - **Test-Driven Development (TDD):** TDD is strictly mandated for all new implementations. Comprehensive, high-quality unit and integration tests must be generated *before* or *alongside* the implementation code. Code is not considered complete until it is fully covered by passing tests.
+
+## GitHub Issue Management
+
+* [2026-04-28 12:33:00] - **Strict Issue Tracking:** All tasks and subtasks must be managed via GitHub Issues.
+* [2026-04-28 12:33:00] - **Subtask Checkboxes:** Markdown subtask boxes within issue descriptions must be automatically checked off as they are completed during the development process.
+* [2026-04-28 12:33:00] - **Success Factors (Definition of Done):** Every GitHub issue must explicitly define and append "Success Factors" representing the Definition of Done for that specific issue. An issue cannot be closed until all Success Factors are met.
 
 ## Definition of Done (Mandatory for every task)
 
@@ -42,6 +48,7 @@ All work must satisfy ALL of the following before a task is considered done:
 
 ### Development Process
 - **Single Source of Truth:** All tasks, subtasks, and project progress must be tracked via GitHub Issues and the associated GitHub Project board.
+- **Strict GitHub Issue Management:** Update issue descriptions to check off subtasks as they are completed. Ensure Success Factors are defined and met before closing.
 - Follow Test-Driven Development (TDD):
   - Write or adapt tests first.
   - Implement only until tests pass.
