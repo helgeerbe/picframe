@@ -40,7 +40,7 @@ It is optional, but recommended to be updated as the project evolves.
 
 * [2026-04-28 12:33:00] - **Strict Issue Tracking:** All tasks and subtasks must be managed via GitHub Issues.
 * [2026-04-28 12:33:00] - **Subtask Checkboxes:** Markdown subtask boxes within issue descriptions must be automatically checked off as they are completed during the development process.
-* [2026-04-28 12:33:00] - **Success Factors (Definition of Done):** Every GitHub issue must explicitly define and append "Success Factors" representing the Definition of Done for that specific issue. An issue cannot be closed until all Success Factors are met.
+* [2026-04-28 12:56:00] - **Success Factors (Definition of Done):** Establishing "Success Factors" and a "Definition of Done" is a required standard operating procedure for all future issue workflows. Every GitHub issue must explicitly define and append these criteria. An issue cannot be closed until all Success Factors are met.
 
 ## Definition of Done (Mandatory for every task)
 
