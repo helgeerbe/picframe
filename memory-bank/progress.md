@@ -22,8 +22,8 @@ This file tracks the project's progress using a task list format.
     *   [x] Task 0.5: Implement last-frame to next image blend
     *   [x] Task 0.6: Capture performance metrics
 *   [-] Phase 1: Core Image MVP (The "Walking Skeleton")
-    *   [ ] Task 1.0: Phase 1 Readiness & Prerequisites
-    *   [ ] Task 1.1: Modernize packaging (PEP 621)
+    *   [x] Task 1.0: Phase 1 Readiness & Prerequisites
+    *   [x] Task 1.1: Modernize packaging (PEP 621)
     *   [ ] Task 1.2: Implement PriorityQueue Event Bus
     *   [ ] Task 1.3: Implement Dual-Database Repositories
     *   [ ] Task 1.4: Implement Unified MetadataExtractor (Images)

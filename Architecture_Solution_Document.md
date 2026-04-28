@@ -198,8 +198,8 @@ To ensure system resilience, the `PlaybackEngine` will implement a global except
 
 ### Phase 1: Core Image MVP (The "Walking Skeleton")
 *Goal: A functional, headless digital picture frame that reads from SQLite and renders images via pi3d in a continuous loop.*
-- [ ] **Task 1.0:** Phase 1 Readiness & Prerequisites: Define database schemas, event dictionary, CI/CD pipeline, and development environment.
-- [ ] **Task 1.1:** Modernize packaging (PEP 621): Migrate to `pyproject.toml`, `setuptools_scm`, and configure developer tooling (pytest, mypy, ruff).
+- [x] **Task 1.0:** Phase 1 Readiness & Prerequisites: Define database schemas, event dictionary, CI/CD pipeline, and development environment.
+- [x] **Task 1.1:** Modernize packaging (PEP 621): Migrate to `pyproject.toml`, `setuptools_scm`, and configure developer tooling (pytest, mypy, ruff).
 - [ ] **Task 1.2:** Implement the thread-safe `PriorityQueue` Event Bus with `IEventPublisher`/`IEventSubscriber` interfaces and define core Immutable DTO `Events`.
 - [ ] **Task 1.3:** Implement the Dual-Database Repositories (`IConfigRepository`, `IMediaRepository`) using SQLite.
 - [ ] **Task 1.4:** Implement the Unified `MetadataExtractor` (Strategy Pattern for images) and decouple `GeoReverse` API calls.
