@@ -99,7 +99,7 @@ A task is only done when:
 - Implementation is complete
 - Tests are green
 - Quality gates pass
-- Documentation is updated
+- Documentation is updated (Documentation belongs to the definition of done)
 - Type safety is complete
 - Refactoring goals are achieved
 - The result is production-ready and review-ready
