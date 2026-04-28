@@ -1,24 +1,25 @@
 # Progress
 
 This file tracks the project's progress using a task list format.
-2026-04-23 11:19:00 - Log of updates made.
+2026-04-28 09:26:00 - Log of updates made.
 
-*
+* [2026-04-28 09:26:00] - Marked Phase 0 as complete.
 
 ## Completed Tasks
 
+*   [2026-04-28 09:26:00] - Phase 0: Technical Spike (Video Handoff PoC)
 *   [2026-04-23 11:19:00] - Architectural Planning & Documentation (Clean Architecture, EDA, Dual-Database, HAL, Frontend Spec)
 
 ## Current Tasks
 
-*   [ ] Phase 0: Technical Spike (Video Handoff PoC)
-    *   [ ] Task 0.1: Develop standalone PoC script
-    *   [ ] Task 0.2: Implement pi3d image to first-frame blend
-    *   [ ] Task 0.3: Integrate GStreamer with HW decoding & Z-order
-    *   [ ] Task 0.4: Implement EOS detection
-    *   [ ] Task 0.5: Implement last-frame to next image blend
-    *   [ ] Task 0.6: Capture performance metrics
-*   [ ] Phase 1: Core Image MVP (The "Walking Skeleton")
+*   [x] Phase 0: Technical Spike (Video Handoff PoC)
+    *   [x] Task 0.1: Develop standalone PoC script
+    *   [x] Task 0.2: Implement pi3d image to first-frame blend
+    *   [x] Task 0.3: Integrate GStreamer with HW decoding & Z-order
+    *   [x] Task 0.4: Implement EOS detection
+    *   [x] Task 0.5: Implement last-frame to next image blend
+    *   [x] Task 0.6: Capture performance metrics
+*   [-] Phase 1: Core Image MVP (The "Walking Skeleton")
     *   [ ] Task 1.1: Modernize packaging (PEP 621)
     *   [ ] Task 1.2: Implement PriorityQueue Event Bus
     *   [ ] Task 1.3: Implement Dual-Database Repositories

@@ -185,12 +185,12 @@ To ensure system resilience, the `PlaybackEngine` will implement a global except
 
 ### Phase 0: Technical Spike (Video Handoff PoC)
 *Goal: De-risk the most complex technical challenge by proving the seamless EGL/OpenGL context handoff between pi3d and GStreamer on target hardware before building the full architecture.*
-- [ ] **Task 0.1:** Develop a standalone Python script accepting an image, a video, and display dimensions.
-- [ ] **Task 0.2:** Implement the pi3d rendering loop to load the image and alpha-blend into the extracted first frame of the video.
-- [ ] **Task 0.3:** Integrate a GStreamer pipeline (enforcing hardware decoding e.g., `v4l2h264dec`) and manage window Z-order/layering to ensure it renders correctly relative to pi3d.
-- [ ] **Task 0.4:** Implement an IPC/Bus watch mechanism to detect the GStreamer End of Stream (EOS) signal.
-- [ ] **Task 0.5:** Trigger the pi3d alpha-blend from the extracted last frame of the video to the next image upon EOS.
-- [ ] **Task 0.6:** Capture and output performance metrics (pi3d FPS during blend, transition latency, CPU/RAM usage).
+- [x] **Task 0.1:** Develop a standalone Python script accepting an image, a video, and display dimensions.
+- [x] **Task 0.2:** Implement the pi3d rendering loop to load the image and alpha-blend into the extracted first frame of the video.
+- [x] **Task 0.3:** Integrate a GStreamer pipeline (enforcing hardware decoding e.g., `v4l2h264dec`) and manage window Z-order/layering to ensure it renders correctly relative to pi3d.
+- [x] **Task 0.4:** Implement an IPC/Bus watch mechanism to detect the GStreamer End of Stream (EOS) signal.
+- [x] **Task 0.5:** Trigger the pi3d alpha-blend from the extracted last frame of the video to the next image upon EOS.
+- [x] **Task 0.6:** Capture and output performance metrics (pi3d FPS during blend, transition latency, CPU/RAM usage).
 
 ### Phase 1: Core Image MVP (The "Walking Skeleton")
 *Goal: A functional, headless digital picture frame that reads from SQLite and renders images via pi3d in a continuous loop.*
