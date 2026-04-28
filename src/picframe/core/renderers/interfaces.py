@@ -1,0 +1,46 @@
+"""
+Interfaces for the Presentation Layer (Renderers).
+"""
+from typing import Protocol
+from picframe.core.events.dto import RenderCommand
+
+
+class IRenderer(Protocol):
+    """
+    Protocol defining the contract for a Presentation Layer renderer.
+    
+    The renderer is a "dumb" component responsible only for drawing pixels
+    to the screen based on received RenderCommands.
+    """
+
+    def start(self) -> None:
+        """
+        Initialize the display and rendering context.
+        Must be called from the main thread.
+        """
+        ...
+
+    def stop(self) -> None:
+        """
+        Clean up resources and close the display.
+        """
+        ...
+
+    def execute(self, command: RenderCommand) -> None:
+        """
+        Process a new render command (e.g., load a new image texture).
+        
+        Args:
+            command: The RenderCommand with image path and overlay data.
+        """
+        ...
+
+    def render_frame(self) -> bool:
+        """
+        Draw a single frame to the display.
+        Must be called continuously in the main thread loop.
+        
+        Returns:
+            bool: True to continue the render loop, False to exit.
+        """
+        ...

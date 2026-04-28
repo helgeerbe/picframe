@@ -38,3 +38,7 @@
 *   Conducted a gap analysis between the new `PlaylistManager`/`ImageProcessingService` and the legacy `Model`/`ImageCache`.
 *   Implemented immediate fixes in `PlaylistManager` to handle missing files and return a placeholder image.
 *   Created GitHub issues #618 and #619 to track deferred features (portrait pairs, filtering, sorting, matting, text overlays) for Phase 2.
+
+## [2026-04-28 15:01:00] - Starting Task 1.6
+*   **Current Focus:** Refactoring `ViewerDisplay` to `Pi3dRenderer` (Issue #601).
+*   **Next Steps:** Extract OpenGL/pi3d drawing logic from legacy `ViewerDisplay` and implement the `execute(RenderCommand)` interface.
