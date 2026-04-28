@@ -1,3 +1,11 @@
+"""
+Thread-safe Event Bus implementation using a PriorityQueue.
+
+This module provides the central communication hub for the application.
+It allows asynchronous background threads (like MQTT or FastAPI) to safely
+publish events to the synchronous main render loop, ensuring that critical
+commands preempt standard state updates.
+"""
 import queue
 import threading
 from collections.abc import Callable
@@ -8,7 +16,15 @@ from .interfaces import IEventPublisher, IEventSubscriber
 
 
 class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
+    """
+    A thread-safe event bus that processes events based on their priority.
+
+    Implements both IEventPublisher and IEventSubscriber protocols.
+    Uses a background worker thread to dispatch events to subscribers.
+    """
+
     def __init__(self) -> None:
+        """Initialize the event bus with an empty queue and subscriber dict."""
         self._subscribers: dict[type, list[Callable[[Any], None]]] = {}
         self._queue: queue.PriorityQueue[tuple[int, Any]] = (
             queue.PriorityQueue()
@@ -20,6 +36,7 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
     def subscribe(
         self, event_type: type, callback: Callable[[Any], None]
     ) -> None:
+        """Register a callback for a specific event type."""
         with self._lock:
             if event_type not in self._subscribers:
                 self._subscribers[event_type] = []
@@ -29,17 +46,22 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
     def unsubscribe(
         self, event_type: type, callback: Callable[[Any], None]
     ) -> None:
+        """Remove a registered callback for a specific event type."""
         with self._lock:
             if event_type in self._subscribers:
                 if callback in self._subscribers[event_type]:
                     self._subscribers[event_type].remove(callback)
 
     def publish(self, event: Event) -> None:
-        # PriorityQueue sorts by the first element of the tuple.
-        # We use the event's priority property.
+        """
+        Publish an event to the bus.
+
+        The event is placed in a PriorityQueue, sorted by its priority.
+        """
         self._queue.put((event.priority, event))
 
     def start(self) -> None:
+        """Start the background worker thread to process events."""
         with self._lock:
             if self._running:
                 return
@@ -50,6 +72,7 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
             self._worker_thread.start()
 
     def stop(self) -> None:
+        """Stop the background worker thread and unblock the queue."""
         with self._lock:
             self._running = False
             # Put a dummy event to unblock the queue if it's waiting
@@ -58,6 +81,12 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
                 self._worker_thread.join()
 
     def _process_events(self) -> None:
+        """
+        Main loop for the background worker thread.
+
+        Continuously pulls events from the PriorityQueue and dispatches
+        them to all registered subscribers.
+        """
         while self._running:
             try:
                 # Block until an item is available
