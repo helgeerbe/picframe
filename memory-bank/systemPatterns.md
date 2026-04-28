@@ -64,9 +64,10 @@ All work must satisfy ALL of the following before a task is considered done:
   - Edge cases and error paths
 
 ### Code Quality
-- Every touched file must include:
-  - A short module-level description
-  - Short and precise inline documentation for all functions
+- **Comprehensive Documentation:** Every touched or created file must include:
+  - A complete module-level docstring explaining its scope and purpose.
+  - Descriptive docstrings for every class and method/function explaining their purpose, arguments, and expected behavior.
+  - Concise, precise inline comments clarifying complex, non-obvious, or threading-related logic.
 - All functions in touched modules must be fully type safe:
   - Complete type annotations
   - Pass project type checker with no errors
