@@ -8,10 +8,12 @@
 
 ## Current Focus
 
-*   Phase 1: Core Image MVP (The "Walking Skeleton") - Preparing for Task 1.4: Unified MetadataExtractor (Images).
+*   Phase 1: Core Image MVP (The "Walking Skeleton") - Preparing for Task 1.5: PlaylistManager & ImageProcessingService.
 
 ## Recent Changes
 
+*   [2026-04-28 13:28:00] - Completed Task 1.4 (Issue #599): Implemented Unified MetadataExtractor for images, ensuring feature parity with the original implementation.
+*   [2026-04-28 13:19:00] - Started Task 1.4 (Issue #599): Unified MetadataExtractor (Images).
 *   [2026-04-28 13:10:00] - Completed Task 1.3 (Issue #598): Implemented Dual-Database Repositories (`SQLiteConfigRepository`, `SQLiteMediaRepository`) and a standardized `MigrationManager`. All code is fully tested, type-checked, and documented.
 *   [2026-04-28 13:00:00] - Started Task 1.3 (Issue #598): Dual-Database Repositories & Migrations.
 *   [2026-04-28 12:25:00] - Completed Task 1.2 (Issue #597): Implemented the thread-safe `PriorityQueue` Event Bus with `IEventPublisher`/`IEventSubscriber` interfaces and defined core Immutable DTO `Events`.
