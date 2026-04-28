@@ -198,6 +198,7 @@ To ensure system resilience, the `PlaybackEngine` will implement a global except
 
 ### Phase 1: Core Image MVP (The "Walking Skeleton")
 *Goal: A functional, headless digital picture frame that reads from SQLite and renders images via pi3d in a continuous loop.*
+- [ ] **Task 1.0:** Phase 1 Readiness & Prerequisites: Define database schemas, event dictionary, CI/CD pipeline, and development environment.
 - [ ] **Task 1.1:** Modernize packaging (PEP 621): Migrate to `pyproject.toml`, `setuptools_scm`, and configure developer tooling (pytest, mypy, ruff).
 - [ ] **Task 1.2:** Implement the thread-safe `PriorityQueue` Event Bus with `IEventPublisher`/`IEventSubscriber` interfaces and define core Immutable DTO `Events`.
 - [ ] **Task 1.3:** Implement the Dual-Database Repositories (`IConfigRepository`, `IMediaRepository`) using SQLite.
@@ -238,6 +239,11 @@ Phase 1 establishes the foundational Clean Architecture and Event-Driven backbon
 *   **Infrastructure Layer:** SQLite repositories will replace YAML. The legacy `ViewerDisplay` will be stripped of all orchestration logic, becoming a pure `Pi3dRenderer` adapter that only responds to `RenderCommand`s.
 
 ### 6.2 Detailed Work Breakdown Structure (Phase 1)
+*   **Task 1.0: Phase 1 Readiness & Prerequisites**
+    *   1.0.1: Define and document exact SQL schema definitions for `config.db3` and `media_cache.db3`.
+    *   1.0.2: Define a comprehensive list of all Event DTOs, their payloads, and their priority levels.
+    *   1.0.3: Establish a basic GitHub Actions workflow to enforce the Definition of Done (running `ruff`, `mypy`, and `pytest` on every PR).
+    *   1.0.4: Ensure all developers have access to the required system packages (e.g., `libegl1`, `libgles2`) for local testing, even if using headless mode.
 *   **Task 1.1: Modernize Packaging & Tooling**
     *   1.1.1: Create `pyproject.toml` (PEP 621) with `setuptools_scm`.
     *   1.1.2: Configure `ruff` (linting/formatting), `mypy` (strict type checking), and `pytest`.

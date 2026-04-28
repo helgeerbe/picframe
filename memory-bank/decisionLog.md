@@ -1,12 +1,14 @@
 # Decision Log
 
 This file records architectural and implementation decisions using a list format.
-2026-04-28 09:26:00 - Log of updates made.
+2026-04-28 11:37:00 - Log of updates made.
 
+* [2026-04-28 11:37:00] - Establish GitHub Issues and GitHub Projects as the single source of truth for project state and task tracking.
 * [2026-04-28 09:26:00] - Confirm GStreamer as the primary video rendering engine with hardware acceleration support, replacing VLC, based on the successful Phase 0 Proof of Concept.
 
 ## Decision
 
+* [2026-04-28 11:37:00] - Establish GitHub Issues and GitHub Projects (Kanban) as the single source of truth for project state, task tracking, and subtask management, replacing local markdown files as the authoritative source.
 * [2026-04-28 09:26:00] - Confirm GStreamer as the primary video rendering engine with hardware acceleration support, replacing VLC, based on the successful Phase 0 Proof of Concept.
 * [2026-04-22 14:47:04] - Use first and last frame extraction from videos to achieve seamless transitions between pi3d (images) and GStreamer (video).
 * [2026-04-23 08:41:15] - Refactor the entire codebase to a Strict Event-Driven Architecture (EDA) using Clean Architecture principles, separating the Control Plane, State Machine, and Renderers.
@@ -32,6 +34,7 @@ This file records architectural and implementation decisions using a list format
 
 ## Rationale
 
+* [2026-04-28 11:37:00] - Centralizing task tracking in GitHub ensures a single, authoritative source of truth that is tightly integrated with the codebase, pull requests, and team workflows. It prevents synchronization issues between local markdown files and the actual development progress.
 * [2026-04-28 09:26:00] - The Phase 0 PoC (`poc_video_handoff_v2.py`) successfully demonstrated that GStreamer can handle hardware-accelerated video decoding while maintaining proper Z-order and seamless handoff with pi3d. The PoC code provides concrete hints and patterns for the upcoming replacement of the legacy VLC player.
 * [2026-04-22 14:47:04] - Solves the visual flicker/black screen issue during EGL/OpenGL context switching between the two exclusive renderers. By showing a static image of the video's first/last frame in pi3d, the system can use alpha blending to seamlessly reveal or hide the underlying hardware-accelerated video layer without visual interruption.
 * [2026-04-23 08:41:15] - The current `Controller.loop()` and `ViewerDisplay.slideshow_is_running()` are tightly coupled, mixing business logic (timing, playlist) with presentation logic (OpenGL drawing). An EDA decouples these, preventing external inputs (MQTT/HTTP) from blocking the 60fps render loop and enabling robust state management for the complex pi3d/GStreamer handoff.
@@ -57,6 +60,7 @@ This file records architectural and implementation decisions using a list format
 
 ## Implementation Details
 
+* [2026-04-28 11:37:00] - All detailed subtasks, status updates, and project tracking are managed via GitHub Issues and the GitHub Project board (https://github.com/users/helgeerbe/projects/3/views/2). Local memory bank files like `progress.md` will only serve as high-level summaries.
 * [2026-04-22 14:47:04] - pi3d renders the transition using the extracted first frame. Once complete, pi3d alpha is set to 0 to reveal the GStreamer video paused on the same frame. At the end of the video, pi3d alpha is set to 1 (showing the extracted last frame), and then transitions to the next media item.
 * [2026-04-23 08:41:15] - Implement a thread-safe Event Bus using `queue.PriorityQueue`. The Control Plane (FastAPI/MQTT) publishes `CommandEvents`. A central `PlaybackStateMachine` subscribes to these, manages the playlist, and publishes `RenderCommands` to the decoupled `Pi3dRenderer` and `GstVideoRenderer`.
 * [2026-04-23 08:46:31] - Create `infrastructure/media/metadata_extractor.py` using the Strategy Pattern (`ImageMetadataStrategy` via `exifread`/`PIL` and `VideoMetadataStrategy` via `ffprobe`). Both strategies return a unified `core.models.MediaItem` dataclass.

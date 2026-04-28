@@ -41,6 +41,7 @@ It is optional, but recommended to be updated as the project evolves.
 All work must satisfy ALL of the following before a task is considered done:
 
 ### Development Process
+- **Single Source of Truth:** All tasks, subtasks, and project progress must be tracked via GitHub Issues and the associated GitHub Project board.
 - Follow Test-Driven Development (TDD):
   - Write or adapt tests first.
   - Implement only until tests pass.

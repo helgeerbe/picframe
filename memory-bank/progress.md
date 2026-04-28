@@ -1,7 +1,9 @@
 # Progress
 
+**Note: The authoritative source of truth for project progress, task status, and detailed subtasks is the [GitHub Project Board](https://github.com/users/helgeerbe/projects/3/views/2) and GitHub Issues. This file serves as a high-level summary.**
+
 This file tracks the project's progress using a task list format.
-2026-04-28 09:26:00 - Log of updates made.
+2026-04-28 11:37:00 - Log of updates made.
 
 * [2026-04-28 09:26:00] - Marked Phase 0 as complete.
 
@@ -20,6 +22,7 @@ This file tracks the project's progress using a task list format.
     *   [x] Task 0.5: Implement last-frame to next image blend
     *   [x] Task 0.6: Capture performance metrics
 *   [-] Phase 1: Core Image MVP (The "Walking Skeleton")
+    *   [ ] Task 1.0: Phase 1 Readiness & Prerequisites
     *   [ ] Task 1.1: Modernize packaging (PEP 621)
     *   [ ] Task 1.2: Implement PriorityQueue Event Bus
     *   [ ] Task 1.3: Implement Dual-Database Repositories
