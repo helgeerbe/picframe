@@ -8,10 +8,11 @@
 
 ## Current Focus
 
-*   Phase 1: Core Image MVP (The "Walking Skeleton") - Preparing for Task 1.5: PlaylistManager & ImageProcessingService.
+*   Phase 1: Core Image MVP (The "Walking Skeleton") - Task 1.5: PlaylistManager & ImageProcessingService (Issue #600).
 
 ## Recent Changes
 
+*   [2026-04-28 13:34:00] - Started Task 1.5 (Issue #600): PlaylistManager & ImageProcessingService. Moved issue to "In Progress" on the GitHub project board.
 *   [2026-04-28 13:28:00] - Completed Task 1.4 (Issue #599): Implemented Unified MetadataExtractor for images, ensuring feature parity with the original implementation.
 *   [2026-04-28 13:19:00] - Started Task 1.4 (Issue #599): Unified MetadataExtractor (Images).
 *   [2026-04-28 13:10:00] - Completed Task 1.3 (Issue #598): Implemented Dual-Database Repositories (`SQLiteConfigRepository`, `SQLiteMediaRepository`) and a standardized `MigrationManager`. All code is fully tested, type-checked, and documented.
@@ -28,3 +29,12 @@
 ## Open Questions/Issues
 
 *   
+## [2026-04-28 14:42:00] - Gap Analysis Completed
+*   Conducted a gap analysis between the new `PlaylistManager`/`ImageProcessingService` and the legacy `Model`/`ImageCache`.
+*   Implemented immediate fixes in `PlaylistManager` to handle missing files and return a placeholder image.
+*   Created GitHub issues #618 and #619 to track deferred features (portrait pairs, filtering, sorting, matting, text overlays) for Phase 2.
+
+## [2026-04-28 14:42:00] - Gap Analysis Completed
+*   Conducted a gap analysis between the new `PlaylistManager`/`ImageProcessingService` and the legacy `Model`/`ImageCache`.
+*   Implemented immediate fixes in `PlaylistManager` to handle missing files and return a placeholder image.
+*   Created GitHub issues #618 and #619 to track deferred features (portrait pairs, filtering, sorting, matting, text overlays) for Phase 2.

@@ -27,7 +27,7 @@ This file tracks the project's progress using a task list format.
     *   [x] Task 1.2: Implement PriorityQueue Event Bus
     *   [x] Task 1.3: Implement Dual-Database Repositories
     *   [x] Task 1.4: Implement Unified MetadataExtractor (Images)
-    *   [ ] Task 1.5: Implement PlaylistManager & ImageProcessingService
+    *   [-] Task 1.5: Implement PlaylistManager & ImageProcessingService
     *   [ ] Task 1.6: Refactor ViewerDisplay to Pi3dRenderer
     *   [ ] Task 1.7: Implement PlaybackEngine & Composition Root
 
