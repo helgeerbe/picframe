@@ -52,8 +52,8 @@ def test_video_player_play(mock_popen, test_video_path):
     assert mock_proc.terminate.called
 
 @pytest.mark.skipif(
-    os.environ.get("GITHUB_ACTIONS") == "true",
-    reason="Skipped on GitHub Actions CI"
+    os.environ.get("GITHUB_ACTIONS") == "true" or (not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY")),
+    reason="Skipped on GitHub Actions CI or when no display is available"
 )
 def test_video_player_integration(test_video_path, caplog):
     """Test starting the video player and playing a video file."""

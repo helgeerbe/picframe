@@ -566,9 +566,12 @@ class VideoStreamer:
             self._state_check_tm = time.time() # STATE message should happen at < 3s intervals
 
     def _player_killer(self):
-        if self._state_check_tm is not None and (time.time() - self._state_check_tm) > 10.0:
-            self.__logger.debug("Suspicious lapse in STATE messages from VideoPlayer")
-            self.kill()
+        while self.player_alive():
+            if self._state_check_tm is not None and (time.time() - self._state_check_tm) > 10.0:
+                self.__logger.debug("Suspicious lapse in STATE messages from VideoPlayer")
+                self.kill()
+                break
+            time.sleep(1.0)
 
     def _listen_stderr(self):
         if not self._proc_stderr:

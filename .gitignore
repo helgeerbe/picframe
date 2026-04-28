@@ -1,3 +1,4 @@
+*.frame
 configuration.yaml
 oldcode/
 docs/diagrams/out/
