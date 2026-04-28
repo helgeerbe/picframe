@@ -12,6 +12,7 @@
 
 ## Recent Changes
 
+*   [2026-04-28 12:25:00] - Completed Task 1.2 (Issue #597): Implemented the thread-safe `PriorityQueue` Event Bus with `IEventPublisher`/`IEventSubscriber` interfaces and defined core Immutable DTO `Events`.
 *   [2026-04-28 12:11:00] - Completed Task 1.1 (Issue #596): Modernized packaging to PEP 621 using `pyproject.toml` and `setuptools_scm`. Removed legacy packaging files and macOS dependencies.
 *   [2026-04-28 11:37:00] - Updated memory bank to reflect that GitHub Issues and the GitHub Project board are the authoritative source of truth for project state and task tracking. Added detailed subtasks to all Phase 1 GitHub issues.
 *   [2026-04-28 11:14:00] - Initialized the `v2-dev` branch, pushed to origin, and successfully generated all Phase 1-4 WBS tasks as GitHub Issues using the GitHub CLI, applying the `next gen` label to each. The primary codebase refactoring phase has officially commenced.
