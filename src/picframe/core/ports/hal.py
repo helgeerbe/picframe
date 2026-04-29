@@ -6,7 +6,7 @@ operating system and hardware. These interfaces ensure the core application
 logic remains decoupled from specific OS implementations (e.g., Wayland, X11, macOS).
 """
 
-from typing import Protocol
+from typing import Callable, Protocol
 
 
 class IDisplayPower(Protocol):
@@ -36,10 +36,22 @@ class IDisplayPower(Protocol):
         ...
 
 
+from typing import Callable
+
 class IHardwareInput(Protocol):
     """
     Interface for monitoring hardware inputs (e.g., GPIO pins, buttons, PIR sensors).
     """
+
+    def register_callback(self, callback: Callable[[str, str], None]) -> None:
+        """
+        Register a callback to be invoked when a hardware event occurs.
+
+        Args:
+            callback: A function taking (input_id: str, action: str).
+                      e.g., callback("next_button", "pressed")
+        """
+        ...
 
     def start(self) -> None:
         """Start monitoring hardware inputs."""

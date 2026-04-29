@@ -47,13 +47,21 @@ class MockDisplayPower(IDisplayPower):
         return self._is_on
 
 
+from typing import Callable, Optional
+
 class MockHardwareInput(IHardwareInput):
     """Mock implementation of IHardwareInput."""
 
     def __init__(self) -> None:
         """Initialize the mock hardware input."""
         self._is_running = False
+        self._callback: Optional[Callable[[str, str], None]] = None
         logger.info("MockHardwareInput initialized.")
+
+    def register_callback(self, callback: Callable[[str, str], None]) -> None:
+        """Register a callback for simulated hardware events."""
+        self._callback = callback
+        logger.info("MockHardwareInput: Callback registered.")
 
     def start(self) -> None:
         """Simulate starting hardware input monitoring."""
@@ -64,6 +72,22 @@ class MockHardwareInput(IHardwareInput):
         """Simulate stopping hardware input monitoring."""
         self._is_running = False
         logger.info("MockHardwareInput: Monitoring stopped.")
+
+    def simulate_event(self, input_id: str, action: str) -> None:
+        """
+        Simulate a hardware event.
+
+        Args:
+            input_id: The ID of the simulated input (e.g., 'button_1').
+            action: The simulated action (e.g., 'pressed').
+        """
+        if self._is_running and self._callback:
+            logger.info(f"MockHardwareInput: Simulating event {input_id} -> {action}")
+            self._callback(input_id, action)
+        elif not self._is_running:
+            logger.warning("MockHardwareInput: Cannot simulate event, monitoring is stopped.")
+        else:
+            logger.warning("MockHardwareInput: Cannot simulate event, no callback registered.")
 
 
 class MockSystemManager(ISystemManager):
