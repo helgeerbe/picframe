@@ -23,6 +23,12 @@ from typing import Optional, List
 import paho.mqtt.client as mqtt
 from picframe import __version__
 from picframe.controller import Controller
+from picframe.core.events.bus import IEventSubscriber, IEventPublisher
+from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent, State
+from picframe.core.ports.state import ISystemStateQuery
+from picframe.core.events.bus import IEventSubscriber, IEventPublisher
+from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent, State
+from picframe.core.ports.state import ISystemStateQuery
 
 
 class InterfaceMQTT:
@@ -36,7 +42,14 @@ class InterfaceMQTT:
         Controller for picframe.
     """
 
-    def __init__(self, controller: Controller, mqtt_config: dict) -> None:
+    def __init__(
+        self,
+        controller: Controller,
+        mqtt_config: dict,
+        event_subscriber: Optional[IEventSubscriber] = None,
+        event_publisher: Optional[IEventPublisher] = None,
+        state_query: Optional[ISystemStateQuery] = None
+    ) -> None:
         """
         Initializes an instance of InterfaceMQTT.
 
@@ -46,6 +59,12 @@ class InterfaceMQTT:
             The controller object.
         mqtt_config : dict
             A dictionary containing MQTT configuration parameters.
+        event_subscriber : Optional[IEventSubscriber]
+            The event bus subscriber interface.
+        event_publisher : Optional[IEventPublisher]
+            The event bus publisher interface.
+        state_query : Optional[ISystemStateQuery]
+            The system state query port.
 
         Raises:
         -------
@@ -56,6 +75,13 @@ class InterfaceMQTT:
         self.__logger.debug("Creating an instance of InterfaceMQTT")
         self.__controller = controller
         self.__controller.publish_state = self.publish_state
+        self._subscriber = event_subscriber
+        self._publisher = event_publisher
+        self._state_query = state_query
+        
+        if self._subscriber:
+            self._subscriber.subscribe(CurrentMediaChangedEvent, self._handle_media_changed)
+            self._subscriber.subscribe(StateEvent, self._handle_state_changed)
         self.__device_id = mqtt_config["device_id"]
         self.__device_url = mqtt_config["device_url"]
         self.__broker = mqtt_config["server"]
@@ -68,6 +94,70 @@ class InterfaceMQTT:
         self.__connected = False
         self.__initialize_client()
         self.__connect()
+
+
+    def _handle_media_changed(self, event: CurrentMediaChangedEvent) -> None:
+        """Handle CurrentMediaChangedEvent from the event bus."""
+        if not self.__connected or self.__client is None:
+            return
+            
+        if hasattr(event.media_item, "to_dict") and callable(event.media_item.to_dict):
+            media_dict = event.media_item.to_dict()
+        elif hasattr(event.media_item, "__dict__"):
+            media_dict = event.media_item.__dict__
+        elif isinstance(event.media_item, dict):
+            media_dict = event.media_item
+        else:
+            media_dict = {"raw": str(event.media_item)}
+            
+        image_path = media_dict.get("filepath")
+        self.publish_state(image=image_path, image_attr=media_dict)
+
+    def _handle_state_changed(self, event: StateEvent) -> None:
+        """Handle StateEvent from the event bus."""
+        if not self.__connected or self.__client is None:
+            return
+            
+        switch_topic_head = "homeassistant/switch/" + self.__device_id
+        
+        if event.state == State.PAUSED:
+            state_topic = switch_topic_head + "_paused/state"
+            self.__client.publish(state_topic, "ON", retain=True)
+        elif event.state == State.PLAYING:
+            state_topic = switch_topic_head + "_paused/state"
+            self.__client.publish(state_topic, "OFF", retain=True)
+
+
+    def _handle_media_changed(self, event: CurrentMediaChangedEvent) -> None:
+        """Handle CurrentMediaChangedEvent from the event bus."""
+        if not self.__connected or self.__client is None:
+            return
+            
+        if hasattr(event.media_item, "to_dict") and callable(event.media_item.to_dict):
+            media_dict = event.media_item.to_dict()
+        elif hasattr(event.media_item, "__dict__"):
+            media_dict = event.media_item.__dict__
+        elif isinstance(event.media_item, dict):
+            media_dict = event.media_item
+        else:
+            media_dict = {"raw": str(event.media_item)}
+            
+        image_path = media_dict.get("filepath")
+        self.publish_state(image=image_path, image_attr=media_dict)
+
+    def _handle_state_changed(self, event: StateEvent) -> None:
+        """Handle StateEvent from the event bus."""
+        if not self.__connected or self.__client is None:
+            return
+            
+        switch_topic_head = "homeassistant/switch/" + self.__device_id
+        
+        if event.state == State.PAUSED:
+            state_topic = switch_topic_head + "_paused/state"
+            self.__client.publish(state_topic, "ON", retain=True)
+        elif event.state == State.PLAYING:
+            state_topic = switch_topic_head + "_paused/state"
+            self.__client.publish(state_topic, "OFF", retain=True)
 
     def __initialize_client(self) -> None:
         """
@@ -606,15 +696,24 @@ class InterfaceMQTT:
         # back buttons
         elif message.topic == button_topic_head + "_back/set":
             if msg == "ON":
-                self.__controller.back()
+                if self._publisher:
+                    self._publisher.publish(CommandEvent(command=Command.PREV))
+                else:
+                    self.__controller.back()
         # next buttons
         elif message.topic == button_topic_head + "_next/set":
             if msg == "ON":
-                self.__controller.next()
+                if self._publisher:
+                    self._publisher.publish(CommandEvent(command=Command.NEXT))
+                else:
+                    self.__controller.next()
         # delete
         elif message.topic == button_topic_head + "_delete/set":
             if msg == "ON":
-                self.__controller.delete()
+                if self._publisher:
+                    self._publisher.publish(CommandEvent(command=Command.DELETE))
+                else:
+                    self.__controller.delete()
         # title on
         elif message.topic == switch_topic_head + "_title_toggle/set":
             state_topic = switch_topic_head + "_title_toggle/state"

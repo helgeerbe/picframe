@@ -150,6 +150,24 @@ class FileChangeEvent(Event):
 
 
 @dataclass(frozen=True)
+class CurrentMediaChangedEvent(Event):
+    """
+    An event notifying subscribers that the currently displayed media has changed.
+    This is the core event for the CQRS metadata broadcasting pattern.
+
+    Attributes:
+        media_item: The MediaItem DTO representing the new image/video.
+    """
+
+    media_item: Any  # Will be typed as MediaItem once imported/resolved
+
+    @property
+    def priority(self) -> int:
+        """Metadata broadcasting has normal priority (3)."""
+        return 3
+
+
+@dataclass(frozen=True)
 class SystemErrorEvent(Event):
     """
     A notification that a critical error has occurred (Poison Pill).

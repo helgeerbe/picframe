@@ -56,6 +56,14 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Concept:** The application provides a command-line interface (e.g., `picframe init` and `picframe run --port 9000`). The `init` command bootstraps the user environment in `~/.picframe/` (creating directories, copying default assets, and initializing SQLite databases).
 *   **Reasoning & Benefits:** Separates application initialization from runtime execution. Bootstrapping operates strictly in user-space, avoiding the security risks and architectural anti-patterns of executing `sudo` from within Python to install system dependencies. System dependencies will be managed via explicit shell scripts or native OS packages (e.g., `.deb`), adhering to Linux best practices and the Principle of Least Privilege.
 
+### 2.12 Event-Driven Metadata Broadcasting (CQRS)
+*   **Concept:** Image metadata broadcasting is handled via a CQRS pattern. The core domain emits a `CurrentMediaChangedEvent` when the displayed image changes. A dedicated `StateTrackerService` subscribes to this event, maintaining the current system state and exposing an `ISystemStateQuery` port. External delivery mechanisms (MQTT, WebSockets, REST APIs) query this port or subscribe to the event bus directly, completely decoupled from the core domain logic.
+*   **Reasoning & Benefits:** This strictly adheres to Hexagonal Architecture by preventing external communication protocols from polluting the domain. It supports both push (MQTT/WebSockets via event subscription) and pull (REST API via state query) models efficiently without duplicating state management logic.
+
+### 2.12 Event-Driven Metadata Broadcasting (CQRS)
+*   **Concept:** Image metadata broadcasting is handled via a CQRS pattern. The core domain emits a `CurrentMediaChangedEvent` when the displayed image changes. A dedicated `StateTrackerService` subscribes to this event, maintaining the current system state and exposing an `ISystemStateQuery` port. External delivery mechanisms (MQTT, WebSockets, REST APIs) query this port or subscribe to the event bus directly, completely decoupled from the core domain logic.
+*   **Reasoning & Benefits:** This strictly adheres to Hexagonal Architecture by preventing external communication protocols from polluting the domain. It supports both push (MQTT/WebSockets via event subscription) and pull (REST API via state query) models efficiently without duplicating state management logic.
+
 ## 3. System Diagrams
 
 ### 3.1 Component Architecture
