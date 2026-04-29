@@ -34,10 +34,11 @@ def test_hal_factory_win32() -> None:
 
 
 def test_hal_factory_linux_default() -> None:
-    """Test that the HAL factory defaults to mock adapters on Linux (for now)."""
+    """Test that the HAL factory injects WaylandDisplayPower on Linux."""
+    from picframe.infrastructure.os.wayland_power import WaylandDisplayPower
     with patch.object(sys, "platform", "linux"):
         adapters = HALFactory.create_adapters()
 
-        assert isinstance(adapters.display_power, MockDisplayPower)
+        assert isinstance(adapters.display_power, WaylandDisplayPower)
         assert isinstance(adapters.hardware_input, MockHardwareInput)
         assert isinstance(adapters.system_manager, MockSystemManager)

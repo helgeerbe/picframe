@@ -16,6 +16,7 @@ from picframe.infrastructure.os.mock_adapters import (
     MockHardwareInput,
     MockSystemManager,
 )
+from picframe.infrastructure.os.wayland_power import WaylandDisplayPower
 
 logger = logging.getLogger(__name__)
 
@@ -37,9 +38,13 @@ class HALFactory:
     """
 
     @staticmethod
-    def create_adapters() -> HALAdapters:
+    def create_adapters(display_output: str = "HDMI-A-1") -> HALAdapters:
         """
         Detect the host OS and instantiate the appropriate HAL adapters.
+
+        Args:
+            display_output: The name of the display output (e.g., 'HDMI-A-1')
+                            to be used by the display power adapter.
 
         Returns:
             HALAdapters: A container holding the concrete implementations
@@ -63,10 +68,13 @@ class HALFactory:
                 system_manager=MockSystemManager(),
             )
 
-        # Default fallback (e.g., Linux/Ubuntu VM during development)
-        logger.info("HALFactory: Defaulting to Mock Adapters for development.")
+        # Default fallback (e.g., Linux/Ubuntu VM during development or Raspberry Pi Wayland)
+        # We inject WaylandDisplayPower here as it's the target environment.
+        # If wlr-randr is missing (e.g., on a generic Ubuntu VM), the adapter
+        # will log an error but won't crash the application.
+        logger.info("HALFactory: Defaulting to Wayland/Mock Adapters for Linux.")
         return HALAdapters(
-            display_power=MockDisplayPower(),
+            display_power=WaylandDisplayPower(display_output=display_output),
             hardware_input=MockHardwareInput(),
             system_manager=MockSystemManager(),
         )

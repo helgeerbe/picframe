@@ -35,11 +35,15 @@ def main() -> None:
     event_bus = PriorityQueueEventBus()
 
     # 3. Initialize Hardware Abstraction Layer (HAL)
-    hal_adapters = HALFactory.create_adapters()
+    # TODO: Load display_hdmi from config_repo (Issue #630)
+    display_output = "HDMI-A-1"
+    hal_adapters = HALFactory.create_adapters(display_output=display_output)
     logger.info(f"HAL Adapters injected: {hal_adapters}")
 
     # 4. Initialize Services
     playlist_manager = PlaylistManager(media_repo)
+    from picframe.core.services.display_power import DisplayPowerManager
+    display_power_manager = DisplayPowerManager(event_bus, hal_adapters.display_power)
 
     # 5. Initialize Renderer
     # TODO: Load config from config_repo
@@ -72,6 +76,9 @@ def main() -> None:
         shutdown_event.set()
         engine.stop()
         event_bus.stop()
+        # Keep a reference to display_power_manager to prevent garbage collection
+        # and allow it to handle events until the bus stops.
+        _ = display_power_manager
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)

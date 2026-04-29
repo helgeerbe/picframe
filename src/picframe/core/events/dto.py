@@ -29,6 +29,9 @@ class Command(Enum):
     SET_CONFIG = auto()
     TOGGLE_TEXT = auto()
     REFRESH_TEXT = auto()
+    DISPLAY_ON = auto()
+    DISPLAY_OFF = auto()
+    DISPLAY_TOGGLE = auto()
 
 
 class State(Enum):
