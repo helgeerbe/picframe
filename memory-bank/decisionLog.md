@@ -96,6 +96,14 @@ This file records architectural and implementation decisions using a list format
 **Rationale:** Simplifies the deployment and serving process. FastAPI can be configured to mount this single directory as static files, eliminating the need for a separate web server (like Nginx) in the default setup, aligning with the "Walking Skeleton" MVP approach.
 **Implementation Details:** Updated `frontend/vite.config.ts` with `build.outDir: '../src/picframe/html'` and `emptyOutDir: true`.
 
+## [2026-04-29 15:55:00] - Database Path Overrides (Issue #628)
+**Decision:** Implement specific environment variable and command-line overrides for the SQLite database paths (`config.db3` and `media_cache.db3`), in addition to the existing configurable `base_dir`.
+**Rationale:**
+1. **SD Card Wear Mitigation:** Crucial for Raspberry Pi deployments. Allows users to point high-write databases (especially the media cache) to a RAM disk (`/dev/shm/`) or external SSD, while keeping static assets and base config on the SD card.
+2. **Containerization:** Aligns with Docker best practices by allowing specific persistent volume mounts for databases via environment variables (`PICFRAME_CONFIG_DB`, `PICFRAME_MEDIA_DB`).
+3. **Testability:** Enables passing `:memory:` or temporary file paths directly to the bootstrapper during testing without mocking the filesystem.
+**Implementation Details:** Updated `main.py` CLI parser to accept `--config-db` and `--media-db` (falling back to env vars). Updated `EnvironmentBootstrapper.__init__` to accept and use these optional overrides.
+
 ## [2026-04-29 15:45:00] - Frontend Build Pipeline Integration
 **Decision:** Configure Vite to output compiled SPA assets directly into the backend's `src/picframe/html` directory.
 **Rationale:** Simplifies the deployment and serving process. FastAPI can be configured to mount this single directory as static files, eliminating the need for a separate web server (like Nginx) in the default setup, aligning with the "Walking Skeleton" MVP approach.

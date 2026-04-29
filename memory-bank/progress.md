@@ -42,9 +42,9 @@ This file tracks the project's progress using a task list format.
         *   [x] Task 2A.5: Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631)
     *   [-] Subphase 2B: The Web Control Plane & CLI (FastAPI, Vue.js SPA, CLI Init, Config Loading)
         *   [x] Task 2B.1: CLI and EnvironmentBootstrapper (Issue #632)
-        *   [ ] Task 2B.2: FastAPI Backend Setup & Configuration (Issue #603)
-        *   [ ] Task 2B.3: FastAPI REST Endpoints (Issue #604)
-        *   [ ] Task 2B.4: FastAPI WebSocket Integration (Issue #628)
+        *   [x] Task 2B.2: FastAPI Backend Setup & Configuration (Issue #603)
+        *   [x] Task 2B.3: Vue.js SPA Development (Issue #604)
+        *   [x] Task 2B.4: Implement Environment/Argument Parsing for Database Paths (Issue #628)
         *   [x] Task 2B.5: Vue.js SPA Implementation (Issue #630)
         *   [ ] Task 2B.6: Integration & E2E Testing (Issue #635)
         *   [ ] Task 2B.7: Update README and User Documentation (Issue #638)
@@ -65,4 +65,4 @@ This file tracks the project's progress using a task list format.
     *   [ ] Task 4.5: Implement Configuration Migration Adapter
     *   [ ] Task 4.6: Comprehensive integration testing & cleanup
 * [2026-04-29 15:45:00] - Completed Task 2B.3: Vue.js SPA Development (Issue #604)
-* [2026-04-29 15:45:00] - Completed Task 2B.3: Vue.js SPA Development (Issue #604)
+* [2026-04-29 16:00:00] - Completed Task 2B.4: Implement Environment/Argument Parsing for Database Paths (Issue #628)

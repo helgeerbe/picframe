@@ -29,7 +29,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def run_picframe(base_dir: str, port: int = 9000) -> None:
+def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = None, media_db_path: str | None = None) -> None:
     """
     Composition Root for Picframe.
     Initializes and wires all components together.
@@ -38,8 +38,8 @@ def run_picframe(base_dir: str, port: int = 9000) -> None:
 
     # 1. Initialize Repositories
     data_dir = os.path.join(os.path.expanduser(base_dir), "data")
-    config_db_path = os.path.join(data_dir, "config.db3")
-    media_db_path = os.path.join(data_dir, "media_cache.db3")
+    config_db_path = config_db_path or os.path.join(data_dir, "config.db3")
+    media_db_path = media_db_path or os.path.join(data_dir, "media_cache.db3")
     
     _config_repo = SQLiteConfigRepository(config_db_path)
     media_repo = SQLiteMediaRepository(media_db_path)
@@ -137,20 +137,24 @@ def main() -> None:
 
     # Init command
     init_parser = subparsers.add_parser("init", help="Initialize the picframe environment")
-    init_parser.add_argument("--dir", default="~/.picframe", help="Base directory for picframe data (default: ~/.picframe)")
+    init_parser.add_argument("--dir", default=os.environ.get("PICFRAME_DIR", "~/.picframe"), help="Base directory for picframe data (default: ~/.picframe or PICFRAME_DIR env var)")
+    init_parser.add_argument("--config-db", default=os.environ.get("PICFRAME_CONFIG_DB"), help="Path to config database (default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)")
+    init_parser.add_argument("--media-db", default=os.environ.get("PICFRAME_MEDIA_DB"), help="Path to media database (default: <dir>/data/media_cache.db3 or PICFRAME_MEDIA_DB env var)")
 
     # Run command
     run_parser = subparsers.add_parser("run", help="Run the picframe application")
-    run_parser.add_argument("--dir", default="~/.picframe", help="Base directory for picframe data (default: ~/.picframe)")
-    run_parser.add_argument("--port", type=int, default=9000, help="Port for the web server (default: 9000)")
+    run_parser.add_argument("--dir", default=os.environ.get("PICFRAME_DIR", "~/.picframe"), help="Base directory for picframe data (default: ~/.picframe or PICFRAME_DIR env var)")
+    run_parser.add_argument("--port", type=int, default=int(os.environ.get("PICFRAME_PORT", 9000)), help="Port for the web server (default: 9000 or PICFRAME_PORT env var)")
+    run_parser.add_argument("--config-db", default=os.environ.get("PICFRAME_CONFIG_DB"), help="Path to config database (default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)")
+    run_parser.add_argument("--media-db", default=os.environ.get("PICFRAME_MEDIA_DB"), help="Path to media database (default: <dir>/data/media_cache.db3 or PICFRAME_MEDIA_DB env var)")
 
     args = parser.parse_args()
 
     if args.command == "init":
-        bootstrapper = EnvironmentBootstrapper(base_dir=args.dir)
+        bootstrapper = EnvironmentBootstrapper(base_dir=args.dir, config_db_path=args.config_db, media_db_path=args.media_db)
         bootstrapper.bootstrap()
     elif args.command == "run":
-        run_picframe(base_dir=args.dir, port=args.port)
+        run_picframe(base_dir=args.dir, port=args.port, config_db_path=args.config_db, media_db_path=args.media_db)
     else:
         parser.print_help()
 

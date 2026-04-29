@@ -24,17 +24,19 @@ class EnvironmentBootstrapper:
     assets required for rendering, and the initialization of the SQLite databases.
     """
 
-    def __init__(self, base_dir: str = "~/.picframe") -> None:
+    def __init__(self, base_dir: str = "~/.picframe", config_db_path: str | None = None, media_db_path: str | None = None) -> None:
         """
         Initialize the EnvironmentBootstrapper.
 
         Args:
             base_dir: The base directory for the picframe environment. Defaults to "~/.picframe".
+            config_db_path: Optional override for the config database path.
+            media_db_path: Optional override for the media database path.
         """
         self.base_dir = Path(os.path.expanduser(base_dir))
         self.data_dir = self.base_dir / "data"
-        self.config_db_path = self.data_dir / "config.db3"
-        self.media_db_path = self.data_dir / "media_cache.db3"
+        self.config_db_path = Path(config_db_path) if config_db_path else self.data_dir / "config.db3"
+        self.media_db_path = Path(media_db_path) if media_db_path else self.data_dir / "media_cache.db3"
 
     def bootstrap(self) -> None:
         """
