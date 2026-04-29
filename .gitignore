@@ -137,4 +137,6 @@ dmypy.json
 .pyre/
 
 #mac os
-.DS_Store
+.DS_Store*.db3
+*.db3-shm
+*.db3-wal
