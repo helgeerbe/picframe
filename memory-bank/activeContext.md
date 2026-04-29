@@ -57,6 +57,8 @@
 *   **Next Steps:** Resolve the display context issue (e.g., run with `DISPLAY=:0` or directly on the Pi) to verify the "Walking Skeleton".
 
 ## [2026-04-29 09:41:00] - Resolved Wayland Display Issues
+## [2026-04-29 13:07:00] - Starting Phase 2B: The Web Control Plane & CLI
+## [2026-04-29 13:21:00] - Completed Task 2B.1: CLI and EnvironmentBootstrapper
 *   **Completed:** Successfully executed the main application over SSH using the correct Wayland environment variables.
 *   **Fix:** Updated `main.py` to pass `"use_sdl2": True` to the `Pi3dRenderer` configuration, allowing `pi3d` to use the SDL2 backend for window creation in the Ubuntu VM development environment.
 *   **Fix:** Identified that the active Wayland display socket was `wayland-0` (not `wayland-1`). Running with `WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000` resolved the remote execution issues.

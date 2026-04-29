@@ -42,6 +42,16 @@ This file tracks the project's progress using a task list format.
         *   [x] Task 2A.5: Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631)
         *   [x] Task 2A.5: Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631)
     *   [-] Subphase 2B: The Web Control Plane & CLI (FastAPI, Vue.js SPA, CLI Init, Config Loading)
+        *   [x] Task 2B.1: CLI and EnvironmentBootstrapper (Issue #632)
+        *   [ ] Task 2B.2: FastAPI Backend Setup & Configuration (Issue #603)
+        *   [ ] Task 2B.3: FastAPI REST Endpoints (Issue #604)
+        *   [ ] Task 2B.4: FastAPI WebSocket Integration (Issue #628)
+        *   [ ] Task 2B.5: Vue.js SPA Implementation (Issue #630)
+        *   [ ] Task 2B.6: Integration & E2E Testing (Issue #635)
+        *   [ ] Task 2B.7: Update README and User Documentation (Issue #638)
+        *   [ ] Task 2B.8: Frontend Build Pipeline and FastAPI Static Asset Integration (Issue #640)
+        *   [ ] Task 2B.9: Migration Script for Legacy configuration.yaml to SQLite (Issue #642)
+        *   [ ] Task 2B.10: Comprehensive API Documentation (Issue #643)
     *   [ ] Subphase 2C: Advanced Rendering & Feature Parity (Overlays, Matting, Portrait Pairs)
 *   [ ] Phase 3: Video Engine Integration
     *   [ ] Task 3.1: Extend MetadataExtractor for Video

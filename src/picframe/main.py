@@ -1,4 +1,14 @@
+"""
+Main entry point for the Picframe application.
+
+This module provides the CLI interface (`picframe init` and `picframe run`)
+and acts as the Composition Root, wiring together all the core components,
+services, and infrastructure adapters required to run the digital picture frame.
+"""
+
+import argparse
 import logging
+import os
 import signal
 import sys
 import threading
@@ -10,23 +20,24 @@ from picframe.core.renderers.pi3d_renderer import Pi3dRenderer
 from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
 from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
 from picframe.core.services.playlist import PlaylistManager
+from picframe.core.services.bootstrapper import EnvironmentBootstrapper
 from picframe.infrastructure.os.hal_factory import HALFactory
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def main() -> None:
+def run_picframe(base_dir: str, port: int = 9000) -> None:
     """
     Composition Root for Picframe.
     Initializes and wires all components together.
     """
-    logger.info("Starting Picframe...")
+    logger.info(f"Starting Picframe (Web server port: {port})...")
 
     # 1. Initialize Repositories
-    # TODO: Use actual paths from environment or arguments
-    config_db_path = "config.db3"
-    media_db_path = "media_cache.db3"
+    data_dir = os.path.join(os.path.expanduser(base_dir), "data")
+    config_db_path = os.path.join(data_dir, "config.db3")
+    media_db_path = os.path.join(data_dir, "media_cache.db3")
     
     _config_repo = SQLiteConfigRepository(config_db_path)
     media_repo = SQLiteMediaRepository(media_db_path)
@@ -65,7 +76,7 @@ def main() -> None:
         "time_delay": 10.0,
     }
     engine = PlaybackEngine(
-        event_bus, playlist_manager, renderer, engine_config
+        event_bus, event_bus, playlist_manager, renderer, engine_config
     )
 
     # 7. Setup Graceful Shutdown
@@ -101,5 +112,37 @@ def main() -> None:
         logger.info("Picframe stopped.")
 
 
+def main() -> None:
+    """
+    Main entry point for the picframe CLI.
+
+    Parses command-line arguments and executes the corresponding command.
+    Available commands:
+        - init: Initializes the picframe environment (directories, assets, databases).
+        - run: Starts the main picframe application.
+    """
+    parser = argparse.ArgumentParser(description="Picframe - Digital Picture Frame")
+    subparsers = parser.add_subparsers(dest="command", help="Available commands")
+
+    # Init command
+    init_parser = subparsers.add_parser("init", help="Initialize the picframe environment")
+    init_parser.add_argument("--dir", default="~/.picframe", help="Base directory for picframe data (default: ~/.picframe)")
+
+    # Run command
+    run_parser = subparsers.add_parser("run", help="Run the picframe application")
+    run_parser.add_argument("--dir", default="~/.picframe", help="Base directory for picframe data (default: ~/.picframe)")
+    run_parser.add_argument("--port", type=int, default=9000, help="Port for the web server (default: 9000)")
+
+    args = parser.parse_args()
+
+    if args.command == "init":
+        bootstrapper = EnvironmentBootstrapper(base_dir=args.dir)
+        bootstrapper.bootstrap()
+    elif args.command == "run":
+        run_picframe(base_dir=args.dir, port=args.port)
+    else:
+        parser.print_help()
+
 if __name__ == "__main__":
     main()
+
