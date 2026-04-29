@@ -71,7 +71,10 @@ class PlaybackEngine:
         """Stop the playback engine and render loop."""
         self._logger.info("Stopping PlaybackEngine")
         self._is_running = False
-        self._renderer.stop()
+        # We don't call renderer.stop() here because it might be called
+        # from a signal handler which can cause issues with pi3d's
+        # display destruction. The renderer will be stopped when the
+        # run loop exits.
         self._change_state(State.PAUSED)
 
     def _run_loop(self) -> None:
@@ -93,11 +96,14 @@ class PlaybackEngine:
             # 3. Render the frame
             if not self._renderer.render_frame():
                 self._logger.info("Renderer requested exit")
-                self.stop()
+                self._is_running = False
                 break
                 
             # Small sleep to prevent 100% CPU usage if renderer doesn't block
             time.sleep(0.01)
+            
+        self._logger.info("Exiting render loop, stopping renderer")
+        self._renderer.stop()
 
     def _handle_command(self, event: CommandEvent) -> None:
         """Handle incoming commands from the Event Bus."""

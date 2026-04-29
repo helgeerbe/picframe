@@ -105,7 +105,7 @@ def test_engine_start_stop(
         engine.stop()
         
         assert engine._is_running is False
-        mock_renderer.stop.assert_called_once()
+        # renderer.stop() is now called at the end of _run_loop, not in stop()
         assert engine._state == State.PAUSED
 
 
@@ -190,7 +190,7 @@ def test_engine_handle_command_stop(
     engine._handle_command(event)
     
     assert engine._is_running is False
-    mock_renderer.stop.assert_called_once()
+    # renderer.stop() is now called at the end of _run_loop, not in stop()
     assert engine._state == State.PAUSED
 
 
