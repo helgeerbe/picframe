@@ -8,6 +8,10 @@ This file records architectural and implementation decisions using a list format
 
 ## Decision
 
+* [2026-04-29 10:15:00] - Split Phase 2 into three distinct subphases (2A: HAL & Inputs, 2B: Web Control Plane & CLI, 2C: Advanced Rendering) to mitigate integration risks and manage scope.
+* [2026-04-29 10:15:00] - Implement a CLI with `init` and `run` commands. The `init` command will bootstrap the user environment in `~/.picframe/` strictly in user-space.
+* [2026-04-29 10:15:00] - Reject the use of `sudo` within the Python application for installing system dependencies. System dependencies will be managed via explicit shell scripts or native OS packages (e.g., `.deb`).
+* [2026-04-29 10:15:00] - Configure FastAPI to serve the compiled Vue.js static files directly, omitting any separate web server (like Nginx) and omitting authentication/authorization for the local network zero-trust model.
 * [2026-04-28 11:37:00] - Establish GitHub Issues and GitHub Projects (Kanban) as the single source of truth for project state, task tracking, and subtask management, replacing local markdown files as the authoritative source.
 * [2026-04-28 09:26:00] - Confirm GStreamer as the primary video rendering engine with hardware acceleration support, replacing VLC, based on the successful Phase 0 Proof of Concept.
 * [2026-04-22 14:47:04] - Use first and last frame extraction from videos to achieve seamless transitions between pi3d (images) and GStreamer (video).
@@ -34,6 +38,10 @@ This file records architectural and implementation decisions using a list format
 
 ## Rationale
 
+* [2026-04-29 10:15:00] - Splitting Phase 2 ensures foundational communication and hardware layers (HAL) are solid before introducing the complexity of the web server, leaving intricate rendering features for the final step.
+* [2026-04-29 10:15:00] - A user-space `init` command safely sets up the required directory structure (`~/.picframe/`) and default assets without requiring elevated privileges.
+* [2026-04-29 10:15:00] - Executing `sudo` from Python is a critical security risk (privilege escalation, supply chain vulnerability) and an architectural anti-pattern. Relying on native package managers or explicit scripts adheres to Linux best practices.
+* [2026-04-29 10:15:00] - Serving Vue.js files via FastAPI simplifies deployment to a single standalone application process. Omitting auth fits the local-network-only constraint and reduces unnecessary complexity.
 * [2026-04-28 11:37:00] - Centralizing task tracking in GitHub ensures a single, authoritative source of truth that is tightly integrated with the codebase, pull requests, and team workflows. It prevents synchronization issues between local markdown files and the actual development progress.
 * [2026-04-28 09:26:00] - The Phase 0 PoC (`poc_video_handoff_v2.py`) successfully demonstrated that GStreamer can handle hardware-accelerated video decoding while maintaining proper Z-order and seamless handoff with pi3d. The PoC code provides concrete hints and patterns for the upcoming replacement of the legacy VLC player.
 * [2026-04-22 14:47:04] - Solves the visual flicker/black screen issue during EGL/OpenGL context switching between the two exclusive renderers. By showing a static image of the video's first/last frame in pi3d, the system can use alpha blending to seamlessly reveal or hide the underlying hardware-accelerated video layer without visual interruption.

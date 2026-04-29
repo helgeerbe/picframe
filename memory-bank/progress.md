@@ -33,11 +33,10 @@ This file tracks the project's progress using a task list format.
 
 ## Next Steps
 
-*   [ ] Phase 2: Control Plane & UI
-    *   [ ] Task 2.1: Implement FastAPI backend
-    *   [ ] Task 2.2: Develop Vue.js SPA
-    *   [ ] Task 2.3: Refactor MQTT client
-    *   [ ] Task 2.4: Implement HardwareInputService
+*   [ ] Phase 2: Control Plane & UI (Subphased)
+    *   [ ] Subphase 2A: Hardware Abstraction & External Inputs (HAL, Power, Input, MQTT, PlaybackEngine Refactor)
+    *   [ ] Subphase 2B: The Web Control Plane & CLI (FastAPI, Vue.js SPA, CLI Init, Config Loading)
+    *   [ ] Subphase 2C: Advanced Rendering & Feature Parity (Overlays, Matting, Portrait Pairs)
 *   [ ] Phase 3: Video Engine Integration
     *   [ ] Task 3.1: Extend MetadataExtractor for Video
     *   [ ] Task 3.2: Create GstVideoRenderer

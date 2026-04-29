@@ -8,10 +8,13 @@
 
 ## Current Focus
 
-*   Phase 1: Core Image MVP (The "Walking Skeleton") - Task 1.5: PlaylistManager & ImageProcessingService (Issue #600).
+*   Phase 2 Planning: Restructuring Phase 2 into Subphases (2A, 2B, 2C) and aligning GitHub issues.
+*   Next up: Implementing the CLI (`init` and `run` commands) and `EnvironmentBootstrapper` (Subphase 2B).
 
 ## Recent Changes
 
+*   [2026-04-29 10:15:00] - Approved architecture for Phase 2 subphases (2A: HAL, 2B: Web/CLI, 2C: Rendering Parity).
+*   [2026-04-29 10:15:00] - Approved CLI design (`picframe init` for user-space bootstrapping in `~/.picframe/`) and rejected `sudo` system dependency installation in favor of native OS packages.
 *   [2026-04-28 13:34:00] - Started Task 1.5 (Issue #600): PlaylistManager & ImageProcessingService. Moved issue to "In Progress" on the GitHub project board.
 *   [2026-04-28 13:28:00] - Completed Task 1.4 (Issue #599): Implemented Unified MetadataExtractor for images, ensuring feature parity with the original implementation.
 *   [2026-04-28 13:19:00] - Started Task 1.4 (Issue #599): Unified MetadataExtractor (Images).

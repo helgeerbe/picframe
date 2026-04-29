@@ -52,6 +52,10 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Concept:** To support native execution across Raspberry Pi (Wayland) and Ubuntu (VM), OS-specific interactions are abstracted behind strict Port interfaces (e.g., `IDisplayPower`, `IHardwareInput`, `ISystemManager`).
 *   **Reasoning & Benefits:** The core application logic must remain OS-agnostic. By defining Ports in the Application layer and implementing OS-specific Adapters in the Infrastructure layer (e.g., `WaylandDisplayPower`, `UbuntuDisplayPower`, `MockHardwareInput`), the Composition Root (`main.py`) can detect the host OS at startup and inject the correct concrete implementation. This prevents `if os.name == '...'` spaghetti code from polluting the domain logic and allows developers to run and test the core engine on Ubuntu without requiring physical Raspberry Pi hardware.
 
+### 2.11 CLI and Application Initialization
+*   **Concept:** The application provides a command-line interface (e.g., `picframe init` and `picframe run --port 9000`). The `init` command bootstraps the user environment in `~/.picframe/` (creating directories, copying default assets, and initializing SQLite databases).
+*   **Reasoning & Benefits:** Separates application initialization from runtime execution. Bootstrapping operates strictly in user-space, avoiding the security risks and architectural anti-patterns of executing `sudo` from within Python to install system dependencies. System dependencies will be managed via explicit shell scripts or native OS packages (e.g., `.deb`), adhering to Linux best practices and the Principle of Least Privilege.
+
 ## 3. System Diagrams
 
 ### 3.1 Component Architecture
@@ -207,12 +211,30 @@ To ensure system resilience, the `PlaybackEngine` will implement a global except
 - [ ] **Task 1.6:** Refactor `ViewerDisplay` into a decoupled `Pi3dRenderer` that only responds to `RenderCommands`.
 - [ ] **Task 1.7:** Implement the `PlaybackEngine` (State Machine) and the Composition Root (`main.py`) to wire dependencies and start the main render loop.
 
-### Phase 2: Control Plane & UI
-*Goal: Make the MVP controllable via a modern Web UI, MQTT, and physical buttons, with real-time state reflection.*
-- [ ] **Task 2.1:** Implement the FastAPI backend (running on Uvicorn) with REST API endpoints and WebSocket routing for real-time state updates.
-- [ ] **Task 2.2:** Develop the Vue.js Single Page Application (SPA) according to the `Frontend_Specification.md` (Media Player with OSM integration, Admin Dashboard).
-- [ ] **Task 2.3:** Refactor the MQTT client to publish `CommandEvents` to the Event Bus instead of direct method calls.
-- [ ] **Task 2.4:** Define the `IHardwareInput` port and implement the `HardwareInputService` with OS-specific adapters (e.g., `RPiGPIOAdapter`, `MockInputAdapter` for macOS).
+### Phase 2: Control Plane & UI (Subphased)
+*Goal: Make the MVP controllable via a modern Web UI, MQTT, and physical buttons, with real-time state reflection. Split into subphases to manage complexity and integration risk.*
+
+#### Subphase 2A: Hardware Abstraction & External Inputs
+*Goal: Establish the HAL and integrate physical/legacy control mechanisms into the EDA.*
+- [ ] **Task 2A.1:** Implement OS-Specific Hardware Abstraction Layer (HAL) Injection (Issue #626).
+- [ ] **Task 2A.2:** Extract Display Power Management to HAL (Issue #620).
+- [ ] **Task 2A.3:** Implement `HardwareInputService` (Issue #606).
+- [ ] **Task 2A.4:** Refactor MQTT Client to publish `CommandEvents` (Issue #605).
+- [ ] **Task 2A.5:** Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631).
+
+#### Subphase 2B: The Web Control Plane & CLI
+*Goal: Build the CLI, FastAPI backend, and Vue.js SPA for real-time administration and playback control.*
+- [ ] **Task 2B.1:** Implement CLI (`init` and `run` commands) and `EnvironmentBootstrapper` for `~/.picframe` setup (Issue #632).
+- [ ] **Task 2B.2:** Implement FastAPI Backend (REST API, WebSockets, serving static Vue files) (Issue #603).
+- [ ] **Task 2B.3:** Develop Vue.js SPA (Media Player, Admin Dashboard) (Issue #604).
+- [ ] **Task 2B.4:** Implement Environment/Argument Parsing for Database Paths (Issue #628).
+- [ ] **Task 2B.5:** Load Renderer Configuration from Config Repository (Issue #630).
+
+#### Subphase 2C: Advanced Rendering & Feature Parity
+*Goal: Close the gap with the legacy system regarding complex image processing and dynamic overlays.*
+- [ ] **Task 2C.1:** Decouple Dynamic Overlays (Clock & Text) from Core Renderer (Issue #621).
+- [ ] **Task 2C.2:** Implement missing `ImageProcessingService` features (Matting, Text/EXIF overlays) (Issue #619).
+- [ ] **Task 2C.3:** Implement missing `PlaylistManager` features (Portrait Pairs, Filtering, Sorting) (Issue #618).
 
 ### Phase 3: Video Engine Integration
 *Goal: Add multimedia support with seamless transitions between images and hardware-accelerated video.*
