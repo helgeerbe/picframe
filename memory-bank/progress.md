@@ -40,16 +40,15 @@ This file tracks the project's progress using a task list format.
         *   [x] Task 2A.3: HardwareInputService Implementation (Issue #606)
         *   [x] Task 2A.4: MQTT Client Refactoring (Issue #605)
         *   [x] Task 2A.5: Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631)
-        *   [x] Task 2A.5: Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631)
     *   [-] Subphase 2B: The Web Control Plane & CLI (FastAPI, Vue.js SPA, CLI Init, Config Loading)
         *   [x] Task 2B.1: CLI and EnvironmentBootstrapper (Issue #632)
         *   [ ] Task 2B.2: FastAPI Backend Setup & Configuration (Issue #603)
         *   [ ] Task 2B.3: FastAPI REST Endpoints (Issue #604)
         *   [ ] Task 2B.4: FastAPI WebSocket Integration (Issue #628)
-        *   [ ] Task 2B.5: Vue.js SPA Implementation (Issue #630)
+        *   [x] Task 2B.5: Vue.js SPA Implementation (Issue #630)
         *   [ ] Task 2B.6: Integration & E2E Testing (Issue #635)
         *   [ ] Task 2B.7: Update README and User Documentation (Issue #638)
-        *   [ ] Task 2B.8: Frontend Build Pipeline and FastAPI Static Asset Integration (Issue #640)
+        *   [x] Task 2B.8: Frontend Build Pipeline and FastAPI Static Asset Integration (Issue #640)
         *   [ ] Task 2B.9: Migration Script for Legacy configuration.yaml to SQLite (Issue #642)
         *   [ ] Task 2B.10: Comprehensive API Documentation (Issue #643)
     *   [ ] Subphase 2C: Advanced Rendering & Feature Parity (Overlays, Matting, Portrait Pairs)
@@ -65,3 +64,5 @@ This file tracks the project's progress using a task list format.
     *   [ ] Task 4.4: Implement SystemManager
     *   [ ] Task 4.5: Implement Configuration Migration Adapter
     *   [ ] Task 4.6: Comprehensive integration testing & cleanup
+* [2026-04-29 15:45:00] - Completed Task 2B.3: Vue.js SPA Development (Issue #604)
+* [2026-04-29 15:45:00] - Completed Task 2B.3: Vue.js SPA Development (Issue #604)

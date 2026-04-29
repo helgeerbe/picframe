@@ -90,3 +90,13 @@ This file records architectural and implementation decisions using a list format
 *   **Decision:** Conducted a gap analysis against the legacy `Model` and `ImageCache` classes. Identified several missing features (e.g., portrait pairs, filtering, sorting, matting, text overlays).
 *   **Rationale:** To maintain focus on the "Walking Skeleton" MVP for Phase 1, these advanced features are deferred to Phase 2 (Control Plane & UI).
 *   **Consequences:** Created GitHub issues #618 and #619 to track these deferred features. Implemented immediate fixes in `PlaylistManager` to handle missing files gracefully and return a 'no images' placeholder, which are critical for Phase 1 stability.
+
+## [2026-04-29 15:45:00] - Frontend Build Pipeline Integration
+**Decision:** Configure Vite to output compiled SPA assets directly into the backend's `src/picframe/html` directory.
+**Rationale:** Simplifies the deployment and serving process. FastAPI can be configured to mount this single directory as static files, eliminating the need for a separate web server (like Nginx) in the default setup, aligning with the "Walking Skeleton" MVP approach.
+**Implementation Details:** Updated `frontend/vite.config.ts` with `build.outDir: '../src/picframe/html'` and `emptyOutDir: true`.
+
+## [2026-04-29 15:45:00] - Frontend Build Pipeline Integration
+**Decision:** Configure Vite to output compiled SPA assets directly into the backend's `src/picframe/html` directory.
+**Rationale:** Simplifies the deployment and serving process. FastAPI can be configured to mount this single directory as static files, eliminating the need for a separate web server (like Nginx) in the default setup, aligning with the "Walking Skeleton" MVP approach.
+**Implementation Details:** Updated `frontend/vite.config.ts` with `build.outDir: '../src/picframe/html'` and `emptyOutDir: true`.

@@ -1,0 +1,37 @@
+{
+  "nav": {
+    "remote": "Fernbedienung",
+    "settings": "Einstellungen"
+  },
+  "remote": {
+    "connecting": "Verbinde mit Picframe...",
+    "establishing": "Stelle Echtzeit-WebSocket-Verbindung her.",
+    "noMedia": "Keine Medien werden abgespielt",
+    "unknownFile": "Unbekannte Datei",
+    "mediaDetails": "Medien-Details",
+    "noMetadata": "Keine Metadaten verfügbar",
+    "location": "Ort"
+  },
+  "settings": {
+    "title": "Konfiguration",
+    "save": "Änderungen speichern",
+    "saving": "Speichere...",
+    "export": "Exportieren",
+    "import": "Importieren",
+    "dangerZone": "Gefahrenzone",
+    "purgeDb": "Medien-Datenbank bereinigen",
+    "clearCache": "Bild-Cache leeren",
+    "reboot": "System neu starten",
+    "shutdown": "System herunterfahren",
+    "confirmAction": "Sind Sie sicher, dass Sie diese Aktion ausführen möchten?",
+    "cancel": "Abbrechen",
+    "confirm": "Bestätigen",
+    "sections": {
+      "viewer": "Viewer-Einstellungen",
+      "model": "Modell-Einstellungen",
+      "mqtt": "MQTT-Einstellungen",
+      "http": "HTTP-Einstellungen",
+      "peripherals": "Peripherie-Einstellungen"
+    }
+  }
+}

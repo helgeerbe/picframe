@@ -63,3 +63,18 @@
 *   **Fix:** Updated `main.py` to pass `"use_sdl2": True` to the `Pi3dRenderer` configuration, allowing `pi3d` to use the SDL2 backend for window creation in the Ubuntu VM development environment.
 *   **Fix:** Identified that the active Wayland display socket was `wayland-0` (not `wayland-1`). Running with `WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000` resolved the remote execution issues.
 *   **Status:** The pi3d Wayland rendering integration is now working correctly, confirming that the recent troubleshooting and fixes applied to the OpenGL texture loading processes were successful. The Phase 1 "Walking Skeleton" is fully operational.
+## [2026-04-29 14:44:00] - Starting Task 2B.3: Vue.js SPA Development (Issue #604)
+
+## [2026-04-29 15:45:00] - Completed Vue.js SPA Development
+- Successfully implemented the Vue 3 Single Page Application (Task 2B.3 / Issue #604).
+- Developed the "Remote" view with playback controls and metadata display.
+- Developed the dynamic "Settings" view with JSON schema parsing and i18n support.
+- Configured the Vite build pipeline to output static assets directly to `src/picframe/html` for FastAPI integration.
+- Current focus shifts to setting up the FastAPI backend (Task 2B.2 / Issue #603) to serve the SPA and provide REST/WebSocket endpoints.
+
+## [2026-04-29 15:45:00] - Completed Vue.js SPA Development
+- Successfully implemented the Vue 3 Single Page Application (Task 2B.3 / Issue #604).
+- Developed the "Remote" view with playback controls and metadata display.
+- Developed the dynamic "Settings" view with JSON schema parsing and i18n support.
+- Configured the Vite build pipeline to output static assets directly to `src/picframe/html` for FastAPI integration.
+- Current focus shifts to setting up the FastAPI backend (Task 2B.2 / Issue #603) to serve the SPA and provide REST/WebSocket endpoints.

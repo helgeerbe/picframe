@@ -1,0 +1,328 @@
+{
+  "viewer": {
+    "blur_amount": {
+      "type": "integer"
+    },
+    "blur_zoom": {
+      "type": "float"
+    },
+    "blur_edges": {
+      "type": "boolean"
+    },
+    "edge_alpha": {
+      "type": "float"
+    },
+    "fps": {
+      "type": "float"
+    },
+    "background": {
+      "type": "array"
+    },
+    "blend_type": {
+      "type": "select",
+      "options": [
+        "blend",
+        "burn",
+        "bump"
+      ]
+    },
+    "font_file": {
+      "type": "string"
+    },
+    "shader": {
+      "type": "string"
+    },
+    "show_text_fm": {
+      "type": "string"
+    },
+    "show_text_tm": {
+      "type": "float"
+    },
+    "show_text_sz": {
+      "type": "integer"
+    },
+    "show_text": {
+      "type": "string"
+    },
+    "text_justify": {
+      "type": "string"
+    },
+    "text_bkg_hgt": {
+      "type": "float"
+    },
+    "text_opacity": {
+      "type": "float"
+    },
+    "text_x_margin": {
+      "type": "integer"
+    },
+    "text_y_margin": {
+      "type": "integer"
+    },
+    "fit": {
+      "type": "boolean"
+    },
+    "video_fit_display": {
+      "type": "boolean"
+    },
+    "kenburns": {
+      "type": "boolean"
+    },
+    "display_x": {
+      "type": "integer"
+    },
+    "display_y": {
+      "type": "integer"
+    },
+    "display_w": {
+      "type": "string"
+    },
+    "display_h": {
+      "type": "string"
+    },
+    "display_power": {
+      "type": "select",
+      "options": [
+        "0",
+        "1",
+        "2",
+        "3"
+      ]
+    },
+    "display_hdmi": {
+      "type": "string"
+    },
+    "use_glx": {
+      "type": "boolean"
+    },
+    "use_sdl2": {
+      "type": "boolean"
+    },
+    "mat_images": {
+      "type": "float"
+    },
+    "mat_type": {
+      "type": "string"
+    },
+    "outer_mat_color": {
+      "type": "string"
+    },
+    "inner_mat_color": {
+      "type": "string"
+    },
+    "outer_mat_border": {
+      "type": "integer"
+    },
+    "inner_mat_border": {
+      "type": "integer"
+    },
+    "outer_mat_use_texture": {
+      "type": "boolean"
+    },
+    "inner_mat_use_texture": {
+      "type": "boolean"
+    },
+    "mat_resource_folder": {
+      "type": "string"
+    },
+    "show_clock": {
+      "type": "boolean"
+    },
+    "clock_justify": {
+      "type": "string"
+    },
+    "clock_text_sz": {
+      "type": "integer"
+    },
+    "clock_format": {
+      "type": "string"
+    },
+    "clock_opacity": {
+      "type": "float"
+    },
+    "clock_top_bottom": {
+      "type": "string"
+    },
+    "clock_wdt_offset_pct": {
+      "type": "float"
+    },
+    "clock_hgt_offset_pct": {
+      "type": "float"
+    },
+    "menu_text_sz": {
+      "type": "integer"
+    },
+    "menu_autohide_tm": {
+      "type": "float"
+    },
+    "geo_suppress_list": {
+      "type": "array"
+    }
+  },
+  "model": {
+    "pic_dir": {
+      "type": "string"
+    },
+    "deleted_pictures": {
+      "type": "string"
+    },
+    "follow_links": {
+      "type": "boolean"
+    },
+    "no_files_img": {
+      "type": "string"
+    },
+    "subdirectory": {
+      "type": "string"
+    },
+    "recent_n": {
+      "type": "integer"
+    },
+    "reshuffle_num": {
+      "type": "integer"
+    },
+    "time_delay": {
+      "type": "float"
+    },
+    "fade_time": {
+      "type": "float"
+    },
+    "update_interval": {
+      "type": "float"
+    },
+    "shuffle": {
+      "type": "boolean"
+    },
+    "sort_cols": {
+      "type": "string"
+    },
+    "image_attr": {
+      "type": "array"
+    },
+    "load_geoloc": {
+      "type": "boolean"
+    },
+    "geo_key": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string"
+    },
+    "key_list": {
+      "type": "array"
+    },
+    "db_file": {
+      "type": "string"
+    },
+    "portrait_pairs": {
+      "type": "boolean"
+    },
+    "location_filter": {
+      "type": "string"
+    },
+    "tags_filter": {
+      "type": "string"
+    },
+    "log_level": {
+      "type": "string"
+    },
+    "log_file": {
+      "type": "string"
+    }
+  },
+  "mqtt": {
+    "use_mqtt": {
+      "type": "boolean"
+    },
+    "server": {
+      "type": "string"
+    },
+    "port": {
+      "type": "integer"
+    },
+    "login": {
+      "type": "string"
+    },
+    "password": {
+      "type": "string"
+    },
+    "tls": {
+      "type": "string"
+    },
+    "device_id": {
+      "type": "string"
+    },
+    "device_url": {
+      "type": "string"
+    }
+  },
+  "http": {
+    "use_http": {
+      "type": "boolean"
+    },
+    "path": {
+      "type": "string"
+    },
+    "port": {
+      "type": "integer"
+    },
+    "auth": {
+      "type": "boolean"
+    },
+    "username": {
+      "type": "string"
+    },
+    "password": {
+      "type": "string"
+    },
+    "use_ssl": {
+      "type": "boolean"
+    },
+    "keyfile": {
+      "type": "string"
+    },
+    "certfile": {
+      "type": "string"
+    }
+  },
+  "peripherals": {
+    "input_type": {
+      "type": "select",
+      "options": [
+        "null",
+        "keyboard",
+        "touch",
+        "mouse"
+      ]
+    },
+    "buttons": {
+      "type": "object",
+      "properties": {
+        "pause": {
+          "type": "string"
+        },
+        "display_off": {
+          "type": "string"
+        },
+        "location": {
+          "type": "string"
+        },
+        "exit": {
+          "type": "string"
+        },
+        "power_down": {
+          "type": "string"
+        }
+      }
+    },
+    "enable": {
+      "type": "boolean"
+    },
+    "label": {
+      "type": "string"
+    },
+    "shortcut": {
+      "type": "string"
+    }
+  }
+}
