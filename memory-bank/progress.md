@@ -21,7 +21,7 @@ This file tracks the project's progress using a task list format.
     *   [x] Task 0.4: Implement EOS detection
     *   [x] Task 0.5: Implement last-frame to next image blend
     *   [x] Task 0.6: Capture performance metrics
-*   [-] Phase 1: Core Image MVP (The "Walking Skeleton")
+*   [x] Phase 1: Core Image MVP (The "Walking Skeleton")
     *   [x] Task 1.0: Phase 1 Readiness & Prerequisites
     *   [x] Task 1.1: Modernize packaging (PEP 621)
     *   [x] Task 1.2: Implement PriorityQueue Event Bus

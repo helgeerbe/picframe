@@ -15,4 +15,4 @@ This file provides a high-level overview of the project and the expected product
 
 ## Overall Architecture
 
-*   
+*   **Display Server:** The project strictly uses Wayland as the sole display server protocol. X11 is not supported.

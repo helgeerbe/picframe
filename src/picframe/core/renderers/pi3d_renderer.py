@@ -73,17 +73,23 @@ class Pi3dRenderer(IRenderer):
     def start(self) -> None:
         """Initialize the pi3d display and sprite."""
         self._logger.info("Starting Pi3dRenderer")
-        self._display = pi3d.Display.create(
-            x=self._display_x,
-            y=self._display_y,
-            w=self._display_w,
-            h=self._display_h,
-            frames_per_second=self._fps,
-            display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR | pi3d.DISPLAY_CONFIG_NO_FRAME,
-            background=self._background,
-            use_glx=self._use_glx,
-            use_sdl2=self._use_sdl2,
-        )
+        self._logger.debug("Calling pi3d.Display.create...")
+        try:
+            self._display = pi3d.Display.create(
+                x=self._display_x,
+                y=self._display_y,
+                w=self._display_w,
+                h=self._display_h,
+                frames_per_second=self._fps,
+                display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR | pi3d.DISPLAY_CONFIG_NO_FRAME,
+                background=self._background,
+                use_glx=self._use_glx,
+                use_sdl2=self._use_sdl2,
+            )
+            self._logger.debug("pi3d.Display.create returned successfully.")
+        except Exception as e:
+            self._logger.error(f"Failed to create pi3d display: {e}", exc_info=True)
+            raise
         
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self._shader_path)

@@ -49,7 +49,7 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Reasoning & Benefits:** Eliminates the need for synchronous, blocking directory scans during playback. When a `FileChangeEvent` is consumed by the Media Orchestrator, it asynchronously triggers the `MetadataExtractor` to update the ephemeral `media_cache.db3` and signals the `PlaylistManager` to adjust the active playlist. This ensures the system reacts to new media in real-time without interrupting the render loop.
 
 ### 2.10 Hardware Abstraction Layer (HAL) & Cross-Platform Ports
-*   **Concept:** To support native execution across Raspberry Pi (Wayland/X11) and Ubuntu (VM), OS-specific interactions are abstracted behind strict Port interfaces (e.g., `IDisplayPower`, `IHardwareInput`, `ISystemManager`).
+*   **Concept:** To support native execution across Raspberry Pi (Wayland) and Ubuntu (VM), OS-specific interactions are abstracted behind strict Port interfaces (e.g., `IDisplayPower`, `IHardwareInput`, `ISystemManager`).
 *   **Reasoning & Benefits:** The core application logic must remain OS-agnostic. By defining Ports in the Application layer and implementing OS-specific Adapters in the Infrastructure layer (e.g., `WaylandDisplayPower`, `UbuntuDisplayPower`, `MockHardwareInput`), the Composition Root (`main.py`) can detect the host OS at startup and inject the correct concrete implementation. This prevents `if os.name == '...'` spaghetti code from polluting the domain logic and allows developers to run and test the core engine on Ubuntu without requiring physical Raspberry Pi hardware.
 
 ## 3. System Diagrams
@@ -178,8 +178,8 @@ To ensure system resilience, the `PlaybackEngine` will implement a global except
 *   **The Mitigation:** The `CommandEvent` DTO will include a `SET_VOLUME` variant. The `PlaybackEngine` routes this command to the `GstVideoRenderer`, which implements the GStreamer volume properties to adjust audio output dynamically.
 
 ### 4.6 Cross-Platform Rendering (pi3d)
-*   **The Problem:** `pi3d` relies on EGL/OpenGL ES, which behaves differently across Raspberry Pi (Wayland vs. X11) and Ubuntu.
-*   **The Mitigation:** The `Pi3dRenderer` will utilize a factory pattern to instantiate the correct `pi3d.Display` backend based on the OS detected by the Composition Root. On Ubuntu (VM), it will default to a windowed X11/SDL2 context for development, while on Raspberry Pi, it will attempt native Wayland/DRM fullscreen contexts.
+*   **The Problem:** `pi3d` relies on EGL/OpenGL ES, which behaves differently across Raspberry Pi (Wayland) and Ubuntu.
+*   **The Mitigation:** The `Pi3dRenderer` will utilize a factory pattern to instantiate the correct `pi3d.Display` backend based on the OS detected by the Composition Root. On Ubuntu (VM), it will default to a windowed Wayland/SDL2 context for development, while on Raspberry Pi, it will attempt native Wayland/DRM fullscreen contexts. Wayland is the sole display server protocol for the application.
 
 ---
 

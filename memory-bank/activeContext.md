@@ -46,3 +46,15 @@
 ## [2026-04-28 15:46:00] - Starting Task 1.7
 *   **Current Focus:** PlaybackEngine & Composition Root (Issue #602).
 *   **Next Steps:** Implement the `PlaybackEngine` state machine (IDLE, PLAYING, TRANSITIONING) and create `main.py` to wire all components together and start the application loops.
+
+## [2026-04-29 09:04:00] - Completed Task 1.7 & Phase 1 Test Run
+*   **Completed:** Implemented `PlaybackEngine` and `main.py` (Composition Root). Created Phase 2 tracking tickets for technical debt (#628, #631).
+*   **Issue:** Test run over SSH hangs at `pi3d.Display.create()`. `Ctrl+C` fails to terminate cleanly due to the hang.
+*   **Root Cause:** `pi3d` requires a physical display context (DRM/KMS or Wayland) which is not available in a standard headless SSH session.
+*   **Next Steps:** Resolve the display context issue (e.g., run with `DISPLAY=:0` or directly on the Pi) to verify the "Walking Skeleton".
+
+## [2026-04-29 09:41:00] - Resolved Wayland Display Issues
+*   **Completed:** Successfully executed the main application over SSH using the correct Wayland environment variables.
+*   **Fix:** Updated `main.py` to pass `"use_sdl2": True` to the `Pi3dRenderer` configuration, allowing `pi3d` to use the SDL2 backend for window creation in the Ubuntu VM development environment.
+*   **Fix:** Identified that the active Wayland display socket was `wayland-0` (not `wayland-1`). Running with `WAYLAND_DISPLAY=wayland-0 XDG_RUNTIME_DIR=/run/user/1000` resolved the remote execution issues.
+*   **Status:** The pi3d Wayland rendering integration is now working correctly, confirming that the recent troubleshooting and fixes applied to the OpenGL texture loading processes were successful. The Phase 1 "Walking Skeleton" is fully operational.

@@ -47,6 +47,7 @@ def main() -> None:
         "background": (0.2, 0.2, 0.2, 1.0),
         "font_file": "src/picframe/data/fonts/NotoSans-Regular.ttf",
         "shader": "src/picframe/data/shaders/blend_new",
+        "use_sdl2": True,
     }
     renderer = Pi3dRenderer(renderer_config)
 
