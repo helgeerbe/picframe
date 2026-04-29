@@ -42,3 +42,7 @@
 ## [2026-04-28 15:01:00] - Starting Task 1.6
 *   **Current Focus:** Refactoring `ViewerDisplay` to `Pi3dRenderer` (Issue #601).
 *   **Next Steps:** Extract OpenGL/pi3d drawing logic from legacy `ViewerDisplay` and implement the `execute(RenderCommand)` interface.
+
+## [2026-04-28 15:46:00] - Starting Task 1.7
+*   **Current Focus:** PlaybackEngine & Composition Root (Issue #602).
+*   **Next Steps:** Implement the `PlaybackEngine` state machine (IDLE, PLAYING, TRANSITIONING) and create `main.py` to wire all components together and start the application loops.
