@@ -22,6 +22,8 @@ from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
 from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.bootstrapper import EnvironmentBootstrapper
 from picframe.infrastructure.os.hal_factory import HALFactory
+from picframe.api.app import create_app
+from picframe.api.server import WebServer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -79,12 +81,17 @@ def run_picframe(base_dir: str, port: int = 9000) -> None:
         event_bus, event_bus, playlist_manager, renderer, engine_config
     )
 
-    # 7. Setup Graceful Shutdown
+    # 7. Initialize Web Server
+    app = create_app()
+    web_server = WebServer(app, port=port)
+
+    # 8. Setup Graceful Shutdown
     shutdown_event = threading.Event()
 
     def signal_handler(sig: int, frame: Any) -> None:
         logger.info("Received shutdown signal. Stopping...")
         shutdown_event.set()
+        web_server.stop()
         engine.stop()
         event_bus.stop()
         # Keep a reference to display_power_manager to prevent garbage collection
@@ -95,9 +102,12 @@ def run_picframe(base_dir: str, port: int = 9000) -> None:
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    # 8. Start Components
+    # 9. Start Components
     logger.info("Starting Event Bus...")
     event_bus.start()
+
+    logger.info("Starting Web Server...")
+    web_server.start()
 
     logger.info("Starting Playback Engine...")
     # engine.start() blocks until stopped
@@ -107,6 +117,7 @@ def run_picframe(base_dir: str, port: int = 9000) -> None:
         logger.error(f"Engine crashed: {e}")
     finally:
         logger.info("Cleaning up...")
+        web_server.stop()
         engine.stop()
         event_bus.stop()
         logger.info("Picframe stopped.")

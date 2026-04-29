@@ -45,7 +45,10 @@ dependencies = [
     "ninepatch>=0.2.0",
     "pi_heif>=0.8.0",
     "python-vlc",
-    "gpiozero>=2.0.0"
+    "gpiozero>=2.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "websockets>=11.0.0"
 ]
 
 [project.optional-dependencies]
@@ -53,6 +56,8 @@ dev = [
     "pytest>=7.0",
     "mypy>=1.0",
     "ruff>=0.3.0",
+    "httpx>=0.28.1",
+    "requests>=2.31.0",
 ]
 
 [project.urls]
