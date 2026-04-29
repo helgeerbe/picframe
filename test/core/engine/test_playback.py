@@ -11,10 +11,15 @@ from picframe.core.models.media import MediaItem, MediaType
 
 
 @pytest.fixture
-def mock_event_bus() -> MagicMock:
-    """Mock the event bus."""
-    bus = MagicMock()
-    return bus
+def mock_event_publisher() -> MagicMock:
+    """Mock the event publisher."""
+    return MagicMock()
+
+
+@pytest.fixture
+def mock_event_subscriber() -> MagicMock:
+    """Mock the event subscriber."""
+    return MagicMock()
 
 
 @pytest.fixture
@@ -56,33 +61,35 @@ def config() -> dict[str, float]:
 
 
 def test_engine_initialization(
-    mock_event_bus: MagicMock,
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, float],
 ) -> None:
     """Test that the engine initializes correctly."""
     engine = PlaybackEngine(
-        mock_event_bus, mock_playlist_manager, mock_renderer, config
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     
-    assert engine._state == State.PAUSED
+    assert engine._state == State.IDLE
     assert engine._is_running is False
     assert engine._time_delay == 10.0
     
     # Verify it subscribed to commands
-    mock_event_bus.subscribe.assert_called_once_with(CommandEvent, engine._handle_command)
+    mock_event_subscriber.subscribe.assert_called_once_with(CommandEvent, engine._handle_command)
 
 
 def test_engine_start_stop(
-    mock_event_bus: MagicMock,
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, float],
 ) -> None:
     """Test starting and stopping the engine."""
     engine = PlaybackEngine(
-        mock_event_bus, mock_playlist_manager, mock_renderer, config
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     
     # Mock _run_loop to return immediately so we don't block
@@ -96,7 +103,7 @@ def test_engine_start_stop(
         assert engine._state == State.PLAYING
         
         # Should have published state event
-        mock_event_bus.publish.assert_called_with(StateEvent(state=State.PLAYING))
+        mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PLAYING))
         
         # Should have requested next media
         mock_playlist_manager.get_next.assert_called_once()
@@ -106,18 +113,19 @@ def test_engine_start_stop(
         
         assert engine._is_running is False
         # renderer.stop() is now called at the end of _run_loop, not in stop()
-        assert engine._state == State.PAUSED
+        assert engine._state == State.IDLE
 
 
 def test_engine_handle_command_next(
-    mock_event_bus: MagicMock,
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, float],
 ) -> None:
     """Test handling the NEXT command."""
     engine = PlaybackEngine(
-        mock_event_bus, mock_playlist_manager, mock_renderer, config
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     
     event = CommandEvent(command=Command.NEXT)
@@ -128,14 +136,15 @@ def test_engine_handle_command_next(
 
 
 def test_engine_handle_command_prev(
-    mock_event_bus: MagicMock,
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, float],
 ) -> None:
     """Test handling the PREV command."""
     engine = PlaybackEngine(
-        mock_event_bus, mock_playlist_manager, mock_renderer, config
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     
     event = CommandEvent(command=Command.PREV)
@@ -146,14 +155,15 @@ def test_engine_handle_command_prev(
 
 
 def test_engine_handle_command_pause_play(
-    mock_event_bus: MagicMock,
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, float],
 ) -> None:
     """Test handling PAUSE and PLAY commands."""
     engine = PlaybackEngine(
-        mock_event_bus, mock_playlist_manager, mock_renderer, config
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     
     # Start in PLAYING state
@@ -163,26 +173,27 @@ def test_engine_handle_command_pause_play(
     event = CommandEvent(command=Command.PAUSE)
     engine._handle_command(event)
     
-    assert engine._state == State.PAUSED
-    mock_event_bus.publish.assert_called_with(StateEvent(state=State.PAUSED))
+    assert engine._state == State.IDLE
+    mock_event_publisher.publish.assert_called_with(StateEvent(state=State.IDLE))
     
     # Play
     event = CommandEvent(command=Command.PLAY)
     engine._handle_command(event)
     
     assert engine._state == State.PLAYING
-    mock_event_bus.publish.assert_called_with(StateEvent(state=State.PLAYING))
+    mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PLAYING))
 
 
 def test_engine_handle_command_stop(
-    mock_event_bus: MagicMock,
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, float],
 ) -> None:
     """Test handling the STOP command."""
     engine = PlaybackEngine(
-        mock_event_bus, mock_playlist_manager, mock_renderer, config
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     engine._is_running = True
     
@@ -191,18 +202,19 @@ def test_engine_handle_command_stop(
     
     assert engine._is_running is False
     # renderer.stop() is now called at the end of _run_loop, not in stop()
-    assert engine._state == State.PAUSED
+    assert engine._state == State.IDLE
 
 
 def test_engine_run_loop_exit(
-    mock_event_bus: MagicMock,
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, float],
 ) -> None:
     """Test that the run loop exits when the renderer returns False."""
     engine = PlaybackEngine(
-        mock_event_bus, mock_playlist_manager, mock_renderer, config
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     engine._is_running = True
     

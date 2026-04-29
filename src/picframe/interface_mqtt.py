@@ -15,19 +15,23 @@ Dependencies:
 - picframe.controller: For controlling the image display.
 """
 
-import logging
 import json
+import logging
 import os
 import ssl
-from typing import Optional, List
+
 import paho.mqtt.client as mqtt
+
 from picframe import __version__
 from picframe.controller import Controller
-from picframe.core.events.bus import IEventSubscriber, IEventPublisher
-from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent, State
-from picframe.core.ports.state import ISystemStateQuery
-from picframe.core.events.bus import IEventSubscriber, IEventPublisher
-from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent, State
+from picframe.core.events.bus import IEventPublisher, IEventSubscriber
+from picframe.core.events.dto import (
+    Command,
+    CommandEvent,
+    CurrentMediaChangedEvent,
+    State,
+    StateEvent,
+)
 from picframe.core.ports.state import ISystemStateQuery
 
 
@@ -46,9 +50,9 @@ class InterfaceMQTT:
         self,
         controller: Controller,
         mqtt_config: dict,
-        event_subscriber: Optional[IEventSubscriber] = None,
-        event_publisher: Optional[IEventPublisher] = None,
-        state_query: Optional[ISystemStateQuery] = None
+        event_subscriber: IEventSubscriber | None = None,
+        event_publisher: IEventPublisher | None = None,
+        state_query: ISystemStateQuery | None = None
     ) -> None:
         """
         Initializes an instance of InterfaceMQTT.
@@ -90,7 +94,7 @@ class InterfaceMQTT:
         self.__login = mqtt_config["login"]
         self.__password = mqtt_config["password"]
         self.__tls = mqtt_config["tls"]
-        self.__client: Optional[mqtt.Client] = None
+        self.__client: mqtt.Client | None = None
         self.__connected = False
         self.__initialize_client()
         self.__connect()
@@ -207,7 +211,7 @@ class InterfaceMQTT:
         _userdata: object,
         _disconnect_flags: mqtt.DisconnectFlags,
         reason_code: mqtt.ReasonCode | int | None,
-        _properties: Optional[mqtt.Properties] = None,
+        _properties: mqtt.Properties | None = None,
     ) -> None:
         """
         Callback for when the client disconnects from the broker.
@@ -257,7 +261,7 @@ class InterfaceMQTT:
         _userdata: object,
         _flags: mqtt.ConnectFlags,
         reason_code: mqtt.ReasonCode | int,
-        _properties: Optional[mqtt.Properties] = None,
+        _properties: mqtt.Properties | None = None,
     ) -> None:
         """
         Callback function that is called when the client successfully connects to the MQTT broker.
@@ -391,7 +395,7 @@ class InterfaceMQTT:
         icon: str,
         available_topic: str,
         has_attributes: bool = False,
-        entity_category: Optional[str] = None
+        entity_category: str | None = None
     ) -> None:
         """
         Set up a sensor in Home Assistant.
@@ -436,7 +440,7 @@ class InterfaceMQTT:
         topic: str,
         icon: str,
         available_topic: str,
-        entity_category: Optional[str] = None
+        entity_category: str | None = None
     ) -> None:
         """
         Sets up the text sensor configuration and publishes it to the MQTT broker.
@@ -520,7 +524,7 @@ class InterfaceMQTT:
         self,
         client: mqtt.Client,
         topic: str,
-        options: List[str],
+        options: list[str],
         icon: str,
         available_topic: str,
         init: bool = False
@@ -564,7 +568,7 @@ class InterfaceMQTT:
         icon: str,
         available_topic: str,
         is_on: bool = False,
-        entity_category: Optional[str] = None
+        entity_category: str | None = None
     ) -> None:
         """
         Sets up a switch in Home Assistant.
@@ -599,7 +603,7 @@ class InterfaceMQTT:
         client.publish(state_topic, "ON" if is_on else "OFF", qos=0, retain=True)
 
     def __setup_button(self, client: mqtt.Client, topic: str, icon: str,
-                       available_topic: str, entity_category: Optional[str] = None) -> None:
+                       available_topic: str, entity_category: str | None = None) -> None:
         """
         Set up a button configuration for the Home Assistant integration.
 
@@ -821,7 +825,7 @@ class InterfaceMQTT:
         elif message.topic == self.__device_id + "/stop":
             self.__controller.stop()
 
-    def publish_state(self, image: Optional[str] = None, image_attr: Optional[dict] = None) -> None:
+    def publish_state(self, image: str | None = None, image_attr: dict | None = None) -> None:
         """
         Publishes the state of the device to the MQTT broker.
 

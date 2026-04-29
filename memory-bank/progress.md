@@ -33,9 +33,15 @@ This file tracks the project's progress using a task list format.
 
 ## Next Steps
 
-*   [ ] Phase 2: Control Plane & UI (Subphased)
-    *   [ ] Subphase 2A: Hardware Abstraction & External Inputs (HAL, Power, Input, MQTT, PlaybackEngine Refactor)
-    *   [ ] Subphase 2B: The Web Control Plane & CLI (FastAPI, Vue.js SPA, CLI Init, Config Loading)
+*   [-] Phase 2: Control Plane & UI (Subphased)
+    *   [x] Subphase 2A: Hardware Abstraction & External Inputs (HAL, Power, Input, MQTT, PlaybackEngine Refactor)
+        *   [x] Task 2A.1: HAL Injection & Mock Adapters
+        *   [x] Task 2A.2: Extract Display Power Management to Hardware Abstraction Layer (Issue #620)
+        *   [x] Task 2A.3: HardwareInputService Implementation (Issue #606)
+        *   [x] Task 2A.4: MQTT Client Refactoring (Issue #605)
+        *   [x] Task 2A.5: Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631)
+        *   [x] Task 2A.5: Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631)
+    *   [-] Subphase 2B: The Web Control Plane & CLI (FastAPI, Vue.js SPA, CLI Init, Config Loading)
     *   [ ] Subphase 2C: Advanced Rendering & Feature Parity (Overlays, Matting, Portrait Pairs)
 *   [ ] Phase 3: Video Engine Integration
     *   [ ] Task 3.1: Extend MetadataExtractor for Video

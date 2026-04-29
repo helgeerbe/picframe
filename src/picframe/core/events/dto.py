@@ -37,8 +37,10 @@ class Command(Enum):
 class State(Enum):
     """Enumeration of all possible system states."""
 
+    IDLE = auto()
     PLAYING = auto()
     PAUSED = auto()
+    TRANSITIONING = auto()
     SLEEPING = auto()
     CONFIG_CHANGED = auto()
     STATS_UPDATED = auto()

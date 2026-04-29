@@ -2,7 +2,7 @@
 Service for tracking system state and exposing it via the ISystemStateQuery port.
 """
 import logging
-from typing import Any, Dict, Optional, cast, cast
+from typing import Any, cast
 
 from picframe.core.events.bus import IEventSubscriber
 from picframe.core.events.dto import CurrentMediaChangedEvent, State, StateEvent
@@ -26,7 +26,7 @@ class StateTrackerService(ISystemStateQuery):
             event_subscriber: The event bus subscriber interface.
         """
         self._subscriber = event_subscriber
-        self._current_media: Optional[Dict[str, Any]] = None
+        self._current_media: dict[str, Any] | None = None
         self._system_state: State = State.PLAYING
 
         # Subscribe to relevant events
@@ -37,9 +37,9 @@ class StateTrackerService(ISystemStateQuery):
         """Handle CurrentMediaChangedEvent."""
         if isinstance(event, CurrentMediaChangedEvent):
             if hasattr(event.media_item, "to_dict") and callable(event.media_item.to_dict):
-                self._current_media = cast(Dict[str, Any], event.media_item.to_dict())
+                self._current_media = cast(dict[str, Any], event.media_item.to_dict())
             elif hasattr(event.media_item, "__dict__"):
-                self._current_media = cast(Dict[str, Any], event.media_item.__dict__)
+                self._current_media = cast(dict[str, Any], event.media_item.__dict__)
             elif isinstance(event.media_item, dict):
                 self._current_media = event.media_item
             else:
@@ -52,14 +52,14 @@ class StateTrackerService(ISystemStateQuery):
             self._system_state = event.state
             logger.debug(f"StateTracker updated system state to {self._system_state.name}")
 
-    def get_current_media(self) -> Optional[Dict[str, Any]]:
+    def get_current_media(self) -> dict[str, Any] | None:
         """
         Get the currently displayed media item as a dictionary.
         Returns None if no media is currently displayed.
         """
         return self._current_media
 
-    def get_system_state(self) -> Dict[str, Any]:
+    def get_system_state(self) -> dict[str, Any]:
         """
         Get the overall system state.
         """

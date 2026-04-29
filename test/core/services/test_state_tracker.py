@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import Mock
+
+import pytest
 
 from picframe.core.events.bus import IEventSubscriber
 from picframe.core.events.dto import CurrentMediaChangedEvent, State, StateEvent
@@ -39,6 +40,8 @@ def test_initialization(state_tracker: StateTrackerService, mock_subscriber: Moc
 
 def test_handle_media_changed(state_tracker: StateTrackerService) -> None:
     """Test that the service updates its current media when a CurrentMediaChangedEvent is received."""
+    """Test that the service updates its current media when a CurrentMediaChangedEvent is received.
+    """
     class MockMediaItem:
         def __init__(self):
             self.path = "/path/to/image.jpg"

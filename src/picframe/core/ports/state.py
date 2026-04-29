@@ -1,7 +1,7 @@
 """
 Port interfaces for querying system state.
 """
-from typing import Any, Dict, Optional, Protocol
+from typing import Any, Protocol
 
 
 class ISystemStateQuery(Protocol):
@@ -11,14 +11,14 @@ class ISystemStateQuery(Protocol):
     to retrieve the current state without coupling to the core domain.
     """
 
-    def get_current_media(self) -> Optional[Dict[str, Any]]:
+    def get_current_media(self) -> dict[str, Any] | None:
         """
         Get the currently displayed media item as a dictionary.
         Returns None if no media is currently displayed.
         """
         ...
 
-    def get_system_state(self) -> Dict[str, Any]:
+    def get_system_state(self) -> dict[str, Any]:
         """
         Get the overall system state (e.g., playing, paused, sleeping).
         """

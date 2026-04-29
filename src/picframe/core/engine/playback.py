@@ -12,6 +12,8 @@ from picframe.core.events.dto import (
     State,
     StateEvent,
 )
+from picframe.core.events.bus import IEventPublisher, IEventSubscriber
+from picframe.core.events.bus import IEventPublisher, IEventSubscriber
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.services.playlist import PlaylistManager
 
@@ -26,7 +28,8 @@ class PlaybackEngine:
 
     def __init__(
         self,
-        event_bus: Any,  # Should be IEventPublisher & IEventSubscriber
+        event_publisher: IEventPublisher,
+        event_subscriber: IEventSubscriber,
         playlist_manager: PlaylistManager,
         renderer: IRenderer,
         config: dict[str, Any],
@@ -41,18 +44,19 @@ class PlaybackEngine:
             config: Application configuration.
         """
         self._logger = logging.getLogger(__name__)
-        self._event_bus = event_bus
+        self._event_publisher = event_publisher
+        self._event_subscriber = event_subscriber
         self._playlist_manager = playlist_manager
         self._renderer = renderer
         self._config = config
         
-        self._state = State.PAUSED  # IDLE is not in State enum, using PAUSED
+        self._state = State.IDLE
         self._is_running = False
         self._time_delay = float(config.get("time_delay", 200.0))
         self._next_transition_time = 0.0
         
         # Subscribe to commands
-        self._event_bus.subscribe(CommandEvent, self._handle_command)
+        self._event_subscriber.subscribe(CommandEvent, self._handle_command)
 
     def start(self) -> None:
         """Start the playback engine and render loop."""
@@ -75,7 +79,7 @@ class PlaybackEngine:
         # from a signal handler which can cause issues with pi3d's
         # display destruction. The renderer will be stopped when the
         # run loop exits.
-        self._change_state(State.PAUSED)
+        self._change_state(State.IDLE)
 
     def _run_loop(self) -> None:
         """The main synchronous render loop."""
@@ -114,7 +118,7 @@ class PlaybackEngine:
         elif event.command == Command.PREV:
             self._trigger_prev_media()
         elif event.command == Command.PAUSE:
-            self._change_state(State.PAUSED)
+            self._change_state(State.IDLE)
         elif event.command == Command.PLAY:
             self._change_state(State.PLAYING)
             # Reset timer so it doesn't immediately transition if it was paused
@@ -129,7 +133,7 @@ class PlaybackEngine:
             self._logger.info(
                 f"Transitioning to next media: {media_item.filepath}"
             )
-            # TRANSITIONING is not in State enum, skipping state change for now
+            self._change_state(State.TRANSITIONING)
             
             # Send render command
             render_cmd = RenderCommand(image_path=media_item.filepath)
@@ -138,7 +142,6 @@ class PlaybackEngine:
             # Update timer
             self._next_transition_time = time.time() + self._time_delay
             
-            # We assume transition is fast enough for MVP, go back to playing
             self._change_state(State.PLAYING)
         else:
             self._logger.warning("No media available to play")
@@ -150,7 +153,7 @@ class PlaybackEngine:
             self._logger.info(
                 f"Transitioning to previous media: {media_item.filepath}"
             )
-            # TRANSITIONING is not in State enum, skipping state change for now
+            self._change_state(State.TRANSITIONING)
             
             # Send render command
             render_cmd = RenderCommand(image_path=media_item.filepath)
@@ -159,7 +162,6 @@ class PlaybackEngine:
             # Update timer
             self._next_transition_time = time.time() + self._time_delay
             
-            # We assume transition is fast enough for MVP, go back to playing
             self._change_state(State.PLAYING)
         else:
             self._logger.warning("No previous media available")
@@ -169,4 +171,4 @@ class PlaybackEngine:
         if self._state != new_state:
             self._logger.debug(f"State changed: {self._state} -> {new_state}")
             self._state = new_state
-            self._event_bus.publish(StateEvent(state=new_state))
+            self._event_publisher.publish(StateEvent(state=new_state))
