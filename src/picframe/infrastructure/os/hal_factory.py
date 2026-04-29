@@ -50,7 +50,7 @@ class HALFactory:
 
         logger.info(f"HALFactory: Detecting OS... os.name='{os_name}', sys.platform='{platform}'")
 
-        # TODO: Implement actual OS detection logic for Raspberry Pi (Wayland/X11)
+        # TODO: Implement actual OS detection logic for Raspberry Pi (Wayland)
         # and Ubuntu VM once the concrete adapters are built in subsequent tasks.
         # For now, we default to the Mock adapters to ensure the application
         # can run cross-platform during Phase 2 development.
