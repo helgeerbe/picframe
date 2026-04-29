@@ -10,6 +10,7 @@ from picframe.core.renderers.pi3d_renderer import Pi3dRenderer
 from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
 from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
 from picframe.core.services.playlist import PlaylistManager
+from picframe.infrastructure.os.hal_factory import HALFactory
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -33,10 +34,14 @@ def main() -> None:
     # 2. Initialize Event Bus
     event_bus = PriorityQueueEventBus()
 
-    # 3. Initialize Services
+    # 3. Initialize Hardware Abstraction Layer (HAL)
+    hal_adapters = HALFactory.create_adapters()
+    logger.info(f"HAL Adapters injected: {hal_adapters}")
+
+    # 4. Initialize Services
     playlist_manager = PlaylistManager(media_repo)
 
-    # 4. Initialize Renderer
+    # 5. Initialize Renderer
     # TODO: Load config from config_repo
     renderer_config: dict[str, Any] = {
         "blur_amount": 12,
@@ -51,7 +56,7 @@ def main() -> None:
     }
     renderer = Pi3dRenderer(renderer_config)
 
-    # 5. Initialize Engine
+    # 6. Initialize Engine
     engine_config: dict[str, float] = {
         "time_delay": 10.0,
     }
@@ -59,7 +64,7 @@ def main() -> None:
         event_bus, playlist_manager, renderer, engine_config
     )
 
-    # 6. Setup Graceful Shutdown
+    # 7. Setup Graceful Shutdown
     shutdown_event = threading.Event()
 
     def signal_handler(sig: int, frame: Any) -> None:
@@ -72,7 +77,7 @@ def main() -> None:
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGTERM, signal_handler)
 
-    # 7. Start Components
+    # 8. Start Components
     logger.info("Starting Event Bus...")
     event_bus.start()
 
