@@ -6,8 +6,11 @@ and sets up the necessary dependencies for the web control plane.
 """
 
 import logging
+from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 logger = logging.getLogger(__name__)
 
@@ -41,5 +44,23 @@ def create_app() -> FastAPI:
     async def health_check() -> dict[str, str]:
         """Basic health check endpoint."""
         return {"status": "ok"}
+
+    # Serve SPA static files
+    html_dir = Path(__file__).parent.parent / "html"
+    if html_dir.exists():
+        # Mount the assets directory
+        assets_dir = html_dir / "assets"
+        if assets_dir.exists():
+            app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
+
+        # Catch-all route for SPA
+        @app.get("/{full_path:path}")
+        async def serve_spa(full_path: str) -> FileResponse:
+            requested_file = html_dir / full_path
+            if full_path and requested_file.is_file():
+                return FileResponse(requested_file)
+            return FileResponse(html_dir / "index.html")
+    else:
+        logger.warning(f"Frontend build directory not found at {html_dir}. Web UI will not be available.")
 
     return app
