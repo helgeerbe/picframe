@@ -150,6 +150,16 @@ def create_app(
                                 event_publisher.publish(CommandEvent(command=Command.DISPLAY_ON))
                             elif command_str == "DISPLAY_OFF":
                                 event_publisher.publish(CommandEvent(command=Command.DISPLAY_OFF))
+                            elif command_str == "DELETE":
+                                event_publisher.publish(CommandEvent(command=Command.DELETE))
+                            elif command_str == "PURGE_FILES":
+                                event_publisher.publish(CommandEvent(command=Command.PURGE_FILES))
+                            elif command_str == "STOP":
+                                event_publisher.publish(CommandEvent(command=Command.STOP))
+                            elif command_str == "REBOOT_HOST":
+                                event_publisher.publish(CommandEvent(command=Command.REBOOT_HOST))
+                            elif command_str == "SHUTDOWN_HOST":
+                                event_publisher.publish(CommandEvent(command=Command.SHUTDOWN_HOST))
                     except json.JSONDecodeError:
                         logger.error("Invalid JSON received on websocket")
             except WebSocketDisconnect:
@@ -177,6 +187,27 @@ def create_app(
             if event_subscriber:
                 event_subscriber.unsubscribe(CurrentMediaChangedEvent, handle_media_changed)
                 event_subscriber.unsubscribe(StateEvent, handle_state_changed)
+
+    @app.post("/api/system/reboot")
+    async def api_reboot() -> dict[str, str]:
+        """Trigger a full host-level OS reboot."""
+        if event_publisher:
+            event_publisher.publish(CommandEvent(command=Command.REBOOT_HOST))
+        return {"status": "rebooting"}
+
+    @app.post("/api/system/shutdown")
+    async def api_shutdown() -> dict[str, str]:
+        """Trigger a full host-level OS shutdown."""
+        if event_publisher:
+            event_publisher.publish(CommandEvent(command=Command.SHUTDOWN_HOST))
+        return {"status": "shutting down"}
+
+    @app.post("/api/maintenance/purge-db")
+    async def api_purge_db() -> dict[str, str]:
+        """Trigger a database purge of missing files."""
+        if event_publisher:
+            event_publisher.publish(CommandEvent(command=Command.PURGE_FILES))
+        return {"status": "purging database"}
 
     @app.get("/media")
     async def serve_media(path: str) -> FileResponse:

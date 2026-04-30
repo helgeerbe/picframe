@@ -125,6 +125,56 @@ class PlaybackEngine:
             self._next_transition_time = time.time() + self._time_delay
         elif event.command == Command.STOP:
             self.stop()
+        elif event.command == Command.DELETE:
+            self._handle_delete_command()
+        elif event.command == Command.PURGE_FILES:
+            self._handle_purge_command()
+
+    def _handle_delete_command(self) -> None:
+        """Handle the DELETE command by moving the current file and advancing."""
+        import os
+        import shutil
+        
+        current_media = self._playlist_manager.get_current()
+        if not current_media or current_media.id == 0:
+            self._logger.warning("No active media to delete.")
+            return
+            
+        filepath = current_media.filepath
+        if not os.path.exists(filepath):
+            self._logger.warning(f"File to delete not found: {filepath}")
+            return
+            
+        # Determine deleted directory
+        base_dir = os.path.dirname(filepath)
+        deleted_dir = os.path.join(base_dir, "deleted_pictures")
+        
+        try:
+            os.makedirs(deleted_dir, exist_ok=True)
+            filename = os.path.basename(filepath)
+            dest_path = os.path.join(deleted_dir, filename)
+            
+            # Move the file
+            shutil.move(filepath, dest_path)
+            self._logger.info(f"Moved deleted file to: {dest_path}")
+            
+            # Mark as deleted in repository
+            self._playlist_manager.delete_current()
+            
+            # Immediately transition to next media
+            self._trigger_next_media()
+            
+        except Exception as e:
+            self._logger.error(f"Failed to delete file {filepath}: {e}")
+
+    def _handle_purge_command(self) -> None:
+        """Handle the PURGE_FILES command by cleaning up the database."""
+        self._logger.info("Executing PURGE_FILES command.")
+        purged_count = self._playlist_manager.purge_missing_files()
+        self._logger.info(f"Purged {purged_count} missing files from database.")
+        
+        # Rebuild playlist to ensure we don't try to play purged items
+        self._playlist_manager.build_playlist()
 
     def _trigger_next_media(self) -> None:
         """Fetch the next media item and send a render command."""

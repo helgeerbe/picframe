@@ -57,6 +57,8 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     playlist_manager = PlaylistManager(media_repo)
     from picframe.core.services.display_power import DisplayPowerManager
     display_power_manager = DisplayPowerManager(event_bus, hal_adapters.display_power)
+    from picframe.core.services.system_manager import SystemManager
+    system_manager = SystemManager(event_bus, hal_adapters.system_manager)
 
     # 5. Initialize Renderer
     default_renderer_config: dict[str, Any] = {
@@ -102,6 +104,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         # Keep a reference to display_power_manager to prevent garbage collection
         # and allow it to handle events until the bus stops.
         _ = display_power_manager
+        _ = system_manager
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)

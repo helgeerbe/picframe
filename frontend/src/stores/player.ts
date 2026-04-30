@@ -115,6 +115,7 @@ export const usePlayerStore = defineStore('player', () => {
     brightness,
     isConnected,
     connect,
+    sendCommand,
     play,
     pause,
     next,

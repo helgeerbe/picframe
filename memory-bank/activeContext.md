@@ -12,6 +12,7 @@
 *   Next up: Implementing the CLI (`init` and `run` commands) and `EnvironmentBootstrapper` (Subphase 2B).
 
 ## Recent Changes
+- **[2026-04-30 14:50:00] - Completed Ticket #649 (Phase 2B: System Actions)**: Implemented host-level reboot/shutdown, media deletion (move to `deleted_pictures`), and database purging via WebUI and EventBus.
 
 *   [2026-04-29 10:15:00] - Approved architecture for Phase 2 subphases (2A: HAL, 2B: Web/CLI, 2C: Rendering Parity).
 *   [2026-04-29 10:15:00] - Approved CLI design (`picframe init` for user-space bootstrapping in `~/.picframe/`) and rejected `sudo` system dependency installation in favor of native OS packages.

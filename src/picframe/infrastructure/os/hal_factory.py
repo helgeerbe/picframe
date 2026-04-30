@@ -16,6 +16,7 @@ from picframe.infrastructure.os.mock_adapters import (
     MockHardwareInput,
     MockSystemManager,
 )
+from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
 from picframe.infrastructure.os.wayland_power import WaylandDisplayPower
 
 logger = logging.getLogger(__name__)
@@ -76,5 +77,5 @@ class HALFactory:
         return HALAdapters(
             display_power=WaylandDisplayPower(display_output=display_output),
             hardware_input=MockHardwareInput(),
-            system_manager=MockSystemManager(),
+            system_manager=LinuxSystemManager(),
         )

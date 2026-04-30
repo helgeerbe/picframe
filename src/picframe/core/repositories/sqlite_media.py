@@ -162,6 +162,42 @@ class SQLiteMediaRepository(IMediaRepository):
         cursor = self._conn.execute("SELECT * FROM media WHERE is_deleted = 0")
         return [dict(row) for row in cursor.fetchall()]
 
+    def purge_missing_files(self) -> int:
+        """
+        Remove database entries for files that no longer exist on disk.
+
+        Returns:
+            The number of purged records.
+        """
+        import os
+        
+        cursor = self._conn.execute("SELECT id, filepath FROM media")
+        rows = cursor.fetchall()
+        
+        missing_ids = []
+        for row in rows:
+            if not os.path.exists(row["filepath"]):
+                missing_ids.append(row["id"])
+                
+        if not missing_ids:
+            return 0
+            
+        # Delete in batches to avoid SQLite limits
+        batch_size = 999
+        purged_count = 0
+        
+        with self._conn:
+            for i in range(0, len(missing_ids), batch_size):
+                batch = missing_ids[i:i + batch_size]
+                placeholders = ",".join("?" * len(batch))
+                cursor = self._conn.execute(
+                    f"DELETE FROM media WHERE id IN ({placeholders})",
+                    batch
+                )
+                purged_count += cursor.rowcount
+                
+        return purged_count
+
     def close(self) -> None:
         """Close the database connection."""
         self._conn.close()

@@ -188,8 +188,8 @@ The system uses a Strict Event-Driven Architecture. All communication across the
 | `CommandEvent(PLAY)` | None | 1 (High) | Resume playback. |
 | `CommandEvent(SLEEP)` | None | 2 (Medium) | Turn off the display (via `DisplayPowerManager`). |
 | `CommandEvent(WAKE)` | None | 2 (Medium) | Turn on the display. |
-| `CommandEvent(REBOOT)` | None | 1 (High) | Reboot the host OS. |
-| `CommandEvent(SHUTDOWN)`| None | 1 (High) | Shutdown the host OS. |
+| `CommandEvent(REBOOT_HOST)` | None | 1 (High) | Trigger a full host-level OS reboot. |
+| `CommandEvent(SHUTDOWN_HOST)`| None | 1 (High) | Trigger a full host-level OS shutdown. |
 | `CommandEvent(SET_VOL)` | `level: int` (0-100) | 2 (Medium) | Adjust video playback volume. |
 | `CommandEvent(DELETE)` | None | 1 (High) | Delete the currently playing media item. |
 | `CommandEvent(PURGE_FILES)` | None | 2 (Medium) | Purge missing files from the database. |
@@ -271,6 +271,22 @@ To allow the application to control display brightness without root privileges, 
 ```bash
 sudo usermod -aG i2c $USER    # For ddcutil (external HDMI/DP monitors)
 sudo usermod -aG video $USER  # For brightnessctl (internal DSI/eDP displays)
+```
+
+**Note on System Power Management:**
+To allow the application to reboot or shut down the host system without prompting for a password, you must configure `sudo` or `polkit` for the user running the application.
+
+For `sudo` (visudo):
+```bash
+# Add the following line to /etc/sudoers (using visudo)
+# Replace 'pi' with the actual username running the application
+pi ALL=(ALL) NOPASSWD: /sbin/reboot, /sbin/shutdown
+```
+
+Alternatively, you can dynamically create a drop-in file in `/etc/sudoers.d/` for the current user:
+```bash
+echo "$USER ALL=(ALL) NOPASSWD: /sbin/reboot, /sbin/shutdown" | sudo tee /etc/sudoers.d/picframe-power
+sudo chmod 0440 /etc/sudoers.d/picframe-power
 ```
 
 **Note on Virtual Machine Development:**

@@ -19,7 +19,8 @@ import {
 import {
   PlayIcon as PlayIconSolid,
   PauseIcon as PauseIconSolid,
-  PowerIcon
+  PowerIcon,
+  TrashIcon as TrashIconSolid
 } from '@heroicons/vue/24/solid'
 import 'leaflet/dist/leaflet.css'
 import { LMap, LTileLayer, LMarker } from '@vue-leaflet/vue-leaflet'
@@ -128,13 +129,18 @@ const zoom = ref(13)
             <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
             
             <!-- Hover Info -->
-            <div class="absolute bottom-0 left-0 right-0 p-6 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500 pointer-events-none">
-              <h2 class="text-2xl font-bold text-white truncate drop-shadow-md">
-                {{ currentMedia?.file_path?.split('/').pop() || 'Unknown File' }}
-              </h2>
-              <p v-if="exifData.caption" class="text-sm text-gray-200 mt-2 line-clamp-2 drop-shadow">
-                {{ exifData.caption }}
-              </p>
+            <div class="absolute bottom-0 left-0 right-0 p-6 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500 pointer-events-none flex justify-between items-end">
+              <div>
+                <h2 class="text-2xl font-bold text-white truncate drop-shadow-md">
+                  {{ currentMedia?.file_path?.split('/').pop() || 'Unknown File' }}
+                </h2>
+                <p v-if="exifData.caption" class="text-sm text-gray-200 mt-2 line-clamp-2 drop-shadow">
+                  {{ exifData.caption }}
+                </p>
+              </div>
+              <button @click="playerStore.sendCommand('DELETE')" class="pointer-events-auto p-3 rounded-full bg-red-600/80 hover:bg-red-500 text-white shadow-lg backdrop-blur-sm transition-all transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-red-500/50 active:scale-95" title="Delete Current Image">
+                <TrashIconSolid class="w-6 h-6" />
+              </button>
             </div>
           </div>
 

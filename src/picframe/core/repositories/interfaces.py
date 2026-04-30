@@ -132,3 +132,12 @@ class IMediaRepository(Protocol):
             A list of dictionaries containing media metadata.
         """
         ...
+
+    def purge_missing_files(self) -> int:
+        """
+        Scan the database and remove entries for files that no longer exist on disk.
+
+        Returns:
+            The number of records deleted.
+        """
+        ...

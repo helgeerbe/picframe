@@ -110,6 +110,38 @@ class PlaylistManager:
             if looped and self._current_index == original_index:
                 return self._get_no_images_placeholder()
 
+    def get_current(self) -> MediaItem | None:
+        """
+        Get the currently playing media item.
+        
+        Returns:
+            The current MediaItem, or None if no item is playing.
+        """
+        if not self._history:
+            return None
+        return self._dict_to_media_item(self._history[-1])
+
+    def delete_current(self) -> None:
+        """
+        Mark the current media item as deleted in the repository.
+        """
+        if not self._history:
+            return
+            
+        current_item = self._history[-1]
+        media_id = current_item.get("id")
+        if media_id:
+            self._media_repo.delete_media_item(media_id)
+            
+    def purge_missing_files(self) -> int:
+        """
+        Purge missing files from the repository.
+        
+        Returns:
+            The number of purged records.
+        """
+        return self._media_repo.purge_missing_files()
+
     def get_previous(self) -> MediaItem | None:
         """
         Get the previously played media item from history.

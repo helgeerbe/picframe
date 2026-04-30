@@ -20,8 +20,8 @@ class Command(Enum):
     PLAY = auto()
     SLEEP = auto()
     WAKE = auto()
-    REBOOT = auto()
-    SHUTDOWN = auto()
+    REBOOT_HOST = auto()
+    SHUTDOWN_HOST = auto()
     SET_VOL = auto()
     DELETE = auto()
     PURGE_FILES = auto()
@@ -87,8 +87,8 @@ class CommandEvent(Event):
             Command.PREV,
             Command.PAUSE,
             Command.PLAY,
-            Command.REBOOT,
-            Command.SHUTDOWN,
+            Command.REBOOT_HOST,
+            Command.SHUTDOWN_HOST,
             Command.DELETE,
             Command.STOP,
         }
