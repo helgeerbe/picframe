@@ -8,6 +8,7 @@ This file records architectural and implementation decisions using a list format
 
 ## Decision
 
+* [2026-04-30 14:53:00] - Refactor Pi3dRenderer into specialized components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`) and implement a formal state machine with a local `PriorityQueue` for render events.
 * [2026-04-29 10:15:00] - Split Phase 2 into three distinct subphases (2A: HAL & Inputs, 2B: Web Control Plane & CLI, 2C: Advanced Rendering) to mitigate integration risks and manage scope.
 * [2026-04-29 10:15:00] - Implement a CLI with `init` and `run` commands. The `init` command will bootstrap the user environment in `~/.picframe/` strictly in user-space.
 * [2026-04-29 10:15:00] - Reject the use of `sudo` within the Python application for installing system dependencies. System dependencies will be managed via explicit shell scripts or native OS packages (e.g., `.deb`).
@@ -37,7 +38,8 @@ This file records architectural and implementation decisions using a list format
 * [2026-04-23 10:58:00] - Define a comprehensive Vue.js SPA Frontend Specification featuring a real-time Media Player with dynamic OpenStreetMap integration and an Administrative Dashboard for config and maintenance.
 
 ## Rationale
-
+ 
+* [2026-04-30 14:53:00] - Based on feedback from Paddy (pi3d author), the monolithic `Pi3dRenderer` is becoming complex and difficult to manage, especially with overlapping animations (fading, Ken Burns, text). Decomposing it improves maintainability. A formal state machine replaces messy conditional blocks, ensuring predictable transitions. A local `PriorityQueue` for render events prevents asynchronous delays from the main EventBus. Skipping `pi3d.Display.loop_running()` when static optimizes CPU and energy usage.
 * [2026-04-29 10:15:00] - Splitting Phase 2 ensures foundational communication and hardware layers (HAL) are solid before introducing the complexity of the web server, leaving intricate rendering features for the final step.
 * [2026-04-29 10:15:00] - A user-space `init` command safely sets up the required directory structure (`~/.picframe/`) and default assets without requiring elevated privileges.
 * [2026-04-29 10:15:00] - Executing `sudo` from Python is a critical security risk (privilege escalation, supply chain vulnerability) and an architectural anti-pattern. Relying on native package managers or explicit scripts adheres to Linux best practices.

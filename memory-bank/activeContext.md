@@ -80,4 +80,13 @@
 - Configured the Vite build pipeline to output static assets directly to `src/picframe/html` for FastAPI integration.
 - Current focus shifts to setting up the FastAPI backend (Task 2B.2 / Issue #603) to serve the SPA and provide REST/WebSocket endpoints.
 ## [2026-04-30 12:04:52] - Completed Issue #645: Media Delivery and Fallback Image Implementation
+
+## [2026-04-30 14:53:00] - Planning Phase 2C: Rendering Parity & Enhancements
+*   **Current Focus:** Designing the architectural refactoring of the `pi3d` rendering engine based on feedback from Paddy (pi3d author).
+*   **Key Changes:**
+    *   Decomposing `Pi3dRenderer` into specialized components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`).
+    *   Implementing a formal State Machine for the render loop to handle slide lifecycles cleanly.
+    *   Introducing a local `PriorityQueue` for synchronous render events to avoid main EventBus delays.
+    *   Optimizing CPU/energy usage by skipping `pi3d.Display.loop_running()` when the screen is static.
+*   **Next Steps:** Create GitHub issues for these architectural changes and begin implementation.
 ## [2026-04-30 12:04:52] - Completed Issue #645: Media Delivery and Fallback Image Implementation

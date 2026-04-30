@@ -64,6 +64,14 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Concept:** Image metadata broadcasting is handled via a CQRS pattern. The core domain emits a `CurrentMediaChangedEvent` when the displayed image changes. A dedicated `StateTrackerService` subscribes to this event, maintaining the current system state and exposing an `ISystemStateQuery` port. External delivery mechanisms (MQTT, WebSockets, REST APIs) query this port or subscribe to the event bus directly, completely decoupled from the core domain logic.
 *   **Reasoning & Benefits:** This strictly adheres to Hexagonal Architecture by preventing external communication protocols from polluting the domain. It supports both push (MQTT/WebSockets via event subscription) and pull (REST API via state query) models efficiently without duplicating state management logic.
 
+### 2.13 Pi3d Rendering Pipeline & State Machine
+*   **Concept:** The monolithic `Pi3dRenderer` is decomposed into specialized, focused rendering components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`) that share a single `pi3d.Display` instance. The render loop operates as a formal State Machine (e.g., `Transitioning` -> `KenBurnsActive` -> `TextFadingIn` -> `Static`), managed by a local, synchronous `PriorityQueue` for internal render events.
+*   **Reasoning & Benefits:**
+    *   **Componentization:** Separating concerns makes the rendering logic cleaner and easier to maintain.
+    *   **State Machine:** Replaces complex, fragile conditional blocks with predictable state transitions, preventing overlapping animations when slide durations are short.
+    *   **Local Event Queue:** Keeps high-frequency, synchronous render events (like "transition complete, start text fade") off the main application Event Bus, ensuring the render loop doesn't suffer from asynchronous delays.
+    *   **Optimization:** By tracking the overall animation state, the engine can skip `pi3d.Display.loop_running()` when the screen is completely static or when a video is playing, significantly reducing CPU load and power consumption.
+
 ## 3. System Diagrams
 
 ### 3.1 Component Architecture
