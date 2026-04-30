@@ -261,11 +261,17 @@ sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb
 ### 4.2 Raspberry Pi (Target Hardware)
 ```bash
 sudo apt-get update
-sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev ddcutil brightnessctl
+sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev wlr-randr ddcutil brightnessctl i2c-tools
 ```
 
 **Note on Display Power Management:**
+`wlr-randr` is required for turning the display on and off under Wayland. It is not always installed by default on Raspberry Pi OS and must be explicitly installed.
+
 To allow the application to control display brightness without root privileges, ensure the user running the application is added to the appropriate groups:
 ```bash
 sudo usermod -aG i2c $USER    # For ddcutil (external HDMI/DP monitors)
 sudo usermod -aG video $USER  # For brightnessctl (internal DSI/eDP displays)
+```
+
+**Note on Virtual Machine Development:**
+Hardware-level display tools (`ddcutil`, `brightnessctl`, `wlr-randr`) will not function correctly within an Ubuntu Virtual Machine because hypervisors do not emulate physical I2C, PWM, or DRM interfaces. For local VM development, the application must use the `MockDisplayPower` adapter.

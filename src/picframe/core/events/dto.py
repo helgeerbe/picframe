@@ -32,6 +32,7 @@ class Command(Enum):
     DISPLAY_ON = auto()
     DISPLAY_OFF = auto()
     DISPLAY_TOGGLE = auto()
+    SET_BRIGHTNESS = auto()
 
 
 class State(Enum):

@@ -59,3 +59,13 @@ class DisplayPowerManager:
         elif event.command == Command.DISPLAY_TOGGLE:
             logger.info("DisplayPowerManager: Received DISPLAY_TOGGLE command.")
             self._adapter.toggle()
+        elif event.command == Command.SET_BRIGHTNESS:
+            if event.payload is not None:
+                try:
+                    brightness = float(event.payload)
+                    # Ensure brightness is within 0.0 to 1.0 bounds
+                    brightness = max(0.0, min(1.0, brightness))
+                    logger.info(f"DisplayPowerManager: Received SET_BRIGHTNESS command ({brightness}).")
+                    self._adapter.set_brightness(brightness)
+                except ValueError:
+                    logger.error(f"DisplayPowerManager: Invalid brightness payload: {event.payload}")

@@ -14,6 +14,7 @@ export const usePlayerStore = defineStore('player', () => {
   const currentMedia = ref<MediaItem | null>(null)
   const isPlaying = ref(false)
   const brightness = ref(1.0)
+  const isDisplayOn = ref(true)
   const isConnected = ref(false)
 
   let ws: WebSocket | null = null
@@ -103,6 +104,11 @@ export const usePlayerStore = defineStore('player', () => {
     sendCommand('SET_BRIGHTNESS', { value })
   }
 
+  function toggleDisplayPower() {
+    isDisplayOn.value = !isDisplayOn.value
+    sendCommand(isDisplayOn.value ? 'DISPLAY_ON' : 'DISPLAY_OFF')
+  }
+
   return {
     currentMedia,
     isPlaying,
@@ -113,6 +119,8 @@ export const usePlayerStore = defineStore('player', () => {
     pause,
     next,
     previous,
-    setBrightness
+    setBrightness,
+    isDisplayOn,
+    toggleDisplayPower
   }
 })

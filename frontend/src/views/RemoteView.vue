@@ -16,9 +16,10 @@ import {
   DocumentTextIcon,
   TagIcon
 } from '@heroicons/vue/24/outline'
-import { 
-  PlayIcon as PlayIconSolid, 
-  PauseIcon as PauseIconSolid 
+import {
+  PlayIcon as PlayIconSolid,
+  PauseIcon as PauseIconSolid,
+  PowerIcon
 } from '@heroicons/vue/24/solid'
 import 'leaflet/dist/leaflet.css'
 import { LMap, LTileLayer, LMarker } from '@vue-leaflet/vue-leaflet'
@@ -36,7 +37,7 @@ L.Icon.Default.mergeOptions({
 })
 
 const playerStore = usePlayerStore()
-const { currentMedia, isPlaying, brightness, isConnected } = storeToRefs(playerStore)
+const { currentMedia, isPlaying, brightness, isDisplayOn, isConnected } = storeToRefs(playerStore)
 
 // Initialize WebSocket connection if not already connected
 onMounted(() => {
@@ -141,7 +142,10 @@ const zoom = ref(13)
           <div class="p-6 sm:p-8 bg-white dark:bg-gray-800/90 border-t border-gray-100 dark:border-gray-700/50">
             
             <!-- Transport Controls -->
-            <div class="flex items-center justify-center space-x-6 sm:space-x-10 mb-8">
+            <div class="flex items-center justify-center space-x-6 sm:space-x-10 mb-8 relative">
+              <button @click="playerStore.toggleDisplayPower()" :class="['absolute left-0 p-3 rounded-full transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/50 active:scale-95', isDisplayOn ? 'text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-500/10' : 'text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10']" :title="isDisplayOn ? 'Turn Display Off' : 'Turn Display On'">
+                <PowerIcon class="w-6 h-6" />
+              </button>
               <button @click="playerStore.previous()" class="p-4 rounded-full hover:bg-gray-100 dark:hover:bg-gray-700/50 text-gray-500 dark:text-gray-400 hover:text-indigo-600 dark:hover:text-indigo-400 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/50 active:scale-95">
                 <BackwardIcon class="w-8 h-8" />
               </button>

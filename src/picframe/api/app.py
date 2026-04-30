@@ -143,8 +143,13 @@ def create_app(
                             elif command_str == "PLAY":
                                 event_publisher.publish(CommandEvent(command=Command.PLAY))
                             elif command_str == "SET_BRIGHTNESS":
-                                # TODO: Implement brightness handling in PlaybackEngine or a dedicated service
-                                logger.warning("SET_BRIGHTNESS command received but not yet fully implemented in backend")
+                                value = payload.get("value")
+                                if value is not None:
+                                    event_publisher.publish(CommandEvent(command=Command.SET_BRIGHTNESS, payload=float(value)))
+                            elif command_str == "DISPLAY_ON":
+                                event_publisher.publish(CommandEvent(command=Command.DISPLAY_ON))
+                            elif command_str == "DISPLAY_OFF":
+                                event_publisher.publish(CommandEvent(command=Command.DISPLAY_OFF))
                     except json.JSONDecodeError:
                         logger.error("Invalid JSON received on websocket")
             except WebSocketDisconnect:

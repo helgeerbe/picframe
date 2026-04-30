@@ -37,6 +37,10 @@ class MockDisplayPower(IDisplayPower):
         state = "ON" if self._is_on else "OFF"
         logger.info(f"MockDisplayPower: Display toggled {state}.")
 
+    def set_brightness(self, value: float) -> None:
+        """Simulate setting the display brightness."""
+        logger.info(f"MockDisplayPower: Brightness set to {value:.2f}.")
+
     def is_on(self) -> bool:
         """
         Check the simulated display power state.
