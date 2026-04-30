@@ -197,68 +197,9 @@ To ensure system resilience, the `PlaybackEngine` will implement a global except
 
 ## 5. Work Breakdown Structure (WBS)
 
-*Note: This WBS is structured into Vertical Slices. Each phase delivers a functional, testable increment of the product, ensuring continuous usability rather than relying on a final "big bang" integration. All tasks below are tracked via GitHub Issues and must be labeled with `next gen`.*
+*Note: The detailed Work Breakdown Structure (WBS) and task tracking have been migrated to GitHub to establish a single source of truth.*
 
-### Phase 0: Technical Spike (Video Handoff PoC)
-*Goal: De-risk the most complex technical challenge by proving the seamless EGL/OpenGL context handoff between pi3d and GStreamer on target hardware before building the full architecture.*
-- [x] **Task 0.1:** Develop a standalone Python script accepting an image, a video, and display dimensions.
-- [x] **Task 0.2:** Implement the pi3d rendering loop to load the image and alpha-blend into the extracted first frame of the video.
-- [x] **Task 0.3:** Integrate a GStreamer pipeline (enforcing hardware decoding e.g., `v4l2h264dec`) and manage window Z-order/layering to ensure it renders correctly relative to pi3d.
-- [x] **Task 0.4:** Implement an IPC/Bus watch mechanism to detect the GStreamer End of Stream (EOS) signal.
-- [x] **Task 0.5:** Trigger the pi3d alpha-blend from the extracted last frame of the video to the next image upon EOS.
-- [x] **Task 0.6:** Capture and output performance metrics (pi3d FPS during blend, transition latency, CPU/RAM usage).
-
-### Phase 1: Core Image MVP (The "Walking Skeleton")
-*Goal: A functional, headless digital picture frame that reads from SQLite and renders images via pi3d in a continuous loop.*
-- [x] **Task 1.0:** Phase 1 Readiness & Prerequisites: Define database schemas, event dictionary, CI/CD pipeline, and development environment.
-- [x] **Task 1.1:** Modernize packaging (PEP 621): Migrate to `pyproject.toml`, `setuptools_scm`, and configure developer tooling (pytest, mypy, ruff).
-- [x] **Task 1.2:** Implement the thread-safe `PriorityQueue` Event Bus with `IEventPublisher`/`IEventSubscriber` interfaces and define core Immutable DTO `Events`.
-- [ ] **Task 1.3:** Implement the Dual-Database Repositories (`IConfigRepository`, `IMediaRepository`) using SQLite.
-- [ ] **Task 1.4:** Implement the Unified `MetadataExtractor` (Strategy Pattern for images) and decouple `GeoReverse` API calls.
-- [ ] **Task 1.5:** Implement the `PlaylistManager` (media querying, filtering, shuffle logic) and `ImageProcessingService` (matting/caching).
-- [ ] **Task 1.6:** Refactor `ViewerDisplay` into a decoupled `Pi3dRenderer` that only responds to `RenderCommands`.
-- [ ] **Task 1.7:** Implement the `PlaybackEngine` (State Machine) and the Composition Root (`main.py`) to wire dependencies and start the main render loop.
-
-### Phase 2: Control Plane & UI (Subphased)
-*Goal: Make the MVP controllable via a modern Web UI, MQTT, and physical buttons, with real-time state reflection. Split into subphases to manage complexity and integration risk.*
-
-#### Subphase 2A: Hardware Abstraction & External Inputs
-*Goal: Establish the HAL and integrate physical/legacy control mechanisms into the EDA.*
-- [ ] **Task 2A.1:** Implement OS-Specific Hardware Abstraction Layer (HAL) Injection (Issue #626).
-- [ ] **Task 2A.2:** Extract Display Power Management to HAL (Issue #620).
-- [ ] **Task 2A.3:** Implement `HardwareInputService` (Issue #606).
-- [ ] **Task 2A.4:** Refactor MQTT Client to publish `CommandEvents` (Issue #605).
-- [ ] **Task 2A.5:** Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631).
-
-#### Subphase 2B: The Web Control Plane & CLI
-*Goal: Build the CLI, FastAPI backend, and Vue.js SPA for real-time administration and playback control.*
-- [ ] **Task 2B.1:** Implement CLI (`init` and `run` commands) and `EnvironmentBootstrapper` for `~/.picframe` setup (Issue #632).
-- [ ] **Task 2B.2:** Implement FastAPI Backend (REST API, WebSockets, serving static Vue files) (Issue #603).
-- [ ] **Task 2B.3:** Develop Vue.js SPA (Media Player, Admin Dashboard) (Issue #604).
-- [ ] **Task 2B.4:** Implement Environment/Argument Parsing for Database Paths (Issue #628).
-- [ ] **Task 2B.5:** Load Renderer Configuration from Config Repository (Issue #630).
-
-#### Subphase 2C: Advanced Rendering & Feature Parity
-*Goal: Close the gap with the legacy system regarding complex image processing and dynamic overlays.*
-- [ ] **Task 2C.1:** Decouple Dynamic Overlays (Clock & Text) from Core Renderer (Issue #621).
-- [ ] **Task 2C.2:** Implement missing `ImageProcessingService` features (Matting, Text/EXIF overlays) (Issue #619).
-- [ ] **Task 2C.3:** Implement missing `PlaylistManager` features (Portrait Pairs, Filtering, Sorting) (Issue #618).
-
-### Phase 3: Video Engine Integration
-*Goal: Add multimedia support with seamless transitions between images and hardware-accelerated video.*
-- [ ] **Task 3.1:** Extend `MetadataExtractor` with the `VideoMetadataStrategy` (using ffprobe).
-- [ ] **Task 3.2:** Create the `GstVideoRenderer` script utilizing hardware-accelerated pipelines (`v4l2h264dec`).
-- [ ] **Task 3.3:** Implement IPC command handling and bus message monitoring (EOS, ERROR) for the GStreamer subprocess.
-- [ ] **Task 3.4:** Implement the precise handoff logic in the `PlaybackEngine` (`pi3d` alpha to 0 -> GStreamer `PLAYING`).
-
-### Phase 4: Advanced System Services & Polish
-*Goal: Feature-complete, production-ready system with background monitoring, scheduling, and legacy migration support.*
-- [ ] **Task 4.1:** Implement the `MediaMonitorService` (using `watchdog`) to run in a background thread and publish `FileChangeEvent`s.
-- [ ] **Task 4.2:** Implement the `SchedulerService` to handle time-based display sleep/wake schedules.
-- [ ] **Task 4.3:** Define the `IDisplayPower` port and implement the `DisplayPowerManager` with OS-specific adapters (`WaylandPower`, `XsetPower`, `UbuntuPower`).
-- [ ] **Task 4.4:** Define the `ISystemManager` port and implement OS-specific adapters for reboot/shutdown commands.
-- [ ] **Task 4.5:** Implement the Configuration Migration Adapter (YAML to `config.db3`).
-- [ ] **Task 4.6:** Comprehensive integration testing, verify "Poison Pill" error handling, and clean up legacy code (remove VLC dependencies, old `setup.py`).
+Please refer to the **[GitHub Project Board](https://github.com/users/helgeerbe/projects/3/views/2)** and the project's **GitHub Issues** for the current, authoritative list of phases, epics, and individual tasks.
 
 ## 6. Phase 1: Core Image MVP Architecture & Implementation Plan
 
@@ -268,38 +209,7 @@ Phase 1 establishes the foundational Clean Architecture and Event-Driven backbon
 *   **Application Layer:** The `PriorityQueue` Event Bus will be established as the sole communication mechanism.
 *   **Infrastructure Layer:** SQLite repositories will replace YAML. The legacy `ViewerDisplay` will be stripped of all orchestration logic, becoming a pure `Pi3dRenderer` adapter that only responds to `RenderCommand`s.
 
-### 6.2 Detailed Work Breakdown Structure (Phase 1)
-*   **Task 1.0: Phase 1 Readiness & Prerequisites**
-    *   1.0.1: Define and document exact SQL schema definitions for `config.db3` and `media_cache.db3`.
-    *   1.0.2: Define a comprehensive list of all Event DTOs, their payloads, and their priority levels.
-    *   1.0.3: Establish a basic GitHub Actions workflow to enforce the Definition of Done (running `ruff`, `mypy`, and `pytest` on every PR).
-    *   1.0.4: Ensure all developers have access to the required system packages (e.g., `libegl1`, `libgles2`) for local testing, even if using headless mode.
-*   **Task 1.1: Modernize Packaging & Tooling**
-    *   1.1.1: Create `pyproject.toml` (PEP 621) with `setuptools_scm`.
-    *   1.1.2: Configure `ruff` (linting/formatting), `mypy` (strict type checking), and `pytest`.
-    *   1.1.3: Remove legacy `setup.py`, `setup.cfg`, `versioneer.py`, and `tox.ini`.
-*   **Task 1.2: Core Event Bus Implementation**
-    *   1.2.1: Define immutable Event DTOs (`CommandEvent`, `StateEvent`, `RenderCommand`, `MediaChangedEvent`).
-    *   1.2.2: Implement `PriorityQueueEventBus` adhering to `IEventPublisher` and `IEventSubscriber` protocols.
-*   **Task 1.3: Dual-Database Repositories & Migrations**
-    *   1.3.1: Define `IConfigRepository` and `IMediaRepository` interfaces.
-    *   1.3.2: Design SQLite schemas for `config.db3` and `media_cache.db3`, including a `schema_version` table.
-    *   1.3.3: Implement the standardized migration mechanism to apply sequential SQL updates.
-    *   1.3.4: Implement concrete SQLite adapters with connection pooling/thread safety.
-*   **Task 1.4: Unified Metadata Extractor (Images)**
-    *   1.4.1: Define `MediaItem` domain model.
-    *   1.4.2: Implement `ImageMetadataStrategy` using `PIL` and `exifread`.
-*   **Task 1.5: Playlist & Image Processing**
-    *   1.5.1: Implement `PlaylistManager` (querying DB, shuffling, history tracking).
-    *   1.5.2: Implement `ImageProcessingService` (matting, resizing, caching logic).
-*   **Task 1.6: Pi3dRenderer Refactoring**
-    *   1.6.1: Extract OpenGL/pi3d drawing logic from legacy `ViewerDisplay`.
-    *   1.6.2: Implement `execute(RenderCommand)` interface. Ensure it runs synchronously in the main thread.
-*   **Task 1.7: PlaybackEngine & Composition Root**
-    *   1.7.1: Implement `PlaybackEngine` state machine (IDLE, PLAYING, TRANSITIONING).
-    *   1.7.2: Create `main.py` to instantiate all components, inject dependencies, and start the Event Bus and Render loops.
-
-### 6.3 Comprehensive Test Strategy
+### 6.2 Comprehensive Test Strategy
 *   **Unit Testing (Domain & Application):** 100% coverage required for `PlaybackEngine`, `PlaylistManager`, and `EventBus`. These will be tested using a `MockRenderer` and `MockRepositories` to ensure state transitions and queue priorities function correctly without hardware dependencies.
 *   **Integration Testing (Infrastructure):** SQLite repositories will be tested against in-memory databases (`:memory:`) to verify schema correctness and query logic.
 *   **Pi3d & GStreamer Integration Testing (Phase 1 & Forward-Looking):**

@@ -11,58 +11,14 @@ This file tracks the project's progress using a task list format.
 
 *   [2026-04-28 09:26:00] - Phase 0: Technical Spike (Video Handoff PoC)
 *   [2026-04-23 11:19:00] - Architectural Planning & Documentation (Clean Architecture, EDA, Dual-Database, HAL, Frontend Spec)
+*   [x] Phase 0: Technical Spike (Video Handoff PoC)
+*   [x] Phase 1: Core Image MVP (The "Walking Skeleton")
 
 ## Current Tasks
 
-*   [x] Phase 0: Technical Spike (Video Handoff PoC)
-    *   [x] Task 0.1: Develop standalone PoC script
-    *   [x] Task 0.2: Implement pi3d image to first-frame blend
-    *   [x] Task 0.3: Integrate GStreamer with HW decoding & Z-order
-    *   [x] Task 0.4: Implement EOS detection
-    *   [x] Task 0.5: Implement last-frame to next image blend
-    *   [x] Task 0.6: Capture performance metrics
-*   [x] Phase 1: Core Image MVP (The "Walking Skeleton")
-    *   [x] Task 1.0: Phase 1 Readiness & Prerequisites
-    *   [x] Task 1.1: Modernize packaging (PEP 621)
-    *   [x] Task 1.2: Implement PriorityQueue Event Bus
-    *   [x] Task 1.3: Implement Dual-Database Repositories
-    *   [x] Task 1.4: Implement Unified MetadataExtractor (Images)
-    *   [x] Task 1.5: Implement PlaylistManager & ImageProcessingService
-    *   [x] Task 1.6: Refactor ViewerDisplay to Pi3dRenderer
-    *   [x] Task 1.7: Implement PlaybackEngine & Composition Root
+*   [-] Phase 2: Control Plane & UI (Subphased)
 
 ## Next Steps
-
-*   [-] Phase 2: Control Plane & UI (Subphased)
-    *   [x] Subphase 2A: Hardware Abstraction & External Inputs (HAL, Power, Input, MQTT, PlaybackEngine Refactor)
-        *   [x] Task 2A.1: HAL Injection & Mock Adapters
-        *   [x] Task 2A.2: Extract Display Power Management to Hardware Abstraction Layer (Issue #620)
-        *   [x] Task 2A.3: HardwareInputService Implementation (Issue #606)
-        *   [x] Task 2A.4: MQTT Client Refactoring (Issue #605)
-        *   [x] Task 2A.5: Refactor PlaybackEngine State Enum and Event Bus Type Hints (Issue #631)
-    *   [-] Subphase 2B: The Web Control Plane & CLI (FastAPI, Vue.js SPA, CLI Init, Config Loading)
-        *   [x] Task 2B.1: CLI and EnvironmentBootstrapper (Issue #632)
-        *   [x] Task 2B.2: FastAPI Backend Setup & Configuration (Issue #603)
-        *   [x] Task 2B.3: Vue.js SPA Development (Issue #604)
-        *   [x] Task 2B.4: Implement Environment/Argument Parsing for Database Paths (Issue #628)
-        *   [x] Task 2B.5: Vue.js SPA Implementation (Issue #630)
-        *   [ ] Task 2B.6: Integration & E2E Testing (Issue #635)
-        *   [ ] Task 2B.7: Update README and User Documentation (Issue #638)
-        *   [x] Task 2B.8: Frontend Build Pipeline and FastAPI Static Asset Integration (Issue #640)
-        *   [ ] Task 2B.9: Migration Script for Legacy configuration.yaml to SQLite (Issue #642)
-        *   [ ] Task 2B.10: Comprehensive API Documentation (Issue #643)
-    *   [ ] Subphase 2C: Advanced Rendering & Feature Parity (Overlays, Matting, Portrait Pairs)
 *   [ ] Phase 3: Video Engine Integration
-    *   [ ] Task 3.1: Extend MetadataExtractor for Video
-    *   [ ] Task 3.2: Create GstVideoRenderer
-    *   [ ] Task 3.3: Implement IPC command handling
-    *   [ ] Task 3.4: Implement pi3d <-> GStreamer handoff logic
 *   [ ] Phase 4: Advanced System Services & Polish
-    *   [ ] Task 4.1: Implement MediaMonitorService
-    *   [ ] Task 4.2: Implement SchedulerService
-    *   [ ] Task 4.3: Implement DisplayPowerManager
-    *   [ ] Task 4.4: Implement SystemManager
-    *   [ ] Task 4.5: Implement Configuration Migration Adapter
-    *   [ ] Task 4.6: Comprehensive integration testing & cleanup
-* [2026-04-29 15:45:00] - Completed Task 2B.3: Vue.js SPA Development (Issue #604)
-* [2026-04-29 16:00:00] - Completed Task 2B.4: Implement Environment/Argument Parsing for Database Paths (Issue #628)
+
