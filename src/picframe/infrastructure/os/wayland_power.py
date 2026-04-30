@@ -17,18 +17,21 @@ logger = logging.getLogger(__name__)
 class WaylandDisplayPower(IDisplayPower):
     """
     Concrete implementation of IDisplayPower for Wayland using wlr-randr.
+    Uses ddcutil for external monitor brightness and brightnessctl for internal displays.
     """
 
-    def __init__(self, display_output: str = "HDMI-A-1") -> None:
+    def __init__(self, display_output: str = "HDMI-A-1", is_external: bool = True) -> None:
         """
         Initialize the Wayland display power adapter.
 
         Args:
             display_output: The name of the Wayland output to control (e.g., 'HDMI-A-1').
+            is_external: Whether the display is external (uses ddcutil) or internal (uses brightnessctl).
         """
         self._is_on = True
         self._display_output = display_output
-        logger.info(f"WaylandDisplayPower initialized for output: {self._display_output}")
+        self.is_external = is_external
+        logger.info(f"WaylandDisplayPower initialized for output: {self._display_output}, external: {self.is_external}")
 
     def turn_on(self) -> None:
         """Turn the display on using wlr-randr."""
@@ -66,6 +69,31 @@ class WaylandDisplayPower(IDisplayPower):
             self.turn_off()
         else:
             self.turn_on()
+
+    def set_brightness(self, value: float) -> None:
+        """Set the display brightness (0.0 to 1.0)."""
+        percent_int = max(0, min(100, int(value * 100)))
+        
+        if self.is_external:
+            # Use ddcutil for HDMI/DP monitors
+            try:
+                subprocess.run(
+                    ["ddcutil", "setvcp", "10", str(percent_int)],
+                    check=True, capture_output=True, timeout=5.0
+                )
+                logger.info(f"Set external monitor brightness to {percent_int}%")
+            except Exception as e:
+                logger.error(f"Failed to set external brightness via ddcutil: {e}")
+        else:
+            # Use brightnessctl for internal/DSI displays
+            try:
+                subprocess.run(
+                    ["brightnessctl", "set", f"{percent_int}%"],
+                    check=True, capture_output=True
+                )
+                logger.info(f"Set internal display brightness to {percent_int}%")
+            except Exception as e:
+                logger.error(f"Failed to set internal brightness via brightnessctl: {e}")
 
     def is_on(self) -> bool:
         """

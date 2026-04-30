@@ -261,4 +261,11 @@ sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb
 ### 4.2 Raspberry Pi (Target Hardware)
 ```bash
 sudo apt-get update
-sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev
+sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev ddcutil brightnessctl
+```
+
+**Note on Display Power Management:**
+To allow the application to control display brightness without root privileges, ensure the user running the application is added to the appropriate groups:
+```bash
+sudo usermod -aG i2c $USER    # For ddcutil (external HDMI/DP monitors)
+sudo usermod -aG video $USER  # For brightnessctl (internal DSI/eDP displays)
