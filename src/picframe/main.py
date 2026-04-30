@@ -59,18 +59,18 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     display_power_manager = DisplayPowerManager(event_bus, hal_adapters.display_power)
 
     # 5. Initialize Renderer
-    # TODO: Load config from config_repo
-    renderer_config: dict[str, Any] = {
+    default_renderer_config: dict[str, Any] = {
         "blur_amount": 12,
         "blur_zoom": 1.0,
         "blur_edges": False,
         "edge_alpha": 0.5,
         "fps": 20.0,
         "background": (0.2, 0.2, 0.2, 1.0),
-        "font_file": "src/picframe/data/fonts/NotoSans-Regular.ttf",
-        "shader": "src/picframe/data/shaders/blend_new",
+        "font_file": os.path.join(data_dir, "fonts", "NotoSans-Regular.ttf"),
+        "shader": os.path.join(data_dir, "shaders", "blend_new"),
         "use_sdl2": True,
     }
+    renderer_config = _config_repo.get_app_config("renderer", default_renderer_config)
     renderer = Pi3dRenderer(renderer_config)
 
     # 6. Initialize Engine
