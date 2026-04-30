@@ -11,9 +11,9 @@ from picframe.core.events.dto import (
     RenderCommand,
     State,
     StateEvent,
+    CurrentMediaChangedEvent,
 )
-from picframe.core.events.bus import IEventPublisher, IEventSubscriber
-from picframe.core.events.bus import IEventPublisher, IEventSubscriber
+from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.services.playlist import PlaylistManager
 
@@ -139,6 +139,9 @@ class PlaybackEngine:
             render_cmd = RenderCommand(image_path=media_item.filepath)
             self._renderer.execute(render_cmd)
             
+            # Publish media changed event
+            self._event_publisher.publish(CurrentMediaChangedEvent(media_item=media_item))
+            
             # Update timer
             self._next_transition_time = time.time() + self._time_delay
             
@@ -158,6 +161,9 @@ class PlaybackEngine:
             # Send render command
             render_cmd = RenderCommand(image_path=media_item.filepath)
             self._renderer.execute(render_cmd)
+            
+            # Publish media changed event
+            self._event_publisher.publish(CurrentMediaChangedEvent(media_item=media_item))
             
             # Update timer
             self._next_transition_time = time.time() + self._time_delay

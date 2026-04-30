@@ -62,6 +62,7 @@ class MediaItem:
             A dictionary representation of the media item.
         """
         return {
+            "id": self.id,
             "filepath": self.filepath,
             "filename": self.filename,
             "directory_id": self.directory_id,

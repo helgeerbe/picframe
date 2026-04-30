@@ -82,7 +82,12 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     )
 
     # 7. Initialize Web Server
-    app = create_app()
+    cors_origins = _config_repo.get_app_config("cors_allowed_origins", ["*"])
+    app = create_app(
+        event_publisher=event_bus,
+        event_subscriber=event_bus,
+        cors_allowed_origins=cors_origins,
+    )
     web_server = WebServer(app, port=port)
 
     # 8. Setup Graceful Shutdown

@@ -83,6 +83,13 @@ class EnvironmentBootstrapper:
                 if not dest_item.exists():
                     shutil.copy2(item, dest_item)
                     logger.debug(f"Copied file {item.name} to {dest_item}")
+        
+        # Ensure no_pictures.jpg is copied to the root of the data directory
+        no_pictures_src = pkg_data_dir / "no_pictures.jpg"
+        no_pictures_dest = self.data_dir / "no_pictures.jpg"
+        if no_pictures_src.exists() and not no_pictures_dest.exists():
+            shutil.copy2(no_pictures_src, no_pictures_dest)
+            logger.debug(f"Copied fallback image to {no_pictures_dest}")
 
     def _initialize_databases(self) -> None:
         """

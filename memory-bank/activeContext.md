@@ -78,3 +78,5 @@
 - Developed the dynamic "Settings" view with JSON schema parsing and i18n support.
 - Configured the Vite build pipeline to output static assets directly to `src/picframe/html` for FastAPI integration.
 - Current focus shifts to setting up the FastAPI backend (Task 2B.2 / Issue #603) to serve the SPA and provide REST/WebSocket endpoints.
+## [2026-04-30 12:04:52] - Completed Issue #645: Media Delivery and Fallback Image Implementation
+## [2026-04-30 12:04:52] - Completed Issue #645: Media Delivery and Fallback Image Implementation

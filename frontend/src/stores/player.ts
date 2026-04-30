@@ -38,6 +38,21 @@ export const usePlayerStore = defineStore('player', () => {
         const data = JSON.parse(event.data)
         if (data.type === 'MediaChangedEvent') {
           currentMedia.value = data.media
+          // Always prepend the host/port if it's a relative path, not just in DEV
+          // This ensures it works when served from the backend or a separate frontend server
+          if (currentMedia.value?.file_path?.startsWith('/')) {
+            const port = import.meta.env.DEV ? '9000' : window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
+            const host = window.location.hostname
+            const protocol = window.location.protocol
+            
+            // If we're in DEV, we know the backend is on 9000.
+            // If we're in PROD, the backend is serving the frontend, so we use the current origin.
+            if (import.meta.env.DEV) {
+              currentMedia.value.file_path = `http://${host}:9000${currentMedia.value.file_path}`
+            } else {
+              currentMedia.value.file_path = `${protocol}//${host}${port ? ':' + port : ''}${currentMedia.value.file_path}`
+            }
+          }
         } else if (data.type === 'StateEvent') {
           if (data.state === 'PLAYING') isPlaying.value = true
           if (data.state === 'PAUSED') isPlaying.value = false

@@ -59,10 +59,16 @@ def test_copy_assets(mock_iterdir, mock_exists, mock_shutil, temp_dir):
         pass
         
     # Let's just mock the pkg_data_dir.exists() directly
-    with patch('picframe.core.services.bootstrapper.Path.exists', side_effect=[True, False, False]):
+    # We need enough side_effects for:
+    # 1. pkg_data_dir.exists() -> True
+    # 2. dest_item.exists() for file -> False
+    # 3. dest_item.exists() for dir -> False
+    # 4. no_pictures_src.exists() -> True
+    # 5. no_pictures_dest.exists() -> False
+    with patch('picframe.core.services.bootstrapper.Path.exists', side_effect=[True, False, False, True, False]):
         bootstrapper._copy_assets()
     
-    mock_shutil.copy2.assert_called_once()
+    assert mock_shutil.copy2.call_count == 2
     mock_shutil.copytree.assert_called_once()
 
 

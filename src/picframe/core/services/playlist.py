@@ -148,10 +148,17 @@ class PlaylistManager:
         Returns a placeholder MediaItem when no images are available.
         """
         import os
-        # Assuming a default path for the 'no pictures' image based on
-        # the project structure. This could be made configurable later.
-        base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-        no_pic_path = os.path.join(base_dir, "data", "no_pictures.jpg")
+        
+        # First try to find it in the user's configuration directory
+        user_dir = os.path.expanduser("~/.picframe")
+        user_no_pic_path = os.path.join(user_dir, "data", "no_pictures.jpg")
+        
+        if os.path.exists(user_no_pic_path):
+            no_pic_path = user_no_pic_path
+        else:
+            # Fallback to the source code directory
+            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
+            no_pic_path = os.path.join(base_dir, "data", "no_pictures.jpg")
         
         return MediaItem(
             id=0,

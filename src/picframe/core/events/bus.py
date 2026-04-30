@@ -26,12 +26,13 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
     def __init__(self) -> None:
         """Initialize the event bus with an empty queue and subscriber dict."""
         self._subscribers: dict[type, list[Callable[[Any], None]]] = {}
-        self._queue: queue.PriorityQueue[tuple[int, Any]] = (
+        self._queue: queue.PriorityQueue[tuple[int, int, Any]] = (
             queue.PriorityQueue()
         )
         self._lock = threading.Lock()
         self._running = False
         self._worker_thread: threading.Thread | None = None
+        self._counter = 0
 
     def subscribe(
         self, event_type: type, callback: Callable[[Any], None]
@@ -58,7 +59,9 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
 
         The event is placed in a PriorityQueue, sorted by its priority.
         """
-        self._queue.put((event.priority, event))
+        with self._lock:
+            self._counter += 1
+            self._queue.put((event.priority, self._counter, event))
 
     def start(self) -> None:
         """Start the background worker thread to process events."""
@@ -76,7 +79,8 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
         with self._lock:
             self._running = False
             # Put a dummy event to unblock the queue if it's waiting
-            self._queue.put((0, None))
+            self._counter += 1
+            self._queue.put((0, self._counter, None))
             if self._worker_thread:
                 self._worker_thread.join()
 
@@ -90,8 +94,9 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
         while self._running:
             try:
                 # Block until an item is available
-                _, event = self._queue.get(timeout=1.0)
+                _, _, event = self._queue.get(timeout=1.0)
                 if event is None:
+                    self._queue.task_done()
                     continue  # Stop signal
 
                 event_type = type(event)
