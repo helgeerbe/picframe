@@ -44,40 +44,25 @@ A dedicated panel surfacing the `MediaItem` DTO properties:
 
 ### 4.3 Dynamic OpenStreetMap Component
 
-The `MapComponent` is a standalone Vue component responsible for rendering an interactive map using Leaflet.js (`@vue-leaflet/vue-leaflet`).
+The `MapComponent` is a standalone Vue component responsible for rendering an interactive map using Leaflet.js (`@vue-leaflet/vue-leaflet`). It is a distinct UI element in the Remote UI, completely separate from the text overlay controls.
 
-*   **Conditional Rendering:** The component only renders if valid `latitude` and `longitude` props are provided.
-*   **Props:**
-    *   `latitude` (Number): The latitude coordinate.
-    *   `longitude` (Number): The longitude coordinate.
-    *   `locationName` (String): An optional reverse-geocoded location string to display above the map.
-*   **Behavior:**
-    *   Automatically centers the map on the provided coordinates.
-    *   Places a marker at the exact location.
-    *   Displays the `locationName` (if available) using internationalization (i18n) for the label.
+*   **Conditional Rendering:** The component is conditionally rendered *only* if the current `MediaItem` DTO contains valid `latitude` and `longitude` properties.
+*   **Implementation:** Utilizes Leaflet.js to embed an interactive OpenStreetMap.
+*   **Features:**
+    *   Centers the map on the media's exact coordinates with a custom marker.
+    *   Displays reverse-geocoded location text fetched from the metadata directly above the map.
 *   **Separation of Concerns:** This component operates entirely independently of the backend pi3d rendering pipeline and text overlay features. It is a purely frontend UI element.
 
-*   **Trigger:** Conditionally rendered *only* if the current `MediaItem` DTO contains valid `latitude` and `longitude` properties.
-*   **Implementation:** Uses Leaflet.js to embed an interactive OpenStreetMap.
-*   **Features:**
-    *   Centers the map on the media's coordinates.
-    *   Places a custom marker at the exact location.
-    *   Displays reverse-geocoded location text (e.g., "Berlin, Germany") fetched from the metadata above the map.
-
 ### 4.4 Text Overlay Controls
-A dedicated panel to manage text overlays on the currently playing media.
+A dedicated panel (`TextOverlayControls.vue`) to manage text overlays on the currently playing media.
+*   **Separation of Concerns:** These controls strictly toggle the text overlays within the backend pi3d render pipeline. They do not affect, hide, or toggle any text elements within the frontend UI itself.
 *   **Configuration Payload:** All settings are collected and transmitted as a unified configuration payload using a `SET_CONFIG` command over the WebSocket connection.
-*   **Helper Text System:** A generalized, reusable helper text system is implemented for all UI elements.
+    *   Example Payload: `{ "command": "SET_CONFIG", "payload": { "viewer": { "show_clock": true, "show_text": "title caption name date folder location" } } }`
+*   **Helper Text System (`HelperText.vue`):** A generalized, reusable helper text system is implemented for all UI elements.
     *   **Presentation Format:** The UI dynamically decides the presentation format based on the length and complexity of the helper text.
         *   **Hover Tooltip:** Used for short, simple descriptions.
         *   **Circled "i" Icon:** Used for longer, more complex descriptions. Clicking the icon opens a pop-up dialog containing the helper text and a close button.
     *   **Internationalization:** All helper texts are defined in the language JSON files (e.g., `en.json`, `de.json`).
-*   **Trigger:** Conditionally rendered *only* if the current `MediaItem` DTO contains valid `latitude` and `longitude` properties.
-*   **Implementation:** Uses Leaflet.js to embed an interactive OpenStreetMap.
-*   **Features:** 
-    *   Centers the map on the media's coordinates.
-    *   Places a custom marker at the exact location.
-    *   Displays reverse-geocoded location text (e.g., "Berlin, Germany") fetched from the metadata above the map.
 
 ---
 
