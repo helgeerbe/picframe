@@ -65,12 +65,12 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Reasoning & Benefits:** This strictly adheres to Hexagonal Architecture by preventing external communication protocols from polluting the domain. It supports both push (MQTT/WebSockets via event subscription) and pull (REST API via state query) models efficiently without duplicating state management logic.
 
 ### 2.13 Pi3d Rendering Pipeline & State Machine
-*   **Concept:** The monolithic `Pi3dRenderer` is decomposed into specialized, focused rendering components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`) that share a single `pi3d.Display` instance. The render loop operates as a formal State Machine (e.g., `Transitioning` -> `KenBurnsActive` -> `TextFadingIn` -> `Static`), managed by a local, synchronous `PriorityQueue` for internal render events.
+*   **Concept:** The monolithic `Pi3dRenderer` is decomposed into specialized, focused rendering components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`) that share a single `pi3d.Display` instance. The render loop operates as a formal, lightweight State Machine implemented via a custom Python `Enum` (`RenderState`) and explicit transition handlers, rather than relying on heavy external libraries.
 *   **Reasoning & Benefits:**
-    *   **Componentization:** Separating concerns makes the rendering logic cleaner and easier to maintain.
-    *   **State Machine:** Replaces complex, fragile conditional blocks with predictable state transitions, preventing overlapping animations when slide durations are short.
-    *   **Local Event Queue:** Keeps high-frequency, synchronous render events (like "transition complete, start text fade") off the main application Event Bus, ensuring the render loop doesn't suffer from asynchronous delays.
-    *   **Optimization:** By tracking the overall animation state, the engine can skip `pi3d.Display.loop_running()` when the screen is completely static or when a video is playing, significantly reducing CPU load and power consumption.
+    *   **Componentization:** Separating concerns makes the rendering logic cleaner and easier to maintain. The `Pi3dRenderer` acts as a facade, delegating specific drawing tasks to `TextRenderer` and `ClockRenderer` based on the `OverlayConfig` DTO received in the `RenderCommand`.
+    *   **Lightweight State Machine:** Using a custom `Enum` (e.g., `STATIC`, `IMAGE_TRANSITIONING`, `TEXT_FADING_IN`, `TEXT_SHOWING`, `TEXT_FADING_OUT`) guarantees zero-overhead performance in the critical 60fps render loop. It maintains strict type safety (`mypy` compatibility) and avoids the dynamic dispatch penalties associated with libraries like `transitions`.
+    *   **Predictable Transitions:** Replaces complex, fragile conditional blocks with explicit state transitions. For example, `IMAGE_TRANSITIONING` automatically advances to `TEXT_FADING_IN` once the image alpha reaches 1.0, preventing overlapping animations.
+    *   **Optimization:** By tracking the overall `RenderState`, the engine can easily identify when the screen is `STATIC`. In this state, it only needs to check the `ClockRenderer` for minute/second changes, allowing it to safely skip `pi3d.Display.loop_running()` and sleep, drastically reducing CPU load and power consumption.
 
 ## 3. System Diagrams
 
