@@ -160,6 +160,10 @@ def create_app(
                                 event_publisher.publish(CommandEvent(command=Command.REBOOT_HOST))
                             elif command_str == "SHUTDOWN_HOST":
                                 event_publisher.publish(CommandEvent(command=Command.SHUTDOWN_HOST))
+                            elif command_str == "SET_CONFIG":
+                                config_payload = payload.get("payload")
+                                if config_payload is not None:
+                                    event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=config_payload))
                     except json.JSONDecodeError:
                         logger.error("Invalid JSON received on websocket")
             except WebSocketDisconnect:

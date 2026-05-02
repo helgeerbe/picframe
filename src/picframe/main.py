@@ -21,6 +21,7 @@ from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
 from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
 from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.bootstrapper import EnvironmentBootstrapper
+from picframe.core.services.config_service import ConfigService
 from picframe.infrastructure.os.hal_factory import HALFactory
 from picframe.api.app import create_app
 from picframe.api.server import WebServer
@@ -59,6 +60,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     display_power_manager = DisplayPowerManager(event_bus, hal_adapters.display_power)
     from picframe.core.services.system_manager import SystemManager
     system_manager = SystemManager(event_bus, hal_adapters.system_manager)
+    config_service = ConfigService(_config_repo, event_bus, event_bus)
 
     # 5. Initialize Renderer
     default_renderer_config: dict[str, Any] = {
@@ -73,7 +75,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         "use_sdl2": True,
     }
     renderer_config = _config_repo.get_app_config("renderer", default_renderer_config)
-    renderer = Pi3dRenderer(renderer_config)
+    renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus)
 
     # 6. Initialize Engine
     engine_config: dict[str, float] = {
@@ -105,6 +107,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         # and allow it to handle events until the bus stops.
         _ = display_power_manager
         _ = system_manager
+        _ = config_service
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)

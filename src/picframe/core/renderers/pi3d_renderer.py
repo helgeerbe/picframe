@@ -8,8 +8,9 @@ from typing import Any
 import pi3d
 from PIL import Image
 
-from picframe.core.events.dto import RenderCommand
+from picframe.core.events.dto import RenderCommand, StateEvent, State
 from picframe.core.renderers.interfaces import IRenderer
+from picframe.core.events.interfaces import IEventSubscriber
 
 
 class Pi3dRenderer(IRenderer):
@@ -20,15 +21,20 @@ class Pi3dRenderer(IRenderer):
     and executing image transitions (alpha blending, Ken Burns).
     """
 
-    def __init__(self, config: dict[str, Any]) -> None:
+    def __init__(self, config: dict[str, Any], event_subscriber: IEventSubscriber | None = None) -> None:
         """
         Initialize the renderer with configuration.
         
         Args:
             config: Dictionary containing display and rendering settings.
+            event_subscriber: Optional event subscriber to listen for config changes.
         """
         self._logger = logging.getLogger(__name__)
         self._config = config
+        self._event_subscriber = event_subscriber
+        
+        if self._event_subscriber:
+            self._event_subscriber.subscribe(StateEvent, self._handle_state_event)
         
         # Display settings
         self._display_x = int(config.get("display_x", 0))
@@ -69,6 +75,27 @@ class Pi3dRenderer(IRenderer):
         self._xstep = 0.0
         self._ystep = 0.0
         self._next_tm = 0.0
+        
+        # Text Overlay State
+        self._show_clock = bool(config.get("show_clock", False))
+        self._show_text = str(config.get("show_text", ""))
+
+    def _handle_state_event(self, event: Any) -> None:
+        if not isinstance(event, StateEvent):
+            return
+            
+        if event.state == State.CONFIG_CHANGED:
+            payload = event.payload or {}
+            updated_sections = payload.get("updated_sections", [])
+            
+            if "viewer" in updated_sections:
+                self._logger.info("Renderer received CONFIG_CHANGED for viewer section. Updating overlay state.")
+                # In a full implementation, we would fetch the new config from the repository.
+                # For now, we'll just log that we need to update the overlays.
+                # Note: Actual pi3d text rendering logic is deferred to Phase 2C (Ticket #621).
+                # This will involve rebuilding the text textures based on the new config
+                # and updating the pi3d sprites in a specialized TextRenderer component.
+                self._logger.debug("Deferred: Rebuild text overlay textures based on new config (Phase 2C).")
 
     def start(self) -> None:
         """Initialize the pi3d display and sprite."""
