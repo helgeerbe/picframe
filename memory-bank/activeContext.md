@@ -12,6 +12,7 @@
 *   Next up: Implementing the CLI (`init` and `run` commands) and `EnvironmentBootstrapper` (Subphase 2B).
 
 ## Recent Changes
+- **[2026-05-02 13:40:00] - Completed Backend Event Plumbing for SET_CONFIG (Ticket #647)**: Actual pi3d text rendering deferred to Phase 2C (Ticket #621).
 - **[2026-04-30 14:50:00] - Completed Ticket #649 (Phase 2B: System Actions)**: Implemented host-level reboot/shutdown, media deletion (move to `deleted_pictures`), and database purging via WebUI and EventBus.
 
 *   [2026-04-29 10:15:00] - Approved architecture for Phase 2 subphases (2A: HAL, 2B: Web/CLI, 2C: Rendering Parity).
@@ -82,6 +83,7 @@
 ## [2026-04-30 12:04:52] - Completed Issue #645: Media Delivery and Fallback Image Implementation
 
 ## [2026-04-30 14:53:00] - Planning Phase 2C: Rendering Parity & Enhancements
+## [2026-05-02 13:18:00] - Completed Frontend UI for Text Overlay Controls (Ticket #647) and MapComponent (Ticket #652). Backend tasks remain.
 *   **Current Focus:** Designing the architectural refactoring of the `pi3d` rendering engine based on feedback from Paddy (pi3d author).
 *   **Key Changes:**
     *   Decomposing `Pi3dRenderer` into specialized components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`).
