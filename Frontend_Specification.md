@@ -43,6 +43,35 @@ A dedicated panel surfacing the `MediaItem` DTO properties:
 *   **Caption/Tags:** Any associated IPTC tags or user-defined captions.
 
 ### 4.3 Dynamic OpenStreetMap Component
+
+The `MapComponent` is a standalone Vue component responsible for rendering an interactive map using Leaflet.js (`@vue-leaflet/vue-leaflet`).
+
+*   **Conditional Rendering:** The component only renders if valid `latitude` and `longitude` props are provided.
+*   **Props:**
+    *   `latitude` (Number): The latitude coordinate.
+    *   `longitude` (Number): The longitude coordinate.
+    *   `locationName` (String): An optional reverse-geocoded location string to display above the map.
+*   **Behavior:**
+    *   Automatically centers the map on the provided coordinates.
+    *   Places a marker at the exact location.
+    *   Displays the `locationName` (if available) using internationalization (i18n) for the label.
+*   **Separation of Concerns:** This component operates entirely independently of the backend pi3d rendering pipeline and text overlay features. It is a purely frontend UI element.
+
+*   **Trigger:** Conditionally rendered *only* if the current `MediaItem` DTO contains valid `latitude` and `longitude` properties.
+*   **Implementation:** Uses Leaflet.js to embed an interactive OpenStreetMap.
+*   **Features:**
+    *   Centers the map on the media's coordinates.
+    *   Places a custom marker at the exact location.
+    *   Displays reverse-geocoded location text (e.g., "Berlin, Germany") fetched from the metadata above the map.
+
+### 4.4 Text Overlay Controls
+A dedicated panel to manage text overlays on the currently playing media.
+*   **Configuration Payload:** All settings are collected and transmitted as a unified configuration payload using a `SET_CONFIG` command over the WebSocket connection.
+*   **Helper Text System:** A generalized, reusable helper text system is implemented for all UI elements.
+    *   **Presentation Format:** The UI dynamically decides the presentation format based on the length and complexity of the helper text.
+        *   **Hover Tooltip:** Used for short, simple descriptions.
+        *   **Circled "i" Icon:** Used for longer, more complex descriptions. Clicking the icon opens a pop-up dialog containing the helper text and a close button.
+    *   **Internationalization:** All helper texts are defined in the language JSON files (e.g., `en.json`, `de.json`).
 *   **Trigger:** Conditionally rendered *only* if the current `MediaItem` DTO contains valid `latitude` and `longitude` properties.
 *   **Implementation:** Uses Leaflet.js to embed an interactive OpenStreetMap.
 *   **Features:** 

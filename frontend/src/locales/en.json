@@ -10,7 +10,24 @@
     "unknownFile": "Unknown File",
     "mediaDetails": "Media Details",
     "noMetadata": "No metadata available",
-    "location": "Location"
+    "location": "Location",
+    "overlays": {
+      "title": "Text Overlays",
+      "clock": "Clock",
+      "clockHelper": "Toggle the clock display on the screen.",
+      "textTitle": "Title",
+      "textTitleHelper": "Show the title of the current media.",
+      "textCaption": "Caption",
+      "textCaptionHelper": "Show the caption or description of the current media.",
+      "textName": "File Name",
+      "textNameHelper": "Show the file name of the current media.",
+      "textDate": "Date",
+      "textDateHelper": "Show the date the media was taken or created.",
+      "textFolder": "Folder",
+      "textFolderHelper": "Show the folder name where the media is located.",
+      "textLocation": "Location",
+      "textLocationHelper": "Show the location where the media was taken."
+    }
   },
   "settings": {
     "title": "Configuration",

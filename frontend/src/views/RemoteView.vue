@@ -1,15 +1,14 @@
 <script setup lang="ts">
-import { onMounted, computed, ref } from 'vue'
+import { onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePlayerStore } from '../stores/player'
-import { 
+import {
    
    
-  ForwardIcon, 
+  ForwardIcon,
   BackwardIcon,
   SunIcon,
   PhotoIcon,
-  MapPinIcon,
   InformationCircleIcon,
   CameraIcon,
   CalendarIcon,
@@ -22,20 +21,8 @@ import {
   PowerIcon,
   TrashIcon as TrashIconSolid
 } from '@heroicons/vue/24/solid'
-import 'leaflet/dist/leaflet.css'
-import { LMap, LTileLayer, LMarker } from '@vue-leaflet/vue-leaflet'
-import L from 'leaflet'
-
-// Fix Leaflet icon issue with Vite
-import iconRetinaUrl from 'leaflet/dist/images/marker-icon-2x.png'
-import iconUrl from 'leaflet/dist/images/marker-icon.png'
-import shadowUrl from 'leaflet/dist/images/marker-shadow.png'
-
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl,
-  iconUrl,
-  shadowUrl,
-})
+import MapComponent from '../components/MapComponent.vue'
+import TextOverlayControls from '../components/TextOverlayControls.vue'
 
 const playerStore = usePlayerStore()
 const { currentMedia, isPlaying, brightness, isDisplayOn, isConnected } = storeToRefs(playerStore)
@@ -61,17 +48,6 @@ const handleBrightnessChange = (event: Event) => {
 }
 
 // Computed properties for safe access
-const hasLocation = computed(() => {
-  return currentMedia.value?.location?.lat != null && currentMedia.value?.location?.lon != null
-})
-
-const mapCenter = computed(() => {
-  if (hasLocation.value) {
-    return [currentMedia.value!.location!.lat, currentMedia.value!.location!.lon] as [number, number]
-  }
-  return [0, 0] as [number, number]
-})
-
 const exifData = computed(() => currentMedia.value?.exif || {})
 
 const formatExifKey = (key: string) => {
@@ -87,8 +63,6 @@ const getExifIcon = (key: string) => {
   return InformationCircleIcon
 }
 
-// Map zoom level
-const zoom = ref(13)
 </script>
 
 <template>
@@ -187,6 +161,9 @@ const zoom = ref(13)
       <!-- Right Column: Metadata & Map -->
       <div class="xl:col-span-5 flex flex-col space-y-6">
         
+        <!-- Text Overlay Controls -->
+        <TextOverlayControls />
+
         <!-- Metadata Card -->
         <div class="bg-white dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden flex-grow">
           <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
@@ -216,30 +193,11 @@ const zoom = ref(13)
         </div>
 
         <!-- Map Card -->
-        <div v-if="hasLocation" class="bg-white dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden flex flex-col h-[350px]">
-          <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between z-10 bg-white dark:bg-gray-800/90">
-            <div class="flex items-center space-x-3 overflow-hidden">
-              <div class="p-2 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg flex-shrink-0">
-                <MapPinIcon class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-              </div>
-              <h3 class="text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
-                {{ exifData.location_name || 'Location' }}
-              </h3>
-            </div>
-          </div>
-          
-          <div class="flex-grow w-full relative z-0">
-            <l-map ref="map" v-model:zoom="zoom" :center="mapCenter" :use-global-leaflet="false" class="z-0">
-              <l-tile-layer
-                url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-                layer-type="base"
-                name="CartoDB Voyager"
-                attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>"
-              ></l-tile-layer>
-              <l-marker :lat-lng="mapCenter"></l-marker>
-            </l-map>
-          </div>
-        </div>
+        <MapComponent
+          :latitude="currentMedia?.location?.lat"
+          :longitude="currentMedia?.location?.lon"
+          :location-name="exifData.location_name"
+        />
 
       </div>
     </div>
@@ -291,11 +249,4 @@ input[type=range]::-moz-range-thumb:hover {
   background: #4338ca;
 }
 
-/* Leaflet Map Tweaks for Dark Mode */
-.dark .leaflet-layer,
-.dark .leaflet-control-zoom-in,
-.dark .leaflet-control-zoom-out,
-.dark .leaflet-control-attribution {
-  filter: invert(100%) hue-rotate(180deg) brightness(95%) contrast(90%);
-}
 </style>

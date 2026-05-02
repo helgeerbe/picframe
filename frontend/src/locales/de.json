@@ -10,7 +10,24 @@
     "unknownFile": "Unbekannte Datei",
     "mediaDetails": "Medien-Details",
     "noMetadata": "Keine Metadaten verfügbar",
-    "location": "Ort"
+    "location": "Ort",
+    "overlays": {
+      "title": "Text-Overlays",
+      "clock": "Uhr",
+      "clockHelper": "Schaltet die Uhrzeitanzeige auf dem Bildschirm um.",
+      "textTitle": "Titel",
+      "textTitleHelper": "Zeigt den Titel des aktuellen Mediums an.",
+      "textCaption": "Bildunterschrift",
+      "textCaptionHelper": "Zeigt die Bildunterschrift oder Beschreibung des aktuellen Mediums an.",
+      "textName": "Dateiname",
+      "textNameHelper": "Zeigt den Dateinamen des aktuellen Mediums an.",
+      "textDate": "Datum",
+      "textDateHelper": "Zeigt das Datum an, an dem das Medium aufgenommen oder erstellt wurde.",
+      "textFolder": "Ordner",
+      "textFolderHelper": "Zeigt den Ordnernamen an, in dem sich das Medium befindet.",
+      "textLocation": "Ort",
+      "textLocationHelper": "Zeigt den Ort an, an dem das Medium aufgenommen wurde."
+    }
   },
   "settings": {
     "title": "Konfiguration",
