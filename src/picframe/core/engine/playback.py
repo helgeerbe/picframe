@@ -185,8 +185,21 @@ class PlaybackEngine:
             )
             self._change_state(State.TRANSITIONING)
             
+            # Generate dynamic text string based on configuration
+            text_string = self._generate_text_string(media_item)
+            
             # Send render command
-            render_cmd = RenderCommand(image_path=media_item.filepath)
+            # We pass the dynamically generated text string in the overlay config.
+            # The renderer still manages the clock and visibility toggles via IConfigRepository.
+            from picframe.core.events.dto import OverlayConfig
+            overlay_config = OverlayConfig(
+                show_clock=bool(self._config.get("show_clock", False)),
+                clock_format=str(self._config.get("clock_format", "%H:%M")),
+                show_text=bool(self._config.get("show_text", False)),
+                text_string=text_string
+            )
+            
+            render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
             self._renderer.execute(render_cmd)
             
             # Publish media changed event
@@ -208,8 +221,19 @@ class PlaybackEngine:
             )
             self._change_state(State.TRANSITIONING)
             
+            # Generate dynamic text string based on configuration
+            text_string = self._generate_text_string(media_item)
+            
             # Send render command
-            render_cmd = RenderCommand(image_path=media_item.filepath)
+            from picframe.core.events.dto import OverlayConfig
+            overlay_config = OverlayConfig(
+                show_clock=bool(self._config.get("show_clock", False)),
+                clock_format=str(self._config.get("clock_format", "%H:%M")),
+                show_text=bool(self._config.get("show_text", False)),
+                text_string=text_string
+            )
+            
+            render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
             self._renderer.execute(render_cmd)
             
             # Publish media changed event
@@ -221,6 +245,46 @@ class PlaybackEngine:
             self._change_state(State.PLAYING)
         else:
             self._logger.warning("No previous media available")
+
+    def _generate_text_string(self, media_item: Any) -> str:
+        """Generate the text overlay string based on configuration and media metadata."""
+        # If it's the fallback image, don't show any text
+        if media_item.filepath.endswith("no_pictures.jpg"):
+            return ""
+            
+        # In a full implementation, we would fetch this from the config repository.
+        # For now, we'll use the default config or what was passed in.
+        show_text_config = str(self._config.get("show_text", "")).lower()
+        if not show_text_config or show_text_config == "false" or show_text_config == "off":
+            return ""
+            
+        parts = []
+        
+        if "title" in show_text_config and media_item.title:
+            parts.append(media_item.title)
+            
+        if "caption" in show_text_config and media_item.caption:
+            parts.append(media_item.caption)
+            
+        if "name" in show_text_config and media_item.filename:
+            parts.append(media_item.filename)
+            
+        if "date" in show_text_config and media_item.exif_datetime:
+            import datetime
+            try:
+                dt = datetime.datetime.fromtimestamp(media_item.exif_datetime)
+                parts.append(dt.strftime("%Y-%m-%d %H:%M"))
+            except Exception:
+                pass
+                
+        if "folder" in show_text_config and media_item.filepath:
+            import os
+            parts.append(os.path.basename(os.path.dirname(media_item.filepath)))
+            
+        if "location" in show_text_config and media_item.location:
+            parts.append(media_item.location)
+            
+        return " - ".join(parts)
 
     def _change_state(self, new_state: State) -> None:
         """Update internal state and publish a StateEvent."""

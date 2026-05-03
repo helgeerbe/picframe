@@ -8,9 +8,20 @@ from typing import Any
 import pi3d
 from PIL import Image
 
-from picframe.core.events.dto import RenderCommand, StateEvent, State
+from enum import Enum, auto
+from picframe.core.events.dto import RenderCommand, StateEvent, State, OverlayConfig
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.events.interfaces import IEventSubscriber
+from picframe.core.renderers.components.text_renderer import TextRenderer
+from picframe.core.renderers.components.clock_renderer import ClockRenderer
+from picframe.core.repositories.interfaces import IConfigRepository
+
+class RenderState(Enum):
+    STATIC = auto()
+    IMAGE_TRANSITIONING = auto()
+    TEXT_FADING_IN = auto()
+    TEXT_SHOWING = auto()
+    TEXT_FADING_OUT = auto()
 
 
 class Pi3dRenderer(IRenderer):
@@ -21,17 +32,19 @@ class Pi3dRenderer(IRenderer):
     and executing image transitions (alpha blending, Ken Burns).
     """
 
-    def __init__(self, config: dict[str, Any], event_subscriber: IEventSubscriber | None = None) -> None:
+    def __init__(self, config: dict[str, Any], event_subscriber: IEventSubscriber | None = None, config_repository: IConfigRepository | None = None) -> None:
         """
         Initialize the renderer with configuration.
         
         Args:
             config: Dictionary containing display and rendering settings.
             event_subscriber: Optional event subscriber to listen for config changes.
+            config_repository: Optional repository to fetch live configuration updates.
         """
         self._logger = logging.getLogger(__name__)
         self._config = config
         self._event_subscriber = event_subscriber
+        self._config_repository = config_repository
         
         if self._event_subscriber:
             self._event_subscriber.subscribe(StateEvent, self._handle_state_event)
@@ -65,10 +78,10 @@ class Pi3dRenderer(IRenderer):
         self._time_delay = float(config.get("time_delay", 200.0))
         
         # State
-        self._display: pi3d.Display | None = None
-        self._slide: pi3d.Sprite | None = None
-        self._sfg: pi3d.Texture | None = None
-        self._sbg: pi3d.Texture | None = None
+        self._display: Any | None = None
+        self._slide: Any | None = None
+        self._sfg: Any | None = None
+        self._sbg: Any | None = None
         
         self._alpha = 1.0
         self._delta_alpha = 1.0
@@ -77,8 +90,27 @@ class Pi3dRenderer(IRenderer):
         self._next_tm = 0.0
         
         # Text Overlay State
-        self._show_clock = bool(config.get("show_clock", False))
-        self._show_text = str(config.get("show_text", ""))
+        if self._config_repository:
+            self._overlay_config = OverlayConfig(
+                show_clock=bool(self._config_repository.get_app_config("viewer.show_clock", config.get("show_clock", False))),
+                clock_format=str(self._config_repository.get_app_config("viewer.clock_format", config.get("clock_format", "%H:%M"))),
+                show_text=bool(self._config_repository.get_app_config("viewer.show_text", config.get("show_text", False))),
+                text_string=str(self._config_repository.get_app_config("viewer.text_string", config.get("text_string", "")))
+            )
+        else:
+            self._overlay_config = OverlayConfig(
+                show_clock=bool(config.get("show_clock", False)),
+                clock_format=str(config.get("clock_format", "%H:%M")),
+                show_text=bool(config.get("show_text", False)),
+                text_string=str(config.get("text_string", ""))
+            )
+        self._text_renderer: TextRenderer | None = None
+        self._clock_renderer: ClockRenderer | None = None
+        self._render_state = RenderState.STATIC
+        self._text_alpha = 0.0
+        self._text_fade_time = 1.0
+        self._text_show_time = float(config.get("show_text_tm", 10.0))
+        self._text_timer = 0.0
 
     def _handle_state_event(self, event: Any) -> None:
         if not isinstance(event, StateEvent):
@@ -88,14 +120,19 @@ class Pi3dRenderer(IRenderer):
             payload = event.payload or {}
             updated_sections = payload.get("updated_sections", [])
             
-            if "viewer" in updated_sections:
-                self._logger.info("Renderer received CONFIG_CHANGED for viewer section. Updating overlay state.")
-                # In a full implementation, we would fetch the new config from the repository.
-                # For now, we'll just log that we need to update the overlays.
-                # Note: Actual pi3d text rendering logic is deferred to Phase 2C (Ticket #621).
-                # This will involve rebuilding the text textures based on the new config
-                # and updating the pi3d sprites in a specialized TextRenderer component.
-                self._logger.debug("Deferred: Rebuild text overlay textures based on new config (Phase 2C).")
+            if "viewer" in updated_sections or "text_overlay" in updated_sections:
+                self._logger.info("Renderer received CONFIG_CHANGED for viewer/overlay section. Updating overlay state.")
+                if self._config_repository:
+                    self._overlay_config = OverlayConfig(
+                        show_clock=bool(self._config_repository.get_app_config("viewer.show_clock", self._overlay_config.show_clock)),
+                        clock_format=str(self._config_repository.get_app_config("viewer.clock_format", self._overlay_config.clock_format)),
+                        show_text=bool(self._config_repository.get_app_config("viewer.show_text", self._overlay_config.show_text)),
+                        text_string=str(self._config_repository.get_app_config("viewer.text_string", self._overlay_config.text_string))
+                    )
+                    if self._text_renderer:
+                        self._text_renderer.update_config(self._overlay_config)
+                    if self._clock_renderer:
+                        self._clock_renderer.update_config(self._overlay_config)
 
     def start(self) -> None:
         """Initialize the pi3d display and sprite."""
@@ -120,6 +157,10 @@ class Pi3dRenderer(IRenderer):
         
         camera = pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self._shader_path)
+        flat_shader = pi3d.Shader("uv_flat")
+        
+        self._text_renderer = TextRenderer(self._display, flat_shader, self._config.get("font_file", ""))
+        self._clock_renderer = ClockRenderer(self._display, flat_shader, self._config.get("font_file", ""))
         
         self._slide = pi3d.Sprite(
             camera=camera,
@@ -147,12 +188,21 @@ class Pi3dRenderer(IRenderer):
             self._logger.warning("Renderer not started, ignoring command")
             return
             
+        if command.overlay:
+            self._overlay_config = command.overlay
+            
         try:
             # Load texture
             # In a real implementation, ImageProcessingService would have already
             # matted/resized the image and saved it to a cache path, or we load it directly.
             # For now, we load the image path directly.
-            im = Image.open(command.image_path)
+            try:
+                im = Image.open(command.image_path)
+            except Exception as e:
+                self._logger.warning(f"Failed to load image {command.image_path}: {e}. Using fallback.")
+                # Create a fallback image (e.g., black screen or default "no pictures" image)
+                im = Image.new('RGB', (self._display.width, self._display.height), color='black')
+                
             new_sfg = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
             
             tm = time.time()
@@ -197,6 +247,13 @@ class Pi3dRenderer(IRenderer):
             else:
                 self._delta_alpha = 1.0
                 
+            self._render_state = RenderState.IMAGE_TRANSITIONING
+            
+            if self._text_renderer:
+                self._text_renderer.update_config(self._overlay_config)
+            if self._clock_renderer:
+                self._clock_renderer.update_config(self._overlay_config)
+                
         except Exception as e:
             self._logger.error(f"Failed to execute RenderCommand: {e}")
 
@@ -213,20 +270,58 @@ class Pi3dRenderer(IRenderer):
             
         tm = time.time()
         
+        # Ensure camera is set for the display
+        import pi3d
+        if pi3d.Camera.instance() is None:
+            pi3d.Camera(is_3d=False)
+        
         # Update Ken Burns tweening
         if self._kenburns and self._alpha >= 1.0:
             t_factor = self._time_delay - self._fade_time - self._next_tm + tm
             self._slide.unif[48] = self._slide.unif[48] * 0.95 + self._xstep * t_factor * 0.05
             self._slide.unif[49] = self._slide.unif[49] * 0.95 + self._ystep * t_factor * 0.05
             
-        # Update alpha transition
-        if self._alpha < 1.0:
-            self._alpha += self._delta_alpha
-            if self._alpha > 1.0:
-                self._alpha = 1.0
-            # Smooth step alpha
-            self._slide.unif[44] = self._alpha * self._alpha * (3.0 - 2.0 * self._alpha)
-            
+        # State Machine
+        if self._render_state == RenderState.IMAGE_TRANSITIONING:
+            if self._alpha < 1.0:
+                self._alpha += self._delta_alpha
+                if self._alpha >= 1.0:
+                    self._alpha = 1.0
+                    if self._overlay_config.show_text:
+                        self._render_state = RenderState.TEXT_FADING_IN
+                        self._text_alpha = 0.0
+                    else:
+                        self._render_state = RenderState.STATIC
+                # Smooth step alpha
+                self._slide.unif[44] = self._alpha * self._alpha * (3.0 - 2.0 * self._alpha)
+                
+        elif self._render_state == RenderState.TEXT_FADING_IN:
+            self._text_alpha += 1.0 / (self._fps * self._text_fade_time)
+            if self._text_alpha >= 1.0:
+                self._text_alpha = 1.0
+                self._render_state = RenderState.TEXT_SHOWING
+                self._text_timer = tm + self._text_show_time
+            if self._text_renderer:
+                self._text_renderer.set_alpha(self._text_alpha)
+                
+        elif self._render_state == RenderState.TEXT_SHOWING:
+            if tm >= self._text_timer:
+                self._render_state = RenderState.TEXT_FADING_OUT
+                
+        elif self._render_state == RenderState.TEXT_FADING_OUT:
+            self._text_alpha -= 1.0 / (self._fps * self._text_fade_time)
+            if self._text_alpha <= 0.0:
+                self._text_alpha = 0.0
+                self._render_state = RenderState.STATIC
+            if self._text_renderer:
+                self._text_renderer.set_alpha(self._text_alpha)
+                
         self._slide.draw()
+        
+        if self._text_renderer and self._render_state in (RenderState.TEXT_FADING_IN, RenderState.TEXT_SHOWING, RenderState.TEXT_FADING_OUT):
+            self._text_renderer.draw()
+            
+        if self._clock_renderer:
+            self._clock_renderer.draw()
         
         return True

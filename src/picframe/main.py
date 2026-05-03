@@ -75,7 +75,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         "use_sdl2": True,
     }
     renderer_config = _config_repo.get_app_config("renderer", default_renderer_config)
-    renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus)
+    renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus, config_repository=_config_repo)
 
     # 6. Initialize Engine
     engine_config: dict[str, float] = {

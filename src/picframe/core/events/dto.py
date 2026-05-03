@@ -115,6 +115,17 @@ class StateEvent(Event):
 
 
 @dataclass(frozen=True)
+class OverlayConfig:
+    """
+    Configuration for dynamic overlays (text and clock) to be rendered on top of the image.
+    """
+    show_clock: bool = False
+    clock_format: str = "%H:%M"
+    show_text: bool = False
+    text_string: str = ""
+
+
+@dataclass(frozen=True)
 class RenderCommand(Event):
     """
     An instruction for the Presentation Layer to draw a specific image.
@@ -125,7 +136,7 @@ class RenderCommand(Event):
     """
 
     image_path: str
-    overlay: Any = None
+    overlay: OverlayConfig | None = None
 
     @property
     def priority(self) -> int:

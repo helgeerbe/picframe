@@ -77,12 +77,13 @@ def test_renderer_initialization(config):
 def test_renderer_start_stop(config, mock_pi3d):
     """Test starting and stopping the renderer."""
     renderer = Pi3dRenderer(config)
-    
+
     # Start
     renderer.start()
     mock_pi3d.Display.create.assert_called_once()
     mock_pi3d.Camera.assert_called_once()
-    mock_pi3d.Shader.assert_called_once_with("blend_new")
+    mock_pi3d.Shader.assert_any_call("blend_new")
+    mock_pi3d.Shader.assert_any_call("uv_flat")
     mock_pi3d.Sprite.assert_called_once()
     assert renderer._display is not None
     assert renderer._slide is not None

@@ -161,8 +161,14 @@ def create_app(
                             elif command_str == "SHUTDOWN_HOST":
                                 event_publisher.publish(CommandEvent(command=Command.SHUTDOWN_HOST))
                             elif command_str == "SET_CONFIG":
+                                # The frontend sends the payload directly in the root object, not nested under "payload"
+                                # e.g. {"command": "SET_CONFIG", "viewer": {"show_clock": true}}
                                 config_payload = payload.get("payload")
-                                if config_payload is not None:
+                                if config_payload is None:
+                                    # Extract everything except the command key
+                                    config_payload = {k: v for k, v in payload.items() if k != "command"}
+                                
+                                if config_payload:
                                     event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=config_payload))
                     except json.JSONDecodeError:
                         logger.error("Invalid JSON received on websocket")
