@@ -3,18 +3,20 @@ Pi3d implementation of the IRenderer interface.
 """
 import logging
 import time
+from dataclasses import replace
+from enum import Enum, auto
 from typing import Any
 
 import pi3d
 from PIL import Image
 
-from enum import Enum, auto
-from picframe.core.events.dto import RenderCommand, StateEvent, State, OverlayConfig
-from picframe.core.renderers.interfaces import IRenderer
+from picframe.core.events.dto import OverlayConfig, RenderCommand, State, StateEvent
 from picframe.core.events.interfaces import IEventSubscriber
-from picframe.core.renderers.components.text_renderer import TextRenderer
 from picframe.core.renderers.components.clock_renderer import ClockRenderer
+from picframe.core.renderers.components.text_renderer import TextRenderer
+from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.repositories.interfaces import IConfigRepository
+
 
 class RenderState(Enum):
     STATIC = auto()
@@ -133,6 +135,13 @@ class Pi3dRenderer(IRenderer):
                         self._text_renderer.update_config(self._overlay_config)
                     if self._clock_renderer:
                         self._clock_renderer.update_config(self._overlay_config)
+                        
+                # React to show_text toggles immediately
+                if self._render_state == RenderState.STATIC and self._overlay_config.show_text:
+                    self._render_state = RenderState.TEXT_FADING_IN
+                    self._text_alpha = 0.0
+                elif self._render_state in (RenderState.TEXT_SHOWING, RenderState.TEXT_FADING_IN) and not self._overlay_config.show_text:
+                    self._render_state = RenderState.TEXT_FADING_OUT
 
     def start(self) -> None:
         """Initialize the pi3d display and sprite."""
@@ -189,7 +198,7 @@ class Pi3dRenderer(IRenderer):
             return
             
         if command.overlay:
-            self._overlay_config = command.overlay
+            self._overlay_config = replace(self._overlay_config, text_string=command.overlay.text_string)
             
         try:
             # Load texture
@@ -197,7 +206,7 @@ class Pi3dRenderer(IRenderer):
             # matted/resized the image and saved it to a cache path, or we load it directly.
             # For now, we load the image path directly.
             try:
-                im = Image.open(command.image_path)
+                im: Image.Image = Image.open(command.image_path)
             except Exception as e:
                 self._logger.warning(f"Failed to load image {command.image_path}: {e}. Using fallback.")
                 # Create a fallback image (e.g., black screen or default "no pictures" image)
@@ -318,10 +327,13 @@ class Pi3dRenderer(IRenderer):
                 
         self._slide.draw()
         
-        if self._text_renderer and self._render_state in (RenderState.TEXT_FADING_IN, RenderState.TEXT_SHOWING, RenderState.TEXT_FADING_OUT):
-            self._text_renderer.draw()
+        # Draw overlays on top of the slide
+        if self._text_renderer and self._overlay_config.show_text:
+            # Only draw text if we are in a state where it should be visible
+            if self._render_state in (RenderState.TEXT_FADING_IN, RenderState.TEXT_SHOWING, RenderState.TEXT_FADING_OUT):
+                self._text_renderer.draw()
             
-        if self._clock_renderer:
+        if self._clock_renderer and self._overlay_config.show_clock:
             self._clock_renderer.draw()
         
         return True
