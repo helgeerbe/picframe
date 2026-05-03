@@ -8,6 +8,7 @@ This file records architectural and implementation decisions using a list format
 
 ## Decision
 
+* [2026-05-03 19:35:00] - Implement `MediaMonitorService` using `watchdog` for real-time directory monitoring and integrate an asynchronous worker pool in `ImageProcessingService` for non-blocking metadata extraction.
 * [2026-04-30 14:53:00] - Refactor Pi3dRenderer into specialized components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`) and implement a formal state machine with a local `PriorityQueue` for render events.
 * [2026-04-29 10:15:00] - Split Phase 2 into three distinct subphases (2A: HAL & Inputs, 2B: Web Control Plane & CLI, 2C: Advanced Rendering) to mitigate integration risks and manage scope.
 * [2026-04-29 10:15:00] - Implement a CLI with `init` and `run` commands. The `init` command will bootstrap the user environment in `~/.picframe/` strictly in user-space.
@@ -39,6 +40,7 @@ This file records architectural and implementation decisions using a list format
 
 ## Rationale
  
+* [2026-05-03 19:35:00] - Real-time directory monitoring with `watchdog` eliminates the need for expensive, periodic full-directory scans. Asynchronous metadata extraction prevents the main thread (and the render loop) from blocking when processing large files or network shares.
 * [2026-04-30 14:53:00] - Based on feedback from Paddy (pi3d author), the monolithic `Pi3dRenderer` is becoming complex and difficult to manage, especially with overlapping animations (fading, Ken Burns, text). Decomposing it improves maintainability. A formal state machine replaces messy conditional blocks, ensuring predictable transitions. A local `PriorityQueue` for render events prevents asynchronous delays from the main EventBus. Skipping `pi3d.Display.loop_running()` when static optimizes CPU and energy usage.
 * [2026-04-29 10:15:00] - Splitting Phase 2 ensures foundational communication and hardware layers (HAL) are solid before introducing the complexity of the web server, leaving intricate rendering features for the final step.
 * [2026-04-29 10:15:00] - A user-space `init` command safely sets up the required directory structure (`~/.picframe/`) and default assets without requiring elevated privileges.

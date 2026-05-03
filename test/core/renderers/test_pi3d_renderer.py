@@ -1,23 +1,34 @@
 """
 Unit tests for the Pi3dRenderer.
 """
-import pytest
+from collections.abc import Generator
+from typing import Any, cast
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from picframe.core.events.dto import RenderCommand
 from picframe.core.renderers.pi3d_renderer import Pi3dRenderer
 
 
 @pytest.fixture
-def mock_pi3d():
+def mock_pi3d() -> Generator[MagicMock, None, None]:
     """Mock the pi3d module to avoid requiring a real display."""
     with patch("picframe.core.renderers.pi3d_renderer.pi3d") as mock:
         # Setup mock display
         mock_display = MagicMock()
         mock_display.width = 1920
         mock_display.height = 1080
+        mock_display.near = 1.0
+        mock_display.far = 1000.0
+        mock_display.fov = 45.0
         mock_display.loop_running.return_value = True
         mock.Display.create.return_value = mock_display
+        mock.Display.INSTANCE = mock_display
+        
+        # Setup mock camera
+        mock_camera = MagicMock()
+        mock.Camera.instance.return_value = mock_camera
         
         # Setup mock sprite
         mock_sprite = MagicMock()
@@ -34,14 +45,14 @@ def mock_pi3d():
 
 
 @pytest.fixture
-def mock_image():
+def mock_image() -> Generator[MagicMock, None, None]:
     """Mock PIL Image."""
     with patch("picframe.core.renderers.pi3d_renderer.Image") as mock:
         yield mock
 
 
 @pytest.fixture
-def config():
+def config() -> dict[str, Any]:
     """Default renderer configuration."""
     return {
         "display_x": 0,
@@ -62,7 +73,7 @@ def config():
     }
 
 
-def test_renderer_initialization(config):
+def test_renderer_initialization(config: dict[str, Any]) -> None:
     """Test that the renderer initializes with the correct configuration."""
     renderer = Pi3dRenderer(config)
     assert renderer._display_w == 1920
@@ -74,7 +85,7 @@ def test_renderer_initialization(config):
     assert renderer._kenburns is False
 
 
-def test_renderer_start_stop(config, mock_pi3d):
+def test_renderer_start_stop(config: dict[str, Any], mock_pi3d: MagicMock) -> None:
     """Test starting and stopping the renderer."""
     renderer = Pi3dRenderer(config)
 
@@ -91,11 +102,13 @@ def test_renderer_start_stop(config, mock_pi3d):
     # Stop
     mock_display = renderer._display
     renderer.stop()
-    mock_display.destroy.assert_called_once()
+    cast(MagicMock, mock_display).destroy.assert_called_once()
     assert renderer._display is None
 
 
-def test_renderer_execute_without_start(config, mock_pi3d, mock_image):
+def test_renderer_execute_without_start(
+    config: dict[str, Any], mock_pi3d: MagicMock, mock_image: MagicMock
+) -> None:
     """Test executing a command before starting the renderer."""
     renderer = Pi3dRenderer(config)
     command = RenderCommand(image_path="/path/to/image.jpg")
@@ -105,7 +118,9 @@ def test_renderer_execute_without_start(config, mock_pi3d, mock_image):
     mock_image.open.assert_not_called()
 
 
-def test_renderer_execute(config, mock_pi3d, mock_image):
+def test_renderer_execute(
+    config: dict[str, Any], mock_pi3d: MagicMock, mock_image: MagicMock
+) -> None:
     """Test executing a render command."""
     renderer = Pi3dRenderer(config)
     renderer.start()
@@ -117,14 +132,16 @@ def test_renderer_execute(config, mock_pi3d, mock_image):
     mock_pi3d.Texture.assert_called_once()
     
     # Verify textures were set on the slide
-    renderer._slide.set_textures.assert_called_once()
+    cast(MagicMock, renderer._slide).set_textures.assert_called_once()
     
     # Verify transition state was reset
     assert renderer._alpha == 0.0
     assert renderer._delta_alpha > 0.0
 
 
-def test_renderer_render_frame(config, mock_pi3d, mock_image):
+def test_renderer_render_frame(
+    config: dict[str, Any], mock_pi3d: MagicMock, mock_image: MagicMock
+) -> None:
     """Test rendering a frame."""
     renderer = Pi3dRenderer(config)
     renderer.start()
@@ -133,25 +150,33 @@ def test_renderer_render_frame(config, mock_pi3d, mock_image):
     command = RenderCommand(image_path="/path/to/image.jpg")
     renderer.execute(command)
     
-    # Render a frame
-    result = renderer.render_frame()
+    # Mock pi3d.Camera.instance to return a mock camera
+    with patch(
+        "picframe.core.renderers.pi3d_renderer.pi3d.Camera.instance"
+    ) as mock_camera_instance:
+        mock_camera_instance.return_value = MagicMock()
+        
+        # Also mock pi3d.Display.INSTANCE for the internal pi3d call
+        with patch("pi3d.Display.Display.INSTANCE", mock_pi3d.Display.INSTANCE):
+            # Render a frame
+            result = renderer.render_frame()
     
     assert result is True
-    renderer._slide.draw.assert_called_once()
+    cast(MagicMock, renderer._slide).draw.assert_called_once()
     
     # Alpha should have increased
     assert renderer._alpha > 0.0
 
 
-def test_renderer_render_frame_not_running(config, mock_pi3d):
+def test_renderer_render_frame_not_running(config: dict[str, Any], mock_pi3d: MagicMock) -> None:
     """Test rendering a frame when the display loop is not running."""
     renderer = Pi3dRenderer(config)
     renderer.start()
     
     # Mock loop_running to return False
-    renderer._display.loop_running.return_value = False
+    cast(MagicMock, renderer._display).loop_running.return_value = False
     
     result = renderer.render_frame()
     
     assert result is False
-    renderer._slide.draw.assert_not_called()
+    cast(MagicMock, renderer._slide).draw.assert_not_called()

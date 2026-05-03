@@ -36,9 +36,10 @@ def test_hal_factory_win32() -> None:
 def test_hal_factory_linux_default() -> None:
     """Test that the HAL factory injects WaylandDisplayPower on Linux."""
     from picframe.infrastructure.os.wayland_power import WaylandDisplayPower
+    from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
     with patch.object(sys, "platform", "linux"):
         adapters = HALFactory.create_adapters()
 
         assert isinstance(adapters.display_power, WaylandDisplayPower)
         assert isinstance(adapters.hardware_input, MockHardwareInput)
-        assert isinstance(adapters.system_manager, MockSystemManager)
+        assert isinstance(adapters.system_manager, LinuxSystemManager)

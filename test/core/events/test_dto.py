@@ -42,8 +42,8 @@ def test_command_event_priority() -> None:
     assert CommandEvent(Command.PREV).priority == 1
     assert CommandEvent(Command.PAUSE).priority == 1
     assert CommandEvent(Command.PLAY).priority == 1
-    assert CommandEvent(Command.REBOOT).priority == 1
-    assert CommandEvent(Command.SHUTDOWN).priority == 1
+    assert CommandEvent(Command.REBOOT_HOST).priority == 1
+    assert CommandEvent(Command.SHUTDOWN_HOST).priority == 1
     assert CommandEvent(Command.DELETE).priority == 1
     assert CommandEvent(Command.STOP).priority == 1
 

@@ -22,6 +22,8 @@ from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
 from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.bootstrapper import EnvironmentBootstrapper
 from picframe.core.services.config_service import ConfigService
+from picframe.core.services.media_monitor import MediaMonitorService
+from picframe.core.services.image_processing import ImageProcessingService
 from picframe.infrastructure.os.hal_factory import HALFactory
 from picframe.api.app import create_app
 from picframe.api.server import WebServer
@@ -61,6 +63,22 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     from picframe.core.services.system_manager import SystemManager
     system_manager = SystemManager(event_bus, hal_adapters.system_manager)
     config_service = ConfigService(_config_repo, event_bus, event_bus)
+    
+    # Initialize ImageProcessingService
+    image_processing_service = ImageProcessingService(cache_dir=os.path.join(data_dir, "cache"))
+    
+    # Initialize MediaMonitorService
+    # TODO: Load directories and allowed_extensions from config
+    media_directories = _config_repo.get_app_config("media_directories", [os.path.join(data_dir, "media")])
+    allowed_extensions = set(_config_repo.get_app_config("allowed_extensions", [".jpg", ".jpeg", ".png", ".heic"]))
+    follow_links = _config_repo.get_app_config("follow_links", False)
+    
+    media_monitor_service = MediaMonitorService(
+        publisher=event_bus,
+        directories=media_directories,
+        allowed_extensions=allowed_extensions,
+        follow_links=follow_links
+    )
 
     # 5. Initialize Renderer
     default_renderer_config: dict[str, Any] = {
@@ -119,6 +137,10 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
 
     logger.info("Starting Web Server...")
     web_server.start()
+    
+    logger.info("Starting Media Monitor Service...")
+    media_monitor_service.perform_differential_sync()
+    media_monitor_service.start()
 
     logger.info("Starting Playback Engine...")
     # engine.start() blocks until stopped
@@ -128,6 +150,8 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         logger.error(f"Engine crashed: {e}")
     finally:
         logger.info("Cleaning up...")
+        media_monitor_service.stop()
+        image_processing_service.shutdown()
         web_server.stop()
         engine.stop()
         event_bus.stop()

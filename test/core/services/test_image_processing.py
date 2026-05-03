@@ -92,6 +92,44 @@ def test_process_image_not_found(temp_cache_dir: str) -> None:
     assert cached_path is None
 
 
+def test_extract_metadata_async(temp_cache_dir: str, sample_media_item: MediaItem) -> None:
+    service = ImageProcessingService(cache_dir=temp_cache_dir)
+    
+    class MockStrategy:
+        def extract(self, filepath: str, directory_id: int) -> MediaItem:
+            return sample_media_item
+            
+    strategy = MockStrategy()
+    
+    # Test without callback
+    future = service.extract_metadata_async(
+        filepath=sample_media_item.filepath,
+        directory_id=1,
+        strategy=strategy
+    )
+    
+    result = future.result(timeout=2.0)
+    assert result == sample_media_item
+    
+    # Test with callback
+    callback_result = None
+    def callback(item: MediaItem | None) -> None:
+        nonlocal callback_result
+        callback_result = item
+        
+    future = service.extract_metadata_async(
+        filepath=sample_media_item.filepath,
+        directory_id=1,
+        strategy=strategy,
+        callback=callback
+    )
+    
+    future.result(timeout=2.0)
+    assert callback_result == sample_media_item
+    
+    service.shutdown()
+
+
 def test_clear_cache(temp_cache_dir: str, sample_media_item: MediaItem) -> None:
     service = ImageProcessingService(cache_dir=temp_cache_dir)
     

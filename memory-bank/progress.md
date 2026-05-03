@@ -14,6 +14,7 @@ This file tracks the project's progress using a task list format.
 *   [2026-04-23 11:19:00] - Architectural Planning & Documentation (Clean Architecture, EDA, Dual-Database, HAL, Frontend Spec)
 *   [x] Phase 0: Technical Spike (Video Handoff PoC)
 *   [x] Phase 1: Core Image MVP (The "Walking Skeleton")
+*   [x] Ticket #656: Directory Scanning and ImageProcessingService Integration (MediaMonitorService, watchdog)
 
 ## Current Tasks
 

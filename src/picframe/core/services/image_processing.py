@@ -2,15 +2,19 @@
 ImageProcessingService for handling image manipulation tasks.
 
 This module provides the `ImageProcessingService` class, which is responsible
-for resizing, matting, and caching images for display.
+for resizing, matting, and caching images for display, as well as providing
+an asynchronous worker pool for metadata extraction.
 """
 
 import logging
 import os
+from collections.abc import Callable
+from concurrent.futures import Future, ThreadPoolExecutor
 from pathlib import Path
 
 from PIL import Image, ImageOps
 
+from picframe.core.metadata.interfaces import IMetadataStrategy
 from picframe.core.models.media import MediaItem
 
 logger = logging.getLogger(__name__)
@@ -21,18 +25,23 @@ class ImageProcessingService:
     Service for processing images before display.
 
     Handles tasks such as resizing to fit the screen, applying matting
-    (borders/shadows), and managing the processed image cache.
+    (borders/shadows), managing the processed image cache, and extracting
+    metadata asynchronously.
     """
 
-    def __init__(self, cache_dir: str = "/tmp/picframe_cache") -> None:
+    def __init__(self, cache_dir: str = "/tmp/picframe_cache", max_workers: int = 4) -> None:
         """
         Initialize the ImageProcessingService.
 
         Args:
             cache_dir: The directory to store processed images.
+            max_workers: Maximum number of threads for the worker pool.
         """
         self._cache_dir = Path(cache_dir)
         self._ensure_cache_dir()
+        self._executor = ThreadPoolExecutor(
+            max_workers=max_workers, thread_name_prefix="ImageProcessingWorker"
+        )
 
     def _ensure_cache_dir(self) -> None:
         """Ensure the cache directory exists."""
@@ -116,6 +125,41 @@ class ImageProcessingService:
             logger.error(f"Failed to process image {media_item.filepath}: {e}")
             return None
 
+    def extract_metadata_async(
+        self,
+        filepath: str,
+        directory_id: int,
+        strategy: IMetadataStrategy,
+        callback: Callable[[MediaItem | None], None] | None = None
+    ) -> "Future[MediaItem | None]":  # type: ignore[type-arg]
+        """
+        Extract metadata from a file asynchronously using the worker pool.
+
+        Args:
+            filepath: The path to the media file.
+            directory_id: The ID of the directory containing the file.
+            strategy: The metadata extraction strategy to use.
+            callback: Optional callback function to execute when extraction completes.
+                      It receives the extracted MediaItem (or None) as its argument.
+
+        Returns:
+            A Future object representing the asynchronous execution.
+        """
+        def _extract_task() -> MediaItem | None:
+            try:
+                logger.debug(f"Extracting metadata for {filepath}")
+                result = strategy.extract(filepath, directory_id)
+                if callback:
+                    callback(result)
+                return result
+            except Exception as e:
+                logger.error(f"Error extracting metadata for {filepath}: {e}")
+                if callback:
+                    callback(None)
+                return None
+
+        return self._executor.submit(_extract_task)
+
     def clear_cache(self) -> None:
         """Remove all files from the cache directory."""
         logger.info(f"Clearing image cache: {self._cache_dir}")
@@ -125,3 +169,13 @@ class ImageProcessingService:
                     item.unlink()
         except Exception as e:
             logger.error(f"Failed to clear cache: {e}")
+
+    def shutdown(self, wait: bool = True) -> None:
+        """
+        Shutdown the worker pool.
+        
+        Args:
+            wait: If True, wait for all pending tasks to complete.
+        """
+        logger.info("Shutting down ImageProcessingService worker pool")
+        self._executor.shutdown(wait=wait)
