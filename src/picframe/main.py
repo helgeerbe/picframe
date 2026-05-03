@@ -109,6 +109,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         event_publisher=event_bus,
         event_subscriber=event_bus,
         cors_allowed_origins=cors_origins,
+        config_repository=_config_repo,
     )
     web_server = WebServer(app, port=port)
 

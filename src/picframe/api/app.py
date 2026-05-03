@@ -9,7 +9,7 @@ import asyncio
 import json
 import logging
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,13 +18,16 @@ from fastapi.staticfiles import StaticFiles
 
 from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
+from picframe.core.repositories.interfaces import IConfigRepository
 
 logger = logging.getLogger(__name__)
+
 
 def create_app(
     event_publisher: IEventPublisher | None = None,
     event_subscriber: IEventSubscriber | None = None,
     cors_allowed_origins: list[str] | None = None,
+    config_repository: IConfigRepository | None = None,
 ) -> FastAPI:
     """
     Create and configure the FastAPI application instance.
@@ -76,11 +79,11 @@ def create_app(
         def handle_media_changed(event: CurrentMediaChangedEvent) -> None:
             media_dict: dict[str, Any] = {}
             if hasattr(event.media_item, "to_dict") and callable(event.media_item.to_dict):
-                media_dict = event.media_item.to_dict()  # type: ignore[misc]
+                media_dict = cast(dict[str, Any], event.media_item.to_dict())
             elif hasattr(event.media_item, "__dict__"):
-                media_dict = event.media_item.__dict__  # type: ignore[misc]
+                media_dict = cast(dict[str, Any], event.media_item.__dict__)
             elif isinstance(event.media_item, dict):
-                media_dict = event.media_item  # type: ignore[misc]
+                media_dict = cast(dict[str, Any], event.media_item)
             else:
                 media_dict = {"raw": str(event.media_item)}
                 
@@ -101,7 +104,10 @@ def create_app(
                     }
             
             # Group EXIF data
-            exif_keys = ["make", "model", "lens", "f_number", "exposure_time", "iso", "focal_length", "exif_datetime", "caption", "tags", "location"]
+            exif_keys = [
+                "make", "model", "lens", "f_number", "exposure_time", "iso",
+                "focal_length", "exif_datetime", "caption", "tags", "location"
+            ]
             exif_data = {}
             for key in exif_keys:
                 if key in media_dict and media_dict[key] is not None:
@@ -145,7 +151,11 @@ def create_app(
                             elif command_str == "SET_BRIGHTNESS":
                                 value = payload.get("value")
                                 if value is not None:
-                                    event_publisher.publish(CommandEvent(command=Command.SET_BRIGHTNESS, payload=float(value)))
+                                    event_publisher.publish(
+                                        CommandEvent(
+                                            command=Command.SET_BRIGHTNESS, payload=float(value)
+                                        )
+                                    )
                             elif command_str == "DISPLAY_ON":
                                 event_publisher.publish(CommandEvent(command=Command.DISPLAY_ON))
                             elif command_str == "DISPLAY_OFF":
@@ -161,15 +171,22 @@ def create_app(
                             elif command_str == "SHUTDOWN_HOST":
                                 event_publisher.publish(CommandEvent(command=Command.SHUTDOWN_HOST))
                             elif command_str == "SET_CONFIG":
-                                # The frontend sends the payload directly in the root object, not nested under "payload"
+                                # The frontend sends the payload directly in the root object,
+                                # not nested under "payload"
                                 # e.g. {"command": "SET_CONFIG", "viewer": {"show_clock": true}}
                                 config_payload = payload.get("payload")
                                 if config_payload is None:
                                     # Extract everything except the command key
-                                    config_payload = {k: v for k, v in payload.items() if k != "command"}
+                                    config_payload = {
+                                        k: v for k, v in payload.items() if k != "command"
+                                    }
                                 
                                 if config_payload:
-                                    event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=config_payload))
+                                    event_publisher.publish(
+                                        CommandEvent(
+                                            command=Command.SET_CONFIG, payload=config_payload
+                                        )
+                                    )
                     except json.JSONDecodeError:
                         logger.error("Invalid JSON received on websocket")
             except WebSocketDisconnect:
@@ -219,6 +236,43 @@ def create_app(
             event_publisher.publish(CommandEvent(command=Command.PURGE_FILES))
         return {"status": "purging database"}
 
+    @app.get("/api/config")
+    async def api_get_config() -> dict[str, Any]:
+        """Get the full application configuration."""
+        if not config_repository:
+            return {}
+            
+        config: dict[str, Any] = {
+            "viewer": config_repository.get_app_config("viewer", {}),
+            "model": config_repository.get_app_config("model", {}),
+            "mqtt": config_repository.get_app_config("mqtt", {}),
+            "http": config_repository.get_app_config("http", {}),
+            "peripherals": config_repository.get_app_config("peripherals", {}),
+        }
+        return config
+
+    @app.put("/api/config")
+    async def api_put_config(payload: dict[str, Any]) -> dict[str, str]:
+        """Update the application configuration."""
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+            
+        # Update the repository
+        for section, values in payload.items():
+            if isinstance(values, dict):
+                # Merge with existing config for this section
+                existing = config_repository.get_app_config(section, {})
+                existing.update(values)
+                config_repository.set_app_config(section, existing)
+            else:
+                config_repository.set_app_config(section, values)
+                
+        # Publish a SET_CONFIG event to notify other components
+        if event_publisher:
+            event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=payload))
+            
+        return {"status": "success"}
+
     @app.get("/media")
     async def serve_media(path: str) -> FileResponse:
         """Serve media files from the filesystem."""
@@ -226,9 +280,13 @@ def create_app(
         
         # Basic security check: only serve files with known media extensions
         # to prevent arbitrary file read (e.g., /etc/passwd)
-        allowed_extensions = {".jpg", ".jpeg", ".png", ".gif", ".heic", ".mp4", ".mov", ".mkv", ".avi", ".webm"}
+        allowed_extensions = {
+            ".jpg", ".jpeg", ".png", ".gif", ".heic",
+            ".mp4", ".mov", ".mkv", ".avi", ".webm"
+        }
         
-        if file_path.exists() and file_path.is_file() and file_path.suffix.lower() in allowed_extensions:
+        if (file_path.exists() and file_path.is_file() and
+            file_path.suffix.lower() in allowed_extensions):
             return FileResponse(file_path)
             
         # Return a 404 or a default image if not found
@@ -256,6 +314,8 @@ def create_app(
                 return FileResponse(requested_file)
             return FileResponse(html_dir / "index.html")
     else:
-        logger.warning(f"Frontend build directory not found at {html_dir}. Web UI will not be available.")
+        logger.warning(
+            f"Frontend build directory not found at {html_dir}. Web UI will not be available."
+        )
 
     return app

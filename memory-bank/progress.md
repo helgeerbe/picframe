@@ -9,6 +9,7 @@ This file tracks the project's progress using a task list format.
 
 ## Completed Tasks
 - [x] Ticket #649: Phase 2B: Implement System Actions via WebUI and EventBus
+- [x] Ticket #655: Implement REST endpoints for Configuration Management
 
 *   [2026-04-28 09:26:00] - Phase 0: Technical Spike (Video Handoff PoC)
 *   [2026-04-23 11:19:00] - Architectural Planning & Documentation (Clean Architecture, EDA, Dual-Database, HAL, Frontend Spec)

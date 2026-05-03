@@ -1,8 +1,11 @@
-import pytest
-from unittest.mock import patch, MagicMock
 from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 from fastapi.testclient import TestClient
+
 from picframe.api.app import create_app
+
 
 @pytest.fixture
 def client() -> TestClient:
@@ -67,6 +70,62 @@ def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
         response = client.get("/assets/app.js")
         assert response.status_code == 200
         assert response.text == "console.log('app');"
+
+def test_api_get_config(client: TestClient) -> None:
+    # Test without config repository
+    response = client.get("/api/config")
+    assert response.status_code == 200
+    assert response.json() == {}
+
+def test_api_get_config_with_repo() -> None:
+    mock_repo = MagicMock()
+    mock_repo.get_app_config.side_effect = lambda key, default: {
+        "viewer": {"fps": 60},
+        "model": {"pic_dir": "/tmp"},
+        "mqtt": {"use_mqtt": False},
+        "http": {"port": 9000},
+        "peripherals": {"enable": True},
+    }.get(key, default)
+    
+    app = create_app(config_repository=mock_repo)
+    client = TestClient(app)
+    
+    response = client.get("/api/config")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["viewer"]["fps"] == 60
+    assert data["model"]["pic_dir"] == "/tmp"
+    assert data["mqtt"]["use_mqtt"] is False
+    assert data["http"]["port"] == 9000
+    assert data["peripherals"]["enable"] is True
+
+def test_api_put_config() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+    
+    # Setup mock to return existing config
+    mock_repo.get_app_config.return_value = {"fps": 30, "blur_amount": 12}
+    
+    app = create_app(config_repository=mock_repo, event_publisher=mock_publisher)
+    client = TestClient(app)
+    
+    payload = {
+        "viewer": {"fps": 60},
+        "model": {"pic_dir": "/new/path"}
+    }
+    
+    response = client.put("/api/config", json=payload)
+    assert response.status_code == 200
+    assert response.json() == {"status": "success"}
+    
+    # Verify repository was updated
+    assert mock_repo.set_app_config.call_count == 2
+    
+    # Verify event was published
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command.name == "SET_CONFIG"
+    assert event.payload == payload
 
 def test_spa_routing_without_html_dir(tmp_path: Path) -> None:
     # Patch the Path object to point to an empty directory
