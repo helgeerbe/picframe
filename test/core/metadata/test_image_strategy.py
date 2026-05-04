@@ -37,15 +37,20 @@ def test_extract_file_not_found(
 )
 @patch(
     "picframe.core.metadata.image_strategy."
-    "ImageMetadataStrategy._get_orientation"
+    "ImageMetadataStrategy._get_all_exif"
 )
 @patch(
     "picframe.core.metadata.image_strategy."
-    "ImageMetadataStrategy._get_exif_datetime"
+    "ImageMetadataStrategy._get_iptc_data"
+)
+@patch(
+    "picframe.core.metadata.image_strategy."
+    "ImageMetadataStrategy._get_xmp_data"
 )
 def test_extract_success(
+    mock_get_xmp: MagicMock,
+    mock_get_iptc: MagicMock,
     mock_get_exif: MagicMock,
-    mock_get_orientation: MagicMock,
     mock_get_dimensions: MagicMock,
     mock_stat: MagicMock,
     mock_isfile: MagicMock,
@@ -60,8 +65,19 @@ def test_extract_success(
     mock_stat.return_value = mock_stat_result
     
     mock_get_dimensions.return_value = (1920, 1080)
-    mock_get_orientation.return_value = 6
-    mock_get_exif.return_value = 1678880000.0
+    mock_get_exif.return_value = {
+        "orientation": 6,
+        "exif_datetime": 1678880000.0,
+        "f_number": 2.8,
+        "iso": 100
+    }
+    mock_get_iptc.return_value = {
+        "title": "Test Title",
+        "tags": "test, image"
+    }
+    mock_get_xmp.return_value = {
+        "caption": "Test Caption"
+    }
 
     result = strategy.extract("/path/to/image.jpg", 1)
 
@@ -76,6 +92,11 @@ def test_extract_success(
     assert result.height == 1080
     assert result.orientation == 6
     assert result.exif_datetime == 1678880000.0
+    assert result.f_number == 2.8
+    assert result.iso == 100
+    assert result.title == "Test Title"
+    assert result.caption == "Test Caption"
+    assert result.tags == "test, image"
 
 
 @patch("os.path.isfile")
