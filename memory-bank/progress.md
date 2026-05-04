@@ -8,6 +8,9 @@ This file tracks the project's progress using a task list format.
 * [2026-04-28 09:26:00] - Marked Phase 0 as complete.
 
 ## Completed Tasks
+- [x] Ticket #621: [Task 2C.1]: Decouple Dynamic Overlays (Clock & Text) from Core Renderer
+- [x] Ticket #657: Refactor Configuration API to use Service Layer and Pydantic Validation
+- [x] Ticket #659: Epic: Centralized Configuration Initialization and Database Seeding
 - [x] Ticket #660: Implement Video Metadata Strategy and Extension Separation
 - [x] Ticket #649: Phase 2B: Implement System Actions via WebUI and EventBus
 - [x] Ticket #655: Implement REST endpoints for Configuration Management

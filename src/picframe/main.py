@@ -114,7 +114,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
 
     # 6. Initialize Engine
     engine = PlaybackEngine(
-        event_bus, event_bus, playlist_manager, renderer, model_config
+        event_bus, event_bus, playlist_manager, renderer, model_config, config_repository=_config_repo
     )
 
     # 7. Initialize Web Server

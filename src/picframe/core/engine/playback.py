@@ -8,10 +8,10 @@ from typing import Any
 from picframe.core.events.dto import (
     Command,
     CommandEvent,
+    CurrentMediaChangedEvent,
     RenderCommand,
     State,
     StateEvent,
-    CurrentMediaChangedEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.renderers.interfaces import IRenderer
@@ -33,6 +33,7 @@ class PlaybackEngine:
         playlist_manager: PlaylistManager,
         renderer: IRenderer,
         config: dict[str, Any],
+        config_repository: Any | None = None,
     ) -> None:
         """
         Initialize the PlaybackEngine.
@@ -42,6 +43,7 @@ class PlaybackEngine:
             playlist_manager: Service for retrieving media items.
             renderer: The presentation layer component for drawing pixels.
             config: Application configuration.
+            config_repository: Optional repository to fetch live configuration updates.
         """
         self._logger = logging.getLogger(__name__)
         self._event_publisher = event_publisher
@@ -49,6 +51,7 @@ class PlaybackEngine:
         self._playlist_manager = playlist_manager
         self._renderer = renderer
         self._config = config
+        self._config_repository = config_repository
         
         self._state = State.IDLE
         self._is_running = False
@@ -280,9 +283,22 @@ class PlaybackEngine:
         if media_item.filepath.endswith("no_pictures.jpg"):
             return ""
             
-        # In a full implementation, we would fetch this from the config repository.
-        # For now, we'll use the default config or what was passed in.
-        show_text_config = str(self._config.get("show_text", "")).lower()
+        # Fetch the live configuration from the repository if available, otherwise use the initial config
+        if self._config_repository:
+            show_text_config = str(
+                self._config_repository.get_app_config(
+                    "viewer.show_text", self._config.get("show_text", "")
+                )
+            ).lower()
+            show_text_fm = str(
+                self._config_repository.get_app_config(
+                    "viewer.show_text_fm", self._config.get("show_text_fm", "%b %d, %Y")
+                )
+            )
+        else:
+            show_text_config = str(self._config.get("show_text", "")).lower()
+            show_text_fm = str(self._config.get("show_text_fm", "%b %d, %Y"))
+            
         if not show_text_config or show_text_config == "false" or show_text_config == "off":
             return ""
             
@@ -301,7 +317,7 @@ class PlaybackEngine:
             import datetime
             try:
                 dt = datetime.datetime.fromtimestamp(media_item.exif_datetime)
-                parts.append(dt.strftime("%Y-%m-%d %H:%M"))
+                parts.append(dt.strftime(show_text_fm))
             except Exception:
                 pass
                 
