@@ -117,6 +117,22 @@ class SQLiteConfigRepository(IConfigRepository):
                 (key, json_value),
             )
 
+    def get_all_app_config(self) -> dict[str, Any]:
+        """
+        Retrieve all application configuration values.
+
+        Returns:
+            A dictionary containing all configuration key-value pairs.
+        """
+        cursor = self._conn.execute("SELECT key, value FROM app_config")
+        config = {}
+        for row in cursor.fetchall():
+            try:
+                config[row["key"]] = json.loads(row["value"])
+            except json.JSONDecodeError:
+                logger.error(f"Failed to decode JSON for config key: {row['key']}")
+        return config
+
     def get_all_directories(self) -> list[dict[str, Any]]:
         """
         Retrieve all configured media directories.

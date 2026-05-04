@@ -79,13 +79,13 @@ def test_api_get_config(client: TestClient) -> None:
 
 def test_api_get_config_with_repo() -> None:
     mock_repo = MagicMock()
-    mock_repo.get_app_config.side_effect = lambda key, default: {
-        "viewer": {"fps": 60},
-        "model": {"pic_dir": "/tmp"},
-        "mqtt": {"use_mqtt": False},
-        "http": {"port": 9000},
-        "peripherals": {"enable": True},
-    }.get(key, default)
+    mock_repo.get_all_app_config.return_value = {
+        "viewer.fps": 60,
+        "model.pic_dir": "/tmp",
+        "mqtt.use_mqtt": False,
+        "http.port": 9000,
+        "peripherals.enable": True,
+    }
     
     app = create_app(config_repository=mock_repo)
     client = TestClient(app)

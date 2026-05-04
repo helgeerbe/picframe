@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { onMounted, ref, onErrorCaptured } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useConfigStore, useSystemStore } from '../stores/config'
 import { useI18n } from 'vue-i18n'
@@ -23,17 +23,68 @@ const { config, isLoading: isConfigLoading, error: configError } = storeToRefs(c
 const { error: systemError } = storeToRefs(systemStore)
 
 const localConfig = ref<Record<string, any>>({})
-const activeTab = ref(Object.keys(configSchema)[0])
+const activeTab = ref(Object.keys(configSchema || {})[0] || 'viewer')
 const showConfirmModal = ref(false)
+const renderError = ref<any>(null)
+
+onErrorCaptured((err, _instance, info) => {
+  console.error('SettingsView Error:', err, info)
+  renderError.value = { message: err instanceof Error ? err.message : String(err), info }
+  return false // Prevent error from propagating and unmounting the app
+})
 const confirmAction = ref<(() => Promise<void>) | null>(null)
 const confirmMessage = ref('')
 const successMessage = ref('')
 
+import { watch } from 'vue'
+
 onMounted(async () => {
   await configStore.fetchConfig()
-  // Deep clone to avoid mutating store directly before save
-  localConfig.value = JSON.parse(JSON.stringify(config.value))
 })
+
+watch(() => config.value, (newConfig) => {
+  if (!newConfig || Object.keys(newConfig).length === 0) return;
+  
+  console.log('configSchema:', configSchema)
+  console.log('config.value:', newConfig)
+  
+  const getFallbackValue = (type: string) => {
+    switch (type) {
+      case 'boolean': return false;
+      case 'integer': return 0;
+      case 'float': return 0.0;
+      case 'string': return '';
+      case 'array': return [];
+      default: return null;
+    }
+  }
+
+  // Initialize localConfig with all keys from schema to prevent undefined errors
+  const initializedConfig: Record<string, any> = {}
+  for (const [section, props] of Object.entries(configSchema)) {
+    initializedConfig[section] = {}
+    for (const [key, propDef] of Object.entries(props as Record<string, any>)) {
+      if (key === '_title') continue; // Skip _title keys from schema
+      if (propDef.type === 'object' && propDef.properties) {
+        initializedConfig[section][key] = {}
+        for (const subKey of Object.keys(propDef.properties)) {
+          if (subKey === '_title') continue; // Skip _title keys from schema
+          const val = newConfig?.[section]?.[key]?.[subKey];
+          initializedConfig[section][key][subKey] = val !== undefined && val !== null
+            ? val
+            : getFallbackValue((propDef.properties as any)[subKey]?.type || 'string');
+        }
+      } else {
+        const val = newConfig?.[section]?.[key];
+        initializedConfig[section][key] = val !== undefined && val !== null
+          ? val
+          : getFallbackValue(propDef.type);
+      }
+    }
+  }
+  
+  localConfig.value = initializedConfig
+}, { immediate: true, deep: true })
 
 const saveConfig = async () => {
   try {
@@ -98,15 +149,24 @@ const importConfig = (event: Event) => {
   reader.readAsText(file)
 }
 
-const formatLabel = (key: string) => {
-  return key.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
+const formatLabel = (key: string | undefined | null) => {
+  if (!key) return ''
+  return String(key).split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }
 </script>
 
 <template>
   <div class="max-w-7xl mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
     
-    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
+    <!-- Error Boundary Display -->
+    <div v-if="renderError" class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 rounded shadow-sm mb-6">
+      <h3 class="font-bold text-lg">Component Crash Detected</h3>
+      <p class="font-mono text-sm mt-2">{{ renderError.message }}</p>
+      <p class="text-xs mt-1 text-red-500">Context: {{ renderError.info }}</p>
+      <button @click="renderError = null" class="mt-4 px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 text-sm">Dismiss</button>
+    </div>
+
+    <div v-if="!renderError" class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
       <div class="flex items-center space-x-3">
         <div class="p-3 bg-indigo-50 dark:bg-indigo-500/10 rounded-xl">
           <Cog6ToothIcon class="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
@@ -135,7 +195,7 @@ const formatLabel = (key: string) => {
     </div>
 
     <!-- Alerts -->
-    <div v-if="configError || systemError" class="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-r-lg mb-6">
+    <div v-if="!renderError && (configError || systemError)" class="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 rounded-r-lg mb-6">
       <div class="flex">
         <div class="flex-shrink-0">
           <ExclamationTriangleIcon class="h-5 w-5 text-red-400" aria-hidden="true" />
@@ -148,7 +208,7 @@ const formatLabel = (key: string) => {
       </div>
     </div>
 
-    <div v-if="successMessage" class="bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 p-4 rounded-r-lg mb-6 transition-all duration-500">
+    <div v-if="!renderError && successMessage" class="bg-green-50 dark:bg-green-900/20 border-l-4 border-green-500 p-4 rounded-r-lg mb-6 transition-all duration-500">
       <div class="flex">
         <div class="flex-shrink-0">
           <CheckCircleIcon class="h-5 w-5 text-green-400" aria-hidden="true" />
@@ -161,7 +221,7 @@ const formatLabel = (key: string) => {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+    <div v-if="!renderError" class="grid grid-cols-1 lg:grid-cols-4 gap-8">
       
       <!-- Sidebar Navigation -->
       <div class="lg:col-span-1">
@@ -202,22 +262,22 @@ const formatLabel = (key: string) => {
         <div class="bg-white dark:bg-gray-800/90 backdrop-blur-xl shadow-xl rounded-3xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden min-h-[600px]">
           
           <!-- Dynamic Config Form -->
-          <div v-if="activeTab !== 'danger' && localConfig[activeTab]" class="p-6 sm:p-8">
+          <div v-if="activeTab !== 'danger' && localConfig && localConfig[activeTab]" class="p-6 sm:p-8">
             <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-8 pb-4 border-b border-gray-100 dark:border-gray-700/50">
               {{ t(`config.${activeTab}._title`, formatLabel(activeTab)) }}
             </h2>
             
             <div class="space-y-8">
-              <template v-for="(propDef, key) in (configSchema as Record<string, any>)[activeTab] as Record<string, any>" :key="key">
+              <template v-for="(propDef, key) in (configSchema as Record<string, any>)[activeTab]" :key="key">
                 
                 <!-- Handle nested objects (like peripherals.buttons) -->
                 <div v-if="propDef.type === 'object'" class="bg-gray-50/50 dark:bg-gray-900/30 p-6 rounded-2xl border border-gray-100 dark:border-gray-700/50">
-                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-6">{{ formatLabel(key) }}</h3>
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white mb-6">{{ formatLabel(String(key)) }}</h3>
                   <div class="space-y-6">
                     <div v-for="(subPropDef, subKey) in propDef.properties as Record<string, any>" :key="subKey" class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
                       <div class="md:col-span-1">
                         <label :for="`${activeTab}-${key}-${subKey}`" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                          {{ formatLabel(subKey) }}
+                          {{ formatLabel(String(subKey)) }}
                         </label>
                         <p class="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                           {{ t(`config.${activeTab}.${key}.${subKey}`, '') }}
@@ -251,7 +311,7 @@ const formatLabel = (key: string) => {
                 <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start border-b border-gray-100 dark:border-gray-700/50 pb-6 last:border-0 last:pb-0">
                   <div class="md:col-span-1">
                     <label :for="`${activeTab}-${key}`" class="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {{ formatLabel(key) }}
+                      {{ formatLabel(String(key)) }}
                     </label>
                     <p class="mt-1 text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
                       {{ t(`config.${activeTab}.${key}`, '') }}
@@ -271,13 +331,13 @@ const formatLabel = (key: string) => {
                     </div>
                     
                     <!-- Select Dropdown -->
-                    <select 
-                      v-else-if="propDef.type === 'select'" 
-                      :id="`${activeTab}-${key}`" 
+                    <select
+                      v-else-if="propDef.type === 'select'"
+                      :id="`${activeTab}-${key}`"
                       v-model="localConfig[activeTab][key]"
                       class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-2.5"
                     >
-                      <option v-for="opt in propDef.options" :key="opt" :value="opt">{{ opt }}</option>
+                      <option v-for="opt in (propDef as any).options" :key="opt" :value="opt">{{ opt }}</option>
                     </select>
                     
                     <!-- Number Input -->

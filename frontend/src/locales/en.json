@@ -60,7 +60,7 @@
       "edge_alpha": "default=0.5, background colour at edge. 1.0 would show reflection of image",
       "fps": "default=20.0",
       "background": "default=[0.2, 0.2, 0.3, 1.0], RGBA to fill edges when fitting",
-      "blend_type": "default=\"blend\", choices={\"blend\", \"burn\", \"bump\"}, type of blend the shader can do",
+      "blend_type": "default=\"blend\", choices=[\"blend\", \"burn\", \"bump\"], type of blend the shader can do",
       "font_file": "",
       "shader": "",
       "show_text_fm": "default \"%b %d, %Y\", format to show date over the image",
@@ -79,7 +79,7 @@
       "display_y": "offset from top of screen (can be negative)",
       "display_w": "width of display surface (null->None will use max returned by hardware)",
       "display_h": "height of display surface",
-      "display_power": "default=0. choices={0, 1, 2, 3}, 0 => legacy `vcgencmd`, 1 => `xset`, 2 => 'wlr-randr', 3 => .../drm/card.../status (needed for multiple screens?) to blank the display",
+      "display_power": "default=0. choices=[0, 1, 2, 3], 0 => legacy `vcgencmd`, 1 => `xset`, 2 => 'wlr-randr', 3 => .../drm/card.../status (needed for multiple screens?) to blank the display",
       "display_hdmi": "default=\"HDMI-A-1\" which is marked \"HDMI 0\" and is nearest the power. Change to \"HDMI-A-2\" if you use \"HDMI 1\"",
       "use_glx": "default=False. Set to True on linux with xserver running. NB use_sdl2 might need to be False for this to work.",
       "use_sdl2": "default=True. pysdl2 can use display without xserver, it should be installed as a dependency of pi3d but might need `sudo apt install libsdl2-dev` if picframe gives errors about missing sdl2",
@@ -155,7 +155,7 @@
     },
     "peripherals": {
       "_title": "Peripherals",
-      "input_type": "default=null, valid options: {null, \"keyboard\", \"touch\", \"mouse\"}",
+      "input_type": "default=null, valid options: [null, \"keyboard\", \"touch\", \"mouse\"]",
       "buttons": {
         "_title": "Buttons",
         "pause": "",

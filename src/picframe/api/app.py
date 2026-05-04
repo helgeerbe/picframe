@@ -11,11 +11,12 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from picframe.api.models import AppConfig
 from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.repositories.interfaces import IConfigRepository
@@ -242,34 +243,49 @@ def create_app(
         if not config_repository:
             return {}
             
-        config: dict[str, Any] = {
-            "viewer": config_repository.get_app_config("viewer", {}),
-            "model": config_repository.get_app_config("model", {}),
-            "mqtt": config_repository.get_app_config("mqtt", {}),
-            "http": config_repository.get_app_config("http", {}),
-            "peripherals": config_repository.get_app_config("peripherals", {}),
-        }
-        return config
+        # Use ConfigService to handle the unflattening logic
+        # We create a temporary instance here since the API layer doesn't have
+        # direct access to the long-running ConfigService instance.
+        # In a more complex setup, this would be injected.
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None: pass
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None: pass
+            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+            
+        from picframe.core.services.config_service import ConfigService
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+        nested_config = temp_service.get_nested_config()
+        
+        # Pass through Pydantic model to populate default values
+        from picframe.api.models import AppConfig
+        app_config = AppConfig(**nested_config)
+        return app_config.model_dump()
 
     @app.put("/api/config")
-    async def api_put_config(payload: dict[str, Any]) -> dict[str, str]:
+    async def api_put_config(payload: AppConfig = Body(...)) -> dict[str, str]:
         """Update the application configuration."""
         if not config_repository:
             return {"status": "error", "message": "Config repository not available"}
             
-        # Update the repository
-        for section, values in payload.items():
-            if isinstance(values, dict):
-                # Merge with existing config for this section
-                existing = config_repository.get_app_config(section, {})
-                existing.update(values)
-                config_repository.set_app_config(section, existing)
-            else:
-                config_repository.set_app_config(section, values)
+        # Use ConfigService to handle the flattening logic
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None: pass
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None: pass
+            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+            
+        from picframe.core.services.config_service import ConfigService
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+        
+        # Convert Pydantic model to dict, excluding unset values to avoid overwriting
+        # existing config with None values if the frontend didn't send them.
+        config_dict = payload.model_dump(exclude_unset=True)
+        temp_service.update_nested_config(config_dict)
                 
         # Publish a SET_CONFIG event to notify other components
         if event_publisher:
-            event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=payload))
+            event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=config_dict))
             
         return {"status": "success"}
 

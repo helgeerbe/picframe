@@ -40,6 +40,15 @@ class IConfigRepository(Protocol):
         """
         ...
 
+    def get_all_app_config(self) -> dict[str, Any]:
+        """
+        Retrieve all application configuration values.
+
+        Returns:
+            A dictionary containing all configuration key-value pairs.
+        """
+        ...
+
     def get_all_directories(self) -> list[dict[str, Any]]:
         """
         Retrieve all configured media directories.
