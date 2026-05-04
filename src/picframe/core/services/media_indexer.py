@@ -6,16 +6,14 @@ events and updates the media repository with extracted metadata.
 """
 
 import logging
-from typing import Any
-
-from picframe.core.events.dto import Command, CommandEvent, FileChangeEvent
 import os
 
+from picframe.core.events.dto import Command, CommandEvent, FileChangeEvent
 from picframe.core.events.interfaces import IEventSubscriber
-from picframe.core.metadata.image_strategy import ImageMetadataStrategy
+from picframe.core.metadata.interfaces import IMetadataStrategy
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 from picframe.core.services.image_processing import ImageProcessingService
-from picframe.core.services.media_monitor import MediaMonitorService
+from picframe.core.services.media_monitor import MediaMonitorService  # type: ignore
 
 logger = logging.getLogger(__name__)
 
@@ -34,12 +32,16 @@ class MediaIndexerService:
         media_repository: IMediaRepository,
         config_repository: IConfigRepository,
         image_processing_service: ImageProcessingService,
-        media_monitor_service: MediaMonitorService
+        media_monitor_service: MediaMonitorService,
+        image_strategy: IMetadataStrategy,
+        video_strategy: IMetadataStrategy
     ) -> None:
         self.media_repository = media_repository
         self.config_repository = config_repository
         self.image_processing_service = image_processing_service
         self.media_monitor_service = media_monitor_service
+        self.image_strategy = image_strategy
+        self.video_strategy = video_strategy
         
         event_subscriber.subscribe(FileChangeEvent, self._handle_file_change)
         event_subscriber.subscribe(CommandEvent, self._handle_command)
@@ -64,18 +66,35 @@ class MediaIndexerService:
                 logger.debug(f"Indexing file: {event.path}")
                 # Extract metadata
                 directory_id = self._get_or_create_directory_id(event.path)
-                strategy = ImageMetadataStrategy()
+                
+                ext = os.path.splitext(event.path)[1].lower()
+                
+                # Get extensions from config
+                image_exts = self.config_repository.get_app_config("model.image_extensions", [
+                    ".jpg", ".jpeg", ".png", ".heic", ".heif"
+                ])
+                video_exts = self.config_repository.get_app_config("model.video_extensions", [
+                    ".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"
+                ])
+                
+                # Ensure extensions are lowercase for comparison
+                image_exts = [e.lower() for e in image_exts]
+                video_exts = [e.lower() for e in video_exts]
+                
+                strategy = None
+                if ext in image_exts:
+                    strategy = self.image_strategy
+                elif ext in video_exts:
+                    strategy = self.video_strategy
+                    
+                if not strategy:
+                    logger.debug(f"Skipping file with unsupported extension: {event.path}")
+                    return
                 
                 # For initial sync, we need this to be synchronous so the DB is populated
                 # before the playlist is built.
                 media_item = strategy.extract(event.path, directory_id)
                 if media_item:
-                    # Determine media type based on extension
-                    ext = os.path.splitext(event.path)[1].lower()
-                    if ext in {".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"}:
-                        from picframe.core.models.media import MediaType
-                        media_item.media_type = MediaType.VIDEO
-                        
                     self.media_repository.add_media_item(media_item.to_dict())
                 else:
                     logger.warning(f"Failed to extract metadata for {event.path}")

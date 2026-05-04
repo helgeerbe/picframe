@@ -98,12 +98,13 @@ model:
   tags_filter: ''
   log_level: WARNING
   log_file: ''
-  allowed_extensions:
+  image_extensions:
   - .jpg
   - .jpeg
   - .png
   - .heic
   - .heif
+  video_extensions:
   - .mp4
   - .mkv
   - .flv

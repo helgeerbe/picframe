@@ -58,12 +58,10 @@ class ViewerConfig(BaseModel):
 
 class ModelConfig(BaseModel):
     pic_dir: str = "~/Pictures"
-    allowed_extensions: list[str] = Field(default_factory=lambda: [
-        ".jpg", ".jpeg", ".png", ".heic", ".heif", 
-        ".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"
+    image_extensions: list[str] = Field(default_factory=lambda: [
+        ".jpg", ".jpeg", ".png", ".heic", ".heif"
     ])
-    allowed_extensions: list[str] = Field(default_factory=lambda: [
-        ".jpg", ".jpeg", ".png", ".heic", ".heif", 
+    video_extensions: list[str] = Field(default_factory=lambda: [
         ".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"
     ])
     deleted_pictures: str = "~/DeletedPictures"

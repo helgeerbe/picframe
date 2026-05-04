@@ -226,7 +226,13 @@
     "log_file": {
       "type": "string"
     },
-    "allowed_extensions": {
+    "image_extensions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "video_extensions": {
       "type": "array",
       "items": {
         "type": "string"

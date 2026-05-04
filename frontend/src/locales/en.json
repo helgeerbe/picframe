@@ -129,7 +129,8 @@
       "tags_filter": "default=\"\" filter clause for image tags",
       "log_level": "default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL",
       "log_file": "default=\"\" for debugging set this to the path to a file. NB logging messages will appended indefinitely so don't forget this. You will need to tidy it up later",
-      "allowed_extensions": "List of file extensions to include in the playlist."
+      "image_extensions": "List of image file extensions to include in the playlist.",
+      "video_extensions": "List of video file extensions to include in the playlist."
     },
     "mqtt": {
       "_title": "Mqtt",

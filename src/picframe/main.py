@@ -14,19 +14,19 @@ import sys
 import threading
 from typing import Any
 
+from picframe.api.app import create_app
+from picframe.api.server import WebServer
 from picframe.core.engine.playback import PlaybackEngine
 from picframe.core.events.bus import PriorityQueueEventBus
 from picframe.core.renderers.pi3d_renderer import Pi3dRenderer
 from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
 from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
-from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.bootstrapper import EnvironmentBootstrapper
 from picframe.core.services.config_service import ConfigService
-from picframe.core.services.media_monitor import MediaMonitorService
 from picframe.core.services.image_processing import ImageProcessingService
+from picframe.core.services.media_monitor import MediaMonitorService
+from picframe.core.services.playlist import PlaylistManager
 from picframe.infrastructure.os.hal_factory import HALFactory
-from picframe.api.app import create_app
-from picframe.api.server import WebServer
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -78,10 +78,13 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     
     logger.info(f"Configured media directories: {media_directories}")
     
-    allowed_extensions = set(model_config.get("allowed_extensions", [
-        ".jpg", ".jpeg", ".png", ".heic", ".heif",
+    image_extensions = model_config.get("image_extensions", [
+        ".jpg", ".jpeg", ".png", ".heic", ".heif"
+    ])
+    video_extensions = model_config.get("video_extensions", [
         ".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"
-    ]))
+    ])
+    allowed_extensions = set(image_extensions + video_extensions)
     follow_links = model_config.get("follow_links", False)
     
     media_monitor_service = MediaMonitorService(
@@ -91,13 +94,18 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         follow_links=follow_links
     )
 
+    from picframe.core.metadata.image_strategy import ImageMetadataStrategy
+    from picframe.core.metadata.video_strategy import VideoMetadataStrategy
     from picframe.core.services.media_indexer import MediaIndexerService
-    media_indexer_service = MediaIndexerService(
+    
+    _ = MediaIndexerService(
         event_subscriber=event_bus,
         media_repository=media_repo,
         config_repository=_config_repo,
         image_processing_service=image_processing_service,
-        media_monitor_service=media_monitor_service
+        media_monitor_service=media_monitor_service,
+        image_strategy=ImageMetadataStrategy(),
+        video_strategy=VideoMetadataStrategy()
     )
 
     # 5. Initialize Renderer

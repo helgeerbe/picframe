@@ -128,10 +128,18 @@ def test_get_all_media(
     assert "/path/to/deleted.jpg" not in paths
 
 
-def test_add_duplicate_filepath_raises_error(
+def test_add_duplicate_filepath_updates_existing(
     media_repo: SQLiteMediaRepository, sample_media_data: dict[str, Any]
 ) -> None:
-    """Test that adding a duplicate filepath raises an IntegrityError."""
+    """Test that adding a duplicate filepath updates the existing record."""
     media_repo.add_media_item(sample_media_data)
-    with pytest.raises(sqlite3.IntegrityError):
-        media_repo.add_media_item(sample_media_data)
+    
+    # Modify data and add again
+    updated_data = sample_media_data.copy()
+    updated_data["file_size"] = 2048
+    media_repo.add_media_item(updated_data)
+    
+    # Verify it was updated, not duplicated
+    all_media = media_repo.get_all_media()
+    assert len(all_media) == 1
+    assert all_media[0]["file_size"] == 2048

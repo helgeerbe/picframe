@@ -1,6 +1,7 @@
 import os
 import sqlite3
 from pathlib import Path
+from typing import Any
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -9,11 +10,11 @@ from picframe.core.services.bootstrapper import EnvironmentBootstrapper
 
 
 @pytest.fixture
-def temp_dir(tmp_path):
+def temp_dir(tmp_path: Path) -> Path:
     return tmp_path / ".picframe"
 
 
-def test_bootstrapper_initialization(temp_dir):
+def test_bootstrapper_initialization(temp_dir: Path) -> None:
     bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir))
     assert bootstrapper.base_dir == temp_dir
     assert bootstrapper.data_dir == temp_dir / "data"
@@ -21,59 +22,44 @@ def test_bootstrapper_initialization(temp_dir):
     assert bootstrapper.media_db_path == temp_dir / "data" / "media_cache.db3"
 
 
-def test_create_directories(temp_dir):
+def test_create_directories(temp_dir: Path) -> None:
     bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir))
     bootstrapper._create_directories()
     assert bootstrapper.data_dir.exists()
     assert bootstrapper.data_dir.is_dir()
 
 
-@patch("picframe.core.services.bootstrapper.shutil")
-@patch("picframe.core.services.bootstrapper.Path.exists")
-@patch("picframe.core.services.bootstrapper.Path.iterdir")
-def test_copy_assets(mock_iterdir, mock_exists, mock_shutil, temp_dir):
-    bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir))
+def test_copy_assets(temp_dir: Path) -> None:
+    bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir / "user_dir"))
+    bootstrapper._create_directories()
     
-    # Mock the package data directory and its contents
-    mock_exists.side_effect = lambda: True # pkg_data_dir exists
+    # Create fake package directory structure
+    fake_pkg_dir = temp_dir / "fake_picframe"
+    fake_data_dir = fake_pkg_dir / "data"
+    fake_html_dir = fake_pkg_dir / "html"
     
-    mock_file = MagicMock()
-    mock_file.name = "test.txt"
-    mock_file.is_dir.return_value = False
+    fake_data_dir.mkdir(parents=True)
+    (fake_data_dir / "test.txt").touch()
+    (fake_data_dir / "test_dir").mkdir()
+    (fake_data_dir / "test_dir" / "inner.txt").touch()
+    (fake_data_dir / "no_pictures.jpg").touch()
     
-    mock_dir = MagicMock()
-    mock_dir.name = "test_dir"
-    mock_dir.is_dir.return_value = True
+    fake_html_dir.mkdir(parents=True)
+    (fake_html_dir / "index.html").touch()
     
-    mock_iterdir.return_value = [mock_file, mock_dir]
-    
-    # Mock destination exists to False so it copies, but pkg_data_dir exists to True
-    def mock_exists_side_effect(*args, **kwargs):
-        return True
-        
-    mock_exists.side_effect = mock_exists_side_effect
-    
-    with patch.object(Path, 'exists', return_value=False):
-        # We need to patch the specific Path instance's exists method inside the loop
-        # But it's easier to just mock the whole Path.exists and handle the pkg_data_dir check
-        pass
-        
-    # Let's just mock the pkg_data_dir.exists() directly
-    # We need enough side_effects for:
-    # 1. pkg_data_dir.exists() -> True
-    # 2. dest_item.exists() for file -> False
-    # 3. dest_item.exists() for dir -> False
-    # 4. no_pictures_src.exists() -> True
-    # 5. no_pictures_dest.exists() -> False
-    with patch('picframe.core.services.bootstrapper.Path.exists', side_effect=[True, False, False, True, False]):
+    with patch('picframe.__file__', str(fake_pkg_dir / "__init__.py")):
         bootstrapper._copy_assets()
-    
-    assert mock_shutil.copy2.call_count == 2
-    mock_shutil.copytree.assert_called_once()
+        
+    # Assert files were copied
+    assert (bootstrapper.data_dir / "test.txt").exists()
+    assert (bootstrapper.data_dir / "test_dir").is_dir()
+    assert (bootstrapper.data_dir / "test_dir" / "inner.txt").exists()
+    assert (bootstrapper.data_dir / "no_pictures.jpg").exists()
+    assert (bootstrapper.base_dir / "html" / "index.html").exists()
 
 
 @patch("picframe.core.services.bootstrapper.input")
-def test_prompt_deletion_keep(mock_input, temp_dir):
+def test_prompt_deletion_keep(mock_input: MagicMock, temp_dir: Path) -> None:
     bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir))
     test_file = temp_dir / "test.db"
     test_file.parent.mkdir(parents=True, exist_ok=True)
@@ -86,7 +72,7 @@ def test_prompt_deletion_keep(mock_input, temp_dir):
     assert test_file.exists()
 
 @patch("picframe.core.services.bootstrapper.input")
-def test_prompt_deletion_delete(mock_input, temp_dir):
+def test_prompt_deletion_delete(mock_input: MagicMock, temp_dir: Path) -> None:
     bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir))
     test_file = temp_dir / "test.db"
     test_file.parent.mkdir(parents=True, exist_ok=True)
@@ -98,7 +84,7 @@ def test_prompt_deletion_delete(mock_input, temp_dir):
     assert result is True
     assert not test_file.exists()
 
-def test_prompt_deletion_force(temp_dir):
+def test_prompt_deletion_force(temp_dir: Path) -> None:
     bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir), force=True)
     test_file = temp_dir / "test.db"
     test_file.parent.mkdir(parents=True, exist_ok=True)
@@ -109,7 +95,7 @@ def test_prompt_deletion_force(temp_dir):
     assert result is True
     assert not test_file.exists()
 
-def test_bootstrap_full(temp_dir):
+def test_bootstrap_full(temp_dir: Path) -> None:
     bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir))
     
     with patch.object(bootstrapper, '_create_directories') as mock_create_dir, \

@@ -8,6 +8,8 @@ from dataclasses import replace
 from enum import Enum, auto
 from typing import Any
 
+from pathlib import Path
+
 import pi3d
 from PIL import Image
 
@@ -212,7 +214,16 @@ class Pi3dRenderer(IRenderer):
             # matted/resized the image and saved it to a cache path, or we load it directly.
             # For now, we load the image path directly.
             try:
-                im: Image.Image = Image.open(command.image_path)
+                # Check if it's a video file based on extension
+                ext = Path(command.image_path).suffix.lower()
+                if ext in ['.mp4', '.mov', '.avi', '.mkv']:
+                    # For videos, we don't load them into pi3d textures directly
+                    # The VideoPlayer handles video playback. We just need a placeholder
+                    # or we can skip texture loading entirely if we know it's a video.
+                    # For now, create a black placeholder to avoid Image.open errors.
+                    im = Image.new('RGB', (self._display.width, self._display.height), color='black')
+                else:
+                    im = Image.open(command.image_path)
             except Exception as e:
                 self._logger.warning(f"Failed to load image {command.image_path}: {e}. Using fallback.")
                 # Create a fallback image (e.g., black screen or default "no pictures" image)

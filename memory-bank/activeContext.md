@@ -12,6 +12,7 @@
 *   Next up: Implementing the CLI (`init` and `run` commands) and `EnvironmentBootstrapper` (Subphase 2B).
 
 ## Recent Changes
+- **[2026-05-04 18:11:00] - Completed Ticket #660 (Implement Video Metadata Strategy and Extension Separation)**: Separated image and video extensions in configuration (`configSchema.json`, `models.py`, `default_config.yaml`). Implemented `VideoMetadataStrategy` for video metadata extraction. Updated `MediaIndexerService` to route files to the correct strategy based on extension. Fixed typing issues and updated unit tests.
 - **[2026-05-03 20:04:00] - Completed Ticket #655 (Implement REST endpoints for Configuration Management)**: Implemented `GET /api/config` and `PUT /api/config` in `src/picframe/api/app.py`. The endpoints interact with `IConfigRepository` to serve structured configuration matching the frontend schema and publish `SET_CONFIG` events upon updates. Added comprehensive unit tests and ensured strict `mypy` and `ruff` compliance.
 - **[2026-05-03 19:35:00] - Completed Ticket #656 (Directory Scanning and ImageProcessingService Integration)**: Implemented `MediaMonitorService` with `watchdog` for real-time file system monitoring, mount point detection, and fast differential sync. Updated `ImageProcessingService` with an asynchronous worker pool for metadata extraction. Fixed `pi3d` mocking issues in tests and ensured strict `mypy` and `ruff` compliance.
 - **[2026-05-02 13:40:00] - Completed Backend Event Plumbing for SET_CONFIG (Ticket #647)**: Actual pi3d text rendering deferred to Phase 2C (Ticket #621).

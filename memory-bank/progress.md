@@ -8,6 +8,7 @@ This file tracks the project's progress using a task list format.
 * [2026-04-28 09:26:00] - Marked Phase 0 as complete.
 
 ## Completed Tasks
+- [x] Ticket #660: Implement Video Metadata Strategy and Extension Separation
 - [x] Ticket #649: Phase 2B: Implement System Actions via WebUI and EventBus
 - [x] Ticket #655: Implement REST endpoints for Configuration Management
 

@@ -85,9 +85,17 @@ def test_extract_exception_handling(
     mock_isfile: MagicMock,
     strategy: ImageMetadataStrategy,
 ) -> None:
-    """Test that extraction returns None if an unexpected exception occurs."""
+    """Test that extraction returns fallback MediaItem if an unexpected exception occurs."""
     mock_isfile.return_value = True
-    mock_stat.side_effect = PermissionError("Access denied")
+    
+    mock_stat_result = MagicMock()
+    mock_stat_result.st_size = 1024
+    mock_stat_result.st_mtime = 1678886400.0
+    mock_stat.return_value = mock_stat_result
 
-    result = strategy.extract("/path/to/image.jpg", 1)
-    assert result is None
+    with patch.object(strategy, '_get_dimensions', side_effect=Exception("Test error")):
+        result = strategy.extract("/path/to/image.jpg", 1)
+        
+    assert result is not None
+    assert result.file_size == 1024
+    assert result.last_modified == 1678886400.0
