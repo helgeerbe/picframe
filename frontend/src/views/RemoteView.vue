@@ -89,7 +89,7 @@ const getExifIcon = (key: string) => {
           <div class="relative w-full bg-black/5 dark:bg-black/40 flex items-center justify-center overflow-hidden group" style="min-height: 400px; flex-grow: 1;">
             <img
               v-if="currentMedia?.file_path"
-              :src="currentMedia.file_path"
+              :src="`/media?path=${encodeURIComponent(currentMedia.file_path)}`"
               alt="Current Media"
               class="absolute inset-0 w-full h-full object-contain transition-transform duration-1000 ease-out group-hover:scale-[1.02]"
               @error="console.error('Failed to load image:', currentMedia.file_path)"

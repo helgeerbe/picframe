@@ -65,7 +65,15 @@ class ImageMetadataStrategy(IMetadataStrategy):
             )
         except Exception as e:
             logger.error(f"Failed to extract metadata from {filepath}: {e}")
-            return None
+            # Fallback to basic file stats if extraction fails completely
+            return MediaItem(
+                filepath=filepath,
+                filename=os.path.basename(filepath),
+                directory_id=directory_id,
+                media_type=MediaType.IMAGE,
+                file_size=os.stat(filepath).st_size,
+                last_modified=os.stat(filepath).st_mtime,
+            )
 
     def _get_dimensions(self, filepath: str) -> tuple[int | None, int | None]:
         """

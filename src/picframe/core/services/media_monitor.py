@@ -193,26 +193,21 @@ class MediaMonitorService:
         Performs a fast differential sync on startup using os.scandir().
         This should be called before starting the observers to ensure the initial state is correct.
         """
-        logger.info("Performing differential sync...")
-        # In a real implementation, this would compare the current file system state
-        # with the state stored in the database (media_cache.db3) and publish
-        # FileChangeEvent DTOs for any discrepancies.
-        # For this example, we'll just log that it's happening.
-        # The actual implementation would likely involve querying the database for all known files,
-        # scanning the directories, and finding the differences.
+        logger.info(f"Performing differential sync on directories: {self.directories}")
+        
+        from watchdog.events import FileCreatedEvent
         
         for directory in self.directories:
             if not os.path.exists(directory):
+                logger.warning(f"Directory does not exist during sync: {directory}")
                 continue
             
             try:
                 for entry in os.scandir(directory):
                     if entry.is_file() and self.handler._is_allowed(entry.path):
-                        # Here you would check if the file exists in the DB and if its
-                        # modified time matches.
-                        # If not, publish a FILE_CREATED or FILE_MODIFIED event.
-                        # For now, we just log it.
                         logger.debug(f"Sync found file: {entry.path}")
+                        # Publish synchronously to ensure indexing completes before playlist build
+                        self.handler.on_created(FileCreatedEvent(entry.path))
             except Exception as e:
                 logger.error(f"Error during differential sync of {directory}: {e}")
         

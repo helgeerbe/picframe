@@ -41,35 +41,23 @@ def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
     assets_dir.mkdir()
     (assets_dir / "app.js").write_text("console.log('app');")
     
-    # Patch the Path object in app.py to point to our tmp_path
-    with patch("picframe.api.app.Path") as mock_path:
-        # Setup the mock to return our tmp_path when __file__ is resolved
-        mock_file_path = MagicMock()
-        mock_parent1 = MagicMock()
-        mock_parent2 = MagicMock()
-        
-        mock_path.return_value = mock_file_path
-        mock_file_path.parent = mock_parent1
-        mock_parent1.parent = mock_parent2
-        mock_parent2.__truediv__.return_value = html_dir
-        
-        app = create_app()
-        client = TestClient(app)
-        
-        # Test root route returns index.html
-        response = client.get("/")
-        assert response.status_code == 200
-        assert response.text == "<h1>Index</h1>"
-        
-        # Test non-existent route falls back to index.html
-        response = client.get("/some/vue/route")
-        assert response.status_code == 200
-        assert response.text == "<h1>Index</h1>"
-        
-        # Test assets route
-        response = client.get("/assets/app.js")
-        assert response.status_code == 200
-        assert response.text == "console.log('app');"
+    app = create_app(html_dir=str(html_dir))
+    client = TestClient(app)
+    
+    # Test root route returns index.html
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.text == "<h1>Index</h1>"
+    
+    # Test non-existent route falls back to index.html
+    response = client.get("/some/vue/route")
+    assert response.status_code == 200
+    assert response.text == "<h1>Index</h1>"
+    
+    # Test assets route
+    response = client.get("/assets/app.js")
+    assert response.status_code == 200
+    assert response.text == "console.log('app');"
 
 def test_api_get_config(client: TestClient) -> None:
     # Test without config repository
@@ -83,7 +71,7 @@ def test_api_get_config_with_repo() -> None:
         "viewer.fps": 60,
         "model.pic_dir": "/tmp",
         "mqtt.use_mqtt": False,
-        "http.port": 9000,
+        
         "peripherals.enable": True,
     }
     
@@ -96,7 +84,7 @@ def test_api_get_config_with_repo() -> None:
     assert data["viewer"]["fps"] == 60
     assert data["model"]["pic_dir"] == "/tmp"
     assert data["mqtt"]["use_mqtt"] is False
-    assert data["http"]["port"] == 9000
+    
     assert data["peripherals"]["enable"] is True
 
 def test_api_put_config() -> None:
@@ -128,20 +116,9 @@ def test_api_put_config() -> None:
     assert event.payload == payload
 
 def test_spa_routing_without_html_dir(tmp_path: Path) -> None:
-    # Patch the Path object to point to an empty directory
-    with patch("picframe.api.app.Path") as mock_path:
-        mock_file_path = MagicMock()
-        mock_parent1 = MagicMock()
-        mock_parent2 = MagicMock()
-        
-        mock_path.return_value = mock_file_path
-        mock_file_path.parent = mock_parent1
-        mock_parent1.parent = mock_parent2
-        mock_parent2.__truediv__.return_value = tmp_path / "nonexistent"
-        
-        app = create_app()
-        client = TestClient(app)
-        
-        # Test root route returns 404 since SPA is not mounted
-        response = client.get("/")
-        assert response.status_code == 404
+    app = create_app(html_dir=str(tmp_path / "nonexistent"))
+    client = TestClient(app)
+    
+    # Test root route returns 404 since SPA is not mounted
+    response = client.get("/")
+    assert response.status_code == 404

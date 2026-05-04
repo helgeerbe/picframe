@@ -211,9 +211,6 @@
     "key_list": {
       "type": "array"
     },
-    "db_file": {
-      "type": "string"
-    },
     "portrait_pairs": {
       "type": "boolean"
     },
@@ -228,6 +225,12 @@
     },
     "log_file": {
       "type": "string"
+    },
+    "allowed_extensions": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   },
   "mqtt": {
@@ -253,35 +256,6 @@
       "type": "string"
     },
     "device_url": {
-      "type": "string"
-    }
-  },
-  "http": {
-    "use_http": {
-      "type": "boolean"
-    },
-    "path": {
-      "type": "string"
-    },
-    "port": {
-      "type": "integer"
-    },
-    "auth": {
-      "type": "boolean"
-    },
-    "username": {
-      "type": "string"
-    },
-    "password": {
-      "type": "string"
-    },
-    "use_ssl": {
-      "type": "boolean"
-    },
-    "keyfile": {
-      "type": "string"
-    },
-    "certfile": {
       "type": "string"
     }
   },
@@ -322,6 +296,26 @@
       "type": "string"
     },
     "shortcut": {
+      "type": "string"
+    }
+  },
+  "http": {
+    "auth": {
+      "type": "boolean"
+    },
+    "username": {
+      "type": "string"
+    },
+    "password": {
+      "type": "string"
+    },
+    "use_ssl": {
+      "type": "boolean"
+    },
+    "keyfile": {
+      "type": "string"
+    },
+    "certfile": {
       "type": "string"
     }
   }

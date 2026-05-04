@@ -32,7 +32,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = None, media_db_path: str | None = None) -> None:
+def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = None, media_db_path: str | None = None, html_dir: str | None = None) -> None:
     """
     Composition Root for Picframe.
     Initializes and wires all components together.
@@ -68,10 +68,21 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     image_processing_service = ImageProcessingService(cache_dir=os.path.join(data_dir, "cache"))
     
     # Initialize MediaMonitorService
-    # TODO: Load directories and allowed_extensions from config
-    media_directories = _config_repo.get_app_config("media_directories", [os.path.join(data_dir, "media")])
-    allowed_extensions = set(_config_repo.get_app_config("allowed_extensions", [".jpg", ".jpeg", ".png", ".heic"]))
-    follow_links = _config_repo.get_app_config("follow_links", False)
+    nested_config = config_service.get_nested_config()
+    model_config = nested_config.get("model", {})
+    
+    pic_dir = model_config.get("pic_dir", os.path.join(data_dir, "media"))
+    # Expand user path (e.g., ~)
+    pic_dir = os.path.expanduser(pic_dir)
+    media_directories = [pic_dir]
+    
+    logger.info(f"Configured media directories: {media_directories}")
+    
+    allowed_extensions = set(model_config.get("allowed_extensions", [
+        ".jpg", ".jpeg", ".png", ".heic", ".heif",
+        ".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"
+    ]))
+    follow_links = model_config.get("follow_links", False)
     
     media_monitor_service = MediaMonitorService(
         publisher=event_bus,
@@ -80,27 +91,22 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         follow_links=follow_links
     )
 
+    from picframe.core.services.media_indexer import MediaIndexerService
+    media_indexer_service = MediaIndexerService(
+        event_subscriber=event_bus,
+        media_repository=media_repo,
+        config_repository=_config_repo,
+        image_processing_service=image_processing_service,
+        media_monitor_service=media_monitor_service
+    )
+
     # 5. Initialize Renderer
-    default_renderer_config: dict[str, Any] = {
-        "blur_amount": 12,
-        "blur_zoom": 1.0,
-        "blur_edges": False,
-        "edge_alpha": 0.5,
-        "fps": 20.0,
-        "background": (0.2, 0.2, 0.2, 1.0),
-        "font_file": os.path.join(data_dir, "fonts", "NotoSans-Regular.ttf"),
-        "shader": os.path.join(data_dir, "shaders", "blend_new"),
-        "use_sdl2": True,
-    }
-    renderer_config = _config_repo.get_app_config("renderer", default_renderer_config)
+    renderer_config = nested_config.get("viewer", {})
     renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus, config_repository=_config_repo)
 
     # 6. Initialize Engine
-    engine_config: dict[str, float] = {
-        "time_delay": 10.0,
-    }
     engine = PlaybackEngine(
-        event_bus, event_bus, playlist_manager, renderer, engine_config
+        event_bus, event_bus, playlist_manager, renderer, model_config
     )
 
     # 7. Initialize Web Server
@@ -110,6 +116,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         event_subscriber=event_bus,
         cors_allowed_origins=cors_origins,
         config_repository=_config_repo,
+        html_dir=html_dir or os.path.join(base_dir, "html"),
     )
     web_server = WebServer(app, port=port)
 
@@ -176,6 +183,7 @@ def main() -> None:
     init_parser.add_argument("--dir", default=os.environ.get("PICFRAME_DIR", "~/.picframe"), help="Base directory for picframe data (default: ~/.picframe or PICFRAME_DIR env var)")
     init_parser.add_argument("--config-db", default=os.environ.get("PICFRAME_CONFIG_DB"), help="Path to config database (default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)")
     init_parser.add_argument("--media-db", default=os.environ.get("PICFRAME_MEDIA_DB"), help="Path to media database (default: <dir>/data/media_cache.db3 or PICFRAME_MEDIA_DB env var)")
+    init_parser.add_argument("-f", "--force", action="store_true", help="Force initialization without prompting (overwrites existing databases if specified)")
 
     # Run command
     run_parser = subparsers.add_parser("run", help="Run the picframe application")
@@ -183,14 +191,15 @@ def main() -> None:
     run_parser.add_argument("--port", type=int, default=int(os.environ.get("PICFRAME_PORT", 9000)), help="Port for the web server (default: 9000 or PICFRAME_PORT env var)")
     run_parser.add_argument("--config-db", default=os.environ.get("PICFRAME_CONFIG_DB"), help="Path to config database (default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)")
     run_parser.add_argument("--media-db", default=os.environ.get("PICFRAME_MEDIA_DB"), help="Path to media database (default: <dir>/data/media_cache.db3 or PICFRAME_MEDIA_DB env var)")
+    run_parser.add_argument("--html-dir", default=os.environ.get("PICFRAME_HTML_DIR"), help="Path to frontend HTML assets (default: <dir>/html or PICFRAME_HTML_DIR env var)")
 
     args = parser.parse_args()
 
     if args.command == "init":
-        bootstrapper = EnvironmentBootstrapper(base_dir=args.dir, config_db_path=args.config_db, media_db_path=args.media_db)
+        bootstrapper = EnvironmentBootstrapper(base_dir=args.dir, config_db_path=args.config_db, media_db_path=args.media_db, force=args.force)
         bootstrapper.bootstrap()
     elif args.command == "run":
-        run_picframe(base_dir=args.dir, port=args.port, config_db_path=args.config_db, media_db_path=args.media_db)
+        run_picframe(base_dir=args.dir, port=args.port, config_db_path=args.config_db, media_db_path=args.media_db, html_dir=args.html_dir)
     else:
         parser.print_help()
 

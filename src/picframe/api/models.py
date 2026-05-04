@@ -6,115 +6,137 @@ from pydantic import BaseModel, Field
 
 
 class ViewerConfig(BaseModel):
-    blur_amount: int | None = None
-    blur_zoom: float | None = None
-    blur_edges: bool | None = None
-    edge_alpha: float | None = None
-    fps: float | None = None
-    background: list[Any] | None = None
-    blend_type: str | None = None
-    font_file: str | None = None
-    shader: str | None = None
-    show_text_fm: str | None = None
-    show_text_tm: float | None = None
-    show_text_sz: int | None = None
-    show_text: str | None = None
-    text_justify: str | None = None
-    text_bkg_hgt: float | None = None
-    text_opacity: float | None = None
-    text_x_margin: int | None = None
-    text_y_margin: int | None = None
-    fit: bool | None = None
-    video_fit_display: bool | None = None
-    kenburns: bool | None = None
-    display_x: int | None = None
-    display_y: int | None = None
+    blur_amount: int = 12
+    blur_zoom: float = 1.0
+    blur_edges: bool = False
+    edge_alpha: float = 0.5
+    fps: float = 20.0
+    background: list[Any] = Field(default_factory=lambda: [0.2, 0.2, 0.3, 1.0])
+    blend_type: str = "blend"
+    font_file: str = "~/picframe_data/data/fonts/NotoSans-Regular.ttf"
+    shader: str = "~/picframe_data/data/shaders/blend_new"
+    show_text_fm: str = "%b %d, %Y"
+    show_text_tm: float = 20.0
+    show_text_sz: int = 40
+    show_text: str = "title caption name date folder location"
+    text_justify: str = "L"
+    text_bkg_hgt: float = 0.25
+    text_opacity: float = 1.0
+    text_x_margin: int = 100
+    text_y_margin: int = 0
+    fit: bool = False
+    video_fit_display: bool = False
+    kenburns: bool = False
+    display_x: int = 0
+    display_y: int = 0
     display_w: str | None = None
     display_h: str | None = None
-    display_power: str | None = None
-    display_hdmi: str | None = None
-    use_glx: bool | None = None
-    use_sdl2: bool | None = None
-    mat_images: float | None = None
+    display_power: str = "0"
+    display_hdmi: str = "HDMI-A-1"
+    use_glx: bool = False
+    use_sdl2: bool = True
+    mat_images: float = 0.01
     mat_type: str | None = None
     outer_mat_color: str | None = None
     inner_mat_color: str | None = None
-    outer_mat_border: int | None = None
-    inner_mat_border: int | None = None
-    outer_mat_use_texture: bool | None = None
-    inner_mat_use_texture: bool | None = None
-    mat_resource_folder: str | None = None
-    show_clock: bool | None = None
-    clock_justify: str | None = None
-    clock_text_sz: int | None = None
-    clock_format: str | None = None
-    clock_opacity: float | None = None
-    clock_top_bottom: str | None = None
-    clock_wdt_offset_pct: float | None = None
-    clock_hgt_offset_pct: float | None = None
-    menu_text_sz: int | None = None
-    menu_autohide_tm: float | None = None
-    geo_suppress_list: list[Any] | None = None
+    outer_mat_border: int = 75
+    inner_mat_border: int = 40
+    outer_mat_use_texture: bool = True
+    inner_mat_use_texture: bool = False
+    mat_resource_folder: str = "~/picframe_data/data/mat"
+    show_clock: bool = False
+    clock_justify: str = "R"
+    clock_text_sz: int = 120
+    clock_format: str = "%-I:%M"
+    clock_opacity: float = 1.0
+    clock_top_bottom: str = "T"
+    clock_wdt_offset_pct: float = 3.0
+    clock_hgt_offset_pct: float = 3.0
+    menu_text_sz: int = 40
+    menu_autohide_tm: float = 10.0
+    geo_suppress_list: list[Any] = Field(default_factory=list)
 
 class ModelConfig(BaseModel):
-    pic_dir: str | None = None
-    deleted_pictures: str | None = None
-    follow_links: bool | None = None
-    no_files_img: str | None = None
-    subdirectory: str | None = None
-    recent_n: int | None = None
-    reshuffle_num: int | None = None
-    time_delay: float | None = None
-    fade_time: float | None = None
-    update_interval: float | None = None
-    shuffle: bool | None = None
-    sort_cols: str | None = None
-    image_attr: list[Any] | None = None
-    load_geoloc: bool | None = None
-    geo_key: str | None = None
-    locale: str | None = None
-    key_list: list[Any] | None = None
-    db_file: str | None = None
-    portrait_pairs: bool | None = None
-    location_filter: str | None = None
-    tags_filter: str | None = None
-    log_level: str | None = None
-    log_file: str | None = None
+    pic_dir: str = "~/Pictures"
+    allowed_extensions: list[str] = Field(default_factory=lambda: [
+        ".jpg", ".jpeg", ".png", ".heic", ".heif", 
+        ".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"
+    ])
+    allowed_extensions: list[str] = Field(default_factory=lambda: [
+        ".jpg", ".jpeg", ".png", ".heic", ".heif", 
+        ".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"
+    ])
+    deleted_pictures: str = "~/DeletedPictures"
+    follow_links: bool = False
+    no_files_img: str = "~/picframe_data/data/no_pictures.jpg"
+    subdirectory: str = ""
+    recent_n: int = 7
+    reshuffle_num: int = 1
+    time_delay: float = 200.0
+    fade_time: float = 10.0
+    update_interval: float = 2.0
+    shuffle: bool = True
+    sort_cols: str = "fname ASC"
+    image_attr: list[Any] = Field(default_factory=lambda: [
+        "PICFRAME GPS",
+        "PICFRAME LOCATION",
+        "EXIF FNumber",
+        "EXIF ExposureTime",
+        "EXIF ISOSpeedRatings",
+        "EXIF FocalLength",
+        "EXIF DateTimeOriginal",
+        "Image Model",
+        "Image Make",
+        "IPTC Caption/Abstract",
+        "IPTC Object Name",
+        "IPTC Keywords"
+    ])
+    load_geoloc: bool = False
+    geo_key: str = "this_needs_to@be_changed"
+    locale: str = "en_US.utf8"
+    key_list: list[Any] = Field(default_factory=lambda: [
+        ["tourism", "amenity", "isolated_dwelling"],
+        ["suburb", "village"],
+        ["city", "county"],
+        ["region", "state", "province"],
+        ["country"]
+    ])
+    portrait_pairs: bool = False
+    location_filter: str = ""
+    tags_filter: str = ""
+    log_level: str = "WARNING"
+    log_file: str = ""
 
 class MqttConfig(BaseModel):
-    use_mqtt: bool | None = None
-    server: str | None = None
-    port: int | None = None
-    login: str | None = None
-    password: str | None = None
-    tls: str | None = None
-    device_id: str | None = None
-    device_url: str | None = None
+    use_mqtt: bool = False
+    server: str = "your_mqtt_broker"
+    login: str = "name"
+    password: str = "your_password"
+    tls: str = ""
+    device_id: str = "picframe"
+    device_url: str = ""
 
 class HttpConfig(BaseModel):
-    use_http: bool | None = None
-    path: str | None = None
-    port: int | None = None
-    auth: bool | None = None
-    username: str | None = None
-    password: str | None = None
-    use_ssl: bool | None = None
-    keyfile: str | None = None
-    certfile: str | None = None
+    auth: bool = False
+    username: str = "admin"
+    password: str = ""
+    use_ssl: bool = False
+    keyfile: str = "path/to/key.pem"
+    certfile: str = "path/to/cert.pem"
 
 class PeripheralButtons(BaseModel):
-    pause: str | None = None
-    display_off: str | None = None
-    location: str | None = None
-    exit: str | None = None
-    power_down: str | None = None
+    pause: str = " "
+    display_off: str = "o"
+    location: str = "l"
+    exit: str = "e"
+    power_down: str = "p"
 
 class PeripheralsConfig(BaseModel):
     input_type: str | None = None
-    buttons: PeripheralButtons | None = None
-    enable: bool | None = None
-    label: str | None = None
-    shortcut: str | None = None
+    buttons: PeripheralButtons = Field(default_factory=PeripheralButtons)
+    enable: bool = True
+    label: str = ""
+    shortcut: str = ""
 
 class AppConfig(BaseModel):
     viewer: ViewerConfig = Field(default_factory=ViewerConfig)

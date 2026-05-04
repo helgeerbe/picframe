@@ -31,6 +31,21 @@ MEDIA_MIGRATIONS = [
             height INTEGER,
             orientation INTEGER DEFAULT 1,
             exif_datetime REAL,
+            f_number REAL,
+            exposure_time TEXT,
+            iso INTEGER,
+            focal_length TEXT,
+            make TEXT,
+            model TEXT,
+            lens TEXT,
+            rating INTEGER,
+            latitude REAL,
+            longitude REAL,
+            title TEXT,
+            caption TEXT,
+            tags TEXT,
+            is_portrait INTEGER,
+            location TEXT,
             duration REAL,
             is_deleted INTEGER DEFAULT 0,
             created_at REAL DEFAULT (julianday('now')),
@@ -78,21 +93,53 @@ class SQLiteMediaRepository(IMediaRepository):
 
     def add_media_item(self, media_data: dict[str, Any]) -> int:
         """
-        Add a new media item to the cache.
+        Add a new media item to the cache, or update if it exists.
 
         Args:
             media_data: A dictionary containing the media metadata.
 
         Returns:
-            The ID of the newly inserted media item.
+            The ID of the newly inserted or updated media item.
         """
         columns = ", ".join(media_data.keys())
         placeholders = ", ".join("?" for _ in media_data)
-        query = f"INSERT INTO media ({columns}) VALUES ({placeholders})"
+        
+        # Use INSERT OR REPLACE to handle unique constraint on filepath
+        query = f"INSERT OR REPLACE INTO media ({columns}) VALUES ({placeholders})"
         
         with self._conn:
             cursor = self._conn.execute(query, tuple(media_data.values()))
             return cursor.lastrowid or 0
+
+    def get_media_by_path(self, filepath: str) -> dict[str, Any] | None:
+        """
+        Retrieve a media item by its filepath.
+
+        Args:
+            filepath: The filepath of the media item to retrieve.
+
+        Returns:
+            A dictionary containing the media metadata, or None if not found.
+        """
+        cursor = self._conn.execute(
+            "SELECT * FROM media WHERE filepath = ?", (filepath,)
+        )
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+    def delete_media_by_path(self, filepath: str) -> None:
+        """
+        Mark a media item as deleted (soft delete) by its filepath.
+
+        Args:
+            filepath: The filepath of the media item to delete.
+        """
+        with self._conn:
+            self._conn.execute(
+                "UPDATE media SET is_deleted = 1, updated_at = julianday('now') "
+                "WHERE filepath = ?",
+                (filepath,),
+            )
 
     def get_media_item(self, media_id: int) -> dict[str, Any] | None:
         """

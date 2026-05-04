@@ -133,6 +133,27 @@ class IMediaRepository(Protocol):
         """
         ...
 
+    def get_media_by_path(self, filepath: str) -> dict[str, Any] | None:
+        """
+        Retrieve a media item by its filepath.
+
+        Args:
+            filepath: The filepath of the media item to retrieve.
+
+        Returns:
+            A dictionary containing the media metadata, or None if not found.
+        """
+        ...
+
+    def delete_media_by_path(self, filepath: str) -> None:
+        """
+        Mark a media item as deleted (soft delete) by its filepath.
+
+        Args:
+            filepath: The filepath of the media item to delete.
+        """
+        ...
+
     def get_all_media(self) -> list[dict[str, Any]]:
         """
         Retrieve all active (non-deleted) media items.

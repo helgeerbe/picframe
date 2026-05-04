@@ -1,0 +1,140 @@
+viewer:
+  blur_amount: 12
+  blur_zoom: 1.0
+  blur_edges: false
+  edge_alpha: 0.5
+  fps: 20.0
+  background:
+  - 0.2
+  - 0.2
+  - 0.3
+  - 1.0
+  blend_type: blend
+  font_file: ~/.picframe/data/fonts/NotoSans-Regular.ttf
+  shader: ~/.picframe/data/shaders/blend_new
+  show_text_fm: '%b %d, %Y'
+  show_text_tm: 20.0
+  show_text_sz: 40
+  show_text: title caption name date folder location
+  text_justify: L
+  text_bkg_hgt: 0.25
+  text_opacity: 1.0
+  text_x_margin: 100
+  text_y_margin: 0
+  fit: false
+  video_fit_display: false
+  kenburns: false
+  display_x: 0
+  display_y: 0
+  display_w: null
+  display_h: null
+  display_power: '0'
+  display_hdmi: HDMI-A-1
+  use_glx: false
+  use_sdl2: true
+  mat_images: 0.01
+  mat_type: null
+  outer_mat_color: null
+  inner_mat_color: null
+  outer_mat_border: 75
+  inner_mat_border: 40
+  outer_mat_use_texture: true
+  inner_mat_use_texture: false
+  mat_resource_folder: ~/.picframe/data/mat
+  show_clock: false
+  clock_justify: R
+  clock_text_sz: 120
+  clock_format: '%-I:%M'
+  clock_opacity: 1.0
+  clock_top_bottom: T
+  clock_wdt_offset_pct: 3.0
+  clock_hgt_offset_pct: 3.0
+  menu_text_sz: 40
+  menu_autohide_tm: 10.0
+  geo_suppress_list: []
+model:
+  pic_dir: ~/Pictures
+  deleted_pictures: ~/DeletedPictures
+  follow_links: false
+  no_files_img: ~/.picframe/data/no_pictures.jpg
+  subdirectory: ''
+  recent_n: 7
+  reshuffle_num: 1
+  time_delay: 200.0
+  fade_time: 10.0
+  update_interval: 2.0
+  shuffle: true
+  sort_cols: fname ASC
+  image_attr:
+  - PICFRAME GPS
+  - PICFRAME LOCATION
+  - EXIF FNumber
+  - EXIF ExposureTime
+  - EXIF ISOSpeedRatings
+  - EXIF FocalLength
+  - EXIF DateTimeOriginal
+  - Image Model
+  - Image Make
+  - IPTC Caption/Abstract
+  - IPTC Object Name
+  - IPTC Keywords
+  load_geoloc: false
+  geo_key: this_needs_to@be_changed
+  locale: en_US.utf8
+  key_list:
+  - - tourism
+    - amenity
+    - isolated_dwelling
+  - - suburb
+    - village
+  - - city
+    - county
+  - - region
+    - state
+    - province
+  - - country
+  portrait_pairs: false
+  location_filter: ''
+  tags_filter: ''
+  log_level: WARNING
+  log_file: ''
+  allowed_extensions:
+  - .jpg
+  - .jpeg
+  - .png
+  - .heic
+  - .heif
+  - .mp4
+  - .mkv
+  - .flv
+  - .mov
+  - .avi
+  - .webm
+  - .hevc
+mqtt:
+  use_mqtt: false
+  server: your_mqtt_broker
+  port: 1883
+  login: name
+  password: your_password
+  tls: ''
+  device_id: picframe
+  device_url: ''
+http:
+  auth: false
+  username: admin
+  password: ''
+  use_ssl: false
+  keyfile: path/to/key.pem
+  certfile: path/to/cert.pem
+peripherals:
+  input_type: null
+  buttons:
+    pause: ' '
+    display_off: o
+    location: l
+    exit: e
+    power_down: p
+  enable: true
+  label: ''
+  shortcut: ''

@@ -2,6 +2,7 @@
 Pi3d implementation of the IRenderer interface.
 """
 import logging
+import os
 import time
 from dataclasses import replace
 from enum import Enum, auto
@@ -55,11 +56,15 @@ class Pi3dRenderer(IRenderer):
         self._display_x = int(config.get("display_x", 0))
         self._display_y = int(config.get("display_y", 0))
         self._display_w = config.get("display_w")
-        if self._display_w is not None:
+        if self._display_w is not None and self._display_w != "":
             self._display_w = int(self._display_w)
+        else:
+            self._display_w = None
         self._display_h = config.get("display_h")
-        if self._display_h is not None:
+        if self._display_h is not None and self._display_h != "":
             self._display_h = int(self._display_h)
+        else:
+            self._display_h = None
             
         self._fps = int(config.get("fps", 20))
         self._background = config.get("background", (0.0, 0.0, 0.0, 1.0))
@@ -67,7 +72,7 @@ class Pi3dRenderer(IRenderer):
         self._use_sdl2 = bool(config.get("use_sdl2", False))
         
         # Rendering settings
-        self._shader_path = config.get("shader", "blend_new")
+        self._shader_path = os.path.expanduser(config.get("shader", "blend_new"))
         blend_type_str = config.get("blend_type", "blend")
         self._blend_type = {"blend": 0.0, "burn": 1.0, "bump": 2.0}.get(blend_type_str, 0.0)
         self._edge_alpha = float(config.get("edge_alpha", 0.5))
@@ -168,8 +173,9 @@ class Pi3dRenderer(IRenderer):
         shader = pi3d.Shader(self._shader_path)
         flat_shader = pi3d.Shader("uv_flat")
         
-        self._text_renderer = TextRenderer(self._display, flat_shader, self._config.get("font_file", ""))
-        self._clock_renderer = ClockRenderer(self._display, flat_shader, self._config.get("font_file", ""))
+        font_file = os.path.expanduser(self._config.get("font_file", ""))
+        self._text_renderer = TextRenderer(self._display, flat_shader, font_file)
+        self._clock_renderer = ClockRenderer(self._display, flat_shader, font_file)
         
         self._slide = pi3d.Sprite(
             camera=camera,

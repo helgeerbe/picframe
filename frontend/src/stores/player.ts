@@ -32,6 +32,8 @@ export const usePlayerStore = defineStore('player', () => {
     ws.onopen = () => {
       isConnected.value = true
       console.log('WebSocket connected')
+      // Request initial state upon connection
+      sendCommand('REQUEST_STATE')
     }
 
     ws.onmessage = (event) => {

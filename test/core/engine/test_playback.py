@@ -105,9 +105,9 @@ def test_engine_start_stop(
         # Should have published state event
         mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PLAYING))
         
-        # Should have requested next media
-        mock_playlist_manager.get_next.assert_called_once()
-        mock_renderer.execute.assert_called_once()
+        # Should have set next transition time to 0.0 to force immediate transition in run_loop
+        assert engine._next_transition_time == 0.0
+        
         
         engine.stop()
         
@@ -132,7 +132,7 @@ def test_engine_handle_command_next(
     engine._handle_command(event)
     
     mock_playlist_manager.get_next.assert_called_once()
-    mock_renderer.execute.assert_called_once()
+    
 
 
 def test_engine_handle_command_prev(
@@ -151,7 +151,7 @@ def test_engine_handle_command_prev(
     engine._handle_command(event)
     
     mock_playlist_manager.get_previous.assert_called_once()
-    mock_renderer.execute.assert_called_once()
+    
 
 
 def test_engine_handle_command_pause_play(

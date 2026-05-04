@@ -12,7 +12,13 @@ import os
 import shutil
 import sqlite3
 import logging
+import yaml
 from pathlib import Path
+from typing import Any
+
+from picframe.api.models import AppConfig
+from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
 
 logger = logging.getLogger(__name__)
 
@@ -24,7 +30,7 @@ class EnvironmentBootstrapper:
     assets required for rendering, and the initialization of the SQLite databases.
     """
 
-    def __init__(self, base_dir: str = "~/.picframe", config_db_path: str | None = None, media_db_path: str | None = None) -> None:
+    def __init__(self, base_dir: str = "~/.picframe", config_db_path: str | None = None, media_db_path: str | None = None, force: bool = False) -> None:
         """
         Initialize the EnvironmentBootstrapper.
 
@@ -32,11 +38,31 @@ class EnvironmentBootstrapper:
             base_dir: The base directory for the picframe environment. Defaults to "~/.picframe".
             config_db_path: Optional override for the config database path.
             media_db_path: Optional override for the media database path.
+            force: If True, bypass interactive prompts and overwrite existing databases.
         """
         self.base_dir = Path(os.path.expanduser(base_dir))
         self.data_dir = self.base_dir / "data"
         self.config_db_path = Path(config_db_path) if config_db_path else self.data_dir / "config.db3"
         self.media_db_path = Path(media_db_path) if media_db_path else self.data_dir / "media_cache.db3"
+        self.force = force
+
+    def _prompt_deletion(self, filepath: Path, db_name: str) -> bool:
+        if not filepath.exists():
+            return True # Safe to proceed
+            
+        if self.force:
+            logger.info(f"--force flag provided. Deleting existing {db_name} database.")
+            filepath.unlink()
+            return True
+
+        response = input(f"\n[?] The {db_name} database already exists at {filepath}.\nDo you want to delete it and start fresh? [y/N]: ").strip().lower()
+        if response in ['y', 'yes']:
+            filepath.unlink()
+            logger.info(f"Deleted existing {db_name} database.")
+            return True
+        else:
+            logger.info(f"Keeping existing {db_name} database. Migrations will be applied if necessary.")
+            return False
 
     def bootstrap(self) -> None:
         """
@@ -47,7 +73,19 @@ class EnvironmentBootstrapper:
         logger.info(f"Bootstrapping environment at {self.base_dir}")
         self._create_directories()
         self._copy_assets()
-        self._initialize_databases()
+        
+        # 1. Handle existing databases
+        config_cleared = self._prompt_deletion(self.config_db_path, "Configuration")
+        media_cleared = self._prompt_deletion(self.media_db_path, "Media Cache")
+
+        # 2. Initialize Repositories (This triggers migrations automatically)
+        config_repo = SQLiteConfigRepository(str(self.config_db_path))
+        media_repo = SQLiteMediaRepository(str(self.media_db_path))
+
+        # 3. Seed Configuration (Only if config was cleared or is empty)
+        if config_cleared or not config_repo.get_all_app_config():
+            self._seed_default_config(config_repo)
+            
         logger.info("Bootstrap complete.")
 
     def _create_directories(self) -> None:
@@ -90,27 +128,52 @@ class EnvironmentBootstrapper:
         if no_pictures_src.exists() and not no_pictures_dest.exists():
             shutil.copy2(no_pictures_src, no_pictures_dest)
             logger.debug(f"Copied fallback image to {no_pictures_dest}")
-
-    def _initialize_databases(self) -> None:
-        """
-        Initialize empty SQLite databases.
-
-        Creates empty 'config.db3' and 'media_cache.db3' files if they do not exist.
-        """
-        if not self.config_db_path.exists():
-            self._create_empty_db(self.config_db_path)
-            logger.debug(f"Initialized config database at {self.config_db_path}")
         
-        if not self.media_db_path.exists():
-            self._create_empty_db(self.media_db_path)
-            logger.debug(f"Initialized media database at {self.media_db_path}")
+        # Copy HTML assets (force overwrite if exists to ensure updates)
+        pkg_html_dir = pkg_dir / "html"
+        dest_html_dir = self.base_dir / "html"
+        if pkg_html_dir.exists():
+            if dest_html_dir.exists():
+                shutil.rmtree(dest_html_dir)
+            shutil.copytree(pkg_html_dir, dest_html_dir)
+            logger.debug(f"Copied HTML directory to {dest_html_dir}")
 
-    def _create_empty_db(self, path: Path) -> None:
-        """
-        Create an empty SQLite database file.
+    def _flatten_dict(self, d: dict[str, Any], parent_key: str = '') -> dict[str, Any]:
+        items: list[tuple[str, Any]] = []
+        for k, v in d.items():
+            new_key = f"{parent_key}.{k}" if parent_key else k
+            if isinstance(v, dict):
+                items.extend(self._flatten_dict(v, new_key).items())
+            else:
+                items.append((new_key, v))
+        return dict(items)
 
-        Args:
-            path: The path where the database file should be created.
+    def _seed_default_config(self, config_repo: SQLiteConfigRepository) -> None:
         """
-        conn = sqlite3.connect(path)
-        conn.close()
+        Seed the configuration database with default values from default_config.yaml.
+        """
+        logger.info("Seeding database with default configuration...")
+        
+        import picframe
+        pkg_dir = Path(picframe.__file__).parent
+        default_yaml_path = pkg_dir / "config" / "default_config.yaml"
+        
+        if not default_yaml_path.exists():
+            logger.error(f"Default configuration file not found at {default_yaml_path}")
+            return
+            
+        try:
+            with open(default_yaml_path, 'r') as f:
+                raw_defaults = yaml.safe_load(f)
+                
+            # Validate against Pydantic model
+            validated_config = AppConfig(**raw_defaults)
+            
+            # Flatten and Seed
+            flat_config = self._flatten_dict(validated_config.model_dump())
+            for key, value in flat_config.items():
+                config_repo.set_app_config(key, value)
+                
+            logger.info("Database seeded successfully.")
+        except Exception as e:
+            logger.error(f"Failed to seed default configuration: {e}")

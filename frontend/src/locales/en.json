@@ -128,7 +128,8 @@
       "location_filter": "default=\"\" filter clause for image location",
       "tags_filter": "default=\"\" filter clause for image tags",
       "log_level": "default=WARNING, could beDEBUG, INFO, WARNING, ERROR, CRITICAL",
-      "log_file": "default=\"\" for debugging set this to the path to a file. NB logging messages will appended indefinitely so don't forget this. You will need to tidy it up later"
+      "log_file": "default=\"\" for debugging set this to the path to a file. NB logging messages will appended indefinitely so don't forget this. You will need to tidy it up later",
+      "allowed_extensions": "List of file extensions to include in the playlist."
     },
     "mqtt": {
       "_title": "Mqtt",
@@ -143,9 +144,6 @@
     },
     "http": {
       "_title": "Http",
-      "use_http": "default=False. Set True to enable http NB THIS SERVER IS FOR LOCAL NETWORK AND SHOULD NOT BE EXPOSED TO EXTERNAL ACCESS",
-      "path": "path to where html files are located",
-      "port": "port used to serve pages by http server < 1024 requires root which is *bad* idea",
       "auth": "default=False. Set True if enable basic auth for http",
       "username": "username for basic auth",
       "password": "password for basic auth. If set null generate random password in file basic_auth.txt in parent http directory",

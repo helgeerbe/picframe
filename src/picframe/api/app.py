@@ -29,6 +29,7 @@ def create_app(
     event_subscriber: IEventSubscriber | None = None,
     cors_allowed_origins: list[str] | None = None,
     config_repository: IConfigRepository | None = None,
+    html_dir: str = "~/.picframe/html",
 ) -> FastAPI:
     """
     Create and configure the FastAPI application instance.
@@ -131,6 +132,10 @@ def create_app(
         if event_subscriber:
             event_subscriber.subscribe(CurrentMediaChangedEvent, handle_media_changed)
             event_subscriber.subscribe(StateEvent, handle_state_changed)
+            
+            # Request the current state and media immediately upon connection
+            if event_publisher:
+                event_publisher.publish(CommandEvent(command=Command.REQUEST_STATE))
 
         async def receive_messages() -> None:
             try:
@@ -171,6 +176,8 @@ def create_app(
                                 event_publisher.publish(CommandEvent(command=Command.REBOOT_HOST))
                             elif command_str == "SHUTDOWN_HOST":
                                 event_publisher.publish(CommandEvent(command=Command.SHUTDOWN_HOST))
+                            elif command_str == "REQUEST_STATE":
+                                event_publisher.publish(CommandEvent(command=Command.REQUEST_STATE))
                             elif command_str == "SET_CONFIG":
                                 # The frontend sends the payload directly in the root object,
                                 # not nested under "payload"
@@ -312,26 +319,32 @@ def create_app(
             return FileResponse(user_no_pic_path)
             
         # Fallback to the source code directory
-        return FileResponse(Path(__file__).parent.parent / "data" / "no_pictures.jpg")
+        fallback_path = Path(__file__).parent.parent / "data" / "no_pictures.jpg"
+        if fallback_path.exists() and fallback_path.is_file():
+            return FileResponse(fallback_path)
+            
+        # If all else fails, return a 404
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Media not found")
 
     # Serve SPA static files
-    html_dir = Path(__file__).parent.parent / "html"
-    if html_dir.exists():
+    html_dir_path = Path(html_dir).expanduser()
+    if html_dir_path.exists():
         # Mount the assets directory
-        assets_dir = html_dir / "assets"
+        assets_dir = html_dir_path / "assets"
         if assets_dir.exists():
             app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
         # Catch-all route for SPA
         @app.get("/{full_path:path}")
         async def serve_spa(full_path: str) -> FileResponse:
-            requested_file = html_dir / full_path
+            requested_file = html_dir_path / full_path
             if full_path and requested_file.is_file():
                 return FileResponse(requested_file)
-            return FileResponse(html_dir / "index.html")
+            return FileResponse(html_dir_path / "index.html")
     else:
         logger.warning(
-            f"Frontend build directory not found at {html_dir}. Web UI will not be available."
+            f"Frontend build directory not found at {html_dir_path}. Web UI will not be available."
         )
 
     return app

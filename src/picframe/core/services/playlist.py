@@ -77,7 +77,9 @@ class PlaylistManager:
         import os
         
         if not self._playlist:
-            return self._get_no_images_placeholder()
+            self.build_playlist(shuffle=self._shuffle)
+            if not self._playlist:
+                return self._get_no_images_placeholder()
 
         original_index = self._current_index
         looped = False

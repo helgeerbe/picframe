@@ -72,31 +72,60 @@ def test_copy_assets(mock_iterdir, mock_exists, mock_shutil, temp_dir):
     mock_shutil.copytree.assert_called_once()
 
 
-def test_initialize_databases(temp_dir):
+@patch("picframe.core.services.bootstrapper.input")
+def test_prompt_deletion_keep(mock_input, temp_dir):
     bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir))
-    bootstrapper._create_directories() # Need dir first
-    bootstrapper._initialize_databases()
+    test_file = temp_dir / "test.db"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.touch()
     
-    assert bootstrapper.config_db_path.exists()
-    assert bootstrapper.media_db_path.exists()
+    mock_input.return_value = "n"
+    result = bootstrapper._prompt_deletion(test_file, "Test")
     
-    # Verify they are valid sqlite databases
-    conn = sqlite3.connect(bootstrapper.config_db_path)
-    conn.close()
-    
-    conn = sqlite3.connect(bootstrapper.media_db_path)
-    conn.close()
+    assert result is False
+    assert test_file.exists()
 
+@patch("picframe.core.services.bootstrapper.input")
+def test_prompt_deletion_delete(mock_input, temp_dir):
+    bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir))
+    test_file = temp_dir / "test.db"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.touch()
+    
+    mock_input.return_value = "y"
+    result = bootstrapper._prompt_deletion(test_file, "Test")
+    
+    assert result is True
+    assert not test_file.exists()
+
+def test_prompt_deletion_force(temp_dir):
+    bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir), force=True)
+    test_file = temp_dir / "test.db"
+    test_file.parent.mkdir(parents=True, exist_ok=True)
+    test_file.touch()
+    
+    result = bootstrapper._prompt_deletion(test_file, "Test")
+    
+    assert result is True
+    assert not test_file.exists()
 
 def test_bootstrap_full(temp_dir):
     bootstrapper = EnvironmentBootstrapper(base_dir=str(temp_dir))
     
     with patch.object(bootstrapper, '_create_directories') as mock_create_dir, \
          patch.object(bootstrapper, '_copy_assets') as mock_copy_assets, \
-         patch.object(bootstrapper, '_initialize_databases') as mock_init_db:
+         patch.object(bootstrapper, '_prompt_deletion', return_value=True) as mock_prompt, \
+         patch('picframe.core.services.bootstrapper.SQLiteConfigRepository') as mock_config_repo, \
+         patch('picframe.core.services.bootstrapper.SQLiteMediaRepository') as mock_media_repo, \
+         patch.object(bootstrapper, '_seed_default_config') as mock_seed:
+        
+        # Mock the repo to return empty config so seeding is triggered
+        mock_repo_instance = mock_config_repo.return_value
+        mock_repo_instance.get_all_app_config.return_value = {}
         
         bootstrapper.bootstrap()
         
         mock_create_dir.assert_called_once()
         mock_copy_assets.assert_called_once()
-        mock_init_db.assert_called_once()
+        assert mock_prompt.call_count == 2
+        mock_seed.assert_called_once_with(mock_repo_instance)

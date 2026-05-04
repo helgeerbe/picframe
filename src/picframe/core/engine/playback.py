@@ -64,9 +64,14 @@ class PlaybackEngine:
         self._is_running = True
         self._renderer.start()
         
+        # Build the initial playlist before starting the loop
+        self._playlist_manager.build_playlist()
+        
         # Initial state transition
         self._change_state(State.PLAYING)
-        self._trigger_next_media()
+        
+        # Force immediate transition for the first image
+        self._next_transition_time = 0.0
         
         # Main render loop
         self._run_loop()
@@ -129,6 +134,29 @@ class PlaybackEngine:
             self._handle_delete_command()
         elif event.command == Command.PURGE_FILES:
             self._handle_purge_command()
+        elif event.command == Command.REQUEST_STATE:
+            self._handle_request_state()
+
+    def _handle_request_state(self) -> None:
+        """Handle a request to broadcast the current state and media."""
+        self._event_publisher.publish(StateEvent(state=self._state))
+        current_media = self._playlist_manager.get_current()
+        if current_media:
+            self._event_publisher.publish(CurrentMediaChangedEvent(media_item=current_media))
+        else:
+            # If there's no current media (e.g., on startup before the first transition),
+            # try to get the next one to populate the initial state.
+            # We don't trigger a full transition here, just fetch the data.
+            if self._playlist_manager._playlist:
+                # Peek at the first item without advancing the index
+                if self._playlist_manager._current_index < len(self._playlist_manager._playlist):
+                    item_data = self._playlist_manager._playlist[self._playlist_manager._current_index]
+                    media_item = self._playlist_manager._dict_to_media_item(item_data)
+                    self._event_publisher.publish(CurrentMediaChangedEvent(media_item=media_item))
+            else:
+                # Fallback to placeholder if playlist is empty
+                placeholder = self._playlist_manager._get_no_images_placeholder()
+                self._event_publisher.publish(CurrentMediaChangedEvent(media_item=placeholder))
 
     def _handle_delete_command(self) -> None:
         """Handle the DELETE command by moving the current file and advancing."""
