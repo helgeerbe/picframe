@@ -11,12 +11,12 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from picframe.api.models import AppConfig
+from picframe.api.models import AppConfig, MediaResponseDTO
 from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.repositories.interfaces import IConfigRepository
@@ -89,18 +89,16 @@ def create_app(
             else:
                 media_dict = {"raw": str(event.media_item)}
                 
-            # Add a URL for the frontend to fetch the image
-            if "filepath" in media_dict and media_dict["filepath"]:
-                # We'll serve media from a new /media endpoint
-                media_dict["file_path"] = f"/media?path={media_dict['filepath']}"
-            elif "file_path" not in media_dict:
-                # Fallback for no_pictures.jpg or other cases where filepath isn't set
-                media_dict["file_path"] = "/media?path=no_pictures.jpg"
+            # Extract file path
+            file_path = media_dict.get("file_path") or media_dict.get("filepath")
+            if not file_path:
+                file_path = "no_pictures.jpg"
                 
             # Map backend fields to frontend expected fields
+            location = None
             if "latitude" in media_dict and "longitude" in media_dict:
                 if media_dict["latitude"] is not None and media_dict["longitude"] is not None:
-                    media_dict["location"] = {
+                    location = {
                         "lat": media_dict["latitude"],
                         "lon": media_dict["longitude"]
                     }
@@ -108,20 +106,29 @@ def create_app(
             # Group EXIF data
             exif_keys = [
                 "make", "model", "lens", "f_number", "exposure_time", "iso",
-                "focal_length", "exif_datetime", "caption", "tags", "location"
+                "focal_length", "exif_datetime", "caption", "tags", "location",
+                "title", "rating", "width", "height", "orientation"
             ]
             exif_data = {}
-            for key in exif_keys:
-                if key in media_dict and media_dict[key] is not None:
-                    # Don't overwrite the location object we just created
-                    if key == "location" and isinstance(media_dict[key], dict):
-                        continue
-                    exif_data[key] = media_dict[key]
             
-            if exif_data:
-                media_dict["exif"] = exif_data
+            # Check if exif data is already nested
+            if "exif" in media_dict and isinstance(media_dict["exif"], dict):
+                exif_data = media_dict["exif"]
+            else:
+                for key in exif_keys:
+                    if key in media_dict and media_dict[key] is not None:
+                        # Don't overwrite the location object we just created
+                        if key == "location" and isinstance(media_dict[key], dict):
+                            continue
+                        exif_data[key] = media_dict[key]
+            
+            dto = MediaResponseDTO(
+                file_path=file_path,
+                exif=exif_data,
+                location=location
+            )
                 
-            msg = json.dumps({"type": "MediaChangedEvent", "media": media_dict})
+            msg = json.dumps({"type": "MediaChangedEvent", "media": dto.model_dump()})
             # Use call_soon_threadsafe because this callback runs in the event bus thread
             loop.call_soon_threadsafe(send_queue.put_nowait, msg)
 
@@ -308,6 +315,35 @@ def create_app(
             ".mp4", ".mov", ".mkv", ".avi", ".webm"
         }
         
+        # Security check: ensure the path is within the configured media directory
+        is_allowed = False
+        if config_repository:
+            # We need to get the full config to check the pic_dir
+            # Since IConfigRepository doesn't have a get_config method, we'll use get_all_app_config
+            # and reconstruct the nested structure, or just get the specific key if it's flat
+            pic_dir_str = config_repository.get_app_config("model.pic_dir", "~/Pictures")
+            pic_dir = Path(pic_dir_str).expanduser().resolve()
+            
+            # Also check directories table
+            allowed_dirs = [pic_dir]
+            for d in config_repository.get_all_directories():
+                allowed_dirs.append(Path(d["path"]).expanduser().resolve())
+                
+            for allowed_dir in allowed_dirs:
+                if file_path.is_relative_to(allowed_dir):
+                    is_allowed = True
+                    break
+                
+        if not is_allowed:
+            # Allow serving the default no_pictures.jpg
+            user_no_pic_path = Path.home() / ".picframe" / "data" / "no_pictures.jpg"
+            fallback_path = Path(__file__).parent.parent / "data" / "no_pictures.jpg"
+            if file_path == user_no_pic_path.resolve() or file_path == fallback_path.resolve():
+                is_allowed = True
+                
+        if not is_allowed:
+            raise HTTPException(status_code=403, detail="Access denied")
+        
         if (file_path.exists() and file_path.is_file() and
             file_path.suffix.lower() in allowed_extensions):
             return FileResponse(file_path)
@@ -324,7 +360,6 @@ def create_app(
             return FileResponse(fallback_path)
             
         # If all else fails, return a 404
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Media not found")
 
     # Serve SPA static files

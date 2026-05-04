@@ -2,18 +2,28 @@
 import { onMounted, computed } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePlayerStore } from '../stores/player'
+import { useI18n } from 'vue-i18n'
 import {
-   
-   
+  mdiCalendarClock,
+  mdiCameraTimer,
+  mdiCameraIris,
+  mdiFilm,
+  mdiSignalDistanceVariant,
+  mdiCamera,
+  mdiTag,
+  mdiImageSizeSelectActual,
+  mdiScreenRotation,
+  mdiFormatTitle,
+  mdiText,
+  mdiFileImage
+} from '@mdi/js'
+import {
   ForwardIcon,
   BackwardIcon,
   SunIcon,
   PhotoIcon,
   InformationCircleIcon,
-  CameraIcon,
-  CalendarIcon,
-  DocumentTextIcon,
-  TagIcon
+  DocumentTextIcon
 } from '@heroicons/vue/24/outline'
 import {
   PlayIcon as PlayIconSolid,
@@ -24,6 +34,7 @@ import {
 import MapComponent from '../components/MapComponent.vue'
 import TextOverlayControls from '../components/TextOverlayControls.vue'
 
+const { t } = useI18n()
 const playerStore = usePlayerStore()
 const { currentMedia, isPlaying, brightness, isDisplayOn, isConnected } = storeToRefs(playerStore)
 
@@ -48,20 +59,144 @@ const handleBrightnessChange = (event: Event) => {
 }
 
 // Computed properties for safe access
-const exifData = computed(() => currentMedia.value?.exif || {})
+const displayFileName = computed(() => {
+  if (!currentMedia.value?.file_path) return t('remote.unknownFile')
+  try {
+    const url = new URL(currentMedia.value.file_path, window.location.origin)
+    const pathParam = url.searchParams.get('path')
+    const pathToUse = pathParam || url.pathname
+    const decoded = decodeURIComponent(pathToUse)
+    return decoded.split('/').pop() || t('remote.unknownFile')
+  } catch (e) {
+    return currentMedia.value.file_path.split('/').pop() || t('remote.unknownFile')
+  }
+})
 
-const formatExifKey = (key: string) => {
-  return key.replace(/([A-Z])/g, ' $1').replace(/^./, str => str.toUpperCase())
-}
+const metadataFields = computed(() => {
+  const data = currentMedia.value?.exif || {}
+  const fields = []
 
-const getExifIcon = (key: string) => {
-  const lowerKey = key.toLowerCase()
-  if (lowerKey.includes('make') || lowerKey.includes('model')) return CameraIcon
-  if (lowerKey.includes('date') || lowerKey.includes('time')) return CalendarIcon
-  if (lowerKey.includes('file')) return DocumentTextIcon
-  if (lowerKey.includes('tag') || lowerKey.includes('caption')) return TagIcon
-  return InformationCircleIcon
-}
+  // File Name
+  fields.push({
+    key: 'fileName',
+    label: t('remote.metadata.fileName'),
+    icon: mdiFileImage,
+    value: displayFileName.value
+  })
+
+  // Date
+  if (data.exif_datetime) {
+    fields.push({
+      key: 'date',
+      label: t('remote.metadata.date'),
+      icon: mdiCalendarClock,
+      value: new Date(data.exif_datetime * 1000).toLocaleString()
+    })
+  }
+
+  // Exposure Time
+  if (data.exposure_time) {
+    fields.push({
+      key: 'exposureTime',
+      label: t('remote.metadata.exposureTime'),
+      icon: mdiCameraTimer,
+      value: `${data.exposure_time} sec`
+    })
+  }
+
+  // Aperture
+  if (data.f_number) {
+    fields.push({
+      key: 'aperture',
+      label: t('remote.metadata.aperture'),
+      icon: mdiCameraIris,
+      value: `f/${data.f_number}`
+    })
+  }
+
+  // ISO
+  if (data.iso) {
+    fields.push({
+      key: 'iso',
+      label: t('remote.metadata.iso'),
+      icon: mdiFilm,
+      value: data.iso
+    })
+  }
+
+  // Focal Length
+  if (data.focal_length) {
+    fields.push({
+      key: 'focalLength',
+      label: t('remote.metadata.focalLength'),
+      icon: mdiSignalDistanceVariant,
+      value: `${data.focal_length} mm`
+    })
+  }
+
+  // Camera Model
+  if (data.make || data.model) {
+    const camera = [data.make, data.model].filter(Boolean).join(' ')
+    fields.push({
+      key: 'camera',
+      label: t('remote.metadata.camera'),
+      icon: mdiCamera,
+      value: camera
+    })
+  }
+
+  // Tags
+  if (data.tags) {
+    fields.push({
+      key: 'tags',
+      label: t('remote.metadata.tags'),
+      icon: mdiTag,
+      value: data.tags
+    })
+  }
+
+  // Resolution
+  if (data.width && data.height) {
+    fields.push({
+      key: 'resolution',
+      label: t('remote.metadata.resolution'),
+      icon: mdiImageSizeSelectActual,
+      value: `${data.width} × ${data.height}`
+    })
+  }
+
+  // Orientation
+  if (data.orientation) {
+    fields.push({
+      key: 'orientation',
+      label: t('remote.metadata.orientation'),
+      icon: mdiScreenRotation,
+      value: data.orientation
+    })
+  }
+
+  // Title
+  if (data.title) {
+    fields.push({
+      key: 'title',
+      label: t('remote.metadata.title'),
+      icon: mdiFormatTitle,
+      value: data.title
+    })
+  }
+
+  // Caption
+  if (data.caption) {
+    fields.push({
+      key: 'caption',
+      label: t('remote.metadata.caption'),
+      icon: mdiText,
+      value: data.caption
+    })
+  }
+
+  return fields
+})
 
 </script>
 
@@ -89,7 +224,7 @@ const getExifIcon = (key: string) => {
           <div class="relative w-full bg-black/5 dark:bg-black/40 flex items-center justify-center overflow-hidden group" style="min-height: 400px; flex-grow: 1;">
             <img
               v-if="currentMedia?.file_path"
-              :src="`/media?path=${encodeURIComponent(currentMedia.file_path)}`"
+              :src="currentMedia.file_path"
               alt="Current Media"
               class="absolute inset-0 w-full h-full object-contain transition-transform duration-1000 ease-out group-hover:scale-[1.02]"
               @error="console.error('Failed to load image:', currentMedia.file_path)"
@@ -106,10 +241,10 @@ const getExifIcon = (key: string) => {
             <div class="absolute bottom-0 left-0 right-0 p-6 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500 pointer-events-none flex justify-between items-end">
               <div>
                 <h2 class="text-2xl font-bold text-white truncate drop-shadow-md">
-                  {{ currentMedia?.file_path?.split('/').pop() || 'Unknown File' }}
+                  {{ displayFileName }}
                 </h2>
-                <p v-if="exifData.caption" class="text-sm text-gray-200 mt-2 line-clamp-2 drop-shadow">
-                  {{ exifData.caption }}
+                <p v-if="currentMedia?.exif?.caption" class="text-sm text-gray-200 mt-2 line-clamp-2 drop-shadow">
+                  {{ currentMedia.exif.caption }}
                 </p>
               </div>
               <button @click="playerStore.sendCommand('DELETE')" class="pointer-events-auto p-3 rounded-full bg-red-600/80 hover:bg-red-500 text-white shadow-lg backdrop-blur-sm transition-all transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-red-500/50 active:scale-95" title="Delete Current Image">
@@ -176,18 +311,20 @@ const getExifIcon = (key: string) => {
           </div>
           
           <div class="p-6">
-            <div v-if="Object.keys(exifData).length > 0" class="space-y-4">
-              <div v-for="(value, key) in exifData" :key="key" class="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
+            <div v-if="metadataFields.length > 0" class="space-y-4">
+              <div v-for="field in metadataFields" :key="field.key" class="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
                 <div class="flex items-center space-x-3 overflow-hidden">
-                  <component :is="getExifIcon(key.toString())" class="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-indigo-500 transition-colors flex-shrink-0" />
-                  <span class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{{ formatExifKey(key.toString()) }}</span>
+                  <svg class="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-indigo-500 transition-colors flex-shrink-0" viewBox="0 0 24 24">
+                    <path :d="field.icon" fill="currentColor" />
+                  </svg>
+                  <span class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{{ field.label }}</span>
                 </div>
-                <span class="text-sm font-semibold text-gray-900 dark:text-gray-200 text-right pl-4 truncate max-w-[60%]" :title="String(value)">{{ value }}</span>
+                <span class="text-sm font-semibold text-gray-900 dark:text-gray-200 text-right pl-4 truncate max-w-[60%]" :title="String(field.value)">{{ field.value }}</span>
               </div>
             </div>
             <div v-else class="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-500">
               <DocumentTextIcon class="w-12 h-12 mb-3 opacity-20" />
-              <p class="text-sm font-medium">No metadata available</p>
+              <p class="text-sm font-medium">{{ $t('remote.noMetadata') }}</p>
             </div>
           </div>
         </div>
@@ -196,7 +333,7 @@ const getExifIcon = (key: string) => {
         <MapComponent
           :latitude="currentMedia?.location?.lat"
           :longitude="currentMedia?.location?.lon"
-          :location-name="exifData.location_name"
+          :location-name="currentMedia?.exif?.location_name"
         />
 
       </div>

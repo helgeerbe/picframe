@@ -5,6 +5,13 @@ from typing import Any
 from pydantic import BaseModel, Field
 
 
+class MediaResponseDTO(BaseModel):
+    """Data Transfer Object for media items sent to the frontend."""
+    file_path: str
+    exif: dict[str, Any] = Field(default_factory=dict)
+    location: dict[str, float] | None = None
+
+
 class ViewerConfig(BaseModel):
     blur_amount: int = 12
     blur_zoom: float = 1.0

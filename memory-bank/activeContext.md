@@ -12,6 +12,7 @@
 *   Next up: Implementing the CLI (`init` and `run` commands) and `EnvironmentBootstrapper` (Subphase 2B).
 
 ## Recent Changes
+- **[2026-05-04 20:08:00] - Completed Ticket #661 (Fix UI Media Playback: Resolve Stuck Placeholder Image and Missing EXIF Metadata)**: Diagnosed and fixed data mapping discrepancies in the WebSocket `/ws/state` endpoint. Updated `RemoteView.vue` to extract and render camera-specific EXIF data (ISO, aperture, exposure time, focal length, camera make/model) using `@mdi/js` icons. Synchronized `en.json` and `de.json` localization files. Updated `Frontend_Specification.md` with UI/UX design principles.
 - **[2026-05-04 18:23:00] - Completed Ticket #621 ([Task 2C.1]: Decouple Dynamic Overlays (Clock & Text) from Core Renderer)**: Implemented dynamic text generation logic in `PlaybackEngine` to extract metadata fields based on live configuration and pass them to the renderer via `RenderCommand`.
 - **[2026-05-04 18:18:00] - Completed Ticket #657 (Refactor Configuration API to use Service Layer and Pydantic Validation)**: Refactored `app.py` to use `ConfigService` for flattening/unflattening configuration data and implemented Pydantic models for strict validation of incoming configuration payloads.
 - **[2026-05-04 18:15:00] - Completed Ticket #659 (Epic: Centralized Configuration Initialization and Database Seeding)**: Implemented central `default_config.yaml`, aligned Pydantic models, enhanced bootstrapper with interactive prompts and DB seeding, implemented `MigrationManager`, and removed hardcoded defaults.

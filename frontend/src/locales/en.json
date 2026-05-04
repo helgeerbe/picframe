@@ -11,6 +11,20 @@
     "mediaDetails": "Media Details",
     "noMetadata": "No metadata available",
     "location": "Location",
+    "metadata": {
+      "fileName": "File Name",
+      "date": "Date",
+      "exposureTime": "Exposure Time",
+      "aperture": "Aperture",
+      "iso": "ISO",
+      "focalLength": "Focal Length",
+      "camera": "Camera",
+      "tags": "Tags",
+      "resolution": "Resolution",
+      "orientation": "Orientation",
+      "title": "Title",
+      "caption": "Caption"
+    },
     "overlays": {
       "title": "Text Overlays",
       "clock": "Clock",

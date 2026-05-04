@@ -11,6 +11,20 @@
     "mediaDetails": "Medien-Details",
     "noMetadata": "Keine Metadaten verfügbar",
     "location": "Ort",
+    "metadata": {
+      "fileName": "Datei",
+      "date": "Datum",
+      "exposureTime": "Belichtungszeit",
+      "aperture": "Blende",
+      "iso": "ISO",
+      "focalLength": "Brennweite",
+      "camera": "Kamera",
+      "tags": "Tags",
+      "resolution": "Auflösung",
+      "orientation": "Ausrichtung",
+      "title": "Titel",
+      "caption": "Bildunterschrift"
+    },
     "overlays": {
       "title": "Text-Overlays",
       "clock": "Uhr",

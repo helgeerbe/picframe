@@ -100,3 +100,31 @@ A dedicated "Danger Zone" or Maintenance tab for system-level operations. All ac
 *   `POST /api/maintenance/purge-db` -> Triggers database rebuild.
 *   `POST /api/maintenance/clear-cache` -> Clears image cache.
 *   `POST /api/system/reboot` -> Reboots host OS.
+
+## 7. UI/UX Design Principles & Consistency
+
+To ensure a cohesive, professional, and highly polished user experience across the entire application, all frontend development must adhere to the following design principles:
+
+### 7.1 Design Language & Styling
+*   **Tailwind Utility-First:** All styling should be implemented using Tailwind CSS utility classes. Avoid custom CSS unless absolutely necessary (e.g., complex range slider thumb styling).
+*   **Modern Aesthetics:** Utilize modern UI trends such as subtle glassmorphism (`backdrop-blur-xl`, `bg-white/90`), soft shadows (`shadow-xl`, `shadow-2xl`), and generous border radii (`rounded-2xl`, `rounded-3xl`) for card components.
+*   **Color Palette:**
+    *   Primary Actions: Indigo (`indigo-600` for buttons, `indigo-500` for hover states).
+    *   Destructive Actions: Red (`red-600`).
+    *   Warnings/Status: Amber (`amber-500`).
+    *   Backgrounds: Soft grays (`gray-50` for light mode, `gray-900` for dark mode).
+*   **Dark Mode Support:** All components must include explicit dark mode variants using Tailwind's `dark:` modifier to ensure accessibility and visual comfort in low-light environments.
+
+### 7.2 Iconography Standardization
+*   **Primary Set (Heroicons):** Use `@heroicons/vue` (Outline for standard UI elements, Solid for active states or primary transport controls) for all general navigation, layout, and control interface icons.
+*   **Secondary Set (Material Design Icons):** Use `@mdi/js` strictly for specialized data representation (e.g., specific EXIF metadata fields like Aperture, Focal Length) where Heroicons lacks the necessary technical metaphors.
+*   **Consistent Rendering:** When mixing icon sets, ensure consistent sizing (e.g., `w-5 h-5`), alignment, and color application (`text-gray-400 group-hover:text-indigo-500`). MDI SVG paths should be wrapped in a standard `<svg>` tag matching the Heroicon dimensions.
+
+### 7.3 Localization (i18n) Synchronization
+*   **Comprehensive Coverage:** Hardcoded text strings are strictly prohibited in Vue templates. All user-facing text must be routed through `vue-i18n` (`$t()` or `t()`).
+*   **File Synchronization:** Any key added to `en.json` must be simultaneously added to `de.json` (and any other supported languages) with an accurate translation.
+*   **Logical Grouping:** Translation keys must be hierarchically structured by view and component (e.g., `remote.metadata.exposureTime`, `settings.sections.viewer`).
+
+### 7.4 Empty States & Graceful Degradation
+*   **Conditional Rendering:** UI elements representing data (like metadata rows) should only render if the underlying data is valid and present. Avoid displaying "N/A", "null", or "Unknown".
+*   **Polished Fallbacks:** When primary content is missing (e.g., no media playing, no metadata available), display a visually distinct empty state featuring a muted icon, a clear descriptive message, and a soft background to maintain layout integrity.

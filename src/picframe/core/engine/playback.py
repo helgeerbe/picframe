@@ -223,10 +223,21 @@ class PlaybackEngine:
             # We pass the dynamically generated text string in the overlay config.
             # The renderer still manages the clock and visibility toggles via IConfigRepository.
             from picframe.core.events.dto import OverlayConfig
+            
+            # Fetch live config if available
+            if self._config_repository:
+                show_clock = bool(self._config_repository.get_app_config("viewer.show_clock", self._config.get("show_clock", False)))
+                clock_format = str(self._config_repository.get_app_config("viewer.clock_format", self._config.get("clock_format", "%H:%M")))
+                show_text = bool(self._config_repository.get_app_config("viewer.show_text", self._config.get("show_text", False)))
+            else:
+                show_clock = bool(self._config.get("show_clock", False))
+                clock_format = str(self._config.get("clock_format", "%H:%M"))
+                show_text = bool(self._config.get("show_text", False))
+                
             overlay_config = OverlayConfig(
-                show_clock=bool(self._config.get("show_clock", False)),
-                clock_format=str(self._config.get("clock_format", "%H:%M")),
-                show_text=bool(self._config.get("show_text", False)),
+                show_clock=show_clock,
+                clock_format=clock_format,
+                show_text=show_text,
                 text_string=text_string
             )
             
@@ -257,10 +268,21 @@ class PlaybackEngine:
             
             # Send render command
             from picframe.core.events.dto import OverlayConfig
+            
+            # Fetch live config if available
+            if self._config_repository:
+                show_clock = bool(self._config_repository.get_app_config("viewer.show_clock", self._config.get("show_clock", False)))
+                clock_format = str(self._config_repository.get_app_config("viewer.clock_format", self._config.get("clock_format", "%H:%M")))
+                show_text = bool(self._config_repository.get_app_config("viewer.show_text", self._config.get("show_text", False)))
+            else:
+                show_clock = bool(self._config.get("show_clock", False))
+                clock_format = str(self._config.get("clock_format", "%H:%M"))
+                show_text = bool(self._config.get("show_text", False))
+                
             overlay_config = OverlayConfig(
-                show_clock=bool(self._config.get("show_clock", False)),
-                clock_format=str(self._config.get("clock_format", "%H:%M")),
-                show_text=bool(self._config.get("show_text", False)),
+                show_clock=show_clock,
+                clock_format=clock_format,
+                show_text=show_text,
                 text_string=text_string
             )
             
@@ -304,16 +326,16 @@ class PlaybackEngine:
             
         parts = []
         
-        if "title" in show_text_config and media_item.title:
+        if "title" in show_text_config and getattr(media_item, "title", None):
             parts.append(media_item.title)
             
-        if "caption" in show_text_config and media_item.caption:
+        if "caption" in show_text_config and getattr(media_item, "caption", None):
             parts.append(media_item.caption)
             
-        if "name" in show_text_config and media_item.filename:
+        if "name" in show_text_config and getattr(media_item, "filename", None):
             parts.append(media_item.filename)
             
-        if "date" in show_text_config and media_item.exif_datetime:
+        if "date" in show_text_config and getattr(media_item, "exif_datetime", None):
             import datetime
             try:
                 dt = datetime.datetime.fromtimestamp(media_item.exif_datetime)
@@ -321,11 +343,11 @@ class PlaybackEngine:
             except Exception:
                 pass
                 
-        if "folder" in show_text_config and media_item.filepath:
+        if "folder" in show_text_config and getattr(media_item, "filepath", None):
             import os
             parts.append(os.path.basename(os.path.dirname(media_item.filepath)))
             
-        if "location" in show_text_config and media_item.location:
+        if "location" in show_text_config and getattr(media_item, "location", None):
             parts.append(media_item.location)
             
         return " - ".join(parts)

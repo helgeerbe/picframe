@@ -43,17 +43,20 @@ export const usePlayerStore = defineStore('player', () => {
           currentMedia.value = data.media
           // Always prepend the host/port if it's a relative path, not just in DEV
           // This ensures it works when served from the backend or a separate frontend server
-          if (currentMedia.value?.file_path?.startsWith('/')) {
+          if (currentMedia.value?.file_path && !currentMedia.value.file_path.startsWith('http') && !currentMedia.value.file_path.startsWith('/media?path=')) {
             const port = import.meta.env.DEV ? '9000' : window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
             const host = window.location.hostname
             const protocol = window.location.protocol
             
+            // Construct the /media?path= URL
+            const mediaUrl = `/media?path=${encodeURIComponent(currentMedia.value.file_path)}`
+            
             // If we're in DEV, we know the backend is on 9000.
             // If we're in PROD, the backend is serving the frontend, so we use the current origin.
             if (import.meta.env.DEV) {
-              currentMedia.value.file_path = `http://${host}:9000${currentMedia.value.file_path}`
+              currentMedia.value.file_path = `http://${host}:9000${mediaUrl}`
             } else {
-              currentMedia.value.file_path = `${protocol}//${host}${port ? ':' + port : ''}${currentMedia.value.file_path}`
+              currentMedia.value.file_path = `${protocol}//${host}${port ? ':' + port : ''}${mediaUrl}`
             }
           }
         } else if (data.type === 'StateEvent') {
