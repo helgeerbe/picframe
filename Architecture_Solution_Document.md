@@ -70,9 +70,12 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Concept:** The monolithic `Pi3dRenderer` is decomposed into specialized, focused rendering components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`) that share a single `pi3d.Display` instance. The render loop operates as a formal, lightweight State Machine implemented via a custom Python `Enum` (`RenderState`) and explicit transition handlers, rather than relying on heavy external libraries.
 *   **Reasoning & Benefits:**
     *   **Componentization:** Separating concerns makes the rendering logic cleaner and easier to maintain. The `Pi3dRenderer` acts as a facade, delegating specific drawing tasks to `TextRenderer` and `ClockRenderer` based on the `OverlayConfig` DTO received in the `RenderCommand`.
-    *   **Lightweight State Machine:** Using a custom `Enum` (e.g., `STATIC`, `IMAGE_TRANSITIONING`, `TEXT_FADING_IN`, `TEXT_SHOWING`, `TEXT_FADING_OUT`) guarantees zero-overhead performance in the critical 60fps render loop. It maintains strict type safety (`mypy` compatibility) and avoids the dynamic dispatch penalties associated with libraries like `transitions`.
-    *   **Predictable Transitions:** Replaces complex, fragile conditional blocks with explicit state transitions. For example, `IMAGE_TRANSITIONING` automatically advances to `TEXT_FADING_IN` once the image alpha reaches 1.0, preventing overlapping animations.
-    *   **Optimization:** By tracking the overall `RenderState`, the engine can easily identify when the screen is `STATIC`. In this state, it only needs to check the `ClockRenderer` for minute/second changes, allowing it to safely skip `pi3d.Display.loop_running()` and sleep, drastically reducing CPU load and power consumption.
+    *   **Lightweight State Machine:** Using a custom `Enum` (e.g., `IDLE`, `TRANSITIONING`, `KEN_BURNS`, `TEXT_ANIMATING`, `STATIC`, `SUSPENDED`) guarantees zero-overhead performance in the critical 60fps render loop. It maintains strict type safety (`mypy` compatibility) and avoids the dynamic dispatch penalties associated with libraries like `transitions`.
+    *   **Predictable Transitions:** Replaces complex, fragile conditional blocks with explicit state transitions. For example, `TRANSITIONING` automatically advances to `TEXT_ANIMATING` once the image alpha reaches 1.0, preventing overlapping animations.
+    *   **Optimization (The Sleep/Wake Mechanism):** By tracking the overall `RenderState`, the engine can easily identify when the screen is `STATIC`. In this state, it skips `pi3d.Display.loop_running()` and sleeps, drastically reducing CPU load. To support the live clock, the `ClockRenderer` implements a "Dirty Rect/Tick" concept, waking the loop exactly when a minute/second change occurs. Because `pi3d` uses EGL double buffering, the engine must render **two consecutive frames** during this tick to ensure both the front and back buffers contain the updated clock string before returning to sleep.
+    *   **Ken Burns Exception:** If the `KEN_BURNS` state is active, the screen is never truly static, and the CPU-saving sleep mechanism is explicitly bypassed.
+    *   **Video Suspension:** When the `PlaybackEngine` hands off to the `GstVideoRenderer`, it sends a command to the `Pi3dRenderer` to enter the `SUSPENDED` state, dropping its CPU usage to near zero until the video finishes.
+    *   **Local Render Queue:** A local `PriorityQueue` is introduced specifically for the rendering engine. This keeps high-frequency, synchronous render events (like `FadeStepComplete` or `ClockTick`) off the main application `EventBus`, preventing pollution and ensuring the main thread can poll both queues efficiently without blocking.
 
 ### 2.15 API Configuration & Network Binding
 *   **Concept:** The system distinguishes between *runtime-mutable configuration* (managed via SQLite/YAML and the `/api/config` endpoint) and *startup-only parameters* (managed via CLI arguments and environment variables).
@@ -183,6 +186,45 @@ sequenceDiagram
     
     Bus-->>API: StateEvent (via WebSocket Subscriber)
     API-->>User: WebSocket Update (State: PLAYING)
+```
+
+### 3.3 Pi3dRenderer State Machine
+This state diagram illustrates the lifecycle of a single image render command within the `Pi3dRenderer`, highlighting the optimization paths for static images and video suspension.
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    
+    IDLE --> TRANSITIONING : RenderCommand(Image)
+    IDLE --> SUSPENDED : RenderCommand(Video)
+    
+    state "Image Rendering Lifecycle" as ImageRender {
+        TRANSITIONING --> KEN_BURNS : Alpha == 1.0 (If Ken Burns Enabled)
+        TRANSITIONING --> TEXT_ANIMATING : Alpha == 1.0 (If Ken Burns Disabled)
+        
+        KEN_BURNS --> TEXT_ANIMATING : Ken Burns Complete
+        
+        TEXT_ANIMATING --> STATIC : Text Fade Complete
+        
+        STATIC --> STATIC : ClockTick (Render 2 Frames)
+    }
+    
+    ImageRender --> TRANSITIONING : RenderCommand(Next Image) (Interrupt)
+    ImageRender --> SUSPENDED : RenderCommand(Video) (Interrupt)
+    
+    SUSPENDED --> TRANSITIONING : RenderCommand(Image)
+    
+    note right of STATIC
+        pi3d.Display.loop_running() is SKIPPED
+        CPU usage drops to near zero.
+        Wakes only on ClockTick (requires 2
+        frames due to double buffering).
+    end note
+    
+    note right of SUSPENDED
+        pi3d.Display.loop_running() is SKIPPED
+        GstVideoRenderer owns the screen.
+    end note
 ```
 
 ## 4. Gap Analysis Resolutions & Mitigation Strategies
