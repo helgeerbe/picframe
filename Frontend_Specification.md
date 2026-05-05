@@ -36,16 +36,33 @@ This view acts as the real-time remote control and information display for the c
     *   `Next` (Skip to next media)
 *   **Display Brightness:** A horizontal slider component bound to the backend brightness state. Dragging the slider emits a `CommandEvent(SET_BRIGHTNESS)` via WebSocket or REST.
 
-### 4.2 Metadata Panel
-A dedicated panel surfacing the `MediaItem` DTO properties:
-*   **File Info:** Filename, directory, resolution, file size, and media type.
-*   **EXIF Data:** Camera Make/Model, Aperture, Shutter Speed, ISO, Focal Length, and original capture Date/Time.
-*   **Caption/Tags:** Any associated IPTC tags or user-defined captions.
+### 4.2 Metadata Display Strategy (Bifurcated Approach)
+To balance the primary visual content with secondary context, metadata presentation follows a bifurcated strategy, strictly separating technical data from narrative context.
+
+#### 4.2.1 The Technical Panel (EXIF Data)
+All technical EXIF data is organized into a dedicated, separate panel to maintain an uncluttered visual interface.
+*   **Content:** Camera Make/Model, Aperture, Shutter Speed, ISO, Focal Length, Resolution, File Size, and Media Type.
+*   **Layout & Constraints:** A clean, tabular layout of icon-value pairs using Material Design icons. To prevent extensive EXIF data from elongating the page and stretching adjacent layout columns, this panel must implement a **Scrollable Constrained Panel** strategy:
+    *   The container must have a strict maximum height (e.g., `max-h-[400px]`).
+    *   Vertical scrolling (`overflow-y-auto`) must be enabled with a custom, unobtrusive scrollbar.
+*   **Grid Decoupling:** The parent grid container holding the Media Player and the Technical Panel must use `items-start` (or equivalent alignment) to break height dependencies. This ensures the Media Player maintains its aspect ratio and does not stretch vertically to match a long metadata list.
+
+#### 4.2.2 Adaptive Cinematic Overlay (Narrative Metadata)
+Narrative metadata is intimately connected to the story of the image and is displayed directly over the image using an adaptive cinematic overlay with progressive disclosure.
+*   **Content:** Title, Caption, and Labels/Tags (IPTC/XMP data).
+*   **Dynamic Adaptation:**
+    *   **Smart Scrim:** A smooth, semi-transparent gradient (dark-to-transparent) anchored to the bottom of the image container.
+    *   **Backdrop Blur:** A subtle backdrop blur (`backdrop-blur-sm`) diffuses underlying image details to ensure text legibility.
+*   **Progressive Disclosure States:**
+    *   **Default State:** Only the Title is visible in the bottom-left corner. Extremely long titles are truncated (`text-overflow: ellipsis`).
+    *   **Hover/Focus State:** The gradient expands slightly. The Caption fades in below the title, constrained by CSS line-clamping (`line-clamp-2` or `3`). Labels/Tags appear as pill-shaped badges in a horizontally scrollable row.
+    *   **"Read More" State:** If the caption is truncated, a "Read more" link transitions the overlay into a reading mode (e.g., a sleek modal or expanded panel) containing the full, un-truncated narrative text.
 
 ### 4.3 Dynamic OpenStreetMap Component
 
 The `MapComponent` is a standalone Vue component responsible for rendering an interactive map using Leaflet.js (`@vue-leaflet/vue-leaflet`). It is a distinct UI element in the Remote UI, completely separate from the text overlay controls.
 
+*   **Layout Placement:** To maintain a strong visual hierarchy, the map is placed in the left column, directly below the Media Player card. This groups the "Visual/Narrative Context" (Image + Map) together, while reserving the right column for "Technical/Control Context" (Text Overlays + EXIF). This placement also significantly improves the mobile experience by bringing the map higher up in the single-column layout.
 *   **Conditional Rendering:** The component is conditionally rendered *only* if the current `MediaItem` DTO contains valid `latitude` and `longitude` properties.
 *   **Implementation:** Utilizes Leaflet.js to embed an interactive OpenStreetMap.
 *   **Features:**

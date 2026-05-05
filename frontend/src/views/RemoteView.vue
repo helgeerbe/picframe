@@ -10,11 +10,8 @@ import {
   mdiFilm,
   mdiSignalDistanceVariant,
   mdiCamera,
-  mdiTag,
   mdiImageSizeSelectActual,
   mdiScreenRotation,
-  mdiFormatTitle,
-  mdiText,
   mdiFileImage
 } from '@mdi/js'
 import {
@@ -145,16 +142,6 @@ const metadataFields = computed(() => {
     })
   }
 
-  // Tags
-  if (data.tags) {
-    fields.push({
-      key: 'tags',
-      label: t('remote.metadata.tags'),
-      icon: mdiTag,
-      value: data.tags
-    })
-  }
-
   // Resolution
   if (data.width && data.height) {
     fields.push({
@@ -175,26 +162,6 @@ const metadataFields = computed(() => {
     })
   }
 
-  // Title
-  if (data.title) {
-    fields.push({
-      key: 'title',
-      label: t('remote.metadata.title'),
-      icon: mdiFormatTitle,
-      value: data.title
-    })
-  }
-
-  // Caption
-  if (data.caption) {
-    fields.push({
-      key: 'caption',
-      label: t('remote.metadata.caption'),
-      icon: mdiText,
-      value: data.caption
-    })
-  }
-
   return fields
 })
 
@@ -212,7 +179,7 @@ const metadataFields = computed(() => {
       </div>
     </div>
 
-    <div class="grid grid-cols-1 xl:grid-cols-12 gap-8">
+    <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
       
       <!-- Left Column: Media & Controls -->
       <div class="xl:col-span-7 flex flex-col space-y-6">
@@ -221,7 +188,7 @@ const metadataFields = computed(() => {
         <div class="bg-white dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-gray-200/50 dark:border-gray-700/50 flex-grow flex flex-col">
           
           <!-- Image Preview Area -->
-          <div class="relative w-full bg-black/5 dark:bg-black/40 flex items-center justify-center overflow-hidden group" style="min-height: 400px; flex-grow: 1;">
+          <div class="relative w-full bg-black/5 dark:bg-black/40 flex items-center justify-center overflow-hidden group aspect-video">
             <img
               v-if="currentMedia?.file_path"
               :src="currentMedia.file_path"
@@ -234,20 +201,34 @@ const metadataFields = computed(() => {
               <p class="text-lg font-medium tracking-wide uppercase text-sm opacity-60">No Media Playing</p>
             </div>
             
-            <!-- Elegant Gradient Overlay -->
-            <div class="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+            <!-- Adaptive Cinematic Gradient Overlay -->
+            <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-40 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
             
-            <!-- Hover Info -->
-            <div class="absolute bottom-0 left-0 right-0 p-6 translate-y-4 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 transition-all duration-500 pointer-events-none flex justify-between items-end">
-              <div>
-                <h2 class="text-2xl font-bold text-white truncate drop-shadow-md">
-                  {{ displayFileName }}
+            <!-- Narrative Metadata Overlay (Progressive Disclosure) -->
+            <div class="absolute bottom-0 left-0 right-0 p-6 transition-all duration-500 flex justify-between items-end group-hover:backdrop-blur-sm">
+              <div class="flex-1 min-w-0 pr-4 pointer-events-none">
+                <!-- Title (Always visible) -->
+                <h2 class="text-2xl font-bold text-white truncate drop-shadow-md transition-transform duration-500 group-hover:-translate-y-1">
+                  {{ currentMedia?.exif?.title || displayFileName }}
                 </h2>
-                <p v-if="currentMedia?.exif?.caption" class="text-sm text-gray-200 mt-2 line-clamp-2 drop-shadow">
-                  {{ currentMedia.exif.caption }}
-                </p>
+                
+                <!-- Progressive Disclosure: Caption & Tags (Visible on hover) -->
+                <div class="grid grid-rows-[0fr] group-hover:grid-rows-[1fr] transition-all duration-500 ease-in-out opacity-0 group-hover:opacity-100">
+                  <div class="overflow-hidden">
+                    <p v-if="currentMedia?.exif?.caption" class="text-sm text-gray-200 mt-2 line-clamp-3 drop-shadow">
+                      {{ currentMedia.exif.caption }}
+                    </p>
+                    
+                    <div v-if="currentMedia?.exif?.tags" class="flex overflow-x-auto hide-scrollbar space-x-2 mt-3 pb-1 pointer-events-auto">
+                      <span v-for="tag in currentMedia.exif.tags.split(',')" :key="tag" class="whitespace-nowrap px-2.5 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-full text-xs text-white transition-colors cursor-default">
+                        {{ tag.trim() }}
+                      </span>
+                    </div>
+                  </div>
+                </div>
               </div>
-              <button @click="playerStore.sendCommand('DELETE')" class="pointer-events-auto p-3 rounded-full bg-red-600/80 hover:bg-red-500 text-white shadow-lg backdrop-blur-sm transition-all transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-red-500/50 active:scale-95" title="Delete Current Image">
+              
+              <button @click="playerStore.sendCommand('DELETE')" class="pointer-events-auto p-3 rounded-full bg-red-600/80 hover:bg-red-500 text-white shadow-lg backdrop-blur-sm transition-all transform hover:scale-110 focus:outline-none focus:ring-2 focus:ring-red-500/50 active:scale-95 flex-shrink-0 opacity-0 group-hover:opacity-100" title="Delete Current Image">
                 <TrashIconSolid class="w-6 h-6" />
               </button>
             </div>
@@ -278,11 +259,11 @@ const metadataFields = computed(() => {
             <!-- Brightness Control -->
             <div class="flex items-center space-x-4 px-6 py-4 bg-gray-50 dark:bg-gray-900/50 rounded-2xl border border-gray-100 dark:border-gray-800">
               <SunIcon class="w-6 h-6 text-gray-400 dark:text-gray-500" />
-              <input 
-                type="range" 
-                min="0" 
-                max="1" 
-                step="0.01" 
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.01"
                 :value="brightness"
                 @input="handleBrightnessChange"
                 class="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer dark:bg-gray-700 accent-indigo-600 hover:accent-indigo-500 transition-all"
@@ -291,9 +272,16 @@ const metadataFields = computed(() => {
             </div>
           </div>
         </div>
+
+        <!-- Map Card -->
+        <MapComponent
+          :latitude="currentMedia?.location?.lat"
+          :longitude="currentMedia?.location?.lon"
+          :location-name="currentMedia?.exif?.location_name"
+        />
       </div>
 
-      <!-- Right Column: Metadata & Map -->
+      <!-- Right Column: Metadata & Controls -->
       <div class="xl:col-span-5 flex flex-col space-y-6">
         
         <!-- Text Overlay Controls -->
@@ -310,7 +298,7 @@ const metadataFields = computed(() => {
             </div>
           </div>
           
-          <div class="p-6">
+          <div class="p-6 max-h-[400px] overflow-y-auto custom-scrollbar">
             <div v-if="metadataFields.length > 0" class="space-y-4">
               <div v-for="field in metadataFields" :key="field.key" class="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
                 <div class="flex items-center space-x-3 overflow-hidden">
@@ -329,19 +317,39 @@ const metadataFields = computed(() => {
           </div>
         </div>
 
-        <!-- Map Card -->
-        <MapComponent
-          :latitude="currentMedia?.location?.lat"
-          :longitude="currentMedia?.location?.lon"
-          :location-name="currentMedia?.exif?.location_name"
-        />
-
       </div>
     </div>
   </div>
 </template>
 
 <style scoped>
+/* Custom scrollbar for metadata panel */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(156, 163, 175, 0.5);
+  border-radius: 20px;
+}
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(75, 85, 99, 0.5);
+}
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(107, 114, 128, 0.8);
+}
+
+/* Hide scrollbar for tags container */
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
 /* Custom range slider styling for WebKit */
 input[type=range]::-webkit-slider-thumb {
   -webkit-appearance: none;
