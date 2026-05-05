@@ -202,6 +202,12 @@ To ensure system resilience, the `PlaybackEngine` will implement a global except
 *   **The Problem:** `pi3d` relies on EGL/OpenGL ES, which behaves differently across Raspberry Pi (Wayland) and Ubuntu.
 *   **The Mitigation:** The `Pi3dRenderer` will utilize a factory pattern to instantiate the correct `pi3d.Display` backend based on the OS detected by the Composition Root. On Ubuntu (VM), it will default to a windowed Wayland/SDL2 context for development, while on Raspberry Pi, it will attempt native Wayland/DRM fullscreen contexts. Wayland is the sole display server protocol for the application.
 
+### 4.7 EventBus Rate Limiting and Debouncing
+*   **The Problem:** High-frequency events (e.g., rapid MQTT commands, continuous sensor inputs) can flood the EventBus, overwhelming the `PlaybackEngine` or causing the `WebSocketBroadcaster` to spam connected clients, leading to UI lag or network congestion.
+*   **The Mitigation:** Implement a dual-strategy approach at the edge.
+    1.  **Debouncing:** Apply debouncing to high-frequency, non-critical events (like rapid volume changes or repeated 'next' commands) before they are processed by the core engine.
+    2.  **Rate Limiting (Token Bucket):** Implement a Token Bucket algorithm within the `WebSocketBroadcaster` to throttle the outbound flow of state updates to clients. The core EventBus remains unthrottled to ensure internal services (like `StateTracker`) maintain an accurate, real-time view of the system, while the external API is protected from spam.
+
 ---
 
 ## 5. Work Breakdown Structure (WBS)

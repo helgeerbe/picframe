@@ -132,9 +132,24 @@ def create_app(
             # Use call_soon_threadsafe because this callback runs in the event bus thread
             loop.call_soon_threadsafe(send_queue.put_nowait, msg)
 
+        # Initialize rate limiter for outbound state events
+        # Default to 10 events per second, burst of 20
+        rate_limit = 10.0
+        capacity = 20
+        if config_repository:
+            rate_limit = float(config_repository.get_app_config("http.websocket_broadcast_rate_limit", 10.0))
+            capacity = int(config_repository.get_app_config("http.websocket_broadcast_capacity", 20))
+            
+        from picframe.core.utils.rate_limit import TokenBucket
+        state_rate_limiter = TokenBucket(capacity=capacity, refill_rate=rate_limit)
+
         def handle_state_changed(event: StateEvent) -> None:
-            msg = json.dumps({"type": "StateEvent", "state": event.state.name})
-            loop.call_soon_threadsafe(send_queue.put_nowait, msg)
+            # Only rate limit state events, not media changes or critical events
+            if state_rate_limiter.consume(1):
+                msg = json.dumps({"type": "StateEvent", "state": event.state.name})
+                loop.call_soon_threadsafe(send_queue.put_nowait, msg)
+            else:
+                logger.debug("WebSocket state broadcast rate limited")
 
         if event_subscriber:
             event_subscriber.subscribe(CurrentMediaChangedEvent, handle_media_changed)
@@ -143,6 +158,14 @@ def create_app(
             # Request the current state and media immediately upon connection
             if event_publisher:
                 event_publisher.publish(CommandEvent(command=Command.REQUEST_STATE))
+
+        # Initialize debouncer for inbound commands
+        debounce_ms = 200
+        if config_repository:
+            debounce_ms = int(config_repository.get_app_config("http.command_debounce_ms", 200))
+            
+        from picframe.core.utils.debounce import Debouncer
+        command_debouncer = Debouncer(delay_ms=debounce_ms)
 
         async def receive_messages() -> None:
             try:
@@ -153,6 +176,12 @@ def create_app(
                         payload = json.loads(data)
                         command_str = payload.get("command")
                         if command_str and event_publisher:
+                            # Apply debouncing to high-frequency commands
+                            if command_str in ("NEXT", "PREV", "SET_BRIGHTNESS"):
+                                if not command_debouncer.should_execute(command_str):
+                                    logger.debug(f"Debounced command: {command_str}")
+                                    continue
+                                    
                             if command_str == "NEXT":
                                 event_publisher.publish(CommandEvent(command=Command.NEXT))
                             elif command_str == "PREV":

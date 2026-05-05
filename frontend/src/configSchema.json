@@ -323,6 +323,15 @@
     },
     "certfile": {
       "type": "string"
+    },
+    "websocket_broadcast_rate_limit": {
+      "type": "float"
+    },
+    "websocket_broadcast_capacity": {
+      "type": "integer"
+    },
+    "command_debounce_ms": {
+      "type": "integer"
     }
   }
 }

@@ -164,7 +164,10 @@
       "password": "password for basic auth. If set null generate random password in file basic_auth.txt in parent http directory",
       "use_ssl": "",
       "keyfile": "private-key",
-      "certfile": "server certificate"
+      "certfile": "server certificate",
+      "websocket_broadcast_rate_limit": "default=10.0, maximale Anzahl von Statusaktualisierungen, die pro Sekunde gesendet werden",
+      "websocket_broadcast_capacity": "default=20, maximale Burst-Größe für Statusaktualisierungen",
+      "command_debounce_ms": "default=200, Verzögerung in Millisekunden zum Entprellen hochfrequenter eingehender Befehle"
     },
     "peripherals": {
       "_title": "Peripherals",
