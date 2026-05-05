@@ -151,9 +151,26 @@ def create_app(
             else:
                 logger.debug("WebSocket state broadcast rate limited")
 
+        def handle_system_error(event: Any) -> None:
+            # We use Any here to avoid circular imports if SystemErrorEvent is not available
+            # but we expect it to be a SystemErrorEvent
+            msg = json.dumps({
+                "type": "SystemErrorEvent",
+                "message": getattr(event, "message", "Unknown Error"),
+                "component": getattr(event, "component", "Unknown")
+            })
+            loop.call_soon_threadsafe(send_queue.put_nowait, msg)
+
         if event_subscriber:
             event_subscriber.subscribe(CurrentMediaChangedEvent, handle_media_changed)
             event_subscriber.subscribe(StateEvent, handle_state_changed)
+            
+            # Try to subscribe to SystemErrorEvent if it exists
+            try:
+                from picframe.core.events.dto import SystemErrorEvent
+                event_subscriber.subscribe(SystemErrorEvent, handle_system_error)
+            except ImportError:
+                pass
             
             # Request the current state and media immediately upon connection
             if event_publisher:
@@ -258,6 +275,11 @@ def create_app(
             if event_subscriber:
                 event_subscriber.unsubscribe(CurrentMediaChangedEvent, handle_media_changed)
                 event_subscriber.unsubscribe(StateEvent, handle_state_changed)
+                try:
+                    from picframe.core.events.dto import SystemErrorEvent
+                    event_subscriber.unsubscribe(SystemErrorEvent, handle_system_error)
+                except ImportError:
+                    pass
 
     @app.post("/api/system/reboot")
     async def api_reboot() -> dict[str, str]:

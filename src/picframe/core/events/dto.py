@@ -46,6 +46,7 @@ class State(Enum):
     SLEEPING = auto()
     CONFIG_CHANGED = auto()
     STATS_UPDATED = auto()
+    ERROR = auto()
 
 
 @dataclass(frozen=True)

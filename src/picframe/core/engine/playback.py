@@ -12,10 +12,12 @@ from picframe.core.events.dto import (
     RenderCommand,
     State,
     StateEvent,
+    SystemErrorEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.services.playlist import PlaylistManager
+from picframe.core.exceptions import MediaProcessingError, SystemError
 
 
 class PlaybackEngine:
@@ -58,6 +60,10 @@ class PlaybackEngine:
         self._time_delay = float(config.get("time_delay", 200.0))
         self._next_transition_time = 0.0
         
+        # Circuit breaker state
+        self._consecutive_errors = 0
+        self._max_consecutive_errors = 5
+        
         # Subscribe to commands
         self._event_subscriber.subscribe(CommandEvent, self._handle_command)
 
@@ -97,19 +103,28 @@ class PlaybackEngine:
             # automatically dispatching to callbacks in this thread.
             # For now, we assume callbacks are handled.
             
-            # 2. Check if it's time for the next slide
-            current_time = time.time()
-            if (
-                self._state == State.PLAYING
-                and current_time >= self._next_transition_time
-            ):
-                self._trigger_next_media()
+            try:
+                # 2. Check if it's time for the next slide
+                current_time = time.time()
+                if (
+                    self._state == State.PLAYING
+                    and current_time >= self._next_transition_time
+                ):
+                    self._trigger_next_media()
+                    
+                # 3. Render the frame
+                if not self._renderer.render_frame():
+                    self._logger.info("Renderer requested exit")
+                    self._is_running = False
+                    break
+                    
+                # Reset error counter on successful loop iteration
+                self._consecutive_errors = 0
                 
-            # 3. Render the frame
-            if not self._renderer.render_frame():
-                self._logger.info("Renderer requested exit")
-                self._is_running = False
-                break
+            except MediaProcessingError as e:
+                self._handle_media_error(e)
+            except Exception as e:
+                self._handle_system_error(e)
                 
             # Small sleep to prevent 100% CPU usage if renderer doesn't block
             time.sleep(0.01)
@@ -351,6 +366,35 @@ class PlaybackEngine:
             parts.append(media_item.location)
             
         return " - ".join(parts)
+
+    def _handle_media_error(self, error: Exception) -> None:
+        """Handle a recoverable media processing error."""
+        self._logger.error(f"Media processing error: {error}", exc_info=True)
+        self._consecutive_errors += 1
+        
+        self._event_publisher.publish(
+            SystemErrorEvent(message=str(error), component="PlaybackEngine")
+        )
+        
+        if self._consecutive_errors >= self._max_consecutive_errors:
+            self._logger.critical("Circuit breaker tripped: Too many consecutive media errors.")
+            self._change_state(State.ERROR)
+            self._is_running = False
+        else:
+            self._logger.info("Attempting to recover by skipping to next media.")
+            self._change_state(State.IDLE)
+            # Force immediate transition on next loop
+            self._next_transition_time = 0.0
+            self._change_state(State.PLAYING)
+
+    def _handle_system_error(self, error: Exception) -> None:
+        """Handle a critical system error."""
+        self._logger.critical(f"Critical system error in render loop: {error}", exc_info=True)
+        self._event_publisher.publish(
+            SystemErrorEvent(message=f"Critical Error: {error}", component="PlaybackEngine")
+        )
+        self._change_state(State.ERROR)
+        self._is_running = False
 
     def _change_state(self, new_state: State) -> None:
         """Update internal state and publish a StateEvent."""

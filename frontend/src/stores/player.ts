@@ -16,6 +16,7 @@ export const usePlayerStore = defineStore('player', () => {
   const brightness = ref(1.0)
   const isDisplayOn = ref(true)
   const isConnected = ref(false)
+  const systemError = ref<{message: string, component: string} | null>(null)
 
   let ws: WebSocket | null = null
 
@@ -62,6 +63,17 @@ export const usePlayerStore = defineStore('player', () => {
         } else if (data.type === 'StateEvent') {
           if (data.state === 'PLAYING') isPlaying.value = true
           if (data.state === 'PAUSED') isPlaying.value = false
+        } else if (data.type === 'SystemErrorEvent') {
+          systemError.value = {
+            message: data.message,
+            component: data.component
+          }
+          // Auto-clear error after 10 seconds
+          setTimeout(() => {
+            if (systemError.value?.message === data.message) {
+              systemError.value = null
+            }
+          }, 10000)
         }
       } catch (e) {
         console.error('Failed to parse WebSocket message', e)
@@ -114,11 +126,16 @@ export const usePlayerStore = defineStore('player', () => {
     sendCommand(isDisplayOn.value ? 'DISPLAY_ON' : 'DISPLAY_OFF')
   }
 
+  function clearError() {
+    systemError.value = null
+  }
+
   return {
     currentMedia,
     isPlaying,
     brightness,
     isConnected,
+    systemError,
     connect,
     sendCommand,
     play,
@@ -127,6 +144,7 @@ export const usePlayerStore = defineStore('player', () => {
     previous,
     setBrightness,
     isDisplayOn,
-    toggleDisplayPower
+    toggleDisplayPower,
+    clearError
   }
 })

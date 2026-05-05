@@ -227,3 +227,36 @@ def test_engine_run_loop_exit(
     # Should have stopped the engine
     assert engine._is_running is False
     mock_renderer.stop.assert_called_once()
+
+
+def test_engine_circuit_breaker(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, float],
+) -> None:
+    """Test that the circuit breaker trips after consecutive errors."""
+    from picframe.core.exceptions import MediaProcessingError
+    
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+    engine._is_running = True
+    engine._state = State.PLAYING
+    
+    # Mock renderer to raise MediaProcessingError
+    mock_renderer.render_frame.side_effect = MediaProcessingError("Test error")
+    
+    # Run the loop. It should catch the error, increment the counter, and eventually trip the breaker.
+    # We need to patch time.sleep to avoid waiting during the test
+    with patch("time.sleep"):
+        engine._run_loop()
+    
+    # The breaker should have tripped after 5 errors
+    assert engine._consecutive_errors == 5
+    assert engine._state == State.ERROR
+    assert engine._is_running is False
+    
+    # Verify StateEvent(ERROR) was published
+    mock_event_publisher.publish.assert_any_call(StateEvent(state=State.ERROR))

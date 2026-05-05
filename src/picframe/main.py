@@ -163,7 +163,12 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     try:
         engine.start()
     except Exception as e:
-        logger.error(f"Engine crashed: {e}")
+        logger.critical(f"Fatal error in main thread: {e}", exc_info=True)
+        from picframe.core.events.dto import SystemErrorEvent
+        event_bus.publish(SystemErrorEvent(message=f"Fatal Error: {e}", component="MainThread"))
+        # Give the event bus a moment to broadcast the error before shutting down
+        import time
+        time.sleep(1.0)
     finally:
         logger.info("Cleaning up...")
         media_monitor_service.stop()

@@ -16,17 +16,17 @@ def test_debouncer_should_execute(mock_monotonic):
     debouncer = Debouncer(delay_ms=500)
     
     # First call should execute
-    mock_monotonic.return_value = 0.0
+    mock_monotonic.return_value = 100.0
     assert debouncer.should_execute("test_action") is True
     
     # Call within delay should be debounced
-    mock_monotonic.return_value = 0.4
+    mock_monotonic.return_value = 100.4
     assert debouncer.should_execute("test_action") is False
     
     # Call after delay should execute
-    mock_monotonic.return_value = 0.6
+    mock_monotonic.return_value = 100.6
     assert debouncer.should_execute("test_action") is True
     
     # Different key should execute independently
-    mock_monotonic.return_value = 0.7
+    mock_monotonic.return_value = 100.7
     assert debouncer.should_execute("other_action") is True
