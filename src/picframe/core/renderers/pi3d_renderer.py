@@ -6,30 +6,25 @@ import os
 import queue
 import time
 from dataclasses import dataclass, field, replace
-from enum import Enum, auto
+from pathlib import Path
 from typing import Any
 
-from pathlib import Path
-
 import pi3d
-from PIL import Image
 
-from picframe.core.events.dto import CurrentMediaChangedEvent, OverlayConfig, RenderCommand, State, StateEvent
+from picframe.core.events.dto import (
+    CurrentMediaChangedEvent,
+    OverlayConfig,
+    RenderCommand,
+    State,
+    StateEvent,
+)
 from picframe.core.events.interfaces import IEventSubscriber
+from picframe.core.renderers.animation_controller import AnimationController, RenderState
 from picframe.core.renderers.components.clock_renderer import ClockRenderer
 from picframe.core.renderers.components.image_renderer import ImageRenderer
 from picframe.core.renderers.components.text_renderer import TextRenderer
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.repositories.interfaces import IConfigRepository
-
-
-class RenderState(Enum):
-    IDLE = auto()
-    TRANSITIONING = auto()
-    KEN_BURNS = auto()
-    TEXT_ANIMATING = auto()
-    STATIC = auto()
-    SUSPENDED = auto()
 
 
 @dataclass(order=True)
@@ -46,7 +41,12 @@ class Pi3dRenderer(IRenderer):
     and executing image transitions (alpha blending, Ken Burns).
     """
 
-    def __init__(self, config: dict[str, Any], event_subscriber: IEventSubscriber | None = None, config_repository: IConfigRepository | None = None) -> None:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        event_subscriber: IEventSubscriber | None = None,
+        config_repository: IConfigRepository | None = None,
+    ) -> None:
         """
         Initialize the renderer with configuration.
         
@@ -94,10 +94,26 @@ class Pi3dRenderer(IRenderer):
         # Text Overlay State
         if self._config_repository:
             self._overlay_config = OverlayConfig(
-                show_clock=bool(self._config_repository.get_app_config("viewer.show_clock", config.get("show_clock", False))),
-                clock_format=str(self._config_repository.get_app_config("viewer.clock_format", config.get("clock_format", "%H:%M"))),
-                show_text=bool(self._config_repository.get_app_config("viewer.show_text", config.get("show_text", False))),
-                text_string=str(self._config_repository.get_app_config("viewer.text_string", config.get("text_string", "")))
+                show_clock=bool(
+                    self._config_repository.get_app_config(
+                        "viewer.show_clock", config.get("show_clock", False)
+                    )
+                ),
+                clock_format=str(
+                    self._config_repository.get_app_config(
+                        "viewer.clock_format", config.get("clock_format", "%H:%M")
+                    )
+                ),
+                show_text=bool(
+                    self._config_repository.get_app_config(
+                        "viewer.show_text", config.get("show_text", False)
+                    )
+                ),
+                text_string=str(
+                    self._config_repository.get_app_config(
+                        "viewer.text_string", config.get("text_string", "")
+                    )
+                ),
             )
         else:
             self._overlay_config = OverlayConfig(
@@ -108,14 +124,11 @@ class Pi3dRenderer(IRenderer):
             )
         self._text_renderer: TextRenderer | None = None
         self._clock_renderer: ClockRenderer | None = None
-        self._render_state = RenderState.STATIC
-        self._text_alpha = 0.0
-        self._text_fade_time = 1.0
-        self._text_show_time = float(config.get("show_text_tm", 10.0))
-        self._text_timer = 0.0
+        
+        self._animation_controller = AnimationController(config)
+        self._animation_controller.update_text_config(self._overlay_config.show_text, False)
         
         self._local_queue: queue.PriorityQueue[PrioritizedRenderTask] = queue.PriorityQueue()
-        self._frames_to_render = 0
         self._current_media: Any | None = None
 
     def _generate_text_string(self, media_item: Any) -> str:
@@ -124,8 +137,16 @@ class Pi3dRenderer(IRenderer):
             return ""
             
         if self._config_repository:
-            show_text_config = str(self._config_repository.get_app_config("viewer.show_text", self._config.get("show_text", ""))).lower()
-            show_text_fm = str(self._config_repository.get_app_config("viewer.show_text_fm", self._config.get("show_text_fm", "%b %d, %Y")))
+            show_text_config = str(
+                self._config_repository.get_app_config(
+                    "viewer.show_text", self._config.get("show_text", "")
+                )
+            ).lower()
+            show_text_fm = str(
+                self._config_repository.get_app_config(
+                    "viewer.show_text_fm", self._config.get("show_text_fm", "%b %d, %Y")
+                )
+            )
         else:
             show_text_config = str(self._config.get("show_text", "")).lower()
             show_text_fm = str(self._config.get("show_text_fm", "%b %d, %Y"))
@@ -167,8 +188,10 @@ class Pi3dRenderer(IRenderer):
             updated_sections = payload.get("updated_sections", [])
             
             if "viewer" in updated_sections or "text_overlay" in updated_sections:
-                self._logger.info("Renderer received CONFIG_CHANGED for viewer/overlay section. Updating overlay state.")
-                old_show_text = self._overlay_config.show_text
+                self._logger.info(
+                    "Renderer received CONFIG_CHANGED for viewer/overlay section. "
+                    "Updating overlay state."
+                )
                 old_text_string = self._overlay_config.text_string
                 
                 if self._config_repository:
@@ -177,25 +200,33 @@ class Pi3dRenderer(IRenderer):
                         new_text_string = self._generate_text_string(self._current_media)
                         
                     self._overlay_config = OverlayConfig(
-                        show_clock=bool(self._config_repository.get_app_config("viewer.show_clock", self._overlay_config.show_clock)),
-                        clock_format=str(self._config_repository.get_app_config("viewer.clock_format", self._overlay_config.clock_format)),
-                        show_text=bool(self._config_repository.get_app_config("viewer.show_text", self._overlay_config.show_text)),
-                        text_string=new_text_string
+                        show_clock=bool(
+                            self._config_repository.get_app_config(
+                                "viewer.show_clock", self._overlay_config.show_clock
+                            )
+                        ),
+                        clock_format=str(
+                            self._config_repository.get_app_config(
+                                "viewer.clock_format", self._overlay_config.clock_format
+                            )
+                        ),
+                        show_text=bool(
+                            self._config_repository.get_app_config(
+                                "viewer.show_text", self._overlay_config.show_text
+                            )
+                        ),
+                        text_string=new_text_string,
                     )
                     if self._text_renderer:
                         self._text_renderer.update_config(self._overlay_config)
                     if self._clock_renderer:
                         self._clock_renderer.update_config(self._overlay_config)
                         
-                self._frames_to_render = 2
-                        
-                # React to show_text toggles immediately
-                if self._render_state == RenderState.STATIC:
-                    if self._overlay_config.show_text and (not old_show_text or self._overlay_config.text_string != old_text_string):
-                        self._render_state = RenderState.TEXT_ANIMATING
-                        self._text_alpha = 0.0
-                elif self._render_state == RenderState.TEXT_ANIMATING and not self._overlay_config.show_text:
-                    self._render_state = RenderState.STATIC
+                self._animation_controller.force_redraw(2)
+                self._animation_controller.update_text_config(
+                    self._overlay_config.show_text,
+                    self._overlay_config.text_string != old_text_string
+                )
 
     def start(self) -> None:
         """Initialize the pi3d display and sprite."""
@@ -244,24 +275,31 @@ class Pi3dRenderer(IRenderer):
             return
             
         if command.overlay:
-            self._overlay_config = replace(self._overlay_config, text_string=command.overlay.text_string)
+            self._overlay_config = replace(
+                self._overlay_config, text_string=command.overlay.text_string
+            )
             
         try:
             # Check if it's a video file based on extension
             ext = Path(command.image_path).suffix.lower()
-            video_extensions = self._config.get("video_extensions", [".mp4", ".mov", ".avi", ".mkv"])
+            video_extensions = self._config.get(
+                "video_extensions", [".mp4", ".mov", ".avi", ".mkv"]
+            )
             # Ensure extensions start with a dot
-            video_extensions = [ext if ext.startswith(".") else f".{ext}" for ext in video_extensions]
+            video_extensions = [
+                ext if ext.startswith(".") else f".{ext}" for ext in video_extensions
+            ]
             
             if ext in video_extensions:
                 # For videos, we suspend the pi3d render loop
-                self._render_state = RenderState.SUSPENDED
+                self._animation_controller.suspend()
                 return
 
             # Delegate to ImageRenderer
-            success = self._image_renderer.execute(command)
+            success, kb_xstep, kb_ystep = self._image_renderer.execute(command)
             if success:
-                self._render_state = RenderState.TRANSITIONING
+                self._animation_controller.start_transition(time.time(), kb_xstep, kb_ystep)
+                self._animation_controller.update_text_config(self._overlay_config.show_text, True)
                 
                 if self._text_renderer:
                     self._text_renderer.update_config(self._overlay_config)
@@ -282,13 +320,16 @@ class Pi3dRenderer(IRenderer):
         if self._display is None or self._image_renderer is None:
             return False
             
+        tm = time.time()
+        anim_state = self._animation_controller.update(tm)
+
         # Process local queue
         try:
             while True:
                 task_item = self._local_queue.get_nowait()
                 if task_item.task == "clock_tick":
-                    if self._render_state == RenderState.STATIC:
-                        self._frames_to_render = 2
+                    if anim_state.render_state == RenderState.STATIC:
+                        self._animation_controller.force_redraw(2)
                 self._local_queue.task_done()
         except queue.Empty:
             pass
@@ -298,62 +339,26 @@ class Pi3dRenderer(IRenderer):
             return False
 
         # Sleep optimization for STATIC and SUSPENDED states
-        if self._render_state == RenderState.SUSPENDED:
+        if anim_state.render_state == RenderState.SUSPENDED:
             time.sleep(0.1)
             return True
             
-        if self._render_state == RenderState.STATIC and not self._kenburns and self._frames_to_render <= 0:
+        if (
+            anim_state.render_state == RenderState.STATIC
+            and not self._kenburns
+            and anim_state.frames_to_render <= 0
+        ):
             time.sleep(0.1)
-            # Do not return early; we must draw the static frame to prevent the screen from going black
-            
-        if self._frames_to_render > 0:
-            self._frames_to_render -= 1
-            
-        tm = time.time()
-        
-        # Update Ken Burns tweening
+            # Do not return early; we must draw the static frame to prevent
+            # the screen from going black
+
+        # Apply animation state to components
+        self._image_renderer.set_alpha(anim_state.image_alpha)
         if self._kenburns:
-            self._image_renderer.update_kenburns(tm)
+            self._image_renderer.set_kenburns_offsets(anim_state.kenburns_x, anim_state.kenburns_y)
             
-        # State Machine
-        if self._render_state == RenderState.TRANSITIONING:
-            transition_complete = self._image_renderer.update_transition()
-            if transition_complete:
-                if self._kenburns:
-                    self._render_state = RenderState.KEN_BURNS
-                else:
-                    self._render_state = RenderState.TEXT_ANIMATING
-                    self._text_alpha = 0.0
-                    
-        elif self._render_state == RenderState.KEN_BURNS:
-            # Ken burns is handled above, just need to transition to text animating
-            # if we want text to fade in after ken burns starts, or we can just
-            # let it run. For now, we'll transition to text animating immediately
-            # so text fades in while ken burns is happening.
-            self._render_state = RenderState.TEXT_ANIMATING
-            self._text_alpha = 0.0
-            
-        elif self._render_state == RenderState.TEXT_ANIMATING:
-            if self._overlay_config.show_text:
-                self._text_alpha += 1.0 / (self._fps * self._text_fade_time)
-                if self._text_alpha >= 1.0:
-                    self._text_alpha = 1.0
-                    self._render_state = RenderState.STATIC
-                    self._text_timer = tm + self._text_show_time
-                if self._text_renderer:
-                    self._text_renderer.set_alpha(self._text_alpha)
-            else:
-                self._render_state = RenderState.STATIC
-                
-        elif self._render_state == RenderState.STATIC:
-            if self._overlay_config.show_text and tm >= self._text_timer:
-                # Text has been shown long enough, fade it out
-                self._text_alpha -= 1.0 / (self._fps * self._text_fade_time)
-                if self._text_alpha <= 0.0:
-                    self._text_alpha = 0.0
-                    # We don't change state, just keep alpha at 0
-                if self._text_renderer:
-                    self._text_renderer.set_alpha(self._text_alpha)
+        if self._text_renderer:
+            self._text_renderer.set_alpha(anim_state.text_alpha)
 
         # Draw components
         self._image_renderer.draw()

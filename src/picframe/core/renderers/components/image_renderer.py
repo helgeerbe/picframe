@@ -72,14 +72,14 @@ class ImageRenderer:
         self._slide.unif[54] = float(self._blend_type)
         self._slide.unif[55] = 1.0  # brightness
 
-    def execute(self, command: RenderCommand) -> bool:
+    def execute(self, command: RenderCommand) -> tuple[bool, float, float]:
         """
         Load a new image and initiate a transition.
-        Returns True if successful, False if it's a video or failed.
+        Returns (success, kb_xstep, kb_ystep).
         """
         if self._slide is None:
             self._logger.warning("ImageRenderer not initialized properly")
-            return False
+            return False, 0.0, 0.0
             
         # Check if it's a video file based on extension
         ext = Path(command.image_path).suffix.lower()
@@ -88,10 +88,10 @@ class ImageRenderer:
         video_extensions = [ext if ext.startswith(".") else f".{ext}" for ext in video_extensions]
         
         if ext in video_extensions:
-            return False
+            return False, 0.0, 0.0
 
         try:
-            im = Image.open(command.image_path)
+            im: Any = Image.open(command.image_path)
         except Exception as e:
             self._logger.warning(f"Failed to load image {command.image_path}: {e}. Using fallback.")
             # Create a fallback image (e.g., black screen or default "no pictures" image)
@@ -129,46 +129,31 @@ class ImageRenderer:
             self._slide.unif[os1] = (wh_rat - 1.0) * 0.5
             self._slide.unif[os2] = 0.0
             
+            xstep = 0.0
+            ystep = 0.0
             if self._kenburns:
-                self._xstep = self._slide.unif[48] * 2.0 / (self._time_delay - self._fade_time)
-                self._ystep = self._slide.unif[49] * 2.0 / (self._time_delay - self._fade_time)
+                xstep = self._slide.unif[48] * 2.0 / (self._time_delay - self._fade_time)
+                ystep = self._slide.unif[49] * 2.0 / (self._time_delay - self._fade_time)
                 self._slide.unif[48] = 0.0
                 self._slide.unif[49] = 0.0
                 
-            # Start transition
-            self._alpha = 0.0
-            if self._fade_time > 0.5:
-                self._delta_alpha = 1.0 / (self._fps * self._fade_time)
-            else:
-                self._delta_alpha = 1.0
-                
-            return True
+            return True, xstep, ystep
                 
         except Exception as e:
             self._logger.error(f"Failed to execute RenderCommand in ImageRenderer: {e}")
-            return False
+            return False, 0.0, 0.0
 
-    def update_transition(self) -> bool:
-        """
-        Update the alpha value for the transition.
-        Returns True if the transition is complete (alpha >= 1.0).
-        """
-        if self._alpha < 1.0:
-            self._alpha += self._delta_alpha
-            if self._alpha >= 1.0:
-                self._alpha = 1.0
+    def set_alpha(self, alpha: float) -> None:
+        """Set the alpha value for the transition."""
+        if self._slide:
             # Smooth step alpha
-            if self._slide:
-                self._slide.unif[44] = self._alpha * self._alpha * (3.0 - 2.0 * self._alpha)
-            
-        return self._alpha >= 1.0
+            self._slide.unif[44] = alpha * alpha * (3.0 - 2.0 * alpha)
 
-    def update_kenburns(self, tm: float) -> None:
-        """Update the Ken Burns tweening."""
-        if self._kenburns and self._alpha >= 1.0 and self._slide:
-            t_factor = self._time_delay - self._fade_time - self._next_tm + tm
-            self._slide.unif[48] = self._slide.unif[48] * 0.95 + self._xstep * t_factor * 0.05
-            self._slide.unif[49] = self._slide.unif[49] * 0.95 + self._ystep * t_factor * 0.05
+    def set_kenburns_offsets(self, x: float, y: float) -> None:
+        """Set the Ken Burns tweening offsets."""
+        if self._slide:
+            self._slide.unif[48] = x
+            self._slide.unif[49] = y
 
     def draw(self) -> None:
         """Draw the image slide."""

@@ -73,7 +73,8 @@ def test_image_renderer_initialization(
     assert renderer._kenburns is False
     
     mock_pi3d.Sprite.assert_called_once()
-    renderer._slide.set_shader.assert_called_once_with(shader)
+    if renderer._slide:
+        renderer._slide.set_shader.assert_called_once_with(shader)
 
 
 def test_image_renderer_execute_video(
@@ -86,7 +87,7 @@ def test_image_renderer_execute_video(
     command = RenderCommand(image_path="/path/to/video.mp4")
     result = renderer.execute(command)
     
-    assert result is False
+    assert result == (False, 0.0, 0.0)
 
 
 @patch("picframe.core.renderers.components.image_renderer.Image")
@@ -96,21 +97,21 @@ def test_image_renderer_execute_image(
     """Test executing a command with an image file."""
     shader = MagicMock()
     renderer = ImageRenderer(mock_display, shader, config)
-    
+
     mock_img_instance = MagicMock()
     mock_image.open.return_value = mock_img_instance
-    
+
     mock_texture = MagicMock()
     mock_texture.ix = 1920
     mock_texture.iy = 1080
     mock_pi3d.Texture.return_value = mock_texture
-    
+
     command = RenderCommand(image_path="/path/to/image.jpg")
-    
+
     with patch("time.time", return_value=100.0):
         result = renderer.execute(command)
-    
-    assert result is True
+
+    assert result == (True, 0.0, 0.0)
     mock_image.open.assert_called_once_with("/path/to/image.jpg")
     mock_pi3d.Texture.assert_called_once_with(
         mock_img_instance, blend=True, m_repeat=True, free_after_load=True
@@ -120,25 +121,17 @@ def test_image_renderer_execute_image(
     assert renderer._sbg == mock_texture  # First image, so sbg is set to sfg
 
 
-def test_image_renderer_update_transition(
+def test_image_renderer_set_alpha(
     mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
 ) -> None:
-    """Test updating the transition state."""
+    """Test setting the alpha value."""
     shader = MagicMock()
     renderer = ImageRenderer(mock_display, shader, config)
     
-    renderer._alpha = 0.5
-    renderer._delta_alpha = 0.1
+    renderer.set_alpha(0.6)
     
-    result = renderer.update_transition()
-    
-    assert result is False
-    assert renderer._alpha == pytest.approx(0.6)
-    
-    # Test transition complete
-    renderer._alpha = 1.0
-    result = renderer.update_transition()
-    assert result is True
+    if renderer._slide:
+        assert renderer._slide.unif[44] == pytest.approx(0.6 * 0.6 * (3.0 - 2.0 * 0.6))
 
 
 def test_image_renderer_draw(
@@ -150,4 +143,5 @@ def test_image_renderer_draw(
     
     renderer.draw()
     
-    renderer._slide.draw.assert_called_once()
+    if renderer._slide:
+        renderer._slide.draw.assert_called_once()

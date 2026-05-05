@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from picframe.core.events.dto import OverlayConfig, RenderCommand
-from picframe.core.renderers.pi3d_renderer import Pi3dRenderer, RenderState
+from picframe.core.renderers.pi3d_renderer import Pi3dRenderer
+from picframe.core.renderers.animation_controller import RenderState
 
 
 @pytest.fixture
@@ -72,7 +73,7 @@ def test_renderer_initialization(config: dict[str, Any]) -> None:
     assert renderer._display_w == 1920
     assert renderer._display_h == 1080
     assert renderer._fps == 60
-    assert renderer._render_state == RenderState.STATIC
+    assert renderer._animation_controller._state == RenderState.STATIC
 
 
 def test_renderer_start_stop(
@@ -125,10 +126,14 @@ def test_renderer_execute(
         image_path="/path/to/image.jpg",
         overlay=OverlayConfig(show_clock=True, show_text=True, text_string="Test"),
     )
+    
+    # Mock ImageRenderer.execute to return success and kb steps
+    mock_image_renderer.execute.return_value = (True, 0.0, 0.0)
+    
     renderer.execute(command)
 
     mock_image_renderer.execute.assert_called_once_with(command)
-    assert renderer._render_state == RenderState.TRANSITIONING
+    assert renderer._animation_controller._state == RenderState.TRANSITIONING
     assert renderer._overlay_config.text_string == "Test"
 
 
@@ -142,13 +147,13 @@ def test_renderer_execute_video(
     renderer.start()
 
     # Mock ImageRenderer.execute to return False for video
-    mock_image_renderer.execute.return_value = False
+    mock_image_renderer.execute.return_value = (False, 0.0, 0.0)
 
     command = RenderCommand(image_path="/path/to/video.mp4")
     renderer.execute(command)
 
     mock_image_renderer.execute.assert_not_called()
-    assert renderer._render_state == RenderState.SUSPENDED
+    assert renderer._animation_controller._state == RenderState.SUSPENDED
 
 
 def test_renderer_render_frame(
@@ -163,17 +168,20 @@ def test_renderer_render_frame(
     renderer.start()
     
     # Set state to transitioning
-    renderer._render_state = RenderState.TRANSITIONING
-    mock_image_renderer.update_transition.return_value = True
+    renderer._animation_controller._state = RenderState.TRANSITIONING
+    renderer._animation_controller._image_alpha = 0.99 # Almost done
+    renderer._animation_controller._fade_time = 0.01 # Fast fade
+
+    renderer._animation_controller._show_text = True
 
     with patch("time.time", return_value=100.0):
         result = renderer.render_frame()
 
     assert result is True
-    mock_image_renderer.update_transition.assert_called_once()
+    mock_image_renderer.set_alpha.assert_called_once()
     mock_image_renderer.draw.assert_called_once()
     # Should transition to TEXT_ANIMATING
-    assert renderer._render_state == RenderState.TEXT_ANIMATING
+    assert renderer._animation_controller._state == RenderState.TEXT_ANIMATING
 
 
 def test_renderer_render_frame_not_running(
@@ -186,7 +194,8 @@ def test_renderer_render_frame_not_running(
     """Test rendering when the display loop is not running."""
     renderer = Pi3dRenderer(config)
     renderer.start()
-    renderer._display.loop_running.return_value = False
+    if renderer._display:
+        renderer._display.loop_running.return_value = False
 
     result = renderer.render_frame()
     assert result is False
@@ -204,7 +213,7 @@ def test_renderer_render_frame_suspended(
     """Test rendering when suspended (e.g., playing video)."""
     renderer = Pi3dRenderer(config)
     renderer.start()
-    renderer._render_state = RenderState.SUSPENDED
+    renderer._animation_controller._state = RenderState.SUSPENDED
 
     result = renderer.render_frame()
 
@@ -224,8 +233,8 @@ def test_renderer_render_frame_static(
     """Test rendering when static (no transitions)."""
     renderer = Pi3dRenderer(config)
     renderer.start()
-    renderer._render_state = RenderState.STATIC
-    renderer._frames_to_render = 0
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._frames_to_render = 0
     renderer._kenburns = False
 
     result = renderer.render_frame()
@@ -244,8 +253,8 @@ def test_renderer_enqueue_task(
     """Test enqueueing a task and processing it."""
     renderer = Pi3dRenderer(config)
     renderer.start()
-    renderer._render_state = RenderState.STATIC
-    renderer._frames_to_render = 0
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._frames_to_render = 0
 
     renderer.enqueue_task(1, "clock_tick")
     
@@ -253,5 +262,5 @@ def test_renderer_enqueue_task(
     with patch("time.sleep"):
         renderer.render_frame()
 
-    assert renderer._frames_to_render == 1
+    assert renderer._animation_controller._frames_to_render == 2
     assert renderer._local_queue.empty()
