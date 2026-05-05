@@ -1,0 +1,176 @@
+"""
+Image Renderer Component.
+
+Responsible for rendering images, managing textures, and executing Ken Burns transitions using pi3d.
+"""
+import logging
+import time
+from pathlib import Path
+from typing import Any
+
+import pi3d
+from PIL import Image
+
+from picframe.core.events.dto import RenderCommand
+
+
+class ImageRenderer:
+    """Renders images and handles transitions on the pi3d display."""
+
+    def __init__(self, display: Any, shader: Any, config: dict[str, Any]) -> None:
+        self._logger = logging.getLogger(__name__)
+        self._display = display
+        self._shader = shader
+        self._config = config
+        
+        # Rendering settings
+        blend_type_str = config.get("blend_type", "blend")
+        self._blend_type = {"blend": 0.0, "burn": 1.0, "bump": 2.0}.get(blend_type_str, 0.0)
+        self._edge_alpha = float(config.get("edge_alpha", 0.5))
+        self._fit = bool(config.get("fit", False))
+        self._kenburns = bool(config.get("kenburns", False))
+        if self._kenburns:
+            self._fit = False
+            
+        self._fade_time = float(config.get("time_fade", 2.0))
+        self._time_delay = float(config.get("time_delay", 200.0))
+        self._fps = int(config.get("fps", 20))
+        
+        # State
+        self._slide: Any | None = None
+        self._sfg: Any | None = None
+        self._sbg: Any | None = None
+        
+        self._alpha = 1.0
+        self._delta_alpha = 1.0
+        self._xstep = 0.0
+        self._ystep = 0.0
+        self._next_tm = 0.0
+        
+        self._init_slide()
+
+    def _init_slide(self) -> None:
+        """Initialize the pi3d Sprite for the slide."""
+        import pi3d
+        try:
+            camera = pi3d.Camera.instance()
+        except AttributeError:
+            # Fallback for testing when Display.INSTANCE is not fully mocked
+            camera = pi3d.Camera(is_3d=False)
+            
+        if camera is None:
+            camera = pi3d.Camera(is_3d=False)
+            
+        self._slide = pi3d.Sprite(
+            camera=camera,
+            w=self._display.width,
+            h=self._display.height,
+            z=5.0
+        )
+        self._slide.set_shader(self._shader)
+        self._slide.unif[47] = self._edge_alpha
+        self._slide.unif[54] = float(self._blend_type)
+        self._slide.unif[55] = 1.0  # brightness
+
+    def execute(self, command: RenderCommand) -> bool:
+        """
+        Load a new image and initiate a transition.
+        Returns True if successful, False if it's a video or failed.
+        """
+        if self._slide is None:
+            self._logger.warning("ImageRenderer not initialized properly")
+            return False
+            
+        # Check if it's a video file based on extension
+        ext = Path(command.image_path).suffix.lower()
+        video_extensions = self._config.get("video_extensions", [".mp4", ".mov", ".avi", ".mkv"])
+        # Ensure extensions start with a dot
+        video_extensions = [ext if ext.startswith(".") else f".{ext}" for ext in video_extensions]
+        
+        if ext in video_extensions:
+            return False
+
+        try:
+            im = Image.open(command.image_path)
+        except Exception as e:
+            self._logger.warning(f"Failed to load image {command.image_path}: {e}. Using fallback.")
+            # Create a fallback image (e.g., black screen or default "no pictures" image)
+            im = Image.new('RGB', (self._display.width, self._display.height), color='black')
+            
+        try:
+            new_sfg = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
+            
+            tm = time.time()
+            self._next_tm = tm + self._time_delay
+            
+            self._sbg = self._sfg
+            self._sfg = new_sfg
+            
+            if self._sbg is None:
+                self._sbg = self._sfg
+                
+            self._slide.set_textures([self._sfg, self._sbg])
+            
+            # Transfer front width/height factors to back
+            self._slide.unif[45:47] = self._slide.unif[42:44]
+            # Transfer front width/height offsets to back
+            self._slide.unif[51:53] = self._slide.unif[48:50]
+            
+            # Calculate aspect ratio adjustments
+            wh_rat = (self._display.width * self._sfg.iy) / (self._display.height * self._sfg.ix)
+            if (wh_rat > 1.0 and self._fit) or (wh_rat <= 1.0 and not self._fit):
+                sz1, sz2, os1, os2 = 42, 43, 48, 49
+            else:
+                sz1, sz2, os1, os2 = 43, 42, 49, 48
+                wh_rat = 1.0 / wh_rat
+                
+            self._slide.unif[sz1] = wh_rat
+            self._slide.unif[sz2] = 1.0
+            self._slide.unif[os1] = (wh_rat - 1.0) * 0.5
+            self._slide.unif[os2] = 0.0
+            
+            if self._kenburns:
+                self._xstep = self._slide.unif[48] * 2.0 / (self._time_delay - self._fade_time)
+                self._ystep = self._slide.unif[49] * 2.0 / (self._time_delay - self._fade_time)
+                self._slide.unif[48] = 0.0
+                self._slide.unif[49] = 0.0
+                
+            # Start transition
+            self._alpha = 0.0
+            if self._fade_time > 0.5:
+                self._delta_alpha = 1.0 / (self._fps * self._fade_time)
+            else:
+                self._delta_alpha = 1.0
+                
+            return True
+                
+        except Exception as e:
+            self._logger.error(f"Failed to execute RenderCommand in ImageRenderer: {e}")
+            return False
+
+    def update_transition(self) -> bool:
+        """
+        Update the alpha value for the transition.
+        Returns True if the transition is complete (alpha >= 1.0).
+        """
+        if self._alpha < 1.0:
+            self._alpha += self._delta_alpha
+            if self._alpha >= 1.0:
+                self._alpha = 1.0
+            # Smooth step alpha
+            if self._slide:
+                self._slide.unif[44] = self._alpha * self._alpha * (3.0 - 2.0 * self._alpha)
+            
+        return self._alpha >= 1.0
+
+    def update_kenburns(self, tm: float) -> None:
+        """Update the Ken Burns tweening."""
+        if self._kenburns and self._alpha >= 1.0 and self._slide:
+            t_factor = self._time_delay - self._fade_time - self._next_tm + tm
+            self._slide.unif[48] = self._slide.unif[48] * 0.95 + self._xstep * t_factor * 0.05
+            self._slide.unif[49] = self._slide.unif[49] * 0.95 + self._ystep * t_factor * 0.05
+
+    def draw(self) -> None:
+        """Draw the image slide."""
+        if self._slide:
+            self._slide.draw()
