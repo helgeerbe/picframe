@@ -167,7 +167,8 @@
       "certfile": "server certificate",
       "websocket_broadcast_rate_limit": "default=10.0, maximale Anzahl von Statusaktualisierungen, die pro Sekunde gesendet werden",
       "websocket_broadcast_capacity": "default=20, maximale Burst-Größe für Statusaktualisierungen",
-      "command_debounce_ms": "default=200, Verzögerung in Millisekunden zum Entprellen hochfrequenter eingehender Befehle"
+      "command_debounce_ms": "default=200, Verzögerung in Millisekunden zum Entprellen hochfrequenter eingehender Befehle",
+      "cors_allowed_origins": "default=[\"*\"]. Sicherheitseinstellung, um anderen Websites die Verbindung zu Ihrem Rahmen zu erlauben. Beispiel: [\"http://localhost:5173\"] für lokale Entwicklung oder [\"*\"] um alle zuzulassen."
     },
     "peripherals": {
       "_title": "Peripherals",

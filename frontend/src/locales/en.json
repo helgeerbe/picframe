@@ -167,7 +167,8 @@
       "certfile": "server certificate",
       "websocket_broadcast_rate_limit": "default=10.0, maximum number of state updates broadcast per second",
       "websocket_broadcast_capacity": "default=20, maximum burst size for state updates",
-      "command_debounce_ms": "default=200, delay in milliseconds to debounce high-frequency inbound commands"
+      "command_debounce_ms": "default=200, delay in milliseconds to debounce high-frequency inbound commands",
+      "cors_allowed_origins": "default=[\"*\"]. Security setting to allow other websites to connect to your frame. Example: [\"http://localhost:5173\"] for local development, or [\"*\"] to allow all."
     },
     "peripherals": {
       "_title": "Peripherals",

@@ -25,9 +25,9 @@ logger = logging.getLogger(__name__)
 
 
 def create_app(
+    cors_allowed_origins: list[str],
     event_publisher: IEventPublisher | None = None,
     event_subscriber: IEventSubscriber | None = None,
-    cors_allowed_origins: list[str] | None = None,
     config_repository: IConfigRepository | None = None,
     html_dir: str = "~/.picframe/html",
 ) -> FastAPI:
@@ -51,9 +51,6 @@ def create_app(
     )
 
     # Configure CORS
-    if cors_allowed_origins is None:
-        cors_allowed_origins = ["*"]
-        
     app.add_middleware(
         CORSMiddleware,
         allow_origins=cors_allowed_origins,

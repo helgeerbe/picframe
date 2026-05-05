@@ -131,6 +131,8 @@ http:
   websocket_broadcast_rate_limit: 10.0
   websocket_broadcast_capacity: 20
   command_debounce_ms: 200
+  cors_allowed_origins:
+    - "*"
 peripherals:
   input_type: null
   buttons:

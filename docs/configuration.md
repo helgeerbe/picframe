@@ -33,17 +33,16 @@ The `picframe run` command accepts several parameters to override default paths 
 *Note: The webserver port and HTML directory path are strictly managed via CLI arguments and environment variables. They are not editable via the frontend UI to prevent connection loss and synchronization issues.*
 
 
-## CLI Parameters
+## Network & Security Configuration
 
-The `picframe run` command accepts several parameters to override default paths and ports. These parameters take precedence over any configuration database settings.
+### CORS (Cross-Origin Resource Sharing)
+The API's CORS policy is managed via the `cors_allowed_origins` parameter within the `http` section of the configuration. This setting dictates which external domains are permitted to make requests to the Picframe API from a web browser.
 
-*   `--dir`: Base directory for picframe data (default: `~/.picframe` or `PICFRAME_DIR` env var).
-*   `--port`: Port for the web server (default: `9000` or `PICFRAME_PORT` env var).
-*   `--config-db`: Path to config database (default: `<dir>/data/config.db3` or `PICFRAME_CONFIG_DB` env var).
-*   `--media-db`: Path to media database (default: `<dir>/data/media_cache.db3` or `PICFRAME_MEDIA_DB` env var).
-*   `--html-dir`: Path to frontend HTML assets (default: `<dir>/html` or `PICFRAME_HTML_DIR` env var).
+*   **Type:** List of strings
+*   **Default:** `["*"]` (Allows requests from any origin)
+*   **Location:** `http.cors_allowed_origins`
 
-*Note: The webserver port and HTML directory path are strictly managed via CLI arguments and environment variables. They are not editable via the frontend UI to prevent connection loss and synchronization issues.*
+**Security Note:** The default `["*"]` is permissive to ensure out-of-the-box compatibility on local networks. If you expose your Picframe API to the internet or want to strictly lock down access, you should update this setting via the Web UI or SQLite database to explicitly list your allowed domains (e.g., `["http://localhost:5173", "https://my-picframe.example.com"]`).
 
 ## Developer Guide: Adding Configuration Keys
 

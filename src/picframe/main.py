@@ -118,7 +118,8 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     )
 
     # 7. Initialize Web Server
-    cors_origins = _config_repo.get_app_config("cors_allowed_origins", ["*"])
+    http_config = nested_config.get("http", {})
+    cors_origins = http_config.get("cors_allowed_origins", ["*"])
     app = create_app(
         event_publisher=event_bus,
         event_subscriber=event_bus,

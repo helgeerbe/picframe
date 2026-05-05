@@ -7,16 +7,17 @@ and instantiate the correct concrete adapters for the HAL ports.
 
 import logging
 import os
+import shutil
 import sys
 from dataclasses import dataclass
 
 from picframe.core.ports import IDisplayPower, IHardwareInput, ISystemManager
+from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
 from picframe.infrastructure.os.mock_adapters import (
     MockDisplayPower,
     MockHardwareInput,
     MockSystemManager,
 )
-from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
 from picframe.infrastructure.os.wayland_power import WaylandDisplayPower
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,27 @@ class HALFactory:
     """
 
     @staticmethod
+    def _is_raspberry_pi() -> bool:
+        try:
+            with open("/proc/device-tree/model") as f:
+                model = f.read().lower()
+                return "raspberry pi" in model
+        except (FileNotFoundError, PermissionError, OSError):
+            return False
+
+    @staticmethod
+    def _is_wayland() -> bool:
+        return bool(os.environ.get("WAYLAND_DISPLAY"))
+
+    @staticmethod
+    def _is_x11() -> bool:
+        return bool(os.environ.get("DISPLAY")) and not HALFactory._is_wayland()
+
+    @staticmethod
+    def _has_wlr_randr() -> bool:
+        return shutil.which("wlr-randr") is not None
+
+    @staticmethod
     def create_adapters(display_output: str = "HDMI-A-1") -> HALAdapters:
         """
         Detect the host OS and instantiate the appropriate HAL adapters.
@@ -56,11 +78,6 @@ class HALFactory:
 
         logger.info(f"HALFactory: Detecting OS... os.name='{os_name}', sys.platform='{platform}'")
 
-        # TODO: Implement actual OS detection logic for Raspberry Pi (Wayland)
-        # and Ubuntu VM once the concrete adapters are built in subsequent tasks.
-        # For now, we default to the Mock adapters to ensure the application
-        # can run cross-platform during Phase 2 development.
-
         if platform == "darwin" or platform == "win32":
             logger.info("HALFactory: Non-target OS detected. Injecting Mock Adapters.")
             return HALAdapters(
@@ -69,13 +86,53 @@ class HALFactory:
                 system_manager=MockSystemManager(),
             )
 
-        # Default fallback (e.g., Linux/Ubuntu VM during development or Raspberry Pi Wayland)
-        # We inject WaylandDisplayPower here as it's the target environment.
-        # If wlr-randr is missing (e.g., on a generic Ubuntu VM), the adapter
-        # will log an error but won't crash the application.
-        logger.info("HALFactory: Defaulting to Wayland/Mock Adapters for Linux.")
+        # Linux environment detection
+        is_rpi = HALFactory._is_raspberry_pi()
+        is_wayland = HALFactory._is_wayland()
+        is_x11 = HALFactory._is_x11()
+        has_wlr_randr = HALFactory._has_wlr_randr()
+
+        logger.info(
+            f"HALFactory: Environment - RPi: {is_rpi}, Wayland: {is_wayland}, "
+            f"X11: {is_x11}, wlr-randr: {has_wlr_randr}"
+        )
+
+        if is_x11:
+            logger.warning(
+                "HALFactory: X11 detected. X11 is not supported. Falling back to Mock Adapters."
+            )
+            return HALAdapters(
+                display_power=MockDisplayPower(),
+                hardware_input=MockHardwareInput(),
+                system_manager=LinuxSystemManager(),
+            )
+
+        # Determine Display Power Adapter
+        display_power: IDisplayPower
+        if is_wayland and has_wlr_randr:
+            logger.info(
+                "HALFactory: Wayland and wlr-randr detected. Injecting WaylandDisplayPower."
+            )
+            display_power = WaylandDisplayPower(display_output=display_output)
+        else:
+            logger.info("HALFactory: Wayland or wlr-randr missing. Injecting MockDisplayPower.")
+            display_power = MockDisplayPower()
+
+        # Determine Hardware Input Adapter
+        hardware_input: IHardwareInput
+        if is_rpi:
+            logger.info(
+                "HALFactory: Raspberry Pi detected. "
+                "Injecting MockHardwareInput (RpiGpioAdapter pending)."
+            )
+            # TODO: Inject RpiGpioAdapter when implemented
+            hardware_input = MockHardwareInput()
+        else:
+            logger.info("HALFactory: Generic Linux detected. Injecting MockHardwareInput.")
+            hardware_input = MockHardwareInput()
+
         return HALAdapters(
-            display_power=WaylandDisplayPower(display_output=display_output),
-            hardware_input=MockHardwareInput(),
+            display_power=display_power,
+            hardware_input=hardware_input,
             system_manager=LinuxSystemManager(),
         )

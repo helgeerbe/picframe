@@ -332,6 +332,12 @@
     },
     "command_debounce_ms": {
       "type": "integer"
+    },
+    "cors_allowed_origins": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
     }
   }
 }

@@ -52,6 +52,7 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 ### 2.10 Hardware Abstraction Layer (HAL) & Cross-Platform Ports
 *   **Concept:** To support native execution across Raspberry Pi (Wayland) and Ubuntu (VM), OS-specific interactions are abstracted behind strict Port interfaces (e.g., `IDisplayPower`, `IHardwareInput`, `ISystemManager`).
 *   **Reasoning & Benefits:** The core application logic must remain OS-agnostic. By defining Ports in the Application layer and implementing OS-specific Adapters in the Infrastructure layer (e.g., `WaylandDisplayPower`, `UbuntuDisplayPower`, `MockHardwareInput`), the Composition Root (`main.py`) can detect the host OS at startup and inject the correct concrete implementation. This prevents `if os.name == '...'` spaghetti code from polluting the domain logic and allows developers to run and test the core engine on Ubuntu without requiring physical Raspberry Pi hardware.
+*   **Robust Environment Detection:** To ensure stability across diverse execution environments (bare metal Raspberry Pi vs. generic Linux VMs), the `HALFactory` implements robust runtime detection. It safely probes hardware identifiers (e.g., `/proc/device-tree/model`) and display server variables (`$WAYLAND_DISPLAY`) using exception boundaries. If native hardware or specific CLI tools (like `wlr-randr`) are missing, it gracefully degrades to Mock adapters. This prevents initialization crashes, ensures proper resource management on bare metal, and allows seamless development and testing on VMs.
 
 ### 2.11 CLI and Application Initialization
 *   **Concept:** The application provides a command-line interface (e.g., `picframe init` and `picframe run --port 9000`). The `init` command bootstraps the user environment in `~/.picframe/` (creating directories, copying default assets, and initializing SQLite databases). It interactively prompts users when existing databases are found, offering to keep or delete them, and supports a `--force` flag for automated environments.
@@ -72,6 +73,12 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
     *   **Lightweight State Machine:** Using a custom `Enum` (e.g., `STATIC`, `IMAGE_TRANSITIONING`, `TEXT_FADING_IN`, `TEXT_SHOWING`, `TEXT_FADING_OUT`) guarantees zero-overhead performance in the critical 60fps render loop. It maintains strict type safety (`mypy` compatibility) and avoids the dynamic dispatch penalties associated with libraries like `transitions`.
     *   **Predictable Transitions:** Replaces complex, fragile conditional blocks with explicit state transitions. For example, `IMAGE_TRANSITIONING` automatically advances to `TEXT_FADING_IN` once the image alpha reaches 1.0, preventing overlapping animations.
     *   **Optimization:** By tracking the overall `RenderState`, the engine can easily identify when the screen is `STATIC`. In this state, it only needs to check the `ClockRenderer` for minute/second changes, allowing it to safely skip `pi3d.Display.loop_running()` and sleep, drastically reducing CPU load and power consumption.
+
+### 2.15 API Configuration & Network Binding
+*   **Concept:** The system distinguishes between *runtime-mutable configuration* (managed via SQLite/YAML and the `/api/config` endpoint) and *startup-only parameters* (managed via CLI arguments and environment variables).
+*   **Reasoning & Benefits:**
+    *   **Network Binding (Port):** The Uvicorn server port is strictly a startup parameter. Allowing the port to be changed dynamically during runtime would require tearing down and restarting the background server thread, leading to dropped WebSocket connections, interrupted API requests, and potential system instability.
+    *   **CORS Configuration:** Cross-Origin Resource Sharing (CORS) origins (`cors_allowed_origins`) are part of the runtime-mutable configuration under the `http` section. The Composition Root (`main.py`) reads this from the `ConfigService` and injects it into the FastAPI application, ensuring the application layer remains decoupled from the configuration storage mechanism.
 
 ## 3. System Diagrams
 

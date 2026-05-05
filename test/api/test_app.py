@@ -9,7 +9,7 @@ from picframe.api.app import create_app
 
 @pytest.fixture
 def client() -> TestClient:
-    app = create_app()
+    app = create_app(cors_allowed_origins=["*"])
     return TestClient(app)
 
 def test_health_check(client: TestClient) -> None:
@@ -40,8 +40,8 @@ def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
     assets_dir = html_dir / "assets"
     assets_dir.mkdir()
     (assets_dir / "app.js").write_text("console.log('app');")
-    
-    app = create_app(html_dir=str(html_dir))
+
+    app = create_app(cors_allowed_origins=["*"], html_dir=str(html_dir))
     client = TestClient(app)
     
     # Test root route returns index.html
@@ -74,8 +74,8 @@ def test_api_get_config_with_repo() -> None:
         
         "peripherals.enable": True,
     }
-    
-    app = create_app(config_repository=mock_repo)
+
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
     client = TestClient(app)
     
     response = client.get("/api/config")
@@ -93,8 +93,8 @@ def test_api_put_config() -> None:
     
     # Setup mock to return existing config
     mock_repo.get_app_config.return_value = {"fps": 30, "blur_amount": 12}
-    
-    app = create_app(config_repository=mock_repo, event_publisher=mock_publisher)
+
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo, event_publisher=mock_publisher)
     client = TestClient(app)
     
     payload = {
@@ -116,7 +116,7 @@ def test_api_put_config() -> None:
     assert event.payload == payload
 
 def test_spa_routing_without_html_dir(tmp_path: Path) -> None:
-    app = create_app(html_dir=str(tmp_path / "nonexistent"))
+    app = create_app(cors_allowed_origins=["*"], html_dir=str(tmp_path / "nonexistent"))
     client = TestClient(app)
     
     # Test root route returns 404 since SPA is not mounted
