@@ -180,3 +180,79 @@ def test_renderer_render_frame_not_running(config: dict[str, Any], mock_pi3d: Ma
     
     assert result is False
     cast(MagicMock, renderer._slide).draw.assert_not_called()
+
+
+def test_renderer_execute_video(
+    config: dict[str, Any], mock_pi3d: MagicMock, mock_image: MagicMock
+) -> None:
+    """Test executing a render command for a video file."""
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    
+    command = RenderCommand(image_path="/path/to/video.mp4")
+    renderer.execute(command)
+    
+    mock_image.open.assert_not_called()
+    assert renderer._render_state.name == "SUSPENDED"
+
+
+@patch("time.sleep")
+def test_renderer_render_frame_suspended(
+    mock_sleep: MagicMock, config: dict[str, Any], mock_pi3d: MagicMock
+) -> None:
+    """Test rendering a frame when suspended."""
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    
+    command = RenderCommand(image_path="/path/to/video.mp4")
+    renderer.execute(command)
+    
+    result = renderer.render_frame()
+    
+    assert result is True
+    mock_sleep.assert_called_once_with(0.1)
+    cast(MagicMock, renderer._slide).draw.assert_not_called()
+
+
+@patch("time.sleep")
+def test_renderer_render_frame_static(
+    mock_sleep: MagicMock, config: dict[str, Any], mock_pi3d: MagicMock
+) -> None:
+    """Test rendering a frame when static."""
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    
+    # Force state to STATIC
+    renderer._render_state = renderer._render_state.__class__.STATIC
+    
+    result = renderer.render_frame()
+    
+    assert result is True
+    mock_sleep.assert_called_once_with(0.1)
+    cast(MagicMock, renderer._slide).draw.assert_not_called()
+
+
+def test_renderer_enqueue_task(config: dict[str, Any], mock_pi3d: MagicMock) -> None:
+    """Test enqueueing a task and processing it."""
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    
+    # Force state to STATIC
+    renderer._render_state = renderer._render_state.__class__.STATIC
+    
+    renderer.enqueue_task(1, "clock_tick")
+    
+    # Mock pi3d.Camera.instance to return a mock camera
+    with patch(
+        "picframe.core.renderers.pi3d_renderer.pi3d.Camera.instance"
+    ) as mock_camera_instance:
+        mock_camera_instance.return_value = MagicMock()
+        
+        # Also mock pi3d.Display.INSTANCE for the internal pi3d call
+        with patch("pi3d.Display.Display.INSTANCE", mock_pi3d.Display.INSTANCE):
+            # Render a frame
+            result = renderer.render_frame()
+            
+    assert result is True
+    assert renderer._frames_to_render == 1  # Started at 2, decremented by 1
+    cast(MagicMock, renderer._slide).draw.assert_called_once()

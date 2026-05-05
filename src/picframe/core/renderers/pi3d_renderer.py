@@ -3,8 +3,9 @@ Pi3d implementation of the IRenderer interface.
 """
 import logging
 import os
+import queue
 import time
-from dataclasses import replace
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from typing import Any
 
@@ -22,11 +23,18 @@ from picframe.core.repositories.interfaces import IConfigRepository
 
 
 class RenderState(Enum):
+    IDLE = auto()
+    TRANSITIONING = auto()
+    KEN_BURNS = auto()
+    TEXT_ANIMATING = auto()
     STATIC = auto()
-    IMAGE_TRANSITIONING = auto()
-    TEXT_FADING_IN = auto()
-    TEXT_SHOWING = auto()
-    TEXT_FADING_OUT = auto()
+    SUSPENDED = auto()
+
+
+@dataclass(order=True)
+class PrioritizedRenderTask:
+    priority: int
+    task: Any = field(compare=False)
 
 
 class Pi3dRenderer(IRenderer):
@@ -120,6 +128,9 @@ class Pi3dRenderer(IRenderer):
         self._text_fade_time = 1.0
         self._text_show_time = float(config.get("show_text_tm", 10.0))
         self._text_timer = 0.0
+        
+        self._local_queue: queue.PriorityQueue[PrioritizedRenderTask] = queue.PriorityQueue()
+        self._frames_to_render = 0
 
     def _handle_state_event(self, event: Any) -> None:
         if not isinstance(event, StateEvent):
@@ -145,10 +156,10 @@ class Pi3dRenderer(IRenderer):
                         
                 # React to show_text toggles immediately
                 if self._render_state == RenderState.STATIC and self._overlay_config.show_text:
-                    self._render_state = RenderState.TEXT_FADING_IN
+                    self._render_state = RenderState.TEXT_ANIMATING
                     self._text_alpha = 0.0
-                elif self._render_state in (RenderState.TEXT_SHOWING, RenderState.TEXT_FADING_IN) and not self._overlay_config.show_text:
-                    self._render_state = RenderState.TEXT_FADING_OUT
+                elif self._render_state == RenderState.TEXT_ANIMATING and not self._overlay_config.show_text:
+                    self._render_state = RenderState.STATIC
 
     def start(self) -> None:
         """Initialize the pi3d display and sprite."""
@@ -213,17 +224,15 @@ class Pi3dRenderer(IRenderer):
             # In a real implementation, ImageProcessingService would have already
             # matted/resized the image and saved it to a cache path, or we load it directly.
             # For now, we load the image path directly.
+            # Check if it's a video file based on extension
+            ext = Path(command.image_path).suffix.lower()
+            if ext in ['.mp4', '.mov', '.avi', '.mkv']:
+                # For videos, we suspend the pi3d render loop
+                self._render_state = RenderState.SUSPENDED
+                return
+
             try:
-                # Check if it's a video file based on extension
-                ext = Path(command.image_path).suffix.lower()
-                if ext in ['.mp4', '.mov', '.avi', '.mkv']:
-                    # For videos, we don't load them into pi3d textures directly
-                    # The VideoPlayer handles video playback. We just need a placeholder
-                    # or we can skip texture loading entirely if we know it's a video.
-                    # For now, create a black placeholder to avoid Image.open errors.
-                    im = Image.new('RGB', (self._display.width, self._display.height), color='black')
-                else:
-                    im = Image.open(command.image_path)
+                im = Image.open(command.image_path)
             except Exception as e:
                 self._logger.warning(f"Failed to load image {command.image_path}: {e}. Using fallback.")
                 # Create a fallback image (e.g., black screen or default "no pictures" image)
@@ -273,7 +282,7 @@ class Pi3dRenderer(IRenderer):
             else:
                 self._delta_alpha = 1.0
                 
-            self._render_state = RenderState.IMAGE_TRANSITIONING
+            self._render_state = RenderState.TRANSITIONING
             
             if self._text_renderer:
                 self._text_renderer.update_config(self._overlay_config)
@@ -283,6 +292,10 @@ class Pi3dRenderer(IRenderer):
         except Exception as e:
             self._logger.error(f"Failed to execute RenderCommand: {e}")
 
+    def enqueue_task(self, priority: int, task: Any) -> None:
+        """Enqueue a high-frequency task (like a clock tick) for the render loop."""
+        self._local_queue.put(PrioritizedRenderTask(priority=priority, task=task))
+
     def render_frame(self) -> bool:
         """
         Draw the current frame and update transition state.
@@ -290,9 +303,32 @@ class Pi3dRenderer(IRenderer):
         if self._display is None or self._slide is None:
             return False
             
+        # Process local queue
+        try:
+            while True:
+                task_item = self._local_queue.get_nowait()
+                if task_item.task == "clock_tick":
+                    if self._render_state == RenderState.STATIC:
+                        self._frames_to_render = 2
+                self._local_queue.task_done()
+        except queue.Empty:
+            pass
+
         loop_running = self._display.loop_running()
         if not loop_running:
             return False
+
+        # Sleep optimization for STATIC and SUSPENDED states
+        if self._render_state == RenderState.SUSPENDED:
+            time.sleep(0.1)
+            return True
+            
+        if self._render_state == RenderState.STATIC and not self._kenburns and self._frames_to_render <= 0:
+            time.sleep(0.1)
+            return True
+            
+        if self._frames_to_render > 0:
+            self._frames_to_render -= 1
             
         tm = time.time()
         
@@ -308,46 +344,43 @@ class Pi3dRenderer(IRenderer):
             self._slide.unif[49] = self._slide.unif[49] * 0.95 + self._ystep * t_factor * 0.05
             
         # State Machine
-        if self._render_state == RenderState.IMAGE_TRANSITIONING:
+        if self._render_state == RenderState.TRANSITIONING:
             if self._alpha < 1.0:
                 self._alpha += self._delta_alpha
                 if self._alpha >= 1.0:
                     self._alpha = 1.0
-                    if self._overlay_config.show_text:
-                        self._render_state = RenderState.TEXT_FADING_IN
-                        self._text_alpha = 0.0
+                    if self._kenburns:
+                        self._render_state = RenderState.KEN_BURNS
                     else:
-                        self._render_state = RenderState.STATIC
+                        self._render_state = RenderState.TEXT_ANIMATING
+                        self._text_alpha = 0.0
                 # Smooth step alpha
                 self._slide.unif[44] = self._alpha * self._alpha * (3.0 - 2.0 * self._alpha)
                 
-        elif self._render_state == RenderState.TEXT_FADING_IN:
-            self._text_alpha += 1.0 / (self._fps * self._text_fade_time)
-            if self._text_alpha >= 1.0:
-                self._text_alpha = 1.0
-                self._render_state = RenderState.TEXT_SHOWING
-                self._text_timer = tm + self._text_show_time
-            if self._text_renderer:
-                self._text_renderer.set_alpha(self._text_alpha)
-                
-        elif self._render_state == RenderState.TEXT_SHOWING:
-            if tm >= self._text_timer:
-                self._render_state = RenderState.TEXT_FADING_OUT
-                
-        elif self._render_state == RenderState.TEXT_FADING_OUT:
-            self._text_alpha -= 1.0 / (self._fps * self._text_fade_time)
-            if self._text_alpha <= 0.0:
-                self._text_alpha = 0.0
+        elif self._render_state == RenderState.KEN_BURNS:
+            # Ken Burns continues until next image, but we transition to TEXT_ANIMATING
+            # immediately after alpha reaches 1.0 to show text.
+            # The actual Ken Burns tweening is handled above.
+            self._render_state = RenderState.TEXT_ANIMATING
+            self._text_alpha = 0.0
+            
+        elif self._render_state == RenderState.TEXT_ANIMATING:
+            if self._overlay_config.show_text:
+                self._text_alpha += 1.0 / (self._fps * self._text_fade_time)
+                if self._text_alpha >= 1.0:
+                    self._text_alpha = 1.0
+                    self._render_state = RenderState.STATIC
+                if self._text_renderer:
+                    self._text_renderer.set_alpha(self._text_alpha)
+            else:
                 self._render_state = RenderState.STATIC
-            if self._text_renderer:
-                self._text_renderer.set_alpha(self._text_alpha)
                 
         self._slide.draw()
         
         # Draw overlays on top of the slide
         if self._text_renderer and self._overlay_config.show_text:
             # Only draw text if we are in a state where it should be visible
-            if self._render_state in (RenderState.TEXT_FADING_IN, RenderState.TEXT_SHOWING, RenderState.TEXT_FADING_OUT):
+            if self._render_state in (RenderState.TEXT_ANIMATING, RenderState.STATIC):
                 self._text_renderer.draw()
             
         if self._clock_renderer and self._overlay_config.show_clock:
