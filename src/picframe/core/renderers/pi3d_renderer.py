@@ -6,7 +6,6 @@ import os
 import queue
 import time
 from dataclasses import dataclass, field, replace
-from pathlib import Path
 from typing import Any
 
 import pi3d
@@ -280,19 +279,11 @@ class Pi3dRenderer(IRenderer):
             )
             
         try:
-            # Check if it's a video file based on extension
-            ext = Path(command.image_path).suffix.lower()
-            video_extensions = self._config.get(
-                "video_extensions", [".mp4", ".mov", ".avi", ".mkv"]
-            )
-            # Ensure extensions start with a dot
-            video_extensions = [
-                ext if ext.startswith(".") else f".{ext}" for ext in video_extensions
-            ]
-            
-            if ext in video_extensions:
-                # For videos, we suspend the pi3d render loop
+            if command.image_path == "SUSPEND":
                 self._animation_controller.suspend()
+                return
+            elif command.image_path == "RESUME":
+                self._animation_controller.resume()
                 return
 
             # Delegate to ImageRenderer

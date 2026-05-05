@@ -2,7 +2,40 @@
 Interfaces for the Presentation Layer (Renderers).
 """
 from typing import Protocol
+
 from picframe.core.events.dto import RenderCommand
+from picframe.core.models.media import MediaItem
+
+
+class IVideoPlayer(Protocol):
+    """
+    Protocol defining the contract for a Video Player service.
+    """
+
+    def play(self, media_item: MediaItem) -> None:
+        """Start playing the specified video media item."""
+        ...
+
+    def stop(self) -> None:
+        """Stop video playback."""
+        ...
+
+    def pause(self) -> None:
+        """Pause video playback."""
+        ...
+
+    def resume(self) -> None:
+        """Resume paused video playback."""
+        ...
+
+    def set_volume(self, level: float) -> None:
+        """
+        Set the audio volume level.
+        
+        Args:
+            level: Volume level between 0.0 and 1.0.
+        """
+        ...
 
 
 class IRenderer(Protocol):

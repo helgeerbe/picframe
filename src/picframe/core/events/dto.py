@@ -184,6 +184,18 @@ class CurrentMediaChangedEvent(Event):
 
 
 @dataclass(frozen=True)
+class PlaybackCompletedEvent(Event):
+    """
+    An event notifying that a media item (e.g., a video) has finished playing.
+    """
+
+    @property
+    def priority(self) -> int:
+        """Playback completion has high priority (1) to ensure smooth handoff."""
+        return 1
+
+
+@dataclass(frozen=True)
 class SystemErrorEvent(Event):
     """
     A notification that a critical error has occurred (Poison Pill).

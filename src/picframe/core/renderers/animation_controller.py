@@ -64,6 +64,11 @@ class AnimationController:
         """Suspend animations (e.g., for video playback)."""
         self._state = RenderState.SUSPENDED
 
+    def resume(self) -> None:
+        """Resume animations after suspension."""
+        if self._state == RenderState.SUSPENDED:
+            self._state = RenderState.STATIC
+
     def force_redraw(self, frames: int = 2) -> None:
         """Force the renderer to draw a specific number of frames."""
         self._frames_to_render = frames

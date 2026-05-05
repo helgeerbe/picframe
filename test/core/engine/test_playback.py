@@ -1,6 +1,7 @@
 """
 Unit tests for the PlaybackEngine.
 """
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -53,10 +54,11 @@ def mock_renderer() -> MagicMock:
 
 
 @pytest.fixture
-def config() -> dict[str, float]:
+def config() -> dict[str, Any]:
     """Default engine configuration."""
     return {
         "time_delay": 10.0,
+        "video_extensions": [".mp4", ".mov", ".mkv", ".avi", ".webm"],
     }
 
 
@@ -65,7 +67,7 @@ def test_engine_initialization(
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
-    config: dict[str, float],
+    config: dict[str, Any],
 ) -> None:
     """Test that the engine initializes correctly."""
     engine = PlaybackEngine(
@@ -77,7 +79,7 @@ def test_engine_initialization(
     assert engine._time_delay == 10.0
     
     # Verify it subscribed to commands
-    mock_event_subscriber.subscribe.assert_called_once_with(CommandEvent, engine._handle_command)
+    mock_event_subscriber.subscribe.assert_any_call(CommandEvent, engine._handle_command)
 
 
 def test_engine_start_stop(
@@ -85,7 +87,7 @@ def test_engine_start_stop(
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
-    config: dict[str, float],
+    config: dict[str, Any],
 ) -> None:
     """Test starting and stopping the engine."""
     engine = PlaybackEngine(
@@ -121,7 +123,7 @@ def test_engine_handle_command_next(
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
-    config: dict[str, float],
+    config: dict[str, Any],
 ) -> None:
     """Test handling the NEXT command."""
     engine = PlaybackEngine(
@@ -140,7 +142,7 @@ def test_engine_handle_command_prev(
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
-    config: dict[str, float],
+    config: dict[str, Any],
 ) -> None:
     """Test handling the PREV command."""
     engine = PlaybackEngine(
@@ -159,7 +161,7 @@ def test_engine_handle_command_pause_play(
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
-    config: dict[str, float],
+    config: dict[str, Any],
 ) -> None:
     """Test handling PAUSE and PLAY commands."""
     engine = PlaybackEngine(
@@ -189,7 +191,7 @@ def test_engine_handle_command_stop(
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
-    config: dict[str, float],
+    config: dict[str, Any],
 ) -> None:
     """Test handling the STOP command."""
     engine = PlaybackEngine(
@@ -210,7 +212,7 @@ def test_engine_run_loop_exit(
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
-    config: dict[str, float],
+    config: dict[str, Any],
 ) -> None:
     """Test that the run loop exits when the renderer returns False."""
     engine = PlaybackEngine(
@@ -229,12 +231,54 @@ def test_engine_run_loop_exit(
     mock_renderer.stop.assert_called_once()
 
 
+def test_engine_trigger_next_media_video(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """Test that video files are correctly identified and routed to the video player."""
+    mock_video_player = MagicMock()
+    
+    # Add video_extensions to config
+    config["video_extensions"] = [".mp4", ".mov", ".mkv", ".avi", ".webm"]
+    
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config, video_player=mock_video_player
+    )
+    
+    # Setup a .mov media item
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.MOV",
+        media_type=MediaType.VIDEO,
+        filename="video.MOV",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+    mock_playlist_manager.get_next.return_value = media_item
+    
+    engine._trigger_next_media()
+    
+    # Verify video player was called
+    mock_video_player.play.assert_called_once_with(media_item)
+    
+    # Verify renderer was suspended
+    from picframe.core.events.dto import RenderCommand
+    # The exact call might be complex due to OverlayConfig, so we just check the image_path
+    call_args = mock_renderer.execute.call_args[0][0]
+    assert isinstance(call_args, RenderCommand)
+    assert call_args.image_path == "SUSPEND"
+
+
 def test_engine_circuit_breaker(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
-    config: dict[str, float],
+    config: dict[str, Any],
 ) -> None:
     """Test that the circuit breaker trips after consecutive errors."""
     from picframe.core.exceptions import MediaProcessingError

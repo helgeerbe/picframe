@@ -111,10 +111,13 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     # 5. Initialize Renderer
     renderer_config = nested_config.get("viewer", {})
     renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus, config_repository=_config_repo)
+    
+    from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
+    video_player = GstVideoRenderer(event_publisher=event_bus)
 
     # 6. Initialize Engine
     engine = PlaybackEngine(
-        event_bus, event_bus, playlist_manager, renderer, model_config, config_repository=_config_repo
+        event_bus, event_bus, playlist_manager, renderer, model_config, config_repository=_config_repo, video_player=video_player
     )
 
     # 7. Initialize Web Server

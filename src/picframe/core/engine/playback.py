@@ -15,9 +15,9 @@ from picframe.core.events.dto import (
     SystemErrorEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
+from picframe.core.exceptions import MediaProcessingError
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.services.playlist import PlaylistManager
-from picframe.core.exceptions import MediaProcessingError, SystemError
 
 
 class PlaybackEngine:
@@ -36,6 +36,7 @@ class PlaybackEngine:
         renderer: IRenderer,
         config: dict[str, Any],
         config_repository: Any | None = None,
+        video_player: Any | None = None,
     ) -> None:
         """
         Initialize the PlaybackEngine.
@@ -52,6 +53,7 @@ class PlaybackEngine:
         self._event_subscriber = event_subscriber
         self._playlist_manager = playlist_manager
         self._renderer = renderer
+        self._video_player = video_player
         self._config = config
         self._config_repository = config_repository
         
@@ -66,6 +68,10 @@ class PlaybackEngine:
         
         # Subscribe to commands
         self._event_subscriber.subscribe(CommandEvent, self._handle_command)
+        
+        # Subscribe to video playback completion
+        from picframe.core.events.dto import PlaybackCompletedEvent
+        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._handle_playback_completed)
 
     def start(self) -> None:
         """Start the playback engine and render loop."""
@@ -142,10 +148,14 @@ class PlaybackEngine:
             self._trigger_prev_media()
         elif event.command == Command.PAUSE:
             self._change_state(State.IDLE)
+            if self._video_player and self._state == State.PLAYING:
+                self._video_player.pause()
         elif event.command == Command.PLAY:
             self._change_state(State.PLAYING)
             # Reset timer so it doesn't immediately transition if it was paused
             self._next_transition_time = time.time() + self._time_delay
+            if self._video_player:
+                self._video_player.resume()
         elif event.command == Command.STOP:
             self.stop()
         elif event.command == Command.DELETE:
@@ -154,6 +164,9 @@ class PlaybackEngine:
             self._handle_purge_command()
         elif event.command == Command.REQUEST_STATE:
             self._handle_request_state()
+        elif event.command == Command.SET_VOL:
+            if self._video_player and event.payload is not None:
+                self._video_player.set_volume(float(event.payload))
 
     def _handle_request_state(self) -> None:
         """Handle a request to broadcast the current state and media."""
@@ -256,18 +269,40 @@ class PlaybackEngine:
                 text_string=text_string
             )
             
-            render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
-            self._renderer.execute(render_cmd)
+            # Check if it's a video
+            video_extensions = tuple(ext.lower() for ext in self._config.get("video_extensions", ['.mp4', '.mov', '.mkv', '.avi', '.webm']))
+            is_video = media_item.filepath.lower().endswith(video_extensions)
+            
+            if is_video and self._video_player:
+                # Suspend pi3d renderer
+                self._renderer.execute(RenderCommand(image_path="SUSPEND", overlay=overlay_config))
+                # Play video
+                self._video_player.play(media_item)
+                # We don't set next_transition_time here, we wait for PlaybackCompletedEvent
+                self._next_transition_time = float('inf')
+            else:
+                if self._video_player:
+                    self._video_player.stop()
+                render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
+                self._renderer.execute(render_cmd)
+                # Update timer for images
+                self._next_transition_time = time.time() + self._time_delay
             
             # Publish media changed event
             self._event_publisher.publish(CurrentMediaChangedEvent(media_item=media_item))
             
-            # Update timer
-            self._next_transition_time = time.time() + self._time_delay
-            
             self._change_state(State.PLAYING)
         else:
             self._logger.warning("No media available to play")
+
+    def _handle_playback_completed(self, event: Any) -> None:
+        """Handle the completion of video playback."""
+        self._logger.info("Video playback completed, scheduling transition to next media.")
+        # Wake up the renderer from SUSPENDED state
+        self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
+        # Instead of calling _trigger_next_media directly (which might be from a different thread),
+        # we set the transition time to 0 so the main loop picks it up immediately.
+        self._next_transition_time = 0.0
 
     def _trigger_prev_media(self) -> None:
         """Fetch the previous media item and send a render command."""
@@ -301,14 +336,22 @@ class PlaybackEngine:
                 text_string=text_string
             )
             
-            render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
-            self._renderer.execute(render_cmd)
+            video_extensions = tuple(ext.lower() for ext in self._config.get("video_extensions", ['.mp4', '.mov', '.mkv', '.avi', '.webm']))
+            is_video = media_item.filepath.lower().endswith(video_extensions)
+            
+            if is_video and self._video_player:
+                self._renderer.execute(RenderCommand(image_path="SUSPEND", overlay=overlay_config))
+                self._video_player.play(media_item)
+                self._next_transition_time = float('inf')
+            else:
+                if self._video_player:
+                    self._video_player.stop()
+                render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
+                self._renderer.execute(render_cmd)
+                self._next_transition_time = time.time() + self._time_delay
             
             # Publish media changed event
             self._event_publisher.publish(CurrentMediaChangedEvent(media_item=media_item))
-            
-            # Update timer
-            self._next_transition_time = time.time() + self._time_delay
             
             self._change_state(State.PLAYING)
         else:
