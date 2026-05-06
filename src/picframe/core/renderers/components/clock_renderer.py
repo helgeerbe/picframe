@@ -33,6 +33,18 @@ class ClockRenderer:
             self._clock_block = None
             self._current_time_str = ""
 
+    def has_changed(self) -> bool:
+        """Check if the clock string needs to be updated based on the current time."""
+        if not self._config or not self._config.show_clock:
+            return False
+            
+        try:
+            now_str = datetime.now().strftime(self._config.clock_format)
+        except Exception:
+            now_str = datetime.now().strftime("%H:%M")
+            
+        return now_str != self._current_time_str
+
     def set_alpha(self, alpha: float) -> None:
         """Set the alpha transparency of the clock."""
         if self._clock_block:

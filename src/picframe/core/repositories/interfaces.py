@@ -30,6 +30,19 @@ class IConfigRepository(Protocol):
         """
         ...
 
+    def get_app_config_bool(self, key: str, default: bool = False) -> bool:
+        """
+        Retrieve an application configuration value by key and ensure it is a boolean.
+
+        Args:
+            key: The configuration key to look up.
+            default: The value to return if the key is not found or cannot be parsed.
+
+        Returns:
+            The boolean configuration value.
+        """
+        ...
+
     def set_app_config(self, key: str, value: Any) -> None:
         """
         Set an application configuration value.

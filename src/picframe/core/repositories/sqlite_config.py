@@ -96,6 +96,22 @@ class SQLiteConfigRepository(IConfigRepository):
                 return default
         return default
 
+    def get_app_config_bool(self, key: str, default: bool = False) -> bool:
+        """
+        Retrieve an application configuration value by key and ensure it is a boolean.
+
+        Args:
+            key: The configuration key to look up.
+            default: The value to return if the key is not found or cannot be parsed.
+
+        Returns:
+            The boolean configuration value.
+        """
+        val = self.get_app_config(key, default)
+        if isinstance(val, str):
+            return val.lower() in ("true", "1", "t", "y", "yes")
+        return bool(val)
+
     def set_app_config(self, key: str, value: Any) -> None:
         """
         Set an application configuration value.

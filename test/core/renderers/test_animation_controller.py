@@ -31,7 +31,8 @@ def test_transition_completion(config):
     controller.start_transition(100.0)
     
     # Fast forward to end of transition
-    for _ in range(40): # 20 fps * 2.0s = 40 frames
+    state = controller.update(100.0)
+    for _ in range(39): # 20 fps * 2.0s = 40 frames
         state = controller.update(100.0)
         
     assert state.render_state == RenderState.TEXT_ANIMATING
@@ -43,7 +44,8 @@ def test_kenburns_transition(config):
     controller.start_transition(100.0, kb_xstep=0.1, kb_ystep=0.1)
     
     # Fast forward to end of transition
-    for _ in range(40):
+    state = controller.update(100.0)
+    for _ in range(39):
         state = controller.update(100.0)
         
     assert state.render_state == RenderState.KEN_BURNS
@@ -61,7 +63,8 @@ def test_text_animation(config):
     controller._state = RenderState.TEXT_ANIMATING
     
     # Fast forward text fade in (1.0s at 20fps = 20 frames)
-    for _ in range(20):
+    state = controller.update(100.0)
+    for _ in range(19):
         state = controller.update(100.0)
         
     assert state.render_state == RenderState.STATIC
@@ -90,4 +93,4 @@ def test_force_redraw(config):
     controller = AnimationController(config)
     controller.force_redraw(5)
     state = controller.update(100.0)
-    assert state.frames_to_render == 4 # Decremented on update
+    assert state.frames_to_render == 5 # Pre-decremented value returned

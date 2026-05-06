@@ -254,11 +254,11 @@ class PlaybackEngine:
             
             # Fetch live config if available
             if self._config_repository:
-                show_clock = bool(self._config_repository.get_app_config("viewer.show_clock", self._config.get("show_clock", False)))
+                show_clock = self._config_repository.get_app_config_bool("viewer.show_clock", self._config.get("show_clock", False))
                 clock_format = str(self._config_repository.get_app_config("viewer.clock_format", self._config.get("clock_format", "%H:%M")))
                 show_text = bool(self._config_repository.get_app_config("viewer.show_text", self._config.get("show_text", False)))
             else:
-                show_clock = bool(self._config.get("show_clock", False))
+                show_clock = str(self._config.get("show_clock", False)).lower() in ("true", "1", "t", "y", "yes") if isinstance(self._config.get("show_clock", False), str) else bool(self._config.get("show_clock", False))
                 clock_format = str(self._config.get("clock_format", "%H:%M"))
                 show_text = bool(self._config.get("show_text", False))
                 
@@ -321,11 +321,11 @@ class PlaybackEngine:
             
             # Fetch live config if available
             if self._config_repository:
-                show_clock = bool(self._config_repository.get_app_config("viewer.show_clock", self._config.get("show_clock", False)))
+                show_clock = self._config_repository.get_app_config_bool("viewer.show_clock", self._config.get("show_clock", False))
                 clock_format = str(self._config_repository.get_app_config("viewer.clock_format", self._config.get("clock_format", "%H:%M")))
                 show_text = bool(self._config_repository.get_app_config("viewer.show_text", self._config.get("show_text", False)))
             else:
-                show_clock = bool(self._config.get("show_clock", False))
+                show_clock = str(self._config.get("show_clock", False)).lower() in ("true", "1", "t", "y", "yes") if isinstance(self._config.get("show_clock", False), str) else bool(self._config.get("show_clock", False))
                 clock_format = str(self._config.get("clock_format", "%H:%M"))
                 show_text = bool(self._config.get("show_text", False))
                 

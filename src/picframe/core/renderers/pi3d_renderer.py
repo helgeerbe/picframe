@@ -40,6 +40,30 @@ class Pi3dRenderer(IRenderer):
     and executing image transitions (alpha blending, Ken Burns).
     """
 
+    @staticmethod
+    def _parse_bool_config(raw_value: Any) -> bool:
+        """
+        Parse a boolean configuration value from various string representations.
+        """
+        if isinstance(raw_value, bool):
+            return raw_value
+        val_str = str(raw_value).strip().lower()
+        return val_str in ("true", "1", "t", "y", "yes", "on")
+
+    @staticmethod
+    def _parse_show_text_config(raw_value: Any) -> bool:
+        """
+        Parse the overloaded show_text configuration.
+        It can be a boolean toggle or a format string.
+        Returns False only if explicitly set to a falsy string/value.
+        """
+        if isinstance(raw_value, bool):
+            return raw_value
+        val_str = str(raw_value).strip().lower()
+        if val_str in ("false", "off", "0", "none", "no", ""):
+            return False
+        return True
+
     def __init__(
         self,
         config: dict[str, Any],
@@ -93,17 +117,15 @@ class Pi3dRenderer(IRenderer):
         # Text Overlay State
         if self._config_repository:
             self._overlay_config = OverlayConfig(
-                show_clock=bool(
-                    self._config_repository.get_app_config(
-                        "viewer.show_clock", config.get("show_clock", False)
-                    )
+                show_clock=self._config_repository.get_app_config_bool(
+                    "viewer.show_clock", config.get("show_clock", False)
                 ),
                 clock_format=str(
                     self._config_repository.get_app_config(
                         "viewer.clock_format", config.get("clock_format", "%H:%M")
                     )
                 ),
-                show_text=bool(
+                show_text=self._parse_show_text_config(
                     self._config_repository.get_app_config(
                         "viewer.show_text", config.get("show_text", False)
                     )
@@ -116,9 +138,9 @@ class Pi3dRenderer(IRenderer):
             )
         else:
             self._overlay_config = OverlayConfig(
-                show_clock=bool(config.get("show_clock", False)),
+                show_clock=self._parse_bool_config(config.get("show_clock", False)),
                 clock_format=str(config.get("clock_format", "%H:%M")),
-                show_text=bool(config.get("show_text", False)),
+                show_text=self._parse_show_text_config(config.get("show_text", False)),
                 text_string=str(config.get("text_string", ""))
             )
         self._text_renderer: TextRenderer | None = None
@@ -199,17 +221,15 @@ class Pi3dRenderer(IRenderer):
                         new_text_string = self._generate_text_string(self._current_media)
                         
                     self._overlay_config = OverlayConfig(
-                        show_clock=bool(
-                            self._config_repository.get_app_config(
-                                "viewer.show_clock", self._overlay_config.show_clock
-                            )
+                        show_clock=self._config_repository.get_app_config_bool(
+                            "viewer.show_clock", self._overlay_config.show_clock
                         ),
                         clock_format=str(
                             self._config_repository.get_app_config(
                                 "viewer.clock_format", self._overlay_config.clock_format
                             )
                         ),
-                        show_text=bool(
+                        show_text=self._parse_show_text_config(
                             self._config_repository.get_app_config(
                                 "viewer.show_text", self._overlay_config.show_text
                             )
@@ -325,23 +345,41 @@ class Pi3dRenderer(IRenderer):
         except queue.Empty:
             pass
 
+        # Sleep optimization for SUSPENDED state
+        if anim_state.render_state == RenderState.SUSPENDED:
+            time.sleep(0.1)
+            return True
+
+        needs_redraw = False
+        
+        # 1. Check animation and transition states
+        if (anim_state.render_state in (RenderState.TRANSITIONING, RenderState.TEXT_ANIMATING) or
+            self._kenburns or
+            anim_state.frames_to_render > 0 or
+            anim_state.text_alpha != getattr(self, '_last_text_alpha', -1.0)):
+            needs_redraw = True
+            
+        # 2. Check dynamic overlays (Clock)
+        elif self._clock_renderer:
+            if self._clock_renderer.has_changed():
+                needs_redraw = True
+                
+        # 3. OS Keepalive (prevent Wayland/X11 "Not Responding" hangs)
+        elif (tm - getattr(self, '_last_redraw_time', 0)) > 10.0:
+            needs_redraw = True
+
+        # --- STATIC BYPASS ---
+        if not needs_redraw:
+            time.sleep(0.05) # Yield CPU to OS
+            return True      # Keep PlaybackEngine loop alive
+
+        # --- ACTIVE RENDER BLOCK ---
         loop_running = self._display.loop_running()
         if not loop_running:
             return False
 
-        # Sleep optimization for STATIC and SUSPENDED states
-        if anim_state.render_state == RenderState.SUSPENDED:
-            time.sleep(0.1)
-            return True
-            
-        if (
-            anim_state.render_state == RenderState.STATIC
-            and not self._kenburns
-            and anim_state.frames_to_render <= 0
-        ):
-            time.sleep(0.1)
-            # Do not return early; we must draw the static frame to prevent
-            # the screen from going black
+        self._last_redraw_time = tm
+        self._last_text_alpha = anim_state.text_alpha
 
         # Apply animation state to components
         self._image_renderer.set_alpha(anim_state.image_alpha)

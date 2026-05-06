@@ -152,8 +152,9 @@ def test_renderer_execute_video(
     command = RenderCommand(image_path="/path/to/video.mp4")
     renderer.execute(command)
 
-    mock_image_renderer.execute.assert_not_called()
-    assert renderer._animation_controller._state == RenderState.SUSPENDED
+    mock_image_renderer.execute.assert_called_once_with(command)
+    # The state should not change to TRANSITIONING if execute returns False
+    assert renderer._animation_controller._state == RenderState.STATIC
 
 
 def test_renderer_render_frame(
@@ -236,11 +237,18 @@ def test_renderer_render_frame_static(
     renderer._animation_controller._state = RenderState.STATIC
     renderer._animation_controller._frames_to_render = 0
     renderer._kenburns = False
+    renderer._last_redraw_time = 100.0
+    renderer._last_text_alpha = 0.0
+    renderer._overlay_config = OverlayConfig(show_clock=False, show_text=False, text_string="")
+    mock_clock_renderer.has_changed.return_value = False
 
-    result = renderer.render_frame()
+    with patch("time.time", return_value=101.0):
+        result = renderer.render_frame()
 
     assert result is True
-    mock_sleep.assert_called_once_with(0.1)
+    mock_sleep.assert_called_once_with(0.05)
+    if renderer._display:
+        renderer._display.loop_running.assert_not_called()
 
 
 def test_renderer_enqueue_task(

@@ -1,3 +1,11 @@
+"""
+Animation Controller Module.
+
+This module provides the `AnimationController` class, which manages the state machine
+and tweening logic for the rendering pipeline. It handles image transitions, Ken Burns
+effects, and text overlay animations, ensuring smooth visual updates.
+"""
+
 import logging
 from dataclasses import dataclass
 from enum import Enum, auto
@@ -5,6 +13,7 @@ from typing import Any
 
 
 class RenderState(Enum):
+    """Enumeration of possible rendering states."""
     IDLE = auto()
     TRANSITIONING = auto()
     KEN_BURNS = auto()
@@ -14,6 +23,7 @@ class RenderState(Enum):
 
 @dataclass
 class AnimationState:
+    """Data Transfer Object representing the current state of all animations."""
     render_state: RenderState
     image_alpha: float
     text_alpha: float
@@ -21,11 +31,19 @@ class AnimationState:
     kenburns_y: float
     frames_to_render: int
 
+
 class AnimationController:
     """
     Manages the animation state machine and tweening logic for the renderer.
     """
     def __init__(self, config: dict[str, Any]) -> None:
+        """
+        Initialize the AnimationController with configuration settings.
+
+        Args:
+            config: A dictionary containing animation configuration parameters
+                    (e.g., fps, time_fade, time_delay, kenburns).
+        """
         self._logger = logging.getLogger(__name__)
         self._fps = int(config.get("fps", 20))
         self._fade_time = float(config.get("time_fade", 2.0))
@@ -51,7 +69,14 @@ class AnimationController:
     def start_transition(
         self, current_time: float, kb_xstep: float = 0.0, kb_ystep: float = 0.0
     ) -> None:
-        """Initiate a new image transition."""
+        """
+        Initiate a new image transition.
+
+        Args:
+            current_time: The current system time in seconds.
+            kb_xstep: The Ken Burns X-axis step value.
+            kb_ystep: The Ken Burns Y-axis step value.
+        """
         self._state = RenderState.TRANSITIONING
         self._image_alpha = 0.0
         self._next_tm = current_time + self._time_delay
@@ -70,11 +95,22 @@ class AnimationController:
             self._state = RenderState.STATIC
 
     def force_redraw(self, frames: int = 2) -> None:
-        """Force the renderer to draw a specific number of frames."""
+        """
+        Force the renderer to draw a specific number of frames.
+
+        Args:
+            frames: The number of frames to force redraw. Defaults to 2.
+        """
         self._frames_to_render = frames
 
     def update_text_config(self, show_text: bool, text_changed: bool) -> None:
-        """Update text overlay configuration and trigger animations if needed."""
+        """
+        Update text overlay configuration and trigger animations if needed.
+
+        Args:
+            show_text: Whether the text overlay should be visible.
+            text_changed: Whether the text content has changed.
+        """
         old_show_text = self._show_text
         self._show_text = show_text
         
@@ -86,7 +122,16 @@ class AnimationController:
             self._state = RenderState.STATIC
 
     def update(self, current_time: float) -> AnimationState:
-        """Calculate the current animation state based on elapsed time."""
+        """
+        Calculate the current animation state based on elapsed time.
+
+        Args:
+            current_time: The current system time in seconds.
+
+        Returns:
+            An AnimationState object containing the updated animation values.
+        """
+        current_frames_to_render = self._frames_to_render
         if self._frames_to_render > 0:
             self._frames_to_render -= 1
 
@@ -137,5 +182,5 @@ class AnimationController:
             text_alpha=self._text_alpha,
             kenburns_x=self._kb_x,
             kenburns_y=self._kb_y,
-            frames_to_render=self._frames_to_render
+            frames_to_render=current_frames_to_render
         )
