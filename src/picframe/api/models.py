@@ -25,7 +25,8 @@ class ViewerConfig(BaseModel):
     show_text_fm: str = "%b %d, %Y"
     show_text_tm: float = 20.0
     show_text_sz: int = 40
-    show_text: str = "title caption name date folder location"
+    show_text_enabled: bool = True
+    text_overlay_format: str = "title caption name date folder location"
     text_justify: str = "L"
     text_bkg_hgt: float = 0.25
     text_opacity: float = 1.0

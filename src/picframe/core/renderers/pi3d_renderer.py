@@ -14,6 +14,8 @@ from picframe.core.events.dto import (
     CurrentMediaChangedEvent,
     OverlayConfig,
     RenderCommand,
+    RendererConfig,
+    RendererConfigUpdatedEvent,
     State,
     StateEvent,
 )
@@ -66,87 +68,62 @@ class Pi3dRenderer(IRenderer):
 
     def __init__(
         self,
-        config: dict[str, Any],
+        config: RendererConfig,
         event_subscriber: IEventSubscriber | None = None,
-        config_repository: IConfigRepository | None = None,
     ) -> None:
         """
         Initialize the renderer with configuration.
         
         Args:
-            config: Dictionary containing display and rendering settings.
+            config: Strongly-typed configuration for the renderer.
             event_subscriber: Optional event subscriber to listen for config changes.
-            config_repository: Optional repository to fetch live configuration updates.
         """
         self._logger = logging.getLogger(__name__)
         self._config = config
         self._event_subscriber = event_subscriber
-        self._config_repository = config_repository
         
         if self._event_subscriber:
-            self._event_subscriber.subscribe(StateEvent, self._handle_state_event)
+            self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_config_event)
             self._event_subscriber.subscribe(CurrentMediaChangedEvent, self._handle_state_event)
         
         # Display settings
-        self._display_x = int(config.get("display_x", 0))
-        self._display_y = int(config.get("display_y", 0))
-        self._display_w = config.get("display_w")
-        if self._display_w is not None and self._display_w != "":
-            self._display_w = int(self._display_w)
-        else:
-            self._display_w = None
-        self._display_h = config.get("display_h")
-        if self._display_h is not None and self._display_h != "":
-            self._display_h = int(self._display_h)
-        else:
-            self._display_h = None
+        self._display_x = config.display_x
+        self._display_y = config.display_y
+        self._display_w = config.display_w
+        self._display_h = config.display_h
             
-        self._fps = int(config.get("fps", 20))
-        self._background = config.get("background", (0.0, 0.0, 0.0, 1.0))
-        self._use_glx = bool(config.get("use_glx", False))
-        self._use_sdl2 = bool(config.get("use_sdl2", False))
+        self._fps = config.fps
+        self._background = config.background
+        self._use_glx = config.use_glx
+        self._use_sdl2 = config.use_sdl2
         
         # Rendering settings
-        self._shader_path = os.path.expanduser(config.get("shader", "blend_new"))
-        self._kenburns = bool(config.get("kenburns", False))
+        self._shader_path = os.path.expanduser(config.shader_path)
+        self._kenburns = config.kenburns
         
         # State
         self._display: Any | None = None
         self._image_renderer: ImageRenderer | None = None
         
         # Text Overlay State
-        if self._config_repository:
-            self._overlay_config = OverlayConfig(
-                show_clock=self._config_repository.get_app_config_bool(
-                    "viewer.show_clock", config.get("show_clock", False)
-                ),
-                clock_format=str(
-                    self._config_repository.get_app_config(
-                        "viewer.clock_format", config.get("clock_format", "%H:%M")
-                    )
-                ),
-                show_text=self._parse_show_text_config(
-                    self._config_repository.get_app_config(
-                        "viewer.show_text", config.get("show_text", False)
-                    )
-                ),
-                text_string=str(
-                    self._config_repository.get_app_config(
-                        "viewer.text_string", config.get("text_string", "")
-                    )
-                ),
-            )
-        else:
-            self._overlay_config = OverlayConfig(
-                show_clock=self._parse_bool_config(config.get("show_clock", False)),
-                clock_format=str(config.get("clock_format", "%H:%M")),
-                show_text=self._parse_show_text_config(config.get("show_text", False)),
-                text_string=str(config.get("text_string", ""))
-            )
+        self._overlay_config = OverlayConfig(
+            show_clock=config.show_clock,
+            clock_format=config.clock_format,
+            show_text=config.show_text_enabled,
+            text_string=""
+        )
         self._text_renderer: TextRenderer | None = None
         self._clock_renderer: ClockRenderer | None = None
         
-        self._animation_controller = AnimationController(config)
+        # Convert RendererConfig to dict for AnimationController compatibility
+        anim_config = {
+            "fps": config.fps,
+            "time_fade": config.time_fade,
+            "time_delay": config.time_delay,
+            "show_text_tm": config.show_text_tm,
+            "kenburns": config.kenburns
+        }
+        self._animation_controller = AnimationController(anim_config)
         self._animation_controller.update_text_config(self._overlay_config.show_text, False)
         
         self._local_queue: queue.PriorityQueue[PrioritizedRenderTask] = queue.PriorityQueue()
@@ -157,23 +134,11 @@ class Pi3dRenderer(IRenderer):
         if not media_item or getattr(media_item, "filepath", "").endswith("no_pictures.jpg"):
             return ""
             
-        if self._config_repository:
-            show_text_config = str(
-                self._config_repository.get_app_config(
-                    "viewer.show_text", self._config.get("show_text", "")
-                )
-            ).lower()
-            show_text_fm = str(
-                self._config_repository.get_app_config(
-                    "viewer.show_text_fm", self._config.get("show_text_fm", "%b %d, %Y")
-                )
-            )
-        else:
-            show_text_config = str(self._config.get("show_text", "")).lower()
-            show_text_fm = str(self._config.get("show_text_fm", "%b %d, %Y"))
-            
-        if not show_text_config or show_text_config == "false" or show_text_config == "off":
+        if not self._config.show_text_enabled:
             return ""
+            
+        show_text_config = self._config.text_overlay_format.lower()
+        show_text_fm = "%b %d, %Y" # Default, could be added to RendererConfig if needed
             
         parts = []
         if "title" in show_text_config and getattr(media_item, "title", None):
@@ -196,56 +161,50 @@ class Pi3dRenderer(IRenderer):
             
         return " - ".join(parts)
 
+    def _handle_config_event(self, event: Any) -> None:
+        if not isinstance(event, RendererConfigUpdatedEvent):
+            return
+            
+        self._logger.info("Renderer received RendererConfigUpdatedEvent. Updating state.")
+        self._config = event.config
+        
+        old_text_string = self._overlay_config.text_string
+        new_text_string = old_text_string
+        
+        if self._current_media:
+            new_text_string = self._generate_text_string(self._current_media)
+            
+        self._overlay_config = OverlayConfig(
+            show_clock=self._config.show_clock,
+            clock_format=self._config.clock_format,
+            show_text=self._config.show_text_enabled,
+            text_string=new_text_string,
+        )
+        
+        if self._text_renderer:
+            self._text_renderer.update_config(self._overlay_config)
+        if self._clock_renderer:
+            self._clock_renderer.update_config(self._overlay_config)
+            
+        self._animation_controller.force_redraw(2)
+        self._animation_controller.update_text_config(
+            self._overlay_config.show_text,
+            self._overlay_config.text_string != old_text_string
+        )
+
     def _handle_state_event(self, event: Any) -> None:
         if isinstance(event, CurrentMediaChangedEvent):
             self._current_media = event.media_item
-            return
             
-        if not isinstance(event, StateEvent):
-            return
-            
-        if event.state == State.CONFIG_CHANGED:
-            payload = event.payload or {}
-            updated_sections = payload.get("updated_sections", [])
-            
-            if "viewer" in updated_sections or "text_overlay" in updated_sections:
-                self._logger.info(
-                    "Renderer received CONFIG_CHANGED for viewer/overlay section. "
-                    "Updating overlay state."
-                )
-                old_text_string = self._overlay_config.text_string
-                
-                if self._config_repository:
-                    new_text_string = self._overlay_config.text_string
-                    if self._current_media:
-                        new_text_string = self._generate_text_string(self._current_media)
-                        
-                    self._overlay_config = OverlayConfig(
-                        show_clock=self._config_repository.get_app_config_bool(
-                            "viewer.show_clock", self._overlay_config.show_clock
-                        ),
-                        clock_format=str(
-                            self._config_repository.get_app_config(
-                                "viewer.clock_format", self._overlay_config.clock_format
-                            )
-                        ),
-                        show_text=self._parse_show_text_config(
-                            self._config_repository.get_app_config(
-                                "viewer.show_text", self._overlay_config.show_text
-                            )
-                        ),
-                        text_string=new_text_string,
-                    )
+            # Update text string when media changes
+            if self._config.show_text_enabled:
+                new_text_string = self._generate_text_string(self._current_media)
+                if new_text_string != self._overlay_config.text_string:
+                    self._overlay_config = replace(self._overlay_config, text_string=new_text_string)
                     if self._text_renderer:
                         self._text_renderer.update_config(self._overlay_config)
-                    if self._clock_renderer:
-                        self._clock_renderer.update_config(self._overlay_config)
-                        
-                self._animation_controller.force_redraw(2)
-                self._animation_controller.update_text_config(
-                    self._overlay_config.show_text,
-                    self._overlay_config.text_string != old_text_string
-                )
+                    self._animation_controller.force_redraw(2)
+                    self._animation_controller.update_text_config(True, True)
 
     def start(self) -> None:
         """Initialize the pi3d display and sprite."""
@@ -274,7 +233,7 @@ class Pi3dRenderer(IRenderer):
         
         self._image_renderer = ImageRenderer(self._display, shader, self._config)
         
-        font_file = os.path.expanduser(self._config.get("font_file", ""))
+        font_file = os.path.expanduser(self._config.font_file)
         self._text_renderer = TextRenderer(self._display, flat_shader, font_file)
         self._clock_renderer = ClockRenderer(self._display, flat_shader, font_file)
 

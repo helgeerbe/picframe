@@ -62,10 +62,17 @@ def test_handle_set_config_command(config_service, mock_repo, mock_publisher):
     event = CommandEvent(command=Command.SET_CONFIG, payload=payload)
     
     config_service._handle_command_event(event)
-    
+
     mock_repo.set_app_config.assert_called_once_with("viewer.fps", 60)
-    mock_publisher.publish.assert_called_once()
-    published_event = mock_publisher.publish.call_args[0][0]
-    assert isinstance(published_event, StateEvent)
-    assert published_event.state == State.CONFIG_CHANGED
-    assert published_event.payload == {"updated_sections": ["viewer"]}
+    assert mock_publisher.publish.call_count == 2
+    
+    # First call should be StateEvent
+    state_event = mock_publisher.publish.call_args_list[0][0][0]
+    assert isinstance(state_event, StateEvent)
+    assert state_event.state == State.CONFIG_CHANGED
+    assert state_event.payload == {"updated_sections": ["viewer"]}
+    
+    # Second call should be RendererConfigUpdatedEvent
+    renderer_event = mock_publisher.publish.call_args_list[1][0][0]
+    from picframe.core.events.dto import RendererConfigUpdatedEvent
+    assert isinstance(renderer_event, RendererConfigUpdatedEvent)

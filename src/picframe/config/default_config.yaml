@@ -15,7 +15,8 @@ viewer:
   show_text_fm: '%b %d, %Y'
   show_text_tm: 20.0
   show_text_sz: 40
-  show_text: title caption name date folder location
+  show_text_enabled: true
+  text_overlay_format: title caption name date folder location
   text_justify: L
   text_bkg_hgt: 0.25
   text_opacity: 1.0

@@ -11,30 +11,30 @@ from typing import Any
 import pi3d
 from PIL import Image
 
-from picframe.core.events.dto import RenderCommand
+from picframe.core.events.dto import RenderCommand, RendererConfig
 
 
 class ImageRenderer:
     """Renders images and handles transitions on the pi3d display."""
 
-    def __init__(self, display: Any, shader: Any, config: dict[str, Any]) -> None:
+    def __init__(self, display: Any, shader: Any, config: RendererConfig) -> None:
         self._logger = logging.getLogger(__name__)
         self._display = display
         self._shader = shader
         self._config = config
         
         # Rendering settings
-        blend_type_str = config.get("blend_type", "blend")
+        blend_type_str = getattr(config, "blend_type", "blend")
         self._blend_type = {"blend": 0.0, "burn": 1.0, "bump": 2.0}.get(blend_type_str, 0.0)
-        self._edge_alpha = float(config.get("edge_alpha", 0.5))
-        self._fit = bool(config.get("fit", False))
-        self._kenburns = bool(config.get("kenburns", False))
+        self._edge_alpha = float(getattr(config, "edge_alpha", 0.5))
+        self._fit = bool(getattr(config, "fit", False))
+        self._kenburns = bool(getattr(config, "kenburns", False))
         if self._kenburns:
             self._fit = False
             
-        self._fade_time = float(config.get("time_fade", 2.0))
-        self._time_delay = float(config.get("time_delay", 200.0))
-        self._fps = int(config.get("fps", 20))
+        self._fade_time = float(getattr(config, "time_fade", 2.0))
+        self._time_delay = float(getattr(config, "time_delay", 200.0))
+        self._fps = int(getattr(config, "fps", 20))
         
         # State
         self._slide: Any | None = None
@@ -83,7 +83,7 @@ class ImageRenderer:
             
         # Check if it's a video file based on extension
         ext = Path(command.image_path).suffix.lower()
-        video_extensions = self._config.get("video_extensions", [".mp4", ".mov", ".avi", ".mkv"])
+        video_extensions = getattr(self._config, "video_extensions", [".mp4", ".mov", ".avi", ".mkv"])
         # Ensure extensions start with a dot
         video_extensions = [ext if ext.startswith(".") else f".{ext}" for ext in video_extensions]
         

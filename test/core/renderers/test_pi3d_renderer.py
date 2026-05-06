@@ -52,22 +52,24 @@ def mock_clock_renderer() -> Generator[MagicMock, None, None]:
         yield mock.return_value
 
 
+from picframe.core.events.dto import RendererConfig
+
 @pytest.fixture
-def config() -> dict[str, Any]:
+def config() -> RendererConfig:
     """Provide a basic configuration for the renderer."""
-    return {
-        "display_w": 1920,
-        "display_h": 1080,
-        "fps": 60,
-        "background": (0.0, 0.0, 0.0, 1.0),
-        "blend_type": "blend",
-        "time_delay": 200,
-        "time_fade": 2,
-        "font_file": "/path/to/font.ttf",
-    }
+    return RendererConfig(
+        display_w=1920,
+        display_h=1080,
+        fps=60,
+        background=(0.0, 0.0, 0.0, 1.0),
+        blend_type="blend",
+        time_delay=200.0,
+        time_fade=2.0,
+        font_file="/path/to/font.ttf",
+    )
 
 
-def test_renderer_initialization(config: dict[str, Any]) -> None:
+def test_renderer_initialization(config: RendererConfig) -> None:
     """Test that the renderer initializes with the correct configuration."""
     renderer = Pi3dRenderer(config)
     assert renderer._display_w == 1920
@@ -77,7 +79,7 @@ def test_renderer_initialization(config: dict[str, Any]) -> None:
 
 
 def test_renderer_start_stop(
-    config: dict[str, Any], 
+    config: RendererConfig,
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
@@ -102,7 +104,7 @@ def test_renderer_start_stop(
 
 
 def test_renderer_execute_without_start(
-    config: dict[str, Any],
+    config: RendererConfig,
     mock_image_renderer: MagicMock
 ) -> None:
     """Test executing a command before starting the renderer."""
@@ -114,7 +116,7 @@ def test_renderer_execute_without_start(
 
 
 def test_renderer_execute(
-    config: dict[str, Any], 
+    config: RendererConfig,
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock
 ) -> None:
@@ -138,7 +140,7 @@ def test_renderer_execute(
 
 
 def test_renderer_execute_video(
-    config: dict[str, Any],
+    config: RendererConfig,
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock
 ) -> None:
@@ -158,7 +160,7 @@ def test_renderer_execute_video(
 
 
 def test_renderer_render_frame(
-    config: dict[str, Any], 
+    config: RendererConfig,
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
@@ -186,7 +188,7 @@ def test_renderer_render_frame(
 
 
 def test_renderer_render_frame_not_running(
-    config: dict[str, Any],
+    config: RendererConfig,
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
@@ -205,7 +207,7 @@ def test_renderer_render_frame_not_running(
 @patch("time.sleep")
 def test_renderer_render_frame_suspended(
     mock_sleep: MagicMock,
-    config: dict[str, Any],
+    config: RendererConfig,
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
@@ -225,7 +227,7 @@ def test_renderer_render_frame_suspended(
 @patch("time.sleep")
 def test_renderer_render_frame_static(
     mock_sleep: MagicMock,
-    config: dict[str, Any],
+    config: RendererConfig,
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
@@ -252,7 +254,7 @@ def test_renderer_render_frame_static(
 
 
 def test_renderer_enqueue_task(
-    config: dict[str, Any],
+    config: RendererConfig,
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,

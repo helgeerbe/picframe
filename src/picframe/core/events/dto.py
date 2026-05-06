@@ -6,7 +6,7 @@ across the application. All events are implemented as frozen dataclasses
 to guarantee thread safety when passed between the asynchronous control
 loop and the synchronous render loop.
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
 
@@ -125,6 +125,53 @@ class OverlayConfig:
     clock_format: str = "%H:%M"
     show_text: bool = False
     text_string: str = ""
+
+
+@dataclass(frozen=True)
+class RendererConfig:
+    """
+    Strongly-typed configuration for the Pi3dRenderer.
+    """
+    display_x: int = 0
+    display_y: int = 0
+    display_w: int | None = None
+    display_h: int | None = None
+    fps: int = 20
+    background: tuple[float, float, float, float] = (0.0, 0.0, 0.0, 1.0)
+    use_glx: bool = False
+    use_sdl2: bool = False
+    shader_path: str = "blend_new"
+    kenburns: bool = False
+    show_clock: bool = False
+    clock_format: str = "%H:%M"
+    show_text_enabled: bool = False
+    text_overlay_format: str = "%b %d, %Y"
+    
+    # Animation settings
+    time_fade: float = 2.0
+    time_delay: float = 200.0
+    show_text_tm: float = 10.0
+    
+    # Font settings
+    font_file: str = ""
+    
+    # Image Renderer settings
+    blend_type: str = "blend"
+    edge_alpha: float = 0.5
+    fit: bool = False
+    video_extensions: list[str] = field(default_factory=lambda: [".mp4", ".mov", ".avi", ".mkv"]) # type: ignore
+
+
+@dataclass(frozen=True)
+class RendererConfigUpdatedEvent(Event):
+    """
+    An event notifying the renderer that its configuration has been updated.
+    """
+    config: RendererConfig
+
+    @property
+    def priority(self) -> int:
+        return 2
 
 
 @dataclass(frozen=True)

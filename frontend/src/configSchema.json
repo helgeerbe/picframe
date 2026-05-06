@@ -41,7 +41,10 @@
     "show_text_sz": {
       "type": "integer"
     },
-    "show_text": {
+    "show_text_enabled": {
+      "type": "boolean"
+    },
+    "text_overlay_format": {
       "type": "string"
     },
     "text_justify": {

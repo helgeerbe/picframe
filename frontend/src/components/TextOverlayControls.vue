@@ -32,7 +32,7 @@ onMounted(async () => {
   const viewerConfig = configStore.config?.viewer || {}
   showClock.value = !!viewerConfig.show_clock
   
-  const showTextStr = (viewerConfig.show_text || '').toLowerCase()
+  const showTextStr = (viewerConfig.text_overlay_format || '').toLowerCase()
   showTitle.value = showTextStr.includes('title')
   showCaption.value = showTextStr.includes('caption')
   showName.value = showTextStr.includes('name')
@@ -57,7 +57,8 @@ const handleChange = () => {
   const payload = {
     viewer: {
       show_clock: showClock.value,
-      show_text: showTextStr
+      show_text_enabled: showTextStr.length > 0,
+      text_overlay_format: showTextStr
     }
   }
   
@@ -67,7 +68,8 @@ const handleChange = () => {
   // Update local config store to stay in sync
   if (configStore.config && configStore.config.viewer) {
     configStore.config.viewer.show_clock = showClock.value
-    configStore.config.viewer.show_text = showTextStr
+    configStore.config.viewer.show_text_enabled = showTextStr.length > 0
+    configStore.config.viewer.text_overlay_format = showTextStr
   }
 }
 

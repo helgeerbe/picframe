@@ -109,8 +109,32 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     )
 
     # 5. Initialize Renderer
-    renderer_config = nested_config.get("viewer", {})
-    renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus, config_repository=_config_repo)
+    from picframe.core.events.dto import RendererConfig
+    renderer_config = RendererConfig(
+        display_x=int(_config_repo.get_app_config("viewer.display_x", 0)),
+        display_y=int(_config_repo.get_app_config("viewer.display_y", 0)),
+        display_w=int(_config_repo.get_app_config("viewer.display_w")) if _config_repo.get_app_config("viewer.display_w") else None,
+        display_h=int(_config_repo.get_app_config("viewer.display_h")) if _config_repo.get_app_config("viewer.display_h") else None,
+        fps=int(_config_repo.get_app_config("viewer.fps", 20)),
+        background=tuple(_config_repo.get_app_config("viewer.background", [0.0, 0.0, 0.0, 1.0])), # type: ignore
+        use_glx=_config_repo.get_app_config_bool("viewer.use_glx", False),
+        use_sdl2=_config_repo.get_app_config_bool("viewer.use_sdl2", False),
+        shader_path=str(_config_repo.get_app_config("viewer.shader", "blend_new")),
+        kenburns=_config_repo.get_app_config_bool("viewer.kenburns", False),
+        show_clock=_config_repo.get_app_config_bool("viewer.show_clock", False),
+        clock_format=str(_config_repo.get_app_config("viewer.clock_format", "%H:%M")),
+        show_text_enabled=_config_repo.get_app_config_bool("viewer.show_text_enabled", False),
+        text_overlay_format=str(_config_repo.get_app_config("viewer.text_overlay_format", "%b %d, %Y")),
+        time_fade=float(_config_repo.get_app_config("model.fade_time", 2.0)),
+        time_delay=float(_config_repo.get_app_config("model.time_delay", 200.0)),
+        show_text_tm=float(_config_repo.get_app_config("viewer.show_text_tm", 10.0)),
+        font_file=str(_config_repo.get_app_config("viewer.font_file", "")),
+        blend_type=str(_config_repo.get_app_config("viewer.blend_type", "blend")),
+        edge_alpha=float(_config_repo.get_app_config("viewer.edge_alpha", 0.5)),
+        fit=_config_repo.get_app_config_bool("viewer.fit", False),
+        video_extensions=_config_repo.get_app_config("model.video_extensions", [".mp4", ".mov", ".avi", ".mkv"]),
+    )
+    renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus)
     
     from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
     video_player = GstVideoRenderer(event_publisher=event_bus)

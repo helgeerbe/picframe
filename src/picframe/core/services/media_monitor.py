@@ -190,7 +190,7 @@ class MediaMonitorService:
 
     def perform_differential_sync(self) -> None:
         """
-        Performs a fast differential sync on startup using os.scandir().
+        Performs a fast differential sync on startup using os.walk().
         This should be called before starting the observers to ensure the initial state is correct.
         """
         logger.info(f"Performing differential sync on directories: {self.directories}")
@@ -203,11 +203,13 @@ class MediaMonitorService:
                 continue
             
             try:
-                for entry in os.scandir(directory):
-                    if entry.is_file() and self.handler._is_allowed(entry.path):
-                        logger.debug(f"Sync found file: {entry.path}")
-                        # Publish synchronously to ensure indexing completes before playlist build
-                        self.handler.on_created(FileCreatedEvent(entry.path))
+                for root, _, files in os.walk(directory, followlinks=self.follow_links):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        if self.handler._is_allowed(file_path):
+                            logger.debug(f"Sync found file: {file_path}")
+                            # Publish synchronously to ensure indexing completes before playlist build
+                            self.handler.on_created(FileCreatedEvent(file_path))
             except Exception as e:
                 logger.error(f"Error during differential sync of {directory}: {e}")
         
