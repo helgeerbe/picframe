@@ -84,6 +84,13 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
     *   **Network Binding (Port):** The Uvicorn server port is strictly a startup parameter. Allowing the port to be changed dynamically during runtime would require tearing down and restarting the background server thread, leading to dropped WebSocket connections, interrupted API requests, and potential system instability.
     *   **CORS Configuration:** Cross-Origin Resource Sharing (CORS) origins (`cors_allowed_origins`) are part of the runtime-mutable configuration under the `http` section. The Composition Root (`main.py`) reads this from the `ConfigService` and injects it into the FastAPI application, ensuring the application layer remains decoupled from the configuration storage mechanism.
 
+### 2.16 Geolocation & Reverse Geocoding Architecture
+*   **Concept:** A hybrid asynchronous architecture handles reverse geocoding of image GPS coordinates to prevent blocking the main thread and to respect strict external API rate limits (e.g., Nominatim's 1 request per second).
+*   **Reasoning & Benefits:**
+    *   **Coordinate Rounding & Caching:** During metadata extraction, GPS coordinates are rounded to 4 decimal places (approx. 11m resolution). These rounded coordinates are used as unique keys in a dedicated `locations` SQLite table. This prevents redundant API calls for photos taken in the exact same location.
+    *   **Background Worker Queue:** The media indexer extracts raw coordinates and places them in a background queue. A dedicated worker thread consumes this queue, performing reverse geocoding lookups at a strictly rate-limited pace (e.g., 2.0s intervals) and saving the resolved address strings to the `locations` table.
+    *   **Just-In-Time (JIT) Fallback:** If an image is selected for playback before the background worker has resolved its coordinates, the `PlaybackEngine` performs a synchronous JIT lookup immediately before display. If this fails (e.g., network error), the engine gracefully falls back to displaying the map without text and flags the coordinate for retry.
+
 ## 3. System Diagrams
 
 ### 3.1 Component Architecture

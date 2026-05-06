@@ -102,6 +102,13 @@ class PlaylistManager:
             # Check if file exists
             filepath = item_data.get("filepath")
             if filepath and os.path.isfile(filepath):
+                # Fetch latest data to ensure we have updated metadata (like geocoding)
+                media_id = item_data.get("id")
+                if media_id:
+                    latest_data = self._media_repo.get_media_item(media_id)
+                    if latest_data:
+                        item_data = latest_data
+                        
                 self._history.append(item_data)
                 return self._dict_to_media_item(item_data)
             else:
@@ -121,7 +128,18 @@ class PlaylistManager:
         """
         if not self._history:
             return None
-        return self._dict_to_media_item(self._history[-1])
+            
+        # Fetch the latest data from the repository to ensure we have updated metadata (like geocoding)
+        current_item = self._history[-1]
+        media_id = current_item.get("id")
+        if media_id:
+            latest_data = self._media_repo.get_media_item(media_id)
+            if latest_data:
+                # Update history with latest data
+                self._history[-1] = latest_data
+                return self._dict_to_media_item(latest_data)
+                
+        return self._dict_to_media_item(current_item)
 
     def delete_current(self) -> None:
         """
@@ -168,6 +186,13 @@ class PlaylistManager:
             # Check if file exists
             filepath = item_data.get("filepath")
             if filepath and os.path.isfile(filepath):
+                # Fetch latest data to ensure we have updated metadata (like geocoding)
+                media_id = item_data.get("id")
+                if media_id:
+                    latest_data = self._media_repo.get_media_item(media_id)
+                    if latest_data:
+                        item_data = latest_data
+                        
                 return self._dict_to_media_item(item_data)
             else:
                 logger.warning(

@@ -184,3 +184,46 @@ class IMediaRepository(Protocol):
             The number of records deleted.
         """
         ...
+
+    def get_location(self, latitude: float, longitude: float) -> str | None:
+        """
+        Retrieve a cached location string for the given coordinates.
+
+        Args:
+            latitude: The latitude coordinate.
+            longitude: The longitude coordinate.
+
+        Returns:
+            The cached address string, or None if not found.
+        """
+        ...
+
+    def save_location(self, latitude: float, longitude: float, address: str) -> None:
+        """
+        Save a resolved location string for the given coordinates.
+
+        Args:
+            latitude: The latitude coordinate.
+            longitude: The longitude coordinate.
+            address: The resolved address string.
+        """
+        ...
+
+    def enqueue_location_lookup(self, latitude: float, longitude: float) -> None:
+        """
+        Add a location lookup task to the persistent queue.
+
+        Args:
+            latitude: The latitude coordinate.
+            longitude: The longitude coordinate.
+        """
+        ...
+
+    def dequeue_location_lookup(self) -> tuple[float, float] | None:
+        """
+        Retrieve and remove the next location lookup task from the queue.
+
+        Returns:
+            A tuple of (latitude, longitude), or None if the queue is empty.
+        """
+        ...

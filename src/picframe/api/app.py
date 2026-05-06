@@ -118,6 +118,33 @@ def create_app(
                         if key == "location" and isinstance(media_dict[key], dict):
                             continue
                         exif_data[key] = media_dict[key]
+                        
+            # Ensure location_name is set in exif_data for the frontend MapComponent
+            if "location" in media_dict and isinstance(media_dict["location"], str):
+                exif_data["location_name"] = media_dict["location"]
+            elif "location" in exif_data and isinstance(exif_data["location"], str):
+                exif_data["location_name"] = exif_data["location"]
+                
+            # Fallback to checking the database directly if we have coordinates but no location string
+            if "location_name" not in exif_data and location is not None:
+                try:
+                    # We need to access the media repo to do a direct lookup
+                    # This is a bit of a hack, but it ensures we get the latest location
+                    # even if the event payload didn't include it
+                    import sqlite3
+                    import os
+                    db_path = os.path.expanduser("~/.picframe/data/media_cache.db3")
+                    if os.path.exists(db_path):
+                        with sqlite3.connect(db_path) as conn:
+                            cursor = conn.execute(
+                                "SELECT address FROM locations WHERE ROUND(latitude, 4) = ROUND(?, 4) AND ROUND(longitude, 4) = ROUND(?, 4)",
+                                (location["lat"], location["lon"])
+                            )
+                            row = cursor.fetchone()
+                            if row and row[0]:
+                                exif_data["location_name"] = row[0]
+                except Exception as e:
+                    logger.error(f"Error fetching location from database: {e}")
             
             dto = MediaResponseDTO(
                 file_path=file_path,

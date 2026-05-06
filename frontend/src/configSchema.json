@@ -212,7 +212,13 @@
       "type": "string"
     },
     "key_list": {
-      "type": "array"
+      "type": "array",
+      "items": {
+        "type": "array",
+        "items": {
+          "type": "string"
+        }
+      }
     },
     "portrait_pairs": {
       "type": "boolean"

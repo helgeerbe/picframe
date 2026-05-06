@@ -25,6 +25,11 @@ const props = defineProps<{
 
 const { t } = useI18n()
 
+const formatCoordinates = (lat?: number | null, lon?: number | null) => {
+  if (lat == null || lon == null) return null
+  return `${Math.abs(lat).toFixed(4)}° ${lat >= 0 ? 'N' : 'S'}, ${Math.abs(lon).toFixed(4)}° ${lon >= 0 ? 'E' : 'W'}`
+}
+
 const hasLocation = computed(() => {
   return props.latitude != null && props.longitude != null
 })
@@ -47,7 +52,7 @@ const zoom = ref(13)
           <MapPinIcon class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
         </div>
         <h3 class="text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
-          {{ locationName || t('remote.location') }}
+          {{ locationName || formatCoordinates(props.latitude, props.longitude) || t('remote.location') }}
         </h3>
       </div>
     </div>

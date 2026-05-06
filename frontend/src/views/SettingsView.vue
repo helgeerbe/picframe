@@ -382,16 +382,29 @@ const formatLabel = (key: string | undefined | null) => {
                       class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-2.5"
                     >
                     
-                    <!-- Array Input (Simple comma separated for now) -->
-                    <input 
-                      v-else-if="propDef.type === 'array'" 
-                      type="text" 
-                      :id="`${activeTab}-${key}`" 
-                      :value="Array.isArray(localConfig[activeTab][key]) ? localConfig[activeTab][key].join(', ') : localConfig[activeTab][key]"
-                      @change="e => localConfig[activeTab][key] = (e.target as HTMLInputElement).value.split(',').map(s => s.trim())"
-                      class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-2.5"
-                      placeholder="Comma separated values"
-                    >
+                    <!-- Array Input (JSON format) -->
+                    <div v-else-if="propDef.type === 'array'" class="relative">
+                      <input
+                        type="text"
+                        :id="`${activeTab}-${key}`"
+                        :value="Array.isArray(localConfig[activeTab][key]) ? JSON.stringify(localConfig[activeTab][key]) : localConfig[activeTab][key]"
+                        @change="e => {
+                          const target = e.target as HTMLInputElement;
+                          try {
+                            const parsed = JSON.parse(target.value);
+                            if (!Array.isArray(parsed)) throw new Error('Must be an array');
+                            localConfig[activeTab][key] = parsed;
+                            target.setCustomValidity('');
+                          } catch (err) {
+                            target.setCustomValidity('Invalid JSON array format');
+                            target.reportValidity();
+                            // Do not update localConfig with invalid data
+                          }
+                        }"
+                        class="block w-full rounded-lg border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm px-4 py-2.5 invalid:border-red-500 invalid:text-red-600 focus:invalid:border-red-500 focus:invalid:ring-red-500"
+                        placeholder='e.g. ["item1", "item2"] or [["nested1"], ["nested2"]]'
+                      >
+                    </div>
                     
                     <!-- Default String Input -->
                     <input 

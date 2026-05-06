@@ -80,6 +80,12 @@ class ImageMetadataStrategy(IMetadataStrategy):
             tags = iptc_data.get("tags") or xmp_data.get("tags") or exif_data.get("tags")
             latitude = exif_data.get("latitude")
             longitude = exif_data.get("longitude")
+            
+            # Round coordinates to 4 decimal places for proximity caching (~11m resolution)
+            if latitude is not None:
+                latitude = round(latitude, 4)
+            if longitude is not None:
+                longitude = round(longitude, 4)
 
             return MediaItem(
                 filepath=filepath,

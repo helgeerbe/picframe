@@ -33,6 +33,45 @@ The `picframe run` command accepts several parameters to override default paths 
 *Note: The webserver port and HTML directory path are strictly managed via CLI arguments and environment variables. They are not editable via the frontend UI to prevent connection loss and synchronization issues.*
 
 
+## Geocoding Configuration (`key_list`)
+
+The `model.key_list` configuration parameter dictates how raw address data from the Nominatim reverse geocoding service is formatted into a human-readable location string.
+
+### Structure Requirement: List of Lists
+This parameter **must** be structured strictly as a list of lists (e.g., `[["tourism", "amenity"], ["city", "town", "village"], ["country"]]`).
+
+Each inner list represents a single "slot" or component in the final comma-separated location string. The items within an inner list define **prioritized fallback options** for that slot.
+
+**Example Default Configuration:**
+```json
+[
+    ["tourism", "amenity", "isolated_dwelling"],
+    ["suburb", "village"],
+    ["city", "county"],
+    ["region", "state", "province"],
+    ["country"]
+]
+```
+
+**How it works:**
+1. The system evaluates the first inner list: `["tourism", "amenity", "isolated_dwelling"]`.
+2. It checks the Nominatim response for the key `tourism`. If found, it adds the value to the location string and **stops checking** the rest of this inner list.
+3. If `tourism` is not found, it checks for `amenity`, and so on.
+4. It then moves to the next inner list (`["suburb", "village"]`) and repeats the process.
+
+This nested structure prevents redundant output (like "Berlin, Berlin" if Nominatim returns both a `city` and a `county` key for the same location) by acting as an `OR` condition within the group and an `AND` condition between groups.
+
+### Available Nominatim Keys
+You can customize the `key_list` using any of the standard address keys returned by Nominatim. Common keys include:
+
+*   **Points of Interest:** `tourism`, `amenity`, `historic`, `leisure`, `shop`, `office`, `building`
+*   **Specific Locations:** `isolated_dwelling`, `farm`, `house_number`, `road`, `pedestrian`, `square`
+*   **Neighborhoods/Localities:** `suburb`, `village`, `hamlet`, `town`, `city_district`, `borough`, `quarter`, `neighbourhood`
+*   **Municipalities:** `city`, `town`, `municipality`, `county`, `local_administrative_area`
+*   **Regions:** `region`, `state`, `province`, `state_district`
+*   **National:** `country`, `country_code`
+*   **Postal:** `postcode`
+
 ## Network & Security Configuration
 
 ### CORS (Cross-Origin Resource Sharing)

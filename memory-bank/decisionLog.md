@@ -8,6 +8,7 @@ This file records architectural and implementation decisions using a list format
 
 ## Decision
 
+* [2026-05-06 12:46:00] - Adopt a hybrid asynchronous architecture for reverse geocoding (Issue #652). The media indexer will queue rounded coordinates (4 decimal places) for a background worker to process at a rate-limited pace (2.0s interval). The `PlaybackEngine` will perform a Just-In-Time (JIT) fallback lookup if an image is selected before its location is resolved.
 * [2026-05-03 20:04:00] - Implement `GET /api/config` and `PUT /api/config` REST endpoints in FastAPI to serve and update structured configuration matching the frontend schema, interacting directly with `IConfigRepository` and publishing `SET_CONFIG` events.
 * [2026-05-03 19:35:00] - Implement `MediaMonitorService` using `watchdog` for real-time directory monitoring and integrate an asynchronous worker pool in `ImageProcessingService` for non-blocking metadata extraction.
 * [2026-04-30 14:53:00] - Refactor Pi3dRenderer into specialized components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`) and implement a formal state machine with a local `PriorityQueue` for render events.
@@ -41,6 +42,7 @@ This file records architectural and implementation decisions using a list format
 
 ## Rationale
  
+* [2026-05-06 12:46:00] - This hybrid approach prevents the main media indexing thread from being blocked by slow external API calls, respects Nominatim's strict rate limits, and ensures that images displayed in the UI have the best chance of showing location data without causing rendering delays. Rounding coordinates to 4 decimal places (~11m resolution) allows for efficient caching of nearby locations in the SQLite database, significantly reducing redundant API requests.
 * [2026-05-03 20:04:00] - The frontend Settings view requires a structured JSON representation of the configuration. Implementing these endpoints provides a clean REST interface for the SPA to read and write settings, ensuring the backend remains the single source of truth via the `IConfigRepository`.
 * [2026-05-03 19:35:00] - Real-time directory monitoring with `watchdog` eliminates the need for expensive, periodic full-directory scans. Asynchronous metadata extraction prevents the main thread (and the render loop) from blocking when processing large files or network shares.
 * [2026-04-30 14:53:00] - Based on feedback from Paddy (pi3d author), the monolithic `Pi3dRenderer` is becoming complex and difficult to manage, especially with overlapping animations (fading, Ken Burns, text). Decomposing it improves maintainability. A formal state machine replaces messy conditional blocks, ensuring predictable transitions. A local `PriorityQueue` for render events prevents asynchronous delays from the main EventBus. Skipping `pi3d.Display.loop_running()` when static optimizes CPU and energy usage.

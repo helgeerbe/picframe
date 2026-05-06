@@ -100,7 +100,7 @@ class ModelConfig(BaseModel):
     load_geoloc: bool = False
     geo_key: str = "this_needs_to@be_changed"
     locale: str = "en_US.utf8"
-    key_list: list[Any] = Field(default_factory=lambda: [
+    key_list: list[list[str]] = Field(default_factory=lambda: [
         ["tourism", "amenity", "isolated_dwelling"],
         ["suburb", "village"],
         ["city", "county"],

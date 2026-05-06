@@ -14,6 +14,7 @@ from picframe.core.metadata.interfaces import IMetadataStrategy
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 from picframe.core.services.image_processing import ImageProcessingService
 from picframe.core.services.media_monitor import MediaMonitorService  # type: ignore
+from picframe.core.services.geocoding_worker import GeocodingWorker
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,10 @@ class MediaIndexerService:
         self.media_monitor_service = media_monitor_service
         self.image_strategy = image_strategy
         self.video_strategy = video_strategy
+        
+        # Initialize and start the geocoding worker
+        self.geocoding_worker = GeocodingWorker(media_repository, config_repository, event_subscriber)
+        self.geocoding_worker.start()
         
         event_subscriber.subscribe(FileChangeEvent, self._handle_file_change)
         event_subscriber.subscribe(CommandEvent, self._handle_command)
@@ -96,6 +101,10 @@ class MediaIndexerService:
                 media_item = strategy.extract(event.path, directory_id)
                 if media_item:
                     self.media_repository.add_media_item(media_item.to_dict())
+                    
+                    # Queue coordinates for reverse geocoding if present
+                    if media_item.latitude is not None and media_item.longitude is not None:
+                        self.geocoding_worker.queue_lookup(media_item.latitude, media_item.longitude)
                 else:
                     logger.warning(f"Failed to extract metadata for {event.path}")
             elif event.event_type == "deleted":

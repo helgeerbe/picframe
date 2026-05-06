@@ -54,6 +54,22 @@ MEDIA_MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_media_directory ON media(directory_id);
         CREATE INDEX IF NOT EXISTS idx_media_type ON media(media_type);
         CREATE INDEX IF NOT EXISTS idx_media_deleted ON media(is_deleted);
+
+        CREATE TABLE IF NOT EXISTS locations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            address TEXT,
+            UNIQUE (latitude, longitude)
+        );
+
+        CREATE TABLE IF NOT EXISTS geocoding_queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            created_at REAL DEFAULT (julianday('now')),
+            UNIQUE (latitude, longitude)
+        );
         """,
     )
 ]
@@ -122,7 +138,13 @@ class SQLiteMediaRepository(IMediaRepository):
             A dictionary containing the media metadata, or None if not found.
         """
         cursor = self._conn.execute(
-            "SELECT * FROM media WHERE filepath = ?", (filepath,)
+            """
+            SELECT m.*, COALESCE(l.address, m.location) as location
+            FROM media m
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4) AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            WHERE m.filepath = ?
+            """,
+            (filepath,)
         )
         row = cursor.fetchone()
         return dict(row) if row else None
@@ -152,7 +174,13 @@ class SQLiteMediaRepository(IMediaRepository):
             A dictionary containing the media metadata, or None if not found.
         """
         cursor = self._conn.execute(
-            "SELECT * FROM media WHERE id = ?", (media_id,)
+            """
+            SELECT m.*, COALESCE(l.address, m.location) as location
+            FROM media m
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4) AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            WHERE m.id = ?
+            """,
+            (media_id,)
         )
         row = cursor.fetchone()
         return dict(row) if row else None
@@ -206,8 +234,79 @@ class SQLiteMediaRepository(IMediaRepository):
         Returns:
             A list of dictionaries containing media metadata.
         """
-        cursor = self._conn.execute("SELECT * FROM media WHERE is_deleted = 0")
+        cursor = self._conn.execute(
+            """
+            SELECT m.*, COALESCE(l.address, m.location) as location
+            FROM media m
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4) AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            WHERE m.is_deleted = 0
+            """
+        )
         return [dict(row) for row in cursor.fetchall()]
+
+    def get_location(self, latitude: float, longitude: float) -> str | None:
+        """
+        Retrieve a cached location string for the given coordinates.
+
+        Args:
+            latitude: The latitude coordinate.
+            longitude: The longitude coordinate.
+
+        Returns:
+            The cached address string, or None if not found.
+        """
+        cursor = self._conn.execute(
+            "SELECT address FROM locations WHERE latitude = ? AND longitude = ?",
+            (latitude, longitude),
+        )
+        row = cursor.fetchone()
+        return row["address"] if row else None
+
+    def save_location(self, latitude: float, longitude: float, address: str) -> None:
+        """
+        Save a resolved location string for the given coordinates.
+
+        Args:
+            latitude: The latitude coordinate.
+            longitude: The longitude coordinate.
+            address: The resolved address string.
+        """
+        with self._conn:
+            self._conn.execute(
+                "INSERT OR REPLACE INTO locations (latitude, longitude, address) VALUES (?, ?, ?)",
+                (latitude, longitude, address),
+            )
+
+    def enqueue_location_lookup(self, latitude: float, longitude: float) -> None:
+        """
+        Add a location lookup task to the persistent queue.
+
+        Args:
+            latitude: The latitude coordinate.
+            longitude: The longitude coordinate.
+        """
+        with self._conn:
+            self._conn.execute(
+                "INSERT OR IGNORE INTO geocoding_queue (latitude, longitude) VALUES (?, ?)",
+                (latitude, longitude),
+            )
+
+    def dequeue_location_lookup(self) -> tuple[float, float] | None:
+        """
+        Retrieve and remove the next location lookup task from the queue.
+
+        Returns:
+            A tuple of (latitude, longitude), or None if the queue is empty.
+        """
+        with self._conn:
+            cursor = self._conn.execute(
+                "SELECT id, latitude, longitude FROM geocoding_queue ORDER BY created_at ASC LIMIT 1"
+            )
+            row = cursor.fetchone()
+            if row:
+                self._conn.execute("DELETE FROM geocoding_queue WHERE id = ?", (row["id"],))
+                return row["latitude"], row["longitude"]
+            return None
 
     def purge_missing_files(self) -> int:
         """

@@ -67,7 +67,7 @@ The `MapComponent` is a standalone Vue component responsible for rendering an in
 *   **Implementation:** Utilizes Leaflet.js to embed an interactive OpenStreetMap.
 *   **Features:**
     *   Centers the map on the media's exact coordinates with a custom marker.
-    *   Displays reverse-geocoded location text fetched from the metadata directly above the map.
+    *   Displays reverse-geocoded location text fetched from the metadata directly above the map. If the location text is unavailable (e.g., geocoding disabled or network error), the map is displayed gracefully without the accompanying text.
 *   **Separation of Concerns:** This component operates entirely independently of the backend pi3d rendering pipeline and text overlay features. It is a purely frontend UI element.
 
 ### 4.4 Text Overlay Controls

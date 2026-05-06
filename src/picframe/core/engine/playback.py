@@ -205,8 +205,12 @@ class PlaybackEngine:
             return
             
         # Determine deleted directory
-        base_dir = os.path.dirname(filepath)
-        deleted_dir = os.path.join(base_dir, "deleted_pictures")
+        if self._config_repository:
+            deleted_dir_config = self._config_repository.get_app_config("model.deleted_pictures", self._config.get("deleted_pictures", "~/DeletedPictures"))
+        else:
+            deleted_dir_config = self._config.get("deleted_pictures", "~/DeletedPictures")
+            
+        deleted_dir = os.path.expanduser(deleted_dir_config)
         
         try:
             os.makedirs(deleted_dir, exist_ok=True)
@@ -405,8 +409,20 @@ class PlaybackEngine:
             import os
             parts.append(os.path.basename(os.path.dirname(media_item.filepath)))
             
-        if "location" in show_text_config and getattr(media_item, "location", None):
-            parts.append(media_item.location)
+        if "location" in show_text_config:
+            location = getattr(media_item, "location", None)
+            if not location and getattr(media_item, "latitude", None) is not None and getattr(media_item, "longitude", None) is not None:
+                # Check if it's in the database cache first
+                cached_location = self._playlist_manager._media_repo.get_location(media_item.latitude, media_item.longitude)
+                if cached_location:
+                    location = cached_location
+                    media_item.location = location
+                else:
+                    # Enqueue for background processing
+                    self._playlist_manager._media_repo.enqueue_location_lookup(media_item.latitude, media_item.longitude)
+            
+            if location:
+                parts.append(location)
             
         return " - ".join(parts)
 
