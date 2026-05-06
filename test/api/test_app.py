@@ -115,6 +115,93 @@ def test_api_put_config() -> None:
     assert event.command.name == "SET_CONFIG"
     assert event.payload == payload
 
+def test_api_import_yaml() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+    
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo, event_publisher=mock_publisher)
+    client = TestClient(app)
+    
+    yaml_content = """
+viewer:
+  fps: 45
+  blur_amount: 15
+  unknown_field: "should be ignored"
+model:
+  pic_dir: "/new/yaml/path"
+"""
+    
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")}
+    )
+    
+    assert response.status_code == 200
+    assert response.json() == {"status": "success", "message": "Legacy YAML configuration imported successfully"}
+    
+    # Verify repository was updated
+    assert mock_repo.set_app_config.call_count > 0
+    
+    # Verify event was published
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command.name == "SET_CONFIG"
+    assert event.payload["viewer"]["fps"] == 45
+    assert event.payload["viewer"]["blur_amount"] == 15
+    assert event.payload["model"]["pic_dir"] == "/new/yaml/path"
+    assert "unknown_field" not in event.payload["viewer"]
+
+def test_api_import_yaml_example_file() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+    
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo, event_publisher=mock_publisher)
+    client = TestClient(app)
+    
+    example_yaml_path = Path(__file__).parent.parent.parent / "src" / "picframe" / "config" / "configuration_example.yaml"
+    
+    with open(example_yaml_path, "rb") as f:
+        response = client.post(
+            "/api/config/import-yaml",
+            files={"file": ("configuration_example.yaml", f, "application/x-yaml")}
+        )
+        
+    assert response.status_code == 200
+    assert response.json() == {"status": "success", "message": "Legacy YAML configuration imported successfully"}
+    
+    # Verify repository was updated
+    assert mock_repo.set_app_config.call_count > 0
+    
+    # Verify event was published
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command.name == "SET_CONFIG"
+    
+    # Verify some specific fields from the example file
+    assert event.payload["viewer"]["blur_amount"] == 12
+    assert event.payload["viewer"]["display_w"] is None
+    assert event.payload["viewer"]["display_h"] is None
+    assert event.payload["model"]["pic_dir"] == "~/Pictures"
+    assert event.payload["http"]["password"] == ""
+
+def test_api_import_yaml_invalid_format() -> None:
+    mock_repo = MagicMock()
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
+    client = TestClient(app)
+    
+    yaml_content = """
+- just a list
+- not a dict
+"""
+    
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")}
+    )
+    
+    assert response.status_code == 500
+    assert "Error importing configuration" in response.json()["detail"]
+
 def test_spa_routing_without_html_dir(tmp_path: Path) -> None:
     app = create_app(cors_allowed_origins=["*"], html_dir=str(tmp_path / "nonexistent"))
     client = TestClient(app)

@@ -130,23 +130,55 @@ const exportConfig = () => {
   downloadAnchorNode.remove()
 }
 
-const importConfig = (event: Event) => {
+const importConfig = async (event: Event) => {
   const target = event.target as HTMLInputElement
   const file = target.files?.[0]
   if (!file) return
 
-  const reader = new FileReader()
-  reader.onload = (e) => {
+  // Check file extension
+  const isYaml = file.name.toLowerCase().endsWith('.yaml') || file.name.toLowerCase().endsWith('.yml')
+
+  if (isYaml) {
+    // Handle YAML import via backend endpoint
+    const formData = new FormData()
+    formData.append('file', file)
+
     try {
-      const imported = JSON.parse(e.target?.result as string)
-      localConfig.value = imported
-      showSuccess('Configuration imported. Please save to apply.')
+      const response = await fetch('/api/config/import-yaml', {
+        method: 'POST',
+        body: formData
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || 'Failed to import YAML configuration')
+      }
+
+      // Refresh config from backend after successful import
+      await configStore.fetchConfig()
+      showSuccess('Legacy YAML configuration imported successfully.')
     } catch (err) {
-      console.error('Failed to parse imported config', err)
-      alert('Invalid configuration file.')
+      console.error('Failed to import YAML config', err)
+      alert(err instanceof Error ? err.message : 'Failed to import YAML configuration.')
     }
+  } else {
+    // Handle JSON import locally
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const imported = JSON.parse(e.target?.result as string)
+        localConfig.value = imported
+        showSuccess('Configuration imported. Please save to apply.')
+      } catch (err) {
+        console.error('Failed to parse imported config', err)
+        alert('Invalid JSON configuration file.')
+      }
+    }
+    reader.readAsText(file)
   }
-  reader.readAsText(file)
+  
+  // Reset input so the same file can be selected again
+  target.value = ''
 }
 
 const formatLabel = (key: string | undefined | null) => {
@@ -183,7 +215,7 @@ const formatLabel = (key: string | undefined | null) => {
         <label class="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-gray-600 shadow-sm text-sm font-medium rounded-lg text-gray-700 dark:text-gray-200 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 cursor-pointer transition-colors">
           <ArrowUpTrayIcon class="w-4 h-4 mr-2" />
           {{ t('settings.import') }}
-          <input type="file" accept=".json" class="hidden" @change="importConfig">
+          <input type="file" accept=".json,.yaml,.yml,application/json,application/x-yaml,text/yaml" class="hidden" @change="importConfig">
         </label>
         
         <button @click="saveConfig" :disabled="isConfigLoading" class="inline-flex items-center px-5 py-2 border border-transparent shadow-sm text-sm font-medium rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 transition-colors">

@@ -11,7 +11,7 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect, HTTPException
+from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -323,6 +323,71 @@ def create_app(
         from picframe.api.models import AppConfig
         app_config = AppConfig(**nested_config)
         return app_config.model_dump()
+
+    @app.post("/api/config/import-yaml")
+    async def api_import_yaml(file: UploadFile = File(...)) -> dict[str, Any]:
+        """Import legacy configuration.yaml file."""
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+            
+        try:
+            content = await file.read()
+            import yaml
+            yaml_data = yaml.safe_load(content)
+            
+            if not isinstance(yaml_data, dict):
+                raise ValueError("Invalid YAML format: expected a dictionary")
+                
+            # Use ConfigService to handle the flattening logic
+            class DummyPublisher(IEventPublisher):
+                def publish(self, event: Any) -> None: pass
+            class DummySubscriber(IEventSubscriber):
+                def subscribe(self, event_type: type, callback: Any) -> None: pass
+                def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+                
+            from picframe.core.services.config_service import ConfigService
+            temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+            
+            # Sanitize legacy YAML data before validation
+            if "viewer" in yaml_data:
+                viewer = yaml_data["viewer"]
+                if "display_w" in viewer and viewer["display_w"] is not None:
+                    viewer["display_w"] = str(viewer["display_w"])
+                if "display_h" in viewer and viewer["display_h"] is not None:
+                    viewer["display_h"] = str(viewer["display_h"])
+                if "display_power" in viewer:
+                    viewer["display_power"] = str(viewer["display_power"])
+            
+            if "http" in yaml_data:
+                http = yaml_data["http"]
+                if "password" in http and http["password"] is None:
+                    http["password"] = ""
+                    
+            if "peripherals" in yaml_data and "buttons" in yaml_data["peripherals"]:
+                buttons = yaml_data["peripherals"]["buttons"]
+                for key, value in buttons.items():
+                    if isinstance(value, dict) and "shortcut" in value:
+                        buttons[key] = value["shortcut"]
+
+            # Validate against AppConfig, ignoring unknown fields
+            # Pydantic v2 ignores extra fields by default unless configured otherwise
+            from picframe.api.models import AppConfig
+            app_config = AppConfig(**yaml_data)
+            
+            config_dict = app_config.model_dump(exclude_unset=True)
+            temp_service.update_nested_config(config_dict)
+            
+            # Publish a SET_CONFIG event to notify other components
+            if event_publisher:
+                event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=config_dict))
+                
+            return {"status": "success", "message": "Legacy YAML configuration imported successfully"}
+            
+        except yaml.YAMLError as e:
+            raise HTTPException(status_code=400, detail=f"Invalid YAML file: {e}")
+        except Exception as e:
+            logger.error(f"Error importing YAML: {e}")
+            raise HTTPException(status_code=500, detail=f"Error importing configuration: {e}")
 
     @app.put("/api/config")
     async def api_put_config(payload: AppConfig = Body(...)) -> dict[str, str]:

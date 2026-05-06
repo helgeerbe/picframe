@@ -234,8 +234,8 @@ stateDiagram-v2
 *   **The Problem:** `pi3d` (OpenGL) must run in the Main Thread. FastAPI/Uvicorn also typically expects the Main Thread. Running both synchronously causes blocking and crashes.
 *   **The Mitigation:** The Main Thread is owned exclusively by the `pi3d` render loop and the `PlaybackEngine` event consumer. FastAPI/Uvicorn and the MQTT client run in isolated background threads. The `PriorityQueue` Event Bus bridges them safely.
 
-### 4.2 Configuration Migration Adapter
-To prevent data loss for existing users, a Migration Adapter will run on startup. If `config.db3` is missing, it will parse the legacy `configuration.yaml`, populate the database, and rename the YAML file to indicate successful migration.
+### 4.2 Legacy Configuration Import Mechanism
+Instead of an automatic startup migration, the system provides an explicit, user-triggered import mechanism for legacy `configuration.yaml` files. This is handled via a dedicated backend endpoint (`/api/config/import-yaml`) that parses the YAML, validates it against Pydantic models (ignoring unknown or obsolete fields), and merges the valid settings into the SQLite database. The frontend provides an "Import Legacy YAML" button in the Settings view. This approach standardizes on JSON for general imports/exports while providing a safe, controlled path for legacy users to migrate their settings without risking startup failures or database corruption.
 
 ### 4.3 Event Bus "Poison Pill" Handling
 To ensure system resilience, the `PlaybackEngine` will implement a global exception boundary. If a corrupted event (e.g., a bad media file) causes an error, the exception is caught, a `SystemErrorEvent` is published (for the UI), and the state machine resets to `IDLE`, preventing the Main Thread from crashing.
