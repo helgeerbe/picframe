@@ -12,7 +12,12 @@ import {
   mdiCamera,
   mdiImageSizeSelectActual,
   mdiScreenRotation,
-  mdiFileImage
+  mdiFileImage,
+  mdiClockOutline,
+  mdiVideo,
+  mdiPalette,
+  mdiAnimationPlay,
+  mdiSpeedometer
 } from '@mdi/js'
 import {
   ForwardIcon,
@@ -29,7 +34,6 @@ import {
   TrashIcon as TrashIconSolid
 } from '@heroicons/vue/24/solid'
 import MapComponent from '../components/MapComponent.vue'
-import TextOverlayControls from '../components/TextOverlayControls.vue'
 
 const { t } = useI18n()
 const playerStore = usePlayerStore()
@@ -72,6 +76,16 @@ const displayFileName = computed(() => {
 const metadataFields = computed(() => {
   const data = currentMedia.value?.exif || {}
   const fields = []
+
+  // Title
+  if (data.title) {
+    fields.push({
+      key: 'title',
+      label: t('remote.metadata.title'),
+      icon: mdiFileImage, // Or another appropriate icon
+      value: data.title
+    })
+  }
 
   // File Name
   fields.push({
@@ -159,6 +173,56 @@ const metadataFields = computed(() => {
       label: t('remote.metadata.orientation'),
       icon: mdiScreenRotation,
       value: data.orientation
+    })
+  }
+
+  // Duration
+  if (data.duration) {
+    fields.push({
+      key: 'duration',
+      label: t('remote.metadata.duration') || 'Duration',
+      icon: mdiClockOutline,
+      value: `${Number(data.duration).toFixed(2)} sec`
+    })
+  }
+
+  // Codec
+  if (data.codec) {
+    fields.push({
+      key: 'codec',
+      label: t('remote.metadata.codec') || 'Codec',
+      icon: mdiVideo,
+      value: data.codec
+    })
+  }
+
+  // Pixel Format
+  if (data.pixel_format) {
+    fields.push({
+      key: 'pixelFormat',
+      label: t('remote.metadata.pixelFormat') || 'Pixel Format',
+      icon: mdiPalette,
+      value: data.pixel_format
+    })
+  }
+
+  // Framerate
+  if (data.framerate) {
+    fields.push({
+      key: 'framerate',
+      label: t('remote.metadata.framerate') || 'Framerate',
+      icon: mdiAnimationPlay,
+      value: `${data.framerate} fps`
+    })
+  }
+
+  // Bitrate
+  if (data.bitrate) {
+    fields.push({
+      key: 'bitrate',
+      label: t('remote.metadata.bitrate') || 'Bitrate',
+      icon: mdiSpeedometer,
+      value: `${(Number(data.bitrate) / 1000).toFixed(0)} kbps`
     })
   }
 
@@ -283,9 +347,6 @@ const metadataFields = computed(() => {
 
       <!-- Right Column: Metadata & Controls -->
       <div class="xl:col-span-5 flex flex-col space-y-6">
-        
-        <!-- Text Overlay Controls -->
-        <TextOverlayControls />
 
         <!-- Metadata Card -->
         <div class="bg-white dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden flex-grow">

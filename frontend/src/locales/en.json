@@ -1,6 +1,7 @@
 {
   "nav": {
     "remote": "Remote",
+    "filters": "Settings & Filters",
     "settings": "Settings"
   },
   "remote": {
@@ -23,7 +24,12 @@
       "resolution": "Resolution",
       "orientation": "Orientation",
       "title": "Title",
-      "caption": "Caption"
+      "caption": "Caption",
+      "duration": "Duration",
+      "codec": "Codec",
+      "pixelFormat": "Pixel Format",
+      "framerate": "Framerate",
+      "bitrate": "Bitrate"
     },
     "overlays": {
       "title": "Text Overlays",

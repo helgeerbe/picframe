@@ -1,6 +1,7 @@
 {
   "nav": {
     "remote": "Fernbedienung",
+    "filters": "Einstellungen & Filter",
     "settings": "Einstellungen"
   },
   "remote": {
@@ -23,7 +24,12 @@
       "resolution": "Auflösung",
       "orientation": "Ausrichtung",
       "title": "Titel",
-      "caption": "Bildunterschrift"
+      "caption": "Bildunterschrift",
+      "duration": "Dauer",
+      "codec": "Codec",
+      "pixelFormat": "Pixelformat",
+      "framerate": "Bildrate",
+      "bitrate": "Bitrate"
     },
     "overlays": {
       "title": "Text-Overlays",

@@ -104,7 +104,8 @@ def create_app(
             exif_keys = [
                 "make", "model", "lens", "f_number", "exposure_time", "iso",
                 "focal_length", "exif_datetime", "caption", "tags", "location",
-                "title", "rating", "width", "height", "orientation"
+                "title", "rating", "width", "height", "orientation",
+                "duration", "codec", "pixel_format", "framerate", "bitrate"
             ]
             exif_data = {}
             
