@@ -22,26 +22,29 @@ def media_item() -> MediaItem:
         file_size=1000,
         last_modified=1000.0,
         exif_datetime=1000.0,
-        width=1920,
-        height=1080,
+        width=1280,
+        height=720,
         orientation=1,
         title="Test Video",
         caption="",
         location="",
         tags="",
-        is_portrait=False
+        is_portrait=False,
+        codec="h264"
     )
 
+@patch("picframe.core.renderers.gst_video_renderer.is_hardware_supported", return_value=True)
 @patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
 @patch("picframe.core.renderers.gst_video_renderer.Gst")
-def test_play_video(mock_gst: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
+def test_play_video(mock_gst: MagicMock, mock_hw_supported: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
     mock_pipeline = MagicMock()
-    mock_gst.parse_launch.return_value = mock_pipeline
+    mock_gst.Pipeline.new.return_value = mock_pipeline
     
     renderer = GstVideoRenderer(mock_publisher)
+    renderer._create_sink_bin = MagicMock()
     renderer.play(media_item)
     
-    mock_gst.parse_launch.assert_called_once()
+    mock_gst.Pipeline.new.assert_called_once_with("video-player")
     mock_pipeline.set_state.assert_called_with(mock_gst.State.PLAYING)
     assert renderer._current_media == media_item
 
@@ -53,16 +56,18 @@ def test_play_video_gst_unavailable(mock_publisher: MagicMock, media_item: Media
     mock_publisher.publish.assert_called_once()
     assert isinstance(mock_publisher.publish.call_args[0][0], PlaybackCompletedEvent)
 
+@patch("picframe.core.renderers.gst_video_renderer.is_hardware_supported", return_value=True)
 @patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
 @patch("picframe.core.renderers.gst_video_renderer.Gst")
-def test_stop_video(mock_gst: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
+def test_stop_video(mock_gst: MagicMock, mock_hw_supported: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
     mock_pipeline = MagicMock()
     mock_bus = MagicMock()
     mock_bus.poll.return_value = False
     mock_pipeline.get_bus.return_value = mock_bus
-    mock_gst.parse_launch.return_value = mock_pipeline
+    mock_gst.Pipeline.new.return_value = mock_pipeline
     
     renderer = GstVideoRenderer(mock_publisher)
+    renderer._create_sink_bin = MagicMock()
     renderer.play(media_item)
     renderer.stop()
     
@@ -70,15 +75,17 @@ def test_stop_video(mock_gst: MagicMock, mock_publisher: MagicMock, media_item: 
     assert renderer._pipeline is None
     assert renderer._current_media is None
 
+@patch("picframe.core.renderers.gst_video_renderer.is_hardware_supported", return_value=True)
 @patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
 @patch("picframe.core.renderers.gst_video_renderer.Gst")
 def test_pause_resume_video(
-    mock_gst: MagicMock, mock_publisher: MagicMock, media_item: MediaItem
+    mock_gst: MagicMock, mock_hw_supported: MagicMock, mock_publisher: MagicMock, media_item: MediaItem
 ) -> None:
     mock_pipeline = MagicMock()
-    mock_gst.parse_launch.return_value = mock_pipeline
+    mock_gst.Pipeline.new.return_value = mock_pipeline
     
     renderer = GstVideoRenderer(mock_publisher)
+    renderer._create_sink_bin = MagicMock()
     renderer.play(media_item)
     
     renderer.pause()
@@ -87,13 +94,15 @@ def test_pause_resume_video(
     renderer.resume()
     mock_pipeline.set_state.assert_called_with(mock_gst.State.PLAYING)
 
+@patch("picframe.core.renderers.gst_video_renderer.is_hardware_supported", return_value=True)
 @patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
 @patch("picframe.core.renderers.gst_video_renderer.Gst")
-def test_set_volume(mock_gst: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
+def test_set_volume(mock_gst: MagicMock, mock_hw_supported: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
     mock_pipeline = MagicMock()
-    mock_gst.parse_launch.return_value = mock_pipeline
+    mock_gst.Pipeline.new.return_value = mock_pipeline
     
     renderer = GstVideoRenderer(mock_publisher)
+    renderer._create_sink_bin = MagicMock()
     renderer.play(media_item)
     
     renderer.set_volume(0.5)

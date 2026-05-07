@@ -68,6 +68,9 @@
     "video_fit_display": {
       "type": "boolean"
     },
+    "max_software_decode_resolution": {
+      "type": "string"
+    },
     "kenburns": {
       "type": "boolean"
     },

@@ -8,10 +8,15 @@
 
 ## Current Focus
 
-*   Phase 2 Planning: Restructuring Phase 2 into Subphases (2A, 2B, 2C) and aligning GitHub issues.
-*   Next up: Implementing the CLI (`init` and `run` commands) and `EnvironmentBootstrapper` (Subphase 2B).
+*   **Video Playback Optimization & Hardware Acceleration Discovery:** Addressing Issue #663. Implementing a proactive, metadata-driven pipeline construction using `ffprobe` and GStreamer Registry introspection (`uridecodebin` and `autoplug-select`) to dynamically discover hardware capabilities, ensure observable software fallbacks, and gracefully reject media exceeding hardware limits.
 
 ## Recent Changes
+- **[2026-05-07 16:00:00] - Completed Ticket #663 (GStreamer Hardware Decoding & VM Fallback)**: Fixed video orientation using `waylandsink`'s `rotate-method`. Implemented dynamic hardware probing in `install_picframe.sh` for GStreamer dependencies. Validated software fallback on VMs lacking hardware decoding. Designed a "Zero-Touch Python Orchestrator" to replace the bash script and created a GitHub issue to track it. Updated architecture documentation.
+- **[2026-05-07 12:30:00] - Completed Ticket #607 (Video Metadata UI Integration & Refactoring)**: Updated `RemoteView.vue` to display video metadata (duration, codec, pixel format, framerate, bitrate). Fixed WebSocket payload filtering in `app.py` to include these fields. Refactored UI by extracting text overlay controls into a new `FiltersView.vue` component. Updated Vue Router, main navigation (`App.vue`), and synchronized `en.json` and `de.json` localization files.
+- **[2026-05-07 11:14:00] - Completed Ticket #613 (DisplayPowerManager Implementation)**: Updated `wayland_power.py`, `hal_factory.py`, and `main.py` to inject an `IEventPublisher` and broadcast `SystemErrorEvent`s on subprocess failures.
+- **[2026-05-07 11:14:00] - Completed Ticket #614 (Documentation and Installation Script)**: Merged configuration and prerequisites into `manual.md`, added `install_picframe.sh` for automated setup.
+- **[2026-05-07 11:14:00] - Completed Ticket #630 (Load display_output from config)**: Updated `main.py` to retrieve `display_output` from the configuration repository instead of hardcoding it.
+- **[2026-05-07 11:14:00] - Completed Ticket #633 (HALFactory Environment Detection)**: Replaced naive `sys.platform` checks with robust runtime hardware probing in `hal_factory.py` and updated adapter initialization in `main.py`.
 - **[2026-05-04 20:08:00] - Completed Ticket #661 (Fix UI Media Playback: Resolve Stuck Placeholder Image and Missing EXIF Metadata)**: Diagnosed and fixed data mapping discrepancies in the WebSocket `/ws/state` endpoint. Updated `RemoteView.vue` to extract and render camera-specific EXIF data (ISO, aperture, exposure time, focal length, camera make/model) using `@mdi/js` icons. Synchronized `en.json` and `de.json` localization files. Updated `Frontend_Specification.md` with UI/UX design principles.
 - **[2026-05-04 18:23:00] - Completed Ticket #621 ([Task 2C.1]: Decouple Dynamic Overlays (Clock & Text) from Core Renderer)**: Implemented dynamic text generation logic in `PlaybackEngine` to extract metadata fields based on live configuration and pass them to the renderer via `RenderCommand`.
 - **[2026-05-04 18:18:00] - Completed Ticket #657 (Refactor Configuration API to use Service Layer and Pydantic Validation)**: Refactored `app.py` to use `ConfigService` for flattening/unflattening configuration data and implemented Pydantic models for strict validation of incoming configuration payloads.

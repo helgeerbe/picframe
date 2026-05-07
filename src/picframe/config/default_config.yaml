@@ -24,6 +24,7 @@ viewer:
   text_y_margin: 0
   fit: false
   video_fit_display: false
+  max_software_decode_resolution: 1280x720
   kenburns: false
   display_x: 0
   display_y: 0

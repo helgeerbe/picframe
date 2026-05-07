@@ -93,23 +93,41 @@ The API's CORS policy is managed via the `cors_allowed_origins` parameter within
 
 This section defines the foundational structures and system permissions required for developing, testing, and deploying Picframe.
 
-### Development Environment
+### Development Environment & System Setup
 
-To develop and test the core engine locally (especially the `Pi3dRenderer`), specific system packages are required depending on the host OS.
+To develop, test, and deploy Picframe, specific system packages are required depending on the host OS. The provided `docs/install_picframe.sh` script automates this process, including dynamic hardware probing for optimal video playback.
 
-#### Ubuntu / Debian (Native or WSL2)
-For headless testing or windowed SDL2 rendering:
+#### Automated Hardware Probing and Video Acceleration
+
+The installation script now includes intelligent hardware probing to ensure GStreamer utilizes the best available video decoding method:
+
+1.  **Architecture Detection:** The script detects if it's running on ARM (Raspberry Pi) or x86/x86_64.
+2.  **Virtual Machine Detection:** It checks if the environment is a Virtual Machine (using `systemd-detect-virt`).
+3.  **Dynamic Dependency Installation:**
+    *   **Raspberry Pi (ARM):** Installs `gstreamer1.0-gl` and `gstreamer1.0-v4l2` for native hardware acceleration.
+    *   **Bare-Metal Linux (x86/x86_64):** Uses `lspci` to identify the GPU vendor (Intel, AMD, or NVIDIA) and installs the corresponding VA-API drivers (e.g., `intel-media-va-driver-non-free`, `mesa-va-drivers`, `vdpau-driver-all`) alongside `gstreamer1.0-vaapi` and `vainfo`.
+    *   **Virtual Machines:** Installs generic `gstreamer1.0-vaapi` support, though hardware acceleration is often limited without GPU passthrough.
+
+#### GStreamer Fallback Mechanism
+
+Picframe's video renderer is designed to be resilient. If hardware-accelerated decoding (via VA-API, V4L2, etc.) is unavailable or fails to initialize (e.g., in a VM without GPU passthrough or if specific plugins are missing), GStreamer's `autoplug-select` mechanism will automatically fall back to software decoding.
+
+To support this fallback, the installation script always installs `gstreamer1.0-libav`, which provides robust software decoders for formats like H.265/HEVC. While software decoding consumes more CPU resources, it ensures video playback remains functional across diverse environments.
+
+#### Manual Installation (Ubuntu / Debian)
+If you prefer to install dependencies manually for headless testing or windowed SDL2 rendering:
 ```bash
 sudo apt-get update
-sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb
+sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb gstreamer1.0-libav gstreamer1.0-vaapi vainfo
 ```
-*(Note: `xvfb` is used for headless automated testing of OpenGL contexts).*
+*(Note: `xvfb` is used for headless automated testing of OpenGL contexts. `gstreamer1.0-libav` provides software decoders. `gstreamer1.0-vaapi` and `vainfo` provide hardware acceleration support via VA-API).*
 
-#### Raspberry Pi (Target Hardware)
+#### Manual Installation (Raspberry Pi)
 ```bash
 sudo apt-get update
-sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev wlr-randr ddcutil brightnessctl i2c-tools
+sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev wlr-randr ddcutil brightnessctl i2c-tools gstreamer1.0-libav gstreamer1.0-gl gstreamer1.0-v4l2
 ```
+*(Note: `gstreamer1.0-gl` and `gstreamer1.0-v4l2` provide hardware acceleration support for the Raspberry Pi).*
 
 **Note on Display Power Management:**
 `wlr-randr` is required for turning the display on and off under Wayland. It is not always installed by default on Raspberry Pi OS and must be explicitly installed.
@@ -118,6 +136,7 @@ To allow the application to control display brightness without root privileges, 
 ```bash
 sudo usermod -aG i2c $USER    # For ddcutil (external HDMI/DP monitors)
 sudo usermod -aG video $USER  # For brightnessctl (internal DSI/eDP displays)
+sudo usermod -aG render $USER # For DRM/KMS access
 ```
 
 **Note on System Power Management (Critical):**
@@ -137,7 +156,7 @@ sudo chmod 0440 /etc/sudoers.d/picframe-power
 ```
 
 **Note on Virtual Machine Development:**
-Hardware-level display tools (`ddcutil`, `brightnessctl`, `wlr-randr`) will not function correctly within an Ubuntu Virtual Machine because hypervisors do not emulate physical I2C, PWM, or DRM interfaces. For local VM development, the application must use the `MockDisplayPower` adapter.
+Hardware-level display tools (`ddcutil`, `brightnessctl`, `wlr-randr`) will not function correctly within an Ubuntu Virtual Machine because hypervisors do not emulate physical I2C, PWM, or DRM interfaces. For local VM development, the application must use the `MockDisplayPower` adapter. Furthermore, hardware-accelerated video decoding may be limited or unavailable in a VM unless GPU passthrough is configured.
 
 ### Developer Guide: Adding Configuration Keys
 

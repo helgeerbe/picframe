@@ -143,7 +143,8 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus)
     
     from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
-    video_player = GstVideoRenderer(event_publisher=event_bus)
+    max_software_decode_resolution = str(_config_repo.get_app_config("viewer.max_software_decode_resolution", "1280x720"))
+    video_player = GstVideoRenderer(event_publisher=event_bus, max_software_decode_resolution=max_software_decode_resolution)
 
     # 6. Initialize Engine
     engine = PlaybackEngine(

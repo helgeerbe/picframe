@@ -59,6 +59,11 @@ class VideoMetadata:
     rating: Optional[Any] = None
     lens: Optional[str] = None
     tags: Optional[Any] = None
+    # --- new fields for hardware acceleration discovery ---
+    codec: Optional[str] = None
+    pixel_format: Optional[str] = None
+    framerate: Optional[str] = None
+    bitrate: Optional[int] = None
 
     @property
     def is_portrait(self) -> bool:

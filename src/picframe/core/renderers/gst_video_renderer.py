@@ -1,8 +1,10 @@
 """
 GStreamer Video Renderer implementation.
 """
+from __future__ import annotations
 import logging
 from pathlib import Path
+from typing import Any, TYPE_CHECKING
 
 from picframe.core.events.dto import PlaybackCompletedEvent, SystemErrorEvent
 from picframe.core.events.interfaces import IEventPublisher
@@ -11,24 +13,43 @@ from picframe.core.renderers.interfaces import IVideoPlayer
 
 logger = logging.getLogger(__name__)
 
+if TYPE_CHECKING:
+    class Gst:
+        Element = Any
+        Bus = Any
+        Bin = Any
+        Pad = Any
+        Caps = Any
+        ElementFactory = Any
+        Message = Any
+        Pipeline = Any
+        State = Any
+        MessageType = Any
+        GhostPad = Any
+        ELEMENT_METADATA_KLASS = Any
+
 try:
-    import gi
-    gi.require_version('Gst', '1.0')
-    from gi.repository import Gst
+    import gi  # type: ignore
+    gi.require_version('Gst', '1.0')  # type: ignore
+    from gi.repository import Gst  # type: ignore
     Gst.init(None)
     GST_AVAILABLE = True
 except ImportError:
+    Gst = Any  # type: ignore
     logger.warning("GStreamer not available. Video playback will be disabled.")
     GST_AVAILABLE = False
 
+
+from picframe.core.renderers.gst_utils import ffprobe_codec_to_gst_caps, is_hardware_supported
 
 class GstVideoRenderer(IVideoPlayer):
     """
     Video player implementation using GStreamer.
     """
 
-    def __init__(self, event_publisher: IEventPublisher):
+    def __init__(self, event_publisher: IEventPublisher, max_software_decode_resolution: str = "1280x720"):
         self._publisher = event_publisher
+        self._max_software_decode_resolution = max_software_decode_resolution
         self._pipeline: Gst.Element | None = None
         self._bus: Gst.Bus | None = None
         self._current_media: MediaItem | None = None
@@ -45,59 +66,138 @@ class GstVideoRenderer(IVideoPlayer):
         self._current_media = media_item
 
         uri = Path(media_item.filepath).absolute().as_uri()
-        
-        # Attempt direct hardware playback first
-        hw_pipeline_str = f"playbin uri={uri} video-sink=\"waylandsink fullscreen=true\""
-        
-        # Fallback software conversion pipeline
-        sw_sink_str = (
-            "videoconvert ! "
-            "videoscale add-borders=false ! "
-            "videoconvert ! "
-            "video/x-raw,format=RGBA ! "
-            "coloralpha alpha=0.99 ! "
-            "waylandsink fullscreen=true"
-        )
-        sw_pipeline_str = f"playbin uri={uri} video-sink=\"{sw_sink_str}\""
 
+        # 1. Threshold-Based Rejection
+        media_caps_str = ffprobe_codec_to_gst_caps(
+            media_item.codec,
+            media_item.width,
+            media_item.height,
+            media_item.framerate
+        )
+        
+        hw_supported = is_hardware_supported(media_caps_str) if media_caps_str else False
+        
+        if not hw_supported:
+            # Check if it exceeds software limits
+            try:
+                max_w, max_h = map(int, self._max_software_decode_resolution.split('x'))
+                if media_item.width and media_item.height:
+                    if media_item.width > max_w or media_item.height > max_h:
+                        msg = f"Media resolution ({media_item.width}x{media_item.height}) exceeds hardware decoder limits and is too large for software fallback (max {self._max_software_decode_resolution}). Skipping file."
+                        logger.warning(msg)
+                        self._publisher.publish(SystemErrorEvent(message=msg, component="GstVideoRenderer"))
+                        self._publisher.publish(PlaybackCompletedEvent())
+                        return
+            except ValueError:
+                logger.error(f"Invalid max_software_decode_resolution format: {self._max_software_decode_resolution}")
+
+        # 2. Construct Pipeline using uridecodebin
         try:
-            logger.debug(f"Attempting hardware GStreamer Pipeline: {hw_pipeline_str}")
-            self._pipeline = Gst.parse_launch(hw_pipeline_str)
+            self._pipeline = Gst.Pipeline.new("video-player")
             
-            # Test if the pipeline can reach PAUSED state (negotiation succeeds)
-            ret = self._pipeline.set_state(Gst.State.PAUSED)
-            if ret == Gst.StateChangeReturn.ASYNC:
-                # Wait up to 5 seconds for state change to complete
-                # get_state returns a tuple: (Gst.StateChangeReturn, state, pending)
-                ret, state, pending = self._pipeline.get_state(5 * Gst.SECOND)
+            # Create elements
+            uridecodebin = Gst.ElementFactory.make("uridecodebin", "decoder")
+            uridecodebin.set_property("uri", uri)
+            
+            # Connect to autoplug-select for observability
+            uridecodebin.connect("autoplug-select", self._on_autoplug_select)
+            
+            # Create custom sink bin
+            sink_bin = self._create_sink_bin()
+            
+            if self._pipeline:
+                self._pipeline.add(uridecodebin)
+                self._pipeline.add(sink_bin)
                 
-            if ret == Gst.StateChangeReturn.FAILURE:
-                logger.warning(
-                    "Hardware GPU decoding unsupported or failed. "
-                    "Falling back to software format conversion. "
-                    "For optimal performance, convert videos externally."
-                )
-                self._pipeline.set_state(Gst.State.NULL)
-                logger.debug(f"Using fallback software GStreamer Pipeline: {sw_pipeline_str}")
-                self._pipeline = Gst.parse_launch(sw_pipeline_str)
-                
+                # Link dynamically when pads are added
+                uridecodebin.connect("pad-added", self._on_pad_added, sink_bin)
+            
         except Exception as e:
-            logger.error(f"Failed to parse GStreamer pipeline: {e}")
+            logger.error(f"Failed to construct GStreamer pipeline: {e}")
             self._publisher.publish(SystemErrorEvent(message=str(e), component="GstVideoRenderer"))
             self._publisher.publish(PlaybackCompletedEvent())
             return
 
-        self._pipeline.set_property("volume", self._volume)
+        if self._pipeline:
+            try:
+                self._pipeline.set_property("volume", self._volume)
+            except TypeError:
+                pass # Custom pipeline doesn't have volume property
+            self._bus = self._pipeline.get_bus()
+            
+            import threading
+            self._stop_event = threading.Event()
+            self._poll_thread = threading.Thread(target=self._poll_bus, daemon=True)
+            self._poll_thread.start()
 
-        self._bus = self._pipeline.get_bus()
+            self._pipeline.set_state(Gst.State.PLAYING)
+            logger.info(f"Started video playback: {media_item.filepath}")
+
+    def _create_sink_bin(self) -> Gst.Bin:
+        """Creates a custom bin for format conversion and alpha blending."""
+        bin = Gst.Bin.new("sink_bin")
         
-        import threading
-        self._stop_event = threading.Event()
-        self._poll_thread = threading.Thread(target=self._poll_bus, daemon=True)
-        self._poll_thread.start()
+        conv1 = Gst.ElementFactory.make("videoconvert", "conv1")
+        scale = Gst.ElementFactory.make("videoscale", "scale")
+        scale.set_property("add-borders", False)
+        conv2 = Gst.ElementFactory.make("videoconvert", "conv2")
+        
+        capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter")
+        caps = Gst.Caps.from_string("video/x-raw,format=RGBA")
+        capsfilter.set_property("caps", caps)
+        
+        alpha = Gst.ElementFactory.make("alpha", "alpha")
+        alpha.set_property("alpha", 0.99)
+        
+        sink = Gst.ElementFactory.make("waylandsink", "sink")
+        sink.set_property("fullscreen", True)
+        # Use waylandsink's built-in rotation support
+        sink.set_property("rotate-method", 8) # GST_VIDEO_ORIENTATION_AUTO
+        
+        for elem in [conv1, scale, conv2, capsfilter, alpha, sink]:
+            bin.add(elem)
+            
+        conv1.link(scale)
+        scale.link(conv2)
+        conv2.link(capsfilter)
+        capsfilter.link(alpha)
+        alpha.link(sink)
+        
+        # Add ghost pad to the bin
+        pad = conv1.get_static_pad("sink")
+        ghost_pad = Gst.GhostPad.new("sink", pad)
+        bin.add_pad(ghost_pad)
+        
+        return bin
 
-        self._pipeline.set_state(Gst.State.PLAYING)
-        logger.info(f"Started video playback: {media_item.filepath}")
+    def _on_pad_added(self, element: Gst.Element, pad: Gst.Pad, sink_bin: Gst.Bin) -> None:
+        """Dynamically links uridecodebin to the sink bin."""
+        caps = pad.get_current_caps()
+        if not caps:
+            caps = pad.query_caps()
+            
+        if caps:
+            struct = caps.get_structure(0)
+            name = struct.get_name()
+            logger.debug(f"uridecodebin added pad with caps: {name}")
+            if name.startswith("video/"):
+                sink_pad = sink_bin.get_static_pad("sink")
+                if not sink_pad.is_linked():
+                    ret = pad.link(sink_pad)
+                    logger.debug(f"Linked video pad to sink_bin: {ret}")
+                    
+                    # Force state change on the sink bin to ensure it plays
+                    sink_bin.sync_state_with_parent()
+                else:
+                    logger.debug("sink_bin is already linked")
+
+    def _on_autoplug_select(self, bin: Gst.Element, pad: Gst.Pad, caps: Gst.Caps, factory: Gst.ElementFactory) -> int:
+        """Observes element selection to detect software fallbacks."""
+        klass = factory.get_metadata(Gst.ELEMENT_METADATA_KLASS)
+        if klass and "Decoder" in klass and "Video" in klass and "Hardware" not in klass:
+            logger.warning(f"Hardware GPU decoding unavailable for this stream. Autoplugger selected software fallback: {factory.get_name()}")
+            # We could emit a PerformanceWarningEvent here if desired
+        return 0 # GST_AUTOPLUG_SELECT_TRY
 
     def _poll_bus(self) -> None:
         """Poll the GStreamer bus for messages in a background thread."""
@@ -127,7 +227,7 @@ class GstVideoRenderer(IVideoPlayer):
             
             # Force GStreamer to process the state change and destroy the window
             if self._bus:
-                while self._bus.poll(Gst.MessageType.ANY, 10000000): # 10ms
+                while self._bus.poll(Gst.MessageType.ANY, 10000000): # type: ignore # pylint: disable=no-member
                     pass
                 
             self._pipeline = None
@@ -151,7 +251,10 @@ class GstVideoRenderer(IVideoPlayer):
         """Set the audio volume level (0.0 to 1.0)."""
         self._volume = max(0.0, min(1.0, level))
         if self._pipeline:
-            self._pipeline.set_property("volume", self._volume)
+            try:
+                self._pipeline.set_property("volume", self._volume)
+            except TypeError:
+                pass
             logger.debug(f"Set video volume to {self._volume}")
 
     def _on_eos(self, bus: Gst.Bus, msg: Gst.Message) -> None:
