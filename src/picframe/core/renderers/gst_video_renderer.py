@@ -138,7 +138,7 @@ class GstVideoRenderer(IVideoPlayer):
         bin = Gst.Bin.new("sink_bin")
         
         from picframe.core.renderers.gst_utils import find_best_element
-        hw_converter = find_best_element(["v4l2convert", "glcolorconvert"])
+        hw_converter = find_best_element(["v4l2convert"])
         
         elements = []
         if hw_converter:
@@ -148,11 +148,29 @@ class GstVideoRenderer(IVideoPlayer):
             sink_pad_element = conv
         else:
             logger.debug("Using software fallback scaler and converter")
+            conv1 = Gst.ElementFactory.make("videoconvert", "conv1")
             scale = Gst.ElementFactory.make("videoscale", "scale")
             scale.set_property("add-borders", False)
-            conv = Gst.ElementFactory.make("videoconvert", "conv")
-            elements.extend([scale, conv])
-            sink_pad_element = scale
+            conv2 = Gst.ElementFactory.make("videoconvert", "conv2")
+            elements.extend([conv1, scale, conv2])
+            sink_pad_element = conv1
+            
+        # Force an alpha-enabled pixel format (RGBA).
+        # This is the critical Wayland synchronization fix:
+        # By presenting a surface with an alpha channel, the Wayland compositor disables
+        # occlusion culling for the underlying pi3d window, allowing it to pre-render
+        # the next image in the background.
+        capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter")
+        caps = Gst.Caps.from_string("video/x-raw,format=RGBA")
+        capsfilter.set_property("caps", caps)
+        elements.append(capsfilter)
+        
+        # Use the software alpha element to force 99% opacity.
+        # This ensures compatibility across both native hardware and VMs,
+        # as waylandsink's native alpha property is often unsupported or buggy in VMs.
+        alpha = Gst.ElementFactory.make("alpha", "alpha")
+        alpha.set_property("alpha", 0.99)
+        elements.append(alpha)
             
         # Prioritize waylandsink for native hardware and fullscreen support, then fallback to glimagesink for VMs
         sink_name = find_best_element(["waylandsink", "glimagesink", "ximagesink", "autovideosink"])
