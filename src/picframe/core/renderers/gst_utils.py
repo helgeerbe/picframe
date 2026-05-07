@@ -1,9 +1,9 @@
 """
-Utility functions for GStreamer integration.
+Utility functions for GStreamer integration and hardware discovery.
 """
 
 import logging
-from typing import Any
+from typing import Any, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -67,11 +67,6 @@ def ffprobe_codec_to_gst_caps(
     if height is not None:
         caps_parts.append(f"height={height}")
         
-    # Note: GStreamer expects framerate as a fraction (e.g., 30/1). 
-    # For limit intersection, width and height are usually the critical factors.
-    # We omit framerate here to avoid complex float-to-fraction conversion issues
-    # unless strictly necessary for specific hardware decoders.
-        
     return ", ".join(caps_parts)
 
 
@@ -82,7 +77,7 @@ def get_hardware_decoders_caps() -> list[Any]:
     Returns:
         A list of Gst.Caps objects representing the capabilities of available hardware decoders.
     """
-    if Gst is None:
+    if not GST_AVAILABLE:
         return []
         
     registry = Gst.Registry.get() # type: ignore # pylint: disable=no-member
@@ -114,7 +109,7 @@ def is_hardware_supported(media_caps_str: str) -> bool:
     Returns:
         True if a hardware decoder supports the caps, False otherwise.
     """
-    if Gst is None or not media_caps_str:
+    if not GST_AVAILABLE or not media_caps_str:
         return False
         
     media_caps = Gst.Caps.from_string(media_caps_str) # type: ignore # pylint: disable=no-member
@@ -129,3 +124,24 @@ def is_hardware_supported(media_caps_str: str) -> bool:
                 return True
                 
     return False
+
+def find_best_element(element_types: List[str]) -> Optional[str]:
+    """
+    Finds the best available GStreamer element from a list of preferred types.
+    Useful for finding hardware-accelerated converters/scalers.
+    
+    Args:
+        element_types: A list of GStreamer element names in order of preference.
+        
+    Returns:
+        The name of the first available element, or None if none are found.
+    """
+    if not GST_AVAILABLE:
+        return None
+        
+    registry = Gst.Registry.get() # type: ignore # pylint: disable=no-member
+    for elem_name in element_types:
+        factory = registry.lookup_feature(elem_name)
+        if factory:
+            return elem_name
+    return None

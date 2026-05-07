@@ -134,37 +134,57 @@ class GstVideoRenderer(IVideoPlayer):
             logger.info(f"Started video playback: {media_item.filepath}")
 
     def _create_sink_bin(self) -> Gst.Bin:
-        """Creates a custom bin for format conversion and alpha blending."""
+        """Creates a custom bin for format conversion and hardware-accelerated rendering."""
         bin = Gst.Bin.new("sink_bin")
         
-        conv1 = Gst.ElementFactory.make("videoconvert", "conv1")
-        scale = Gst.ElementFactory.make("videoscale", "scale")
-        scale.set_property("add-borders", False)
-        conv2 = Gst.ElementFactory.make("videoconvert", "conv2")
+        from picframe.core.renderers.gst_utils import find_best_element
+        hw_converter = find_best_element(["v4l2convert", "glcolorconvert"])
         
-        capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter")
-        caps = Gst.Caps.from_string("video/x-raw,format=RGBA")
-        capsfilter.set_property("caps", caps)
+        elements = []
+        if hw_converter:
+            logger.debug(f"Using hardware converter/scaler: {hw_converter}")
+            conv = Gst.ElementFactory.make(hw_converter, "conv")
+            elements.append(conv)
+            sink_pad_element = conv
+        else:
+            logger.debug("Using software fallback scaler and converter")
+            scale = Gst.ElementFactory.make("videoscale", "scale")
+            scale.set_property("add-borders", False)
+            conv = Gst.ElementFactory.make("videoconvert", "conv")
+            elements.extend([scale, conv])
+            sink_pad_element = scale
+            
+        # Prioritize waylandsink for native hardware and fullscreen support, then fallback to glimagesink for VMs
+        sink_name = find_best_element(["waylandsink", "glimagesink", "ximagesink", "autovideosink"])
+        if not sink_name:
+            sink_name = "autovideosink"
+            
+        sink = Gst.ElementFactory.make(sink_name, "sink")
         
-        alpha = Gst.ElementFactory.make("alpha", "alpha")
-        alpha.set_property("alpha", 0.99)
+        # Set fullscreen property if supported by the sink
+        try:
+            # glimagesink doesn't have a fullscreen property, it relies on the window manager
+            # waylandsink does have a fullscreen property
+            if hasattr(sink.props, 'fullscreen'):
+                sink.set_property("fullscreen", True)
+        except Exception as e:
+            logger.debug(f"Could not set fullscreen property on {sink_name}: {e}")
+
+        # Only set waylandsink specific properties if it's actually a waylandsink
+        if sink_name == "waylandsink":
+            sink.set_property("rotate-method", 8) # GST_VIDEO_ORIENTATION_AUTO
+            
+        elements.append(sink)
         
-        sink = Gst.ElementFactory.make("waylandsink", "sink")
-        sink.set_property("fullscreen", True)
-        # Use waylandsink's built-in rotation support
-        sink.set_property("rotate-method", 8) # GST_VIDEO_ORIENTATION_AUTO
-        
-        for elem in [conv1, scale, conv2, capsfilter, alpha, sink]:
+        for elem in elements:
             bin.add(elem)
             
-        conv1.link(scale)
-        scale.link(conv2)
-        conv2.link(capsfilter)
-        capsfilter.link(alpha)
-        alpha.link(sink)
-        
+        # Link elements sequentially
+        for i in range(len(elements) - 1):
+            elements[i].link(elements[i+1])
+            
         # Add ghost pad to the bin
-        pad = conv1.get_static_pad("sink")
+        pad = sink_pad_element.get_static_pad("sink")
         ghost_pad = Gst.GhostPad.new("sink", pad)
         bin.add_pad(ghost_pad)
         
