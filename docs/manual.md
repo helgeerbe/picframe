@@ -1,26 +1,31 @@
-# Configuration Management
+# Picframe Configuration & Setup Manual
+
+This document provides comprehensive instructions for configuring and setting up Picframe. It is divided into standard user instructions and extended developer guidelines.
+
+---
+
+## Part 1: Standard User Instructions
 
 Picframe uses a centralized configuration management system backed by SQLite and validated by Pydantic.
 
-## Initialization (`picframe init`)
+### Initialization (`picframe init`)
 
 When you run `picframe init`, the application bootstraps your environment (defaulting to `~/.picframe`).
 
-### Interactive Prompts
+#### Interactive Prompts
 If the configuration database (`config.db3`) or media cache database (`media_cache.db3`) already exists, the CLI will interactively prompt you to either keep or delete them.
 
-### Force Flag
+#### Force Flag
 For automated environments (like Docker or CI/CD), you can bypass these prompts using the `--force` (or `-f`) flag:
 ```bash
 picframe init --force
 ```
 This will automatically overwrite any existing databases.
 
-### Database Seeding
+#### Database Seeding
 If the configuration database is newly created or cleared, it is automatically seeded with default values. These defaults are read from `src/picframe/config/default_config.yaml`, validated against the Pydantic models, and stored in the SQLite database.
 
-
-## CLI Parameters
+### CLI Parameters
 
 The `picframe run` command accepts several parameters to override default paths and ports. These parameters take precedence over any configuration database settings.
 
@@ -32,12 +37,11 @@ The `picframe run` command accepts several parameters to override default paths 
 
 *Note: The webserver port and HTML directory path are strictly managed via CLI arguments and environment variables. They are not editable via the frontend UI to prevent connection loss and synchronization issues.*
 
-
-## Geocoding Configuration (`key_list`)
+### Geocoding Configuration (`key_list`)
 
 The `model.key_list` configuration parameter dictates how raw address data from the Nominatim reverse geocoding service is formatted into a human-readable location string.
 
-### Structure Requirement: List of Lists
+#### Structure Requirement: List of Lists
 This parameter **must** be structured strictly as a list of lists (e.g., `[["tourism", "amenity"], ["city", "town", "village"], ["country"]]`).
 
 Each inner list represents a single "slot" or component in the final comma-separated location string. The items within an inner list define **prioritized fallback options** for that slot.
@@ -61,7 +65,7 @@ Each inner list represents a single "slot" or component in the final comma-separ
 
 This nested structure prevents redundant output (like "Berlin, Berlin" if Nominatim returns both a `city` and a `county` key for the same location) by acting as an `OR` condition within the group and an `AND` condition between groups.
 
-### Available Nominatim Keys
+#### Available Nominatim Keys
 You can customize the `key_list` using any of the standard address keys returned by Nominatim. Common keys include:
 
 *   **Points of Interest:** `tourism`, `amenity`, `historic`, `leisure`, `shop`, `office`, `building`
@@ -72,9 +76,9 @@ You can customize the `key_list` using any of the standard address keys returned
 *   **National:** `country`, `country_code`
 *   **Postal:** `postcode`
 
-## Network & Security Configuration
+### Network & Security Configuration
 
-### CORS (Cross-Origin Resource Sharing)
+#### CORS (Cross-Origin Resource Sharing)
 The API's CORS policy is managed via the `cors_allowed_origins` parameter within the `http` section of the configuration. This setting dictates which external domains are permitted to make requests to the Picframe API from a web browser.
 
 *   **Type:** List of strings
@@ -83,7 +87,59 @@ The API's CORS policy is managed via the `cors_allowed_origins` parameter within
 
 **Security Note:** The default `["*"]` is permissive to ensure out-of-the-box compatibility on local networks. If you expose your Picframe API to the internet or want to strictly lock down access, you should update this setting via the Web UI or SQLite database to explicitly list your allowed domains (e.g., `["http://localhost:5173", "https://my-picframe.example.com"]`).
 
-## Developer Guide: Adding Configuration Keys
+---
+
+## Part 2: Extended Developer Guidelines & System Setup
+
+This section defines the foundational structures and system permissions required for developing, testing, and deploying Picframe.
+
+### Development Environment
+
+To develop and test the core engine locally (especially the `Pi3dRenderer`), specific system packages are required depending on the host OS.
+
+#### Ubuntu / Debian (Native or WSL2)
+For headless testing or windowed SDL2 rendering:
+```bash
+sudo apt-get update
+sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb
+```
+*(Note: `xvfb` is used for headless automated testing of OpenGL contexts).*
+
+#### Raspberry Pi (Target Hardware)
+```bash
+sudo apt-get update
+sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev wlr-randr ddcutil brightnessctl i2c-tools
+```
+
+**Note on Display Power Management:**
+`wlr-randr` is required for turning the display on and off under Wayland. It is not always installed by default on Raspberry Pi OS and must be explicitly installed.
+
+To allow the application to control display brightness without root privileges, ensure the user running the application is added to the appropriate groups:
+```bash
+sudo usermod -aG i2c $USER    # For ddcutil (external HDMI/DP monitors)
+sudo usermod -aG video $USER  # For brightnessctl (internal DSI/eDP displays)
+```
+
+**Note on System Power Management (Critical):**
+To allow the application to reboot or shut down the host system without prompting for a password, you must configure `sudo` or `polkit` for the user running the application. The `LinuxSystemManager` relies on these permissions to function correctly without interactive prompts.
+
+For `sudo` (visudo):
+```bash
+# Add the following line to /etc/sudoers (using visudo)
+# Replace 'pi' with the actual username running the application
+pi ALL=(ALL) NOPASSWD: /sbin/reboot, /sbin/shutdown
+```
+
+Alternatively, you can dynamically create a drop-in file in `/etc/sudoers.d/` for the current user:
+```bash
+echo "$USER ALL=(ALL) NOPASSWD: /sbin/reboot, /sbin/shutdown" | sudo tee /etc/sudoers.d/picframe-power
+sudo chmod 0440 /etc/sudoers.d/picframe-power
+```
+
+**Note on Virtual Machine Development:**
+Hardware-level display tools (`ddcutil`, `brightnessctl`, `wlr-randr`) will not function correctly within an Ubuntu Virtual Machine because hypervisors do not emulate physical I2C, PWM, or DRM interfaces. For local VM development, the application must use the `MockDisplayPower` adapter.
+
+### Developer Guide: Adding Configuration Keys
 
 To add a new configuration key, you must update three locations to ensure the frontend, backend validation, and database seeding remain synchronized:
 
@@ -96,7 +152,7 @@ To add a new configuration key, you must update three locations to ensure the fr
 3.  **Backend Validation (`src/picframe/api/models.py`)**:
     Add the new key to the corresponding Pydantic model (e.g., `ViewerConfig`, `ModelConfig`). Ensure you provide a default value (e.g., `my_new_key: int = 10`) so that validation passes even if the key is missing from an older database.
 
-## Database Migrations
+### Database Migrations
 
 Picframe uses a code-based migration system to handle schema changes for both `config.db3` and `media_cache.db3`.
 
