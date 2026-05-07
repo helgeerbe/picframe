@@ -10,6 +10,7 @@ import os
 import shutil
 import sys
 from dataclasses import dataclass
+from typing import Any
 
 from picframe.core.ports import IDisplayPower, IHardwareInput, ISystemManager
 from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
@@ -61,13 +62,17 @@ class HALFactory:
         return shutil.which("wlr-randr") is not None
 
     @staticmethod
-    def create_adapters(display_output: str = "HDMI-A-1") -> HALAdapters:
+    def create_adapters(
+        display_output: str = "HDMI-A-1",
+        hardware_input_config: dict[str, dict[str, Any]] | None = None
+    ) -> HALAdapters:
         """
         Detect the host OS and instantiate the appropriate HAL adapters.
 
         Args:
             display_output: The name of the display output (e.g., 'HDMI-A-1')
                             to be used by the display power adapter.
+            hardware_input_config: Configuration dictionary for hardware inputs.
 
         Returns:
             HALAdapters: A container holding the concrete implementations
@@ -88,8 +93,12 @@ class HALFactory:
 
         # Linux environment detection
         is_rpi = HALFactory._is_raspberry_pi()
-        is_wayland = HALFactory._is_wayland()
-        is_x11 = HALFactory._is_x11()
+        
+        # Refined Display Server Detection
+        xdg_session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+        is_wayland = xdg_session_type == "wayland" or HALFactory._is_wayland()
+        is_x11 = xdg_session_type == "x11" or HALFactory._is_x11()
+        
         has_wlr_randr = HALFactory._has_wlr_randr()
 
         logger.info(
@@ -120,12 +129,15 @@ class HALFactory:
 
         # Determine Hardware Input Adapter
         hardware_input: IHardwareInput
-        if is_rpi:
-            logger.info(
-                "HALFactory: Raspberry Pi detected. "
-                "Injecting MockHardwareInput (RpiGpioAdapter pending)."
+        if is_rpi and hardware_input_config is not None:
+            logger.info("HALFactory: Raspberry Pi detected. Injecting RPiGPIOAdapter.")
+            from picframe.infrastructure.os.rpi_gpio_adapter import RPiGPIOAdapter
+            hardware_input = RPiGPIOAdapter(config=hardware_input_config)
+        elif is_rpi:
+            logger.warning(
+                "HALFactory: Raspberry Pi detected, but no hardware_input_config provided. "
+                "Injecting MockHardwareInput."
             )
-            # TODO: Inject RpiGpioAdapter when implemented
             hardware_input = MockHardwareInput()
         else:
             logger.info("HALFactory: Generic Linux detected. Injecting MockHardwareInput.")

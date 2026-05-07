@@ -50,25 +50,30 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     # 2. Initialize Event Bus
     event_bus = PriorityQueueEventBus()
 
-    # 3. Initialize Hardware Abstraction Layer (HAL)
-    # TODO: Load display_hdmi from config_repo (Issue #630)
-    display_output = "HDMI-A-1"
-    hal_adapters = HALFactory.create_adapters(display_output=display_output)
+    # 3. Initialize Config Service (Needed for HAL)
+    config_service = ConfigService(_config_repo, event_bus, event_bus)
+    nested_config = config_service.get_nested_config()
+
+    # 4. Initialize Hardware Abstraction Layer (HAL)
+    display_output = str(_config_repo.get_app_config("viewer.display_hdmi", "HDMI-A-1"))
+    hardware_input_config = nested_config.get("hardware_inputs", {})
+    hal_adapters = HALFactory.create_adapters(
+        display_output=display_output,
+        hardware_input_config=hardware_input_config
+    )
     logger.info(f"HAL Adapters injected: {hal_adapters}")
 
-    # 4. Initialize Services
+    # 5. Initialize Services
     playlist_manager = PlaylistManager(media_repo)
     from picframe.core.services.display_power import DisplayPowerManager
     display_power_manager = DisplayPowerManager(event_bus, hal_adapters.display_power)
     from picframe.core.services.system_manager import SystemManager
     system_manager = SystemManager(event_bus, hal_adapters.system_manager)
-    config_service = ConfigService(_config_repo, event_bus, event_bus)
     
     # Initialize ImageProcessingService
     image_processing_service = ImageProcessingService(cache_dir=os.path.join(data_dir, "cache"))
     
     # Initialize MediaMonitorService
-    nested_config = config_service.get_nested_config()
     model_config = nested_config.get("model", {})
     
     pic_dir = model_config.get("pic_dir", os.path.join(data_dir, "media"))

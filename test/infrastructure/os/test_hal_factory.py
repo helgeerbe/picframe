@@ -38,17 +38,37 @@ def test_hal_factory_win32() -> None:
 @patch("picframe.infrastructure.os.hal_factory.HALFactory._is_wayland", return_value=True)
 @patch("picframe.infrastructure.os.hal_factory.HALFactory._is_x11", return_value=False)
 @patch("picframe.infrastructure.os.hal_factory.HALFactory._has_wlr_randr", return_value=True)
-def test_hal_factory_rpi_wayland(
+def test_hal_factory_rpi_wayland_with_config(
     mock_wlr: Any, mock_x11: Any, mock_wayland: Any, mock_rpi: Any
 ) -> None:
-    """Test that the HAL factory injects correct adapters for Raspberry Pi on Wayland."""
+    """Test that the HAL factory injects correct adapters for Raspberry Pi on Wayland with config."""
+    from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
+    from picframe.infrastructure.os.rpi_gpio_adapter import RPiGPIOAdapter
+    from picframe.infrastructure.os.wayland_power import WaylandDisplayPower
+    with patch.object(sys, "platform", "linux"):
+        config = {"btn1": {"type": "button", "pin": 17}}
+        adapters = HALFactory.create_adapters(hardware_input_config=config)
+
+        assert isinstance(adapters.display_power, WaylandDisplayPower)
+        assert isinstance(adapters.hardware_input, RPiGPIOAdapter)
+        assert isinstance(adapters.system_manager, LinuxSystemManager)
+
+
+@patch("picframe.infrastructure.os.hal_factory.HALFactory._is_raspberry_pi", return_value=True)
+@patch("picframe.infrastructure.os.hal_factory.HALFactory._is_wayland", return_value=True)
+@patch("picframe.infrastructure.os.hal_factory.HALFactory._is_x11", return_value=False)
+@patch("picframe.infrastructure.os.hal_factory.HALFactory._has_wlr_randr", return_value=True)
+def test_hal_factory_rpi_wayland_no_config(
+    mock_wlr: Any, mock_x11: Any, mock_wayland: Any, mock_rpi: Any
+) -> None:
+    """Test that the HAL factory falls back to MockHardwareInput if config is missing on RPi."""
     from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
     from picframe.infrastructure.os.wayland_power import WaylandDisplayPower
     with patch.object(sys, "platform", "linux"):
         adapters = HALFactory.create_adapters()
 
         assert isinstance(adapters.display_power, WaylandDisplayPower)
-        assert isinstance(adapters.hardware_input, MockHardwareInput) # Pending RpiGpioAdapter
+        assert isinstance(adapters.hardware_input, MockHardwareInput)
         assert isinstance(adapters.system_manager, LinuxSystemManager)
 
 
