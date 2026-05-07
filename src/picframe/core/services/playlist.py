@@ -106,7 +106,7 @@ class PlaylistManager:
                 media_id = item_data.get("id")
                 if media_id:
                     latest_data = self._media_repo.get_media_item(media_id)
-                    if latest_data:
+                    if latest_data and isinstance(latest_data, dict):
                         item_data = latest_data
                         
                 self._history.append(item_data)
@@ -190,7 +190,7 @@ class PlaylistManager:
                 media_id = item_data.get("id")
                 if media_id:
                     latest_data = self._media_repo.get_media_item(media_id)
-                    if latest_data:
+                    if latest_data and isinstance(latest_data, dict):
                         item_data = latest_data
                         
                 return self._dict_to_media_item(item_data)
