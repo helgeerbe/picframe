@@ -31,28 +31,28 @@ Elements define Pad Templates that describe exactly what formats they can accept
 To achieve a zero-configuration, highly observable pipeline, we must combine proactive capability discovery with reactive pipeline introspection.
 
 ### Phase 1: Startup Capability Discovery (The Registry)
-During application initialization (e.g., in `Bootstrapper` or `GstVideoRenderer.__init__`), the system queries the `Gst.Registry`.
+During application initialization, the `GstVideoRenderer` spawns the `gst_worker.py` subprocess. The subprocess queries the `Gst.Registry`.
 1.  Iterate through all features in the registry.
 2.  Filter for elements where the `klass` metadata contains `Codec/Decoder/Video` AND `Hardware`.
 3.  Extract the `Gst.Caps` from the sink pad templates of these hardware elements.
-4.  Store this as a "Hardware Capability Matrix" in memory.
+4.  Store this as a "Hardware Capability Matrix" in the subprocess memory.
 
-### Phase 2: Pre-Playback Evaluation
-When `play(media_item)` is called:
-1.  Retrieve the media's codec and pixel format (either via `ffprobe` metadata from `VideoMetadataStrategy` or `GstPbutils.Discoverer`).
-2.  Convert this metadata into a `Gst.Caps` object (e.g., `video/x-h264, profile=high`).
-3.  Intersect the media caps with the Hardware Capability Matrix.
-4.  **Decision:** If the intersection is empty, we *know proactively* that hardware acceleration is impossible. We can immediately log the warning and emit a `SystemErrorEvent` or telemetry metric before playback even starts.
+### Phase 2: Pre-Playback Evaluation (IPC `check_caps`)
+When `play(media_item)` is called in the main process:
+1.  The main process sends a `check_caps` IPC command to the subprocess with the media URI.
+2.  The subprocess retrieves the media's codec and pixel format.
+3.  The subprocess converts this metadata into a `Gst.Caps` object and intersects it with the Hardware Capability Matrix.
+4.  **Decision:** The subprocess sends a `caps_result` IPC event back to the main process. If unsupported, the main process can immediately log the warning and emit a `SystemErrorEvent` before playback starts.
 
 ### Phase 3: Pipeline Introspection and Observability (`autoplug-select`)
-Instead of using the opaque `playbin` or manually constructing rigid pipelines, we use `uridecodebin` (or `playbin3` with deep signal hooks). `uridecodebin` dynamically constructs the decoding pipeline but emits signals during the process.
+The subprocess uses `uridecodebin` (or `playbin3` with deep signal hooks) to dynamically construct the decoding pipeline.
 
-1.  Connect to the `autoplug-select` signal of `uridecodebin`.
-2.  This signal is fired every time the autoplugger considers an element for the pipeline. It passes the `Gst.ElementFactory` being considered.
-3.  **Observability Hook:** Inside the callback, inspect the factory's `klass`. 
-    *   If the autoplugger selects a software decoder (lacking the `Hardware` class) for a heavy codec (like H.264/HEVC), we intercept this decision.
-    *   We can log: *"Hardware GPU decoding unavailable for this stream. Autoplugger selected software fallback: {factory.get_name()}"*.
-4.  This guarantees that even if our proactive caps intersection (Phase 2) missed an edge case, the actual pipeline construction is fully observable, and the warning is reliably triggered.
+1.  The subprocess connects to the `autoplug-select` signal of `uridecodebin`.
+2.  This signal is fired every time the autoplugger considers an element for the pipeline.
+3.  **Observability Hook:** Inside the callback, the subprocess inspects the factory's `klass`.
+    *   If the autoplugger selects a software decoder (lacking the `Hardware` class) for a heavy codec, it intercepts this decision.
+    *   The subprocess sends a `warning` IPC event (type: `software_fallback`) to the main process.
+4.  The main process receives this IPC event and translates it into a `PerformanceWarningEvent` on the main Event Bus.
 
 ## 5. Ensuring Reliable Software Fallback
 

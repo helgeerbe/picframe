@@ -8,6 +8,7 @@ This file tracks the project's progress using a task list format.
 * [2026-04-28 09:26:00] - Marked Phase 0 as complete.
 
 ## Completed Tasks
+- [x] Ticket #608: [Task]: GstVideoRenderer Implementation
 - [x] Ticket #661: Fix UI Media Playback: Resolve Stuck Placeholder Image and Missing EXIF Metadata
 - [x] Ticket #621: [Task 2C.1]: Decouple Dynamic Overlays (Clock & Text) from Core Renderer
 - [x] Ticket #657: Refactor Configuration API to use Service Layer and Pydantic Validation

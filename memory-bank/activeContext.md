@@ -8,9 +8,10 @@
 
 ## Current Focus
 
-*   **Video Playback Optimization & Hardware Acceleration Discovery:** Addressing Issue #663. Implementing a proactive, metadata-driven pipeline construction using `ffprobe` and GStreamer Registry introspection (`uridecodebin` and `autoplug-select`) to dynamically discover hardware capabilities, ensure observable software fallbacks, and gracefully reject media exceeding hardware limits.
+*   **GStreamer Subprocess IPC & Event Routing:** Addressing Issue #609. Transitioning the GStreamer video renderer from an in-process model to an out-of-process subprocess model. Implementing a robust IPC protocol (Unix Domain Sockets) to handle commands (play, pause, stop) and route GStreamer bus messages (EOS, ERROR, warnings) back to the main application's Event Bus.
 
 ## Recent Changes
+- **[2026-05-07 21:15:00] - Architectural Assessment for Issue #609**: Completed the technical assessment and gap analysis for moving GStreamer to a subprocess. Updated `Architecture_Solution_Document.md` and `architecture_gst_hw_discovery.md` to reflect the new IPC-driven architecture and hardware discovery isolation.
 - **[2026-05-07 16:00:00] - Completed Ticket #663 (GStreamer Hardware Decoding & VM Fallback)**: Fixed video orientation using `waylandsink`'s `rotate-method`. Implemented dynamic hardware probing in `install_picframe.sh` for GStreamer dependencies. Validated software fallback on VMs lacking hardware decoding. Designed a "Zero-Touch Python Orchestrator" to replace the bash script and created a GitHub issue to track it. Updated architecture documentation.
 - **[2026-05-07 12:30:00] - Completed Ticket #607 (Video Metadata UI Integration & Refactoring)**: Updated `RemoteView.vue` to display video metadata (duration, codec, pixel format, framerate, bitrate). Fixed WebSocket payload filtering in `app.py` to include these fields. Refactored UI by extracting text overlay controls into a new `FiltersView.vue` component. Updated Vue Router, main navigation (`App.vue`), and synchronized `en.json` and `de.json` localization files.
 - **[2026-05-07 11:14:00] - Completed Ticket #613 (DisplayPowerManager Implementation)**: Updated `wayland_power.py`, `hal_factory.py`, and `main.py` to inject an `IEventPublisher` and broadcast `SystemErrorEvent`s on subprocess failures.

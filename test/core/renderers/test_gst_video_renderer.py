@@ -1,10 +1,20 @@
 from unittest.mock import MagicMock, patch
+import json
 
 import pytest
 
 from picframe.core.events.dto import PlaybackCompletedEvent, SystemErrorEvent
 from picframe.core.models.media import MediaItem, MediaType
 from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
+from picframe.core.renderers.ipc_protocol import (
+    EosEvent,
+    ErrorEvent,
+    PauseCommand,
+    PlayCommand,
+    SetVolumeCommand,
+    StopCommand,
+    WarningEvent,
+)
 
 
 @pytest.fixture
@@ -33,108 +43,120 @@ def media_item() -> MediaItem:
         codec="h264"
     )
 
-@patch("picframe.core.renderers.gst_video_renderer.is_hardware_supported", return_value=True)
-@patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
-@patch("picframe.core.renderers.gst_video_renderer.Gst")
-def test_play_video(mock_gst: MagicMock, mock_hw_supported: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
-    mock_pipeline = MagicMock()
-    mock_gst.Pipeline.new.return_value = mock_pipeline
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_play_video(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
+    mock_conn = MagicMock()
+    mock_client.return_value = mock_conn
     
     renderer = GstVideoRenderer(mock_publisher)
-    renderer._create_sink_bin = MagicMock()
     renderer.play(media_item)
     
-    mock_gst.Pipeline.new.assert_called_once_with("video-player")
-    mock_pipeline.set_state.assert_called_with(mock_gst.State.PLAYING)
     assert renderer._current_media == media_item
+    assert mock_conn.send.call_count == 2
+    
+    # Verify the sent commands
+    stop_json = mock_conn.send.call_args_list[0][0][0]
+    stop_dict = json.loads(stop_json)
+    assert stop_dict["type"] == "stop"
 
-@patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", False)
-def test_play_video_gst_unavailable(mock_publisher: MagicMock, media_item: MediaItem) -> None:
+    play_json = mock_conn.send.call_args_list[1][0][0]
+    play_dict = json.loads(play_json)
+    assert play_dict["type"] == "play"
+    assert "file:///path/to/video.mp4" in play_dict["uri"]
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_stop_video(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
+    mock_conn = MagicMock()
+    mock_client.return_value = mock_conn
+    
     renderer = GstVideoRenderer(mock_publisher)
     renderer.play(media_item)
+    mock_conn.send.reset_mock()
     
-    mock_publisher.publish.assert_called_once()
-    assert isinstance(mock_publisher.publish.call_args[0][0], PlaybackCompletedEvent)
-
-@patch("picframe.core.renderers.gst_video_renderer.is_hardware_supported", return_value=True)
-@patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
-@patch("picframe.core.renderers.gst_video_renderer.Gst")
-def test_stop_video(mock_gst: MagicMock, mock_hw_supported: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
-    mock_pipeline = MagicMock()
-    mock_bus = MagicMock()
-    mock_bus.poll.return_value = False
-    mock_pipeline.get_bus.return_value = mock_bus
-    mock_gst.Pipeline.new.return_value = mock_pipeline
-    
-    renderer = GstVideoRenderer(mock_publisher)
-    renderer._create_sink_bin = MagicMock()
-    renderer.play(media_item)
     renderer.stop()
     
-    mock_pipeline.set_state.assert_called_with(mock_gst.State.NULL)
-    assert renderer._pipeline is None
+    mock_conn.send.assert_called_once()
+    sent_json = mock_conn.send.call_args[0][0]
+    sent_dict = json.loads(sent_json)
+    assert sent_dict["type"] == "stop"
     assert renderer._current_media is None
 
-@patch("picframe.core.renderers.gst_video_renderer.is_hardware_supported", return_value=True)
-@patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
-@patch("picframe.core.renderers.gst_video_renderer.Gst")
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
 def test_pause_resume_video(
-    mock_gst: MagicMock, mock_hw_supported: MagicMock, mock_publisher: MagicMock, media_item: MediaItem
+    mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock, media_item: MediaItem
 ) -> None:
-    mock_pipeline = MagicMock()
-    mock_gst.Pipeline.new.return_value = mock_pipeline
+    mock_conn = MagicMock()
+    mock_client.return_value = mock_conn
     
     renderer = GstVideoRenderer(mock_publisher)
-    renderer._create_sink_bin = MagicMock()
     renderer.play(media_item)
+    mock_conn.send.reset_mock()
     
     renderer.pause()
-    mock_pipeline.set_state.assert_called_with(mock_gst.State.PAUSED)
+    mock_conn.send.assert_called_once()
+    sent_json = mock_conn.send.call_args[0][0]
+    assert json.loads(sent_json)["type"] == "pause"
     
+    mock_conn.send.reset_mock()
     renderer.resume()
-    mock_pipeline.set_state.assert_called_with(mock_gst.State.PLAYING)
+    mock_conn.send.assert_called_once()
+    sent_json = mock_conn.send.call_args[0][0]
+    assert json.loads(sent_json)["type"] == "play"
 
-@patch("picframe.core.renderers.gst_video_renderer.is_hardware_supported", return_value=True)
-@patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
-@patch("picframe.core.renderers.gst_video_renderer.Gst")
-def test_set_volume(mock_gst: MagicMock, mock_hw_supported: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
-    mock_pipeline = MagicMock()
-    mock_gst.Pipeline.new.return_value = mock_pipeline
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_set_volume(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
+    mock_conn = MagicMock()
+    mock_client.return_value = mock_conn
     
     renderer = GstVideoRenderer(mock_publisher)
-    renderer._create_sink_bin = MagicMock()
-    renderer.play(media_item)
     
     renderer.set_volume(0.5)
-    mock_pipeline.set_property.assert_called_with("volume", 0.5)
+    mock_conn.send.assert_called_once()
+    sent_json = mock_conn.send.call_args[0][0]
+    sent_dict = json.loads(sent_json)
+    assert sent_dict["type"] == "set_volume"
+    assert sent_dict["level"] == 0.5
     
-    # Test bounds
+    mock_conn.send.reset_mock()
     renderer.set_volume(1.5)
-    mock_pipeline.set_property.assert_called_with("volume", 1.0)
+    sent_json = mock_conn.send.call_args[0][0]
+    assert json.loads(sent_json)["level"] == 1.0
     
+    mock_conn.send.reset_mock()
     renderer.set_volume(-0.5)
-    mock_pipeline.set_property.assert_called_with("volume", 0.0)
+    sent_json = mock_conn.send.call_args[0][0]
+    assert json.loads(sent_json)["level"] == 0.0
 
-@patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
-@patch("picframe.core.renderers.gst_video_renderer.Gst")
-def test_on_eos(mock_gst: MagicMock, mock_publisher: MagicMock) -> None:
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_handle_eos_event(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock) -> None:
     renderer = GstVideoRenderer(mock_publisher)
-    renderer._on_eos(MagicMock(), MagicMock())
+    
+    event = EosEvent()
+    renderer._handle_event(event)
     
     mock_publisher.publish.assert_called_once()
     assert isinstance(mock_publisher.publish.call_args[0][0], PlaybackCompletedEvent)
 
-@patch("picframe.core.renderers.gst_video_renderer.GST_AVAILABLE", True)
-@patch("picframe.core.renderers.gst_video_renderer.Gst")
-def test_on_error(mock_gst: MagicMock, mock_publisher: MagicMock) -> None:
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_handle_error_event(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock) -> None:
     renderer = GstVideoRenderer(mock_publisher)
-    mock_msg = MagicMock()
-    mock_err = MagicMock()
-    mock_err.message = "Test Error"
-    mock_msg.parse_error.return_value = (mock_err, "Debug Info")
     
-    renderer._on_error(MagicMock(), mock_msg)
+    event = ErrorEvent(details="Test Error")
+    renderer._handle_event(event)
     
     assert mock_publisher.publish.call_count == 2
     assert isinstance(mock_publisher.publish.call_args_list[0][0][0], SystemErrorEvent)
+    assert mock_publisher.publish.call_args_list[0][0][0].message == "Test Error"
     assert isinstance(mock_publisher.publish.call_args_list[1][0][0], PlaybackCompletedEvent)

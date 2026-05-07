@@ -12,6 +12,7 @@ It is optional, but recommended to be updated as the project evolves.
 
 ## Architectural Patterns
 
+* [2026-05-07 21:15:00] - **Out-of-Process Rendering (IPC):** Isolating unstable native libraries (like GStreamer) into dedicated subprocesses communicating via strict JSON-over-socket IPC protocols to protect the main application's stability and prevent memory leaks from affecting the core orchestrator.
 * [2026-04-23 08:41:27] - **Clean Architecture (Hexagonal Architecture):** The system is structured into concentric layers (Core Domain, Application Layer, Infrastructure/Adapters). Dependencies point inwards, decoupling the UI (Vue/REST) and Database (SQLite) from the core media playback logic.
 * [2026-04-23 08:41:27] - **Strict Event-Driven Architecture (EDA):** A central, asynchronous Event Bus mediates all communication. The Control Plane (FastAPI/MQTT) publishes typed `CommandEvents`. The Media Orchestrator subscribes to these and publishes `RenderCommands` to the Presentation Layer.
 * [2026-04-23 08:41:27] - **State Machine Pattern:** A dedicated `PlaybackEngine` encapsulates all business logic, timing, and playback state progression. It enforces the rules for transitioning between states (e.g., `SHOWING_IMAGE`, `TRANSITIONING`, `PLAYING_VIDEO`).
