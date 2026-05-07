@@ -4,8 +4,9 @@ Tests for the WaylandDisplayPower adapter.
 
 import subprocess
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
+from picframe.core.events.dto import SystemErrorEvent
 from picframe.infrastructure.os.wayland_power import WaylandDisplayPower
 
 
@@ -76,25 +77,41 @@ def test_wayland_power_toggle(mock_run: Any) -> None:
 
 @patch("subprocess.run")
 def test_wayland_power_handles_subprocess_error(mock_run: Any) -> None:
-    """Test that the adapter handles wlr-randr execution errors gracefully."""
+    """Test that the adapter handles wlr-randr execution errors gracefully and publishes an event."""
     mock_run.side_effect = subprocess.CalledProcessError(
         returncode=1, cmd="wlr-randr", stderr=b"Error"
     )
-    adapter = WaylandDisplayPower()
+    mock_publisher = MagicMock()
+    adapter = WaylandDisplayPower(publisher=mock_publisher)
 
     # Should not raise an exception
     adapter.turn_off()
     # State should remain unchanged if the command failed
     assert adapter.is_on() is True
+    
+    # Verify event was published
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, SystemErrorEvent)
+    assert event.component == "WaylandDisplayPower"
+    assert "Failed to turn display OFF" in event.message
 
 
 @patch("subprocess.run")
 def test_wayland_power_handles_file_not_found(mock_run: Any) -> None:
-    """Test that the adapter handles missing wlr-randr gracefully."""
+    """Test that the adapter handles missing wlr-randr gracefully and publishes an event."""
     mock_run.side_effect = FileNotFoundError()
-    adapter = WaylandDisplayPower()
+    mock_publisher = MagicMock()
+    adapter = WaylandDisplayPower(publisher=mock_publisher)
 
     # Should not raise an exception
     adapter.turn_off()
     # State should remain unchanged if the command failed
     assert adapter.is_on() is True
+    
+    # Verify event was published
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, SystemErrorEvent)
+    assert event.component == "WaylandDisplayPower"
+    assert "wlr-randr not found" in event.message

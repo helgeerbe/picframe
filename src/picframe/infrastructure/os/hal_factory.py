@@ -10,7 +10,8 @@ import os
 import shutil
 import sys
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Optional
+from picframe.core.events.interfaces import IEventPublisher
 
 from picframe.core.ports import IDisplayPower, IHardwareInput, ISystemManager
 from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
@@ -64,7 +65,8 @@ class HALFactory:
     @staticmethod
     def create_adapters(
         display_output: str = "HDMI-A-1",
-        hardware_input_config: dict[str, dict[str, Any]] | None = None
+        hardware_input_config: dict[str, dict[str, Any]] | None = None,
+        publisher: Optional[IEventPublisher] = None
     ) -> HALAdapters:
         """
         Detect the host OS and instantiate the appropriate HAL adapters.
@@ -73,6 +75,7 @@ class HALFactory:
             display_output: The name of the display output (e.g., 'HDMI-A-1')
                             to be used by the display power adapter.
             hardware_input_config: Configuration dictionary for hardware inputs.
+            publisher: Optional event publisher for broadcasting system errors.
 
         Returns:
             HALAdapters: A container holding the concrete implementations
@@ -95,7 +98,7 @@ class HALFactory:
         is_rpi = HALFactory._is_raspberry_pi()
         
         # Refined Display Server Detection
-        xdg_session_type = os.environ.get("XDG_SESSION_TYPE", "").lower()
+        xdg_session_type = str(os.environ.get("XDG_SESSION_TYPE", "")).lower()
         is_wayland = xdg_session_type == "wayland" or HALFactory._is_wayland()
         is_x11 = xdg_session_type == "x11" or HALFactory._is_x11()
         
@@ -122,7 +125,7 @@ class HALFactory:
             logger.info(
                 "HALFactory: Wayland and wlr-randr detected. Injecting WaylandDisplayPower."
             )
-            display_power = WaylandDisplayPower(display_output=display_output)
+            display_power = WaylandDisplayPower(display_output=display_output, publisher=publisher)
         else:
             logger.info("HALFactory: Wayland or wlr-randr missing. Injecting MockDisplayPower.")
             display_power = MockDisplayPower()

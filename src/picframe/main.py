@@ -59,7 +59,8 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     hardware_input_config = nested_config.get("hardware_inputs", {})
     hal_adapters = HALFactory.create_adapters(
         display_output=display_output,
-        hardware_input_config=hardware_input_config
+        hardware_input_config=hardware_input_config,
+        publisher=event_bus
     )
     logger.info(f"HAL Adapters injected: {hal_adapters}")
 
@@ -251,4 +252,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

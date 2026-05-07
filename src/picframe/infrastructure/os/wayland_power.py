@@ -8,7 +8,10 @@ display power states.
 
 import logging
 import subprocess
+from typing import Optional
 
+from picframe.core.events.dto import SystemErrorEvent
+from picframe.core.events.interfaces import IEventPublisher
 from picframe.core.ports import IDisplayPower
 
 logger = logging.getLogger(__name__)
@@ -20,17 +23,19 @@ class WaylandDisplayPower(IDisplayPower):
     Uses ddcutil for external monitor brightness and brightnessctl for internal displays.
     """
 
-    def __init__(self, display_output: str = "HDMI-A-1", is_external: bool = True) -> None:
+    def __init__(self, display_output: str = "HDMI-A-1", is_external: bool = True, publisher: Optional[IEventPublisher] = None) -> None:
         """
         Initialize the Wayland display power adapter.
 
         Args:
             display_output: The name of the Wayland output to control (e.g., 'HDMI-A-1').
             is_external: Whether the display is external (uses ddcutil) or internal (uses brightnessctl).
+            publisher: Optional event publisher for broadcasting system errors.
         """
         self._is_on = True
         self._display_output = display_output
         self.is_external = is_external
+        self._publisher = publisher
         logger.info(f"WaylandDisplayPower initialized for output: {self._display_output}, external: {self.is_external}")
 
     def turn_on(self) -> None:
@@ -44,9 +49,15 @@ class WaylandDisplayPower(IDisplayPower):
             self._is_on = True
             logger.info(f"WaylandDisplayPower: Display {self._display_output} turned ON.")
         except subprocess.CalledProcessError as e:
-            logger.error(f"WaylandDisplayPower: Failed to turn display ON: {e.stderr.decode()}")
+            error_msg = f"Failed to turn display ON: {e.stderr.decode()}"
+            logger.error(f"WaylandDisplayPower: {error_msg}")
+            if self._publisher:
+                self._publisher.publish(SystemErrorEvent(component="WaylandDisplayPower", message=error_msg))
         except FileNotFoundError:
-            logger.error("WaylandDisplayPower: wlr-randr not found. Is it installed?")
+            error_msg = "wlr-randr not found. Is it installed?"
+            logger.error(f"WaylandDisplayPower: {error_msg}")
+            if self._publisher:
+                self._publisher.publish(SystemErrorEvent(component="WaylandDisplayPower", message=error_msg))
 
     def turn_off(self) -> None:
         """Turn the display off using wlr-randr."""
@@ -59,9 +70,15 @@ class WaylandDisplayPower(IDisplayPower):
             self._is_on = False
             logger.info("WaylandDisplayPower: Display turned OFF.")
         except subprocess.CalledProcessError as e:
-            logger.error(f"WaylandDisplayPower: Failed to turn display OFF: {e.stderr.decode()}")
+            error_msg = f"Failed to turn display OFF: {e.stderr.decode()}"
+            logger.error(f"WaylandDisplayPower: {error_msg}")
+            if self._publisher:
+                self._publisher.publish(SystemErrorEvent(component="WaylandDisplayPower", message=error_msg))
         except FileNotFoundError:
-            logger.error("WaylandDisplayPower: wlr-randr not found. Is it installed?")
+            error_msg = "wlr-randr not found. Is it installed?"
+            logger.error(f"WaylandDisplayPower: {error_msg}")
+            if self._publisher:
+                self._publisher.publish(SystemErrorEvent(component="WaylandDisplayPower", message=error_msg))
 
     def toggle(self) -> None:
         """Toggle the display power state."""
@@ -83,7 +100,10 @@ class WaylandDisplayPower(IDisplayPower):
                 )
                 logger.info(f"Set external monitor brightness to {percent_int}%")
             except Exception as e:
-                logger.error(f"Failed to set external brightness via ddcutil: {e}")
+                error_msg = f"Failed to set external brightness via ddcutil: {e}"
+                logger.error(error_msg)
+                if self._publisher:
+                    self._publisher.publish(SystemErrorEvent(component="WaylandDisplayPower", message=error_msg))
         else:
             # Use brightnessctl for internal/DSI displays
             try:
@@ -93,7 +113,10 @@ class WaylandDisplayPower(IDisplayPower):
                 )
                 logger.info(f"Set internal display brightness to {percent_int}%")
             except Exception as e:
-                logger.error(f"Failed to set internal brightness via brightnessctl: {e}")
+                error_msg = f"Failed to set internal brightness via brightnessctl: {e}"
+                logger.error(error_msg)
+                if self._publisher:
+                    self._publisher.publish(SystemErrorEvent(component="WaylandDisplayPower", message=error_msg))
 
     def is_on(self) -> bool:
         """
