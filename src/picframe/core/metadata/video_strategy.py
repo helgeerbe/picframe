@@ -2,8 +2,10 @@
 Video metadata extraction strategy.
 """
 
+import json
 import logging
 import os
+import subprocess
 
 from picframe.core.metadata.interfaces import IMetadataStrategy
 from picframe.core.models.media import MediaItem, MediaType
@@ -38,14 +40,111 @@ class VideoMetadataStrategy(IMetadataStrategy):
             modified_time = stat.st_mtime
             filename = os.path.basename(filepath)
 
-            # Extract video metadata using ffprobe (or similar logic)
-            # For now, we'll just use basic stats and set duration to 0
-            # In a real implementation, we would use ffprobe or similar to get the actual duration
-            
             width = None
             height = None
             duration = 0.0
             orientation = 1 # Default orientation
+            codec = None
+            pixel_format = None
+            framerate = None
+            bitrate = None
+            
+            # Additional fields for parity with image EXIF
+            exif_datetime = None
+            latitude = None
+            longitude = None
+            make = None
+            model = None
+            title = None
+            caption = None
+            tags_str = None
+
+            try:
+                # Extract video metadata using ffprobe
+                cmd = [
+                    "ffprobe",
+                    "-v", "quiet",
+                    "-print_format", "json",
+                    "-show_format",
+                    "-show_streams",
+                    filepath
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+                probe_data = json.loads(result.stdout)
+
+                # Extract format-level metadata
+                if "format" in probe_data:
+                    fmt = probe_data["format"]
+                    if "duration" in fmt:
+                        duration = float(fmt["duration"])
+                    if "bit_rate" in fmt:
+                        bitrate = int(fmt["bit_rate"])
+                    
+                    format_tags = fmt.get("tags", {})
+                    
+                    # Creation date
+                    creation_time = format_tags.get("creation_time")
+                    if creation_time:
+                        try:
+                            from datetime import datetime
+                            # ffprobe usually returns ISO 8601: 2023-10-27T15:30:00.000000Z
+                            dt = datetime.fromisoformat(creation_time.replace('Z', '+00:00'))
+                            exif_datetime = dt.timestamp()
+                        except ValueError:
+                            pass
+                            
+                    # GPS Coordinates (often in format tags for mp4/mov)
+                    location = format_tags.get("location")
+                    if location:
+                        # Example format: +37.7749-122.4194/
+                        import re
+                        match = re.match(r'([+-]\d+\.\d+)([+-]\d+\.\d+)', location)
+                        if match:
+                            latitude = float(match.group(1))
+                            longitude = float(match.group(2))
+                            
+                    # Make and Model
+                    make = format_tags.get("make")
+                    model = format_tags.get("model")
+                    
+                    # Title and Caption
+                    title = format_tags.get("title")
+                    caption = format_tags.get("comment") or format_tags.get("description")
+                    
+                    # Tags/Keywords
+                    keywords = format_tags.get("keywords")
+                    if keywords:
+                        tags_str = keywords
+
+                # Extract video stream details
+                for stream in probe_data.get("streams", []):
+                    if stream.get("codec_type") == "video":
+                        width = int(stream.get("width", 0)) or None
+                        height = int(stream.get("height", 0)) or None
+                        codec = stream.get("codec_name")
+                        pixel_format = stream.get("pix_fmt")
+                        
+                        # Extract framerate
+                        r_frame_rate = stream.get("r_frame_rate")
+                        if r_frame_rate and "/" in r_frame_rate:
+                            num, den = r_frame_rate.split("/")
+                            if int(den) > 0:
+                                framerate = float(num) / float(den)
+                        
+                        # Handle rotation/orientation if present in stream tags
+                        stream_tags = stream.get("tags", {})
+                        if "rotate" in stream_tags:
+                            rotation = int(stream_tags["rotate"])
+                            if rotation == 90:
+                                orientation = 6
+                            elif rotation == 180:
+                                orientation = 3
+                            elif rotation == 270:
+                                orientation = 8
+                        break
+
+            except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
+                logger.warning(f"ffprobe failed for {filepath}: {e}. Falling back to basic stats.")
 
             return MediaItem(
                 filepath=filepath,
@@ -58,6 +157,18 @@ class VideoMetadataStrategy(IMetadataStrategy):
                 height=height,
                 orientation=orientation,
                 duration=duration,
+                codec=codec,
+                pixel_format=pixel_format,
+                framerate=framerate,
+                bitrate=bitrate,
+                exif_datetime=exif_datetime,
+                latitude=latitude,
+                longitude=longitude,
+                make=make,
+                model=model,
+                title=title,
+                caption=caption,
+                tags=tags_str,
             )
 
         except Exception as e:

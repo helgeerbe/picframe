@@ -47,6 +47,10 @@ MEDIA_MIGRATIONS = [
             is_portrait INTEGER,
             location TEXT,
             duration REAL,
+            codec TEXT,
+            pixel_format TEXT,
+            framerate REAL,
+            bitrate INTEGER,
             is_deleted INTEGER DEFAULT 0,
             created_at REAL DEFAULT (julianday('now')),
             updated_at REAL DEFAULT (julianday('now'))

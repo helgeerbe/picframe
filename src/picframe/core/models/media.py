@@ -51,6 +51,10 @@ class MediaItem:
     is_portrait: bool | None = None
     location: str | None = None
     duration: float | None = None
+    codec: str | None = None
+    pixel_format: str | None = None
+    framerate: float | None = None
+    bitrate: int | None = None
     id: int | None = None
     is_deleted: bool = False
 
@@ -91,5 +95,9 @@ class MediaItem:
             ),
             "location": self.location,
             "duration": self.duration,
+            "codec": self.codec,
+            "pixel_format": self.pixel_format,
+            "framerate": self.framerate,
+            "bitrate": self.bitrate,
             "is_deleted": int(self.is_deleted),
         }
