@@ -22,6 +22,11 @@ class VideoMetadataStrategy(IMetadataStrategy):
     MediaItem model.
     """
 
+    def __init__(self, display_w: int = 0, display_h: int = 0, config_repository=None):
+        self.display_w = display_w
+        self.display_h = display_h
+        self._config_repository = config_repository
+
     def extract(self, filepath: str, directory_id: int) -> MediaItem | None:
         """
         Extract metadata from a video file.
@@ -145,6 +150,15 @@ class VideoMetadataStrategy(IMetadataStrategy):
 
             except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
                 logger.warning(f"ffprobe failed for {filepath}: {e}. Falling back to basic stats.")
+
+            # Extract and cache first/last frames
+            if width and height and duration > 0:
+                from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
+                # We don't have sample_aspect_ratio easily available here, default to 1:1
+                # It could be extracted from ffprobe output if needed
+                target_w = self.display_w if self.display_w > 0 else width
+                target_h = self.display_h if self.display_h > 0 else height
+                VideoFrameExtractor.extract_and_save_frames(filepath, duration, target_w, target_h)
 
             return MediaItem(
                 filepath=filepath,

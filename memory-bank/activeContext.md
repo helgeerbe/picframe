@@ -105,3 +105,7 @@
     *   Optimizing CPU/energy usage by skipping `pi3d.Display.loop_running()` when the screen is static.
 *   **Next Steps:** Create GitHub issues for these architectural changes and begin implementation.
 ## [2026-04-30 12:04:52] - Completed Issue #645: Media Delivery and Fallback Image Implementation
+## [2026-05-07 23:52:00] - Fixed Mypy error in Pi3dRenderer
+- Replaced `if self._event_publisher:` with `if self._event_publisher is not None:` to satisfy Mypy strict optional checking when emitting `TransitionCompletedEvent`.
+## [2026-05-07 23:58:00] - Fixed TransitionCompletedEvent emission logic
+- Updated `Pi3dRenderer.render_frame` to use `self._was_transitioning` instead of `self._last_render_state` to reliably detect when a transition (including text animation) has fully completed and reached the `STATIC` state. This ensures the `TransitionCompletedEvent` is emitted, which triggers the video player to start.

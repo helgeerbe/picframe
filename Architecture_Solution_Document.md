@@ -94,6 +94,14 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
     *   **Background Worker Queue:** The media indexer extracts raw coordinates and places them in a background queue. A dedicated worker thread consumes this queue, performing reverse geocoding lookups at a strictly rate-limited pace (e.g., 2.0s intervals) and saving the resolved address strings to the `locations` table.
     *   **Just-In-Time (JIT) Fallback:** If an image is selected for playback before the background worker has resolved its coordinates, the `PlaybackEngine` performs a synchronous JIT lookup immediately before display. If this fails (e.g., network error), the engine gracefully falls back to displaying the map without text and flags the coordinate for retry.
 
+### 2.17 PlaybackEngine Handoff Logic (The "Sandwich" Pattern)
+*   **Concept:** To achieve seamless EGL/OpenGL context switching between the `pi3d` image renderer and the `GstVideoRenderer` without visual flicker or "black flashes", the system employs a "First/Last Frame Sandwich" pattern.
+*   **Reasoning & Benefits:**
+    *   **Pre-roll Extraction:** During the initial file scanning process (`MediaIndexerService` / `VideoMetadataStrategy`), the system extracts the first and last frames of the video and caches them locally (`.1.frame`, `.2.frame`). An on-demand fallback mechanism generates these frames immediately if they are missing during playback.
+    *   **Transition In:** The `PlaybackEngine` instructs `pi3d` to perform a standard alpha-blend transition from the current image to the video's **first frame**. Only after this transition is complete does the engine command GStreamer to `PLAY`.
+    *   **Mid-Playback Texture Swap:** While the video is playing (and obscuring the `pi3d` surface), the `PlaybackEngine` instructs `pi3d` to silently load the video's **last frame** into its background buffer.
+    *   **Transition Out:** When the video finishes (EOS) and the GStreamer surface is destroyed, `pi3d` is already displaying the exact last frame of the video, preventing any visual jump. The engine then transitions smoothly from this last frame to the next image in the playlist.
+
 ## 3. System Diagrams
 
 ### 3.1 Component Architecture

@@ -259,18 +259,21 @@ def test_engine_trigger_next_media_video(
         last_modified=1234567890.0,
     )
     mock_playlist_manager.get_next.return_value = media_item
+    mock_renderer.get_display_rect.return_value = (0, 0, 1920, 1080)
+    media_item.duration = 10.0
+
+    with patch("os.path.exists", return_value=True), \
+         patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames", return_value=(MagicMock(), MagicMock())):
+        engine._trigger_next_media()
     
-    engine._trigger_next_media()
+    # Verify state changed to PREPARING_VIDEO
+    assert engine._state == State.PREPARING_VIDEO
     
-    # Verify video player was called
-    mock_video_player.play.assert_called_once_with(media_item)
-    
-    # Verify renderer was suspended
+    # Verify renderer was sent the first frame
     from picframe.core.events.dto import RenderCommand
-    # The exact call might be complex due to OverlayConfig, so we just check the image_path
     call_args = mock_renderer.execute.call_args[0][0]
     assert isinstance(call_args, RenderCommand)
-    assert call_args.image_path == "SUSPEND"
+    assert call_args.image_path == "/path/to/video.1.frame"
 
 
 def test_engine_circuit_breaker(
@@ -304,3 +307,49 @@ def test_engine_circuit_breaker(
     
     # Verify StateEvent(ERROR) was published
     mock_event_publisher.publish.assert_any_call(StateEvent(state=State.ERROR))
+
+def test_playback_engine_handles_media_processing_error(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    playback_engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    """Test that PlaybackEngine catches MediaProcessingError and skips to next media."""
+    from picframe.core.exceptions import MediaProcessingError
+    from picframe.core.events.dto import State, SystemErrorEvent
+    
+    # Setup mock to raise MediaProcessingError on render
+    mock_renderer.execute.side_effect = MediaProcessingError("Test error")
+    
+    # Setup playlist manager to return a media item
+    media_item = MediaItem(
+        id=1, 
+        filepath="/path/to/image.jpg",
+        filename="image.jpg",
+        directory_id=1,
+        media_type="image",
+        file_size=1024,
+        last_modified=1234567890.0
+    )
+    mock_playlist_manager.get_next.return_value = media_item
+    
+    # Trigger next media
+    playback_engine._trigger_next_media()
+    
+    # Verify error was handled
+    assert playback_engine._consecutive_errors == 1
+    mock_event_publisher.publish.assert_any_call(
+        SystemErrorEvent(message="Test error", component="PlaybackEngine")
+    )
+    
+    # Verify it skipped to next (transition time set to 0)
+    assert playback_engine._next_transition_time == 0.0
+    assert playback_engine._state == State.PLAYING

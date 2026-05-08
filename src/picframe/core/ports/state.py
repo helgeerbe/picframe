@@ -1,7 +1,17 @@
 """
 Port interfaces for querying system state.
 """
+from enum import Enum
 from typing import Any, Protocol
+
+
+class State(Enum):
+    """System states."""
+    IDLE = "IDLE"
+    PLAYING = "PLAYING"
+    TRANSITIONING = "TRANSITIONING"
+    PREPARING_VIDEO = "PREPARING_VIDEO"
+    ERROR = "ERROR"
 
 
 class ISystemStateQuery(Protocol):

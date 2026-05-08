@@ -12,8 +12,8 @@ class IVideoPlayer(Protocol):
     Protocol defining the contract for a Video Player service.
     """
 
-    def play(self, media_item: MediaItem) -> None:
-        """Start playing the specified video media item."""
+    def play(self, media_item: MediaItem, x: int = 0, y: int = 0, w: int = 0, h: int = 0) -> None:
+        """Start playing the specified video media item within the given screen rectangle."""
         ...
 
     def stop(self) -> None:
@@ -65,6 +65,13 @@ class IRenderer(Protocol):
         
         Args:
             command: The RenderCommand with image path and overlay data.
+        """
+        ...
+
+    def get_display_rect(self) -> tuple[int, int, int, int]:
+        """
+        Get the actual (x, y, width, height) of the rendering display.
+        Returns (0, 0, 0, 0) if the display is not yet initialized.
         """
         ...
 

@@ -9,15 +9,15 @@ import argparse
 import logging
 import os
 import sys
-import threading
-from multiprocessing.connection import Client, Listener, Connection
-from typing import Any, Optional
+from multiprocessing.connection import Connection, Listener
+from typing import Any
 
 from picframe.core.renderers.ipc_protocol import (
     CapsResultEvent,
     CheckCapsCommand,
     EosEvent,
     ErrorEvent,
+    FirstFrameRenderedEvent,
     IpcMessage,
     PauseCommand,
     PlayCommand,
@@ -39,7 +39,7 @@ try:
     import gi
     gi.require_version('Gst', '1.0')
     gi.require_version('GstPbutils', '1.0')
-    from gi.repository import Gst, GLib, GstPbutils
+    from gi.repository import GLib, Gst, GstPbutils
     Gst.init(None)
     GST_AVAILABLE = True
 except ImportError:
@@ -49,13 +49,14 @@ except ImportError:
     logger.error("GStreamer not available. Worker cannot start.")
     GST_AVAILABLE = False
 
-from picframe.core.renderers.gst_utils import find_best_element, is_hardware_supported
+from picframe.core.renderers.gst_utils import find_best_element
+
 
 class GstWorker:
     def __init__(self, socket_path: str):
         self.socket_path = socket_path
-        self.conn: Optional[Connection] = None
-        self.listener: Optional[Listener] = None
+        self.conn: Connection | None = None
+        self.listener: Listener | None = None
         self.pipeline: Any = None
         self.bus: Any = None
         self.volume: float = 1.0
@@ -153,7 +154,7 @@ class GstWorker:
     def _dispatch_command(self, cmd: IpcMessage) -> None:
         """Dispatch an incoming command to the appropriate handler."""
         if isinstance(cmd, PlayCommand):
-            self._handle_play(cmd.uri)
+            self._handle_play(cmd.uri, cmd.x, cmd.y, cmd.w, cmd.h)
         elif isinstance(cmd, PauseCommand):
             self._handle_pause()
         elif isinstance(cmd, StopCommand):
@@ -163,7 +164,7 @@ class GstWorker:
         elif isinstance(cmd, CheckCapsCommand):
             self._handle_check_caps(cmd.uri)
 
-    def _handle_play(self, uri: str) -> None:
+    def _handle_play(self, uri: str, x: int, y: int, w: int, h: int) -> None:
         self._handle_stop()
         
         try:
@@ -172,7 +173,7 @@ class GstWorker:
             uridecodebin.set_property("uri", uri)
             uridecodebin.connect("autoplug-select", self._on_autoplug_select)
             
-            sink_bin = self._create_sink_bin()
+            sink_bin = self._create_sink_bin(x, y, w, h)
             
             self.pipeline.add(uridecodebin)
             self.pipeline.add(sink_bin)
@@ -187,6 +188,7 @@ class GstWorker:
             self.bus.add_signal_watch()
             self.bus.connect("message::eos", self._on_eos)
             self.bus.connect("message::error", self._on_error)
+            self.bus.connect("message::async-done", self._on_async_done)
             
             ret = self.pipeline.set_state(Gst.State.PLAYING)
             if ret == Gst.StateChangeReturn.FAILURE:
@@ -200,7 +202,7 @@ class GstWorker:
             self._send_event(ErrorEvent(details=str(e)))
             self._handle_stop()
 
-    def _create_sink_bin(self) -> Any:
+    def _create_sink_bin(self, x: int, y: int, w: int, h: int) -> Any:
         bin = Gst.Bin.new("sink_bin")
         hw_converter = find_best_element(["v4l2convert"])
         
@@ -237,6 +239,12 @@ class GstWorker:
                 sink.set_property("fullscreen", True)
         except Exception:
             pass
+
+        if w > 0 and h > 0:
+            try:
+                Gst.util_set_object_arg(sink, "render-rectangle", f"<{x}, {y}, {w}, {h}>")
+            except Exception as e:
+                logger.warning(f"Sink {sink_name} does not support render-rectangle property: {e}")
 
         if sink_name == "waylandsink":
             sink.set_property("rotate-method", 8)
@@ -347,12 +355,22 @@ class GstWorker:
 
     def _on_eos(self, bus: Any, msg: Any) -> None:
         self._send_event(EosEvent())
-        self._handle_stop()
+        # Do NOT call _handle_stop() here. We want the last frame to remain visible
+        # until the main process explicitly sends a StopCommand after the pi3d transition.
 
     def _on_error(self, bus: Any, msg: Any) -> None:
         err, debug = msg.parse_error()
         self._send_event(ErrorEvent(details=err.message))
         self._handle_stop()
+
+    def _on_async_done(self, bus: Any, msg: Any) -> None:
+        self._send_event(FirstFrameRenderedEvent())
+        # Ensure pipeline is playing after async-done
+        if self.pipeline:
+            self.pipeline.set_state(Gst.State.PLAYING)
+        # Ensure pipeline is playing after async-done
+        if self.pipeline:
+            self.pipeline.set_state(Gst.State.PLAYING)
 
     def cleanup(self) -> None:
         self._handle_stop()

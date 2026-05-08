@@ -105,6 +105,8 @@ class GstVideoRenderer(IVideoPlayer):
 
     def _handle_event(self, event: IpcMessage) -> None:
         """Translate IPC events into domain events."""
+        from picframe.core.renderers.ipc_protocol import FirstFrameRenderedEvent
+        from picframe.core.events.dto import VideoFirstFrameRenderedEvent
         if isinstance(event, EosEvent):
             logger.info("Received EOS from worker.")
             self._publisher.publish(PlaybackCompletedEvent())
@@ -115,6 +117,9 @@ class GstVideoRenderer(IVideoPlayer):
         elif isinstance(event, WarningEvent):
             logger.warning(f"Worker Warning: {event.warning_type} - {event.decoder}")
             # Could publish a PerformanceWarningEvent here
+        elif isinstance(event, FirstFrameRenderedEvent):
+            logger.info("Received FirstFrameRenderedEvent from worker.")
+            self._publisher.publish(VideoFirstFrameRenderedEvent())
 
     def _send_command(self, cmd: IpcMessage) -> None:
         """Send a command to the worker."""
@@ -124,7 +129,7 @@ class GstVideoRenderer(IVideoPlayer):
             except Exception as e:
                 logger.error(f"Failed to send IPC command: {e}")
 
-    def play(self, media_item: MediaItem) -> None:
+    def play(self, media_item: MediaItem, x: int = 0, y: int = 0, w: int = 0, h: int = 0) -> None:
         """Start playing the specified video media item."""
         if not self._running:
             logger.error("Cannot play video: Worker is not running.")
@@ -137,8 +142,8 @@ class GstVideoRenderer(IVideoPlayer):
         uri = Path(media_item.filepath).absolute().as_uri()
         
         # Send play command
-        self._send_command(PlayCommand(uri=uri))
-        logger.info(f"Sent play command for: {media_item.filepath}")
+        self._send_command(PlayCommand(uri=uri, x=x, y=y, w=w, h=h))
+        logger.info(f"Sent play command for: {media_item.filepath} at ({x},{y}) {w}x{h}")
 
     def stop(self) -> None:
         """Stop video playback."""

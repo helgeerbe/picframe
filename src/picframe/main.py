@@ -104,6 +104,11 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     from picframe.core.metadata.video_strategy import VideoMetadataStrategy
     from picframe.core.services.media_indexer import MediaIndexerService
     
+    display_w_val = _config_repo.get_app_config("viewer.display_w", 0)
+    display_w = int(display_w_val) if display_w_val else 0
+    display_h_val = _config_repo.get_app_config("viewer.display_h", 0)
+    display_h = int(display_h_val) if display_h_val else 0
+    
     _ = MediaIndexerService(
         event_subscriber=event_bus,
         media_repository=media_repo,
@@ -111,7 +116,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         image_processing_service=image_processing_service,
         media_monitor_service=media_monitor_service,
         image_strategy=ImageMetadataStrategy(),
-        video_strategy=VideoMetadataStrategy()
+        video_strategy=VideoMetadataStrategy(display_w=display_w, display_h=display_h, config_repository=_config_repo)
     )
 
     # 5. Initialize Renderer
@@ -119,8 +124,8 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     renderer_config = RendererConfig(
         display_x=int(_config_repo.get_app_config("viewer.display_x", 0)),
         display_y=int(_config_repo.get_app_config("viewer.display_y", 0)),
-        display_w=int(_config_repo.get_app_config("viewer.display_w")) if _config_repo.get_app_config("viewer.display_w") else None,
-        display_h=int(_config_repo.get_app_config("viewer.display_h")) if _config_repo.get_app_config("viewer.display_h") else None,
+        display_w=int(_config_repo.get_app_config("viewer.display_w")) if _config_repo.get_app_config("viewer.display_w") not in (None, "") else None,
+        display_h=int(_config_repo.get_app_config("viewer.display_h")) if _config_repo.get_app_config("viewer.display_h") not in (None, "") else None,
         fps=int(_config_repo.get_app_config("viewer.fps", 20)),
         background=tuple(_config_repo.get_app_config("viewer.background", [0.0, 0.0, 0.0, 1.0])), # type: ignore
         use_glx=_config_repo.get_app_config_bool("viewer.use_glx", False),
@@ -140,7 +145,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         fit=_config_repo.get_app_config_bool("viewer.fit", False),
         video_extensions=_config_repo.get_app_config("model.video_extensions", [".mp4", ".mov", ".avi", ".mkv"]),
     )
-    renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus)
+    renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus, event_publisher=event_bus)
     
     from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
     max_software_decode_resolution = str(_config_repo.get_app_config("viewer.max_software_decode_resolution", "1280x720"))

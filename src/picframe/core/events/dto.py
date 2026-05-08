@@ -43,6 +43,7 @@ class State(Enum):
     PLAYING = auto()
     PAUSED = auto()
     TRANSITIONING = auto()
+    PREPARING_VIDEO = auto()
     SLEEPING = auto()
     CONFIG_CHANGED = auto()
     STATS_UPDATED = auto()
@@ -159,7 +160,7 @@ class RendererConfig:
     blend_type: str = "blend"
     edge_alpha: float = 0.5
     fit: bool = False
-    video_extensions: list[str] = field(default_factory=lambda: [".mp4", ".mov", ".avi", ".mkv"]) # type: ignore
+    video_extensions: list[str] = field(default_factory=lambda: [".mp4", ".mov", ".avi", ".mkv"])
 
 
 @dataclass(frozen=True)
@@ -182,10 +183,13 @@ class RenderCommand(Event):
     Attributes:
         image_path: The absolute path to the image file to render.
         overlay: Optional configuration for text overlays.
+        background_only: If True, load the image into the background buffer without transitioning.
     """
 
     image_path: str
     overlay: OverlayConfig | None = None
+    background_only: bool = False
+    image_obj: Any = None
 
     @property
     def priority(self) -> int:
@@ -229,6 +233,25 @@ class CurrentMediaChangedEvent(Event):
         """Metadata broadcasting has normal priority (3)."""
         return 3
 
+
+@dataclass(frozen=True)
+class TransitionCompletedEvent(Event):
+    """
+    An event notifying that a visual transition (e.g., crossfade) has completed.
+    """
+
+    @property
+    def priority(self) -> int:
+        """Transition completion has high priority (1) to ensure smooth handoff."""
+        return 1
+
+
+@dataclass(frozen=True)
+class VideoFirstFrameRenderedEvent(Event):
+    """Event emitted when the video player has rendered its first frame."""
+    @property
+    def priority(self) -> int:
+        return 10
 
 @dataclass(frozen=True)
 class PlaybackCompletedEvent(Event):

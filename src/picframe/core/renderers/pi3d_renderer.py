@@ -19,7 +19,7 @@ from picframe.core.events.dto import (
     State,
     StateEvent,
 )
-from picframe.core.events.interfaces import IEventSubscriber
+from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.renderers.animation_controller import AnimationController, RenderState
 from picframe.core.renderers.components.clock_renderer import ClockRenderer
 from picframe.core.renderers.components.image_renderer import ImageRenderer
@@ -70,6 +70,7 @@ class Pi3dRenderer(IRenderer):
         self,
         config: RendererConfig,
         event_subscriber: IEventSubscriber | None = None,
+        event_publisher: IEventPublisher | None = None,
     ) -> None:
         """
         Initialize the renderer with configuration.
@@ -81,6 +82,7 @@ class Pi3dRenderer(IRenderer):
         self._logger = logging.getLogger(__name__)
         self._config = config
         self._event_subscriber = event_subscriber
+        self._event_publisher = event_publisher
         
         if self._event_subscriber:
             self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_config_event)
@@ -268,13 +270,25 @@ class Pi3dRenderer(IRenderer):
             # Delegate to ImageRenderer
             success, kb_xstep, kb_ystep = self._image_renderer.execute(command)
             if success:
-                self._animation_controller.start_transition(time.time(), kb_xstep, kb_ystep)
-                self._animation_controller.update_text_config(self._overlay_config.show_text, True)
-                
-                if self._text_renderer:
-                    self._text_renderer.update_config(self._overlay_config)
-                if self._clock_renderer:
-                    self._clock_renderer.update_config(self._overlay_config)
+                if getattr(command, "background_only", False):
+                    self._logger.debug("Loaded image into background buffer only.")
+                    self._animation_controller.force_redraw(2)
+                    # Ensure we wake up from SUSPENDED state to process the redraw
+                    from picframe.core.renderers.animation_controller import RenderState
+                    if self._animation_controller._state == RenderState.SUSPENDED:
+                        self._animation_controller.resume()
+                        # We need to suspend again after drawing the background
+                        import threading
+                        threading.Timer(0.5, self._animation_controller.suspend).start()
+                else:
+                    self._animation_controller.start_transition(time.time(), kb_xstep, kb_ystep)
+                    self._was_transitioning = True
+                    self._animation_controller.update_text_config(self._overlay_config.show_text, True)
+                    
+                    if self._text_renderer:
+                        self._text_renderer.update_config(self._overlay_config)
+                    if self._clock_renderer:
+                        self._clock_renderer.update_config(self._overlay_config)
                 
         except Exception as e:
             self._logger.error(f"Failed to execute RenderCommand: {e}")
@@ -282,6 +296,15 @@ class Pi3dRenderer(IRenderer):
     def enqueue_task(self, priority: int, task: Any) -> None:
         """Enqueue a high-frequency task (like a clock tick) for the render loop."""
         self._local_queue.put(PrioritizedRenderTask(priority=priority, task=task))
+
+    def get_display_rect(self) -> tuple[int, int, int, int]:
+        """Get the actual (x, y, width, height) of the rendering display."""
+        if self._display is None:
+            return (self._display_x, self._display_y, self._display_w or 0, self._display_h or 0)
+        
+        x = getattr(self._display, 'left', self._display_x)
+        y = getattr(self._display, 'top', self._display_y)
+        return (int(x), int(y), int(self._display.width), int(self._display.height))
 
     def render_frame(self) -> bool:
         """
@@ -329,6 +352,12 @@ class Pi3dRenderer(IRenderer):
 
         # --- STATIC BYPASS ---
         if not needs_redraw:
+            # If we just finished a transition, we need to emit the event
+            if getattr(self, '_was_transitioning', False) and anim_state.render_state == RenderState.STATIC:
+                from picframe.core.events.dto import TransitionCompletedEvent
+                if self._event_publisher is not None:
+                    self._event_publisher.publish(TransitionCompletedEvent())
+                self._was_transitioning = False
             time.sleep(0.05) # Yield CPU to OS
             return True      # Keep PlaybackEngine loop alive
 
@@ -339,6 +368,15 @@ class Pi3dRenderer(IRenderer):
 
         self._last_redraw_time = tm
         self._last_text_alpha = anim_state.text_alpha
+
+        # Check for transition completion
+        if anim_state.render_state == RenderState.STATIC and getattr(self, '_was_transitioning', False):
+            if self._event_publisher is not None:
+                from picframe.core.events.dto import TransitionCompletedEvent
+                self._event_publisher.publish(TransitionCompletedEvent())
+            self._was_transitioning = False
+
+        self._last_render_state = anim_state.render_state
 
         # Apply animation state to components
         self._image_renderer.set_alpha(anim_state.image_alpha)

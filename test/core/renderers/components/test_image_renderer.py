@@ -90,6 +90,25 @@ def test_image_renderer_execute_video(
     assert result == (False, 0.0, 0.0)
 
 
+from picframe.core.exceptions import MediaProcessingError
+
+@patch("picframe.core.renderers.components.image_renderer.Image")
+def test_image_renderer_execute_image_error(
+    mock_image: MagicMock, mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
+) -> None:
+    """Test executing a command with an image file that fails to load."""
+    shader = MagicMock()
+    renderer = ImageRenderer(mock_display, shader, config)
+
+    mock_image.open.side_effect = Exception("Failed to load image")
+
+    command = RenderCommand(image_path="/path/to/image.jpg")
+
+    with pytest.raises(MediaProcessingError) as exc_info:
+        renderer.execute(command)
+
+    assert "Failed to load image /path/to/image.jpg" in str(exc_info.value)
+
 @patch("picframe.core.renderers.components.image_renderer.Image")
 def test_image_renderer_execute_image(
     mock_image: MagicMock, mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]

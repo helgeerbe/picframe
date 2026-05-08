@@ -91,11 +91,14 @@ class ImageRenderer:
             return False, 0.0, 0.0
 
         try:
-            im: Any = Image.open(command.image_path)
+            if getattr(command, "image_obj", None) is not None:
+                im: Any = command.image_obj
+            else:
+                im: Any = Image.open(command.image_path)
         except Exception as e:
-            self._logger.warning(f"Failed to load image {command.image_path}: {e}. Using fallback.")
-            # Create a fallback image (e.g., black screen or default "no pictures" image)
-            im = Image.new('RGB', (self._display.width, self._display.height), color='black')
+            self._logger.error(f"Failed to load image {command.image_path}: {e}")
+            from picframe.core.exceptions import MediaProcessingError
+            raise MediaProcessingError(f"Failed to load image {command.image_path}: {e}") from e
             
         try:
             new_sfg = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)

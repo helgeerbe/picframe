@@ -10,9 +10,10 @@ from picframe.core.models.media import MediaType
 def strategy() -> VideoMetadataStrategy:
     return VideoMetadataStrategy()
 
+@patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
 @patch("picframe.core.metadata.video_strategy.subprocess.run")
 @patch("picframe.core.metadata.video_strategy.os.stat")
-def test_extract_success(mock_stat: MagicMock, mock_run: MagicMock, strategy: VideoMetadataStrategy) -> None:
+def test_extract_success(mock_stat: MagicMock, mock_run: MagicMock, mock_extract: MagicMock, strategy: VideoMetadataStrategy) -> None:
     # Mock os.stat
     mock_stat_result = MagicMock()
     mock_stat_result.st_size = 1024
@@ -81,10 +82,12 @@ def test_extract_success(mock_stat: MagicMock, mock_run: MagicMock, strategy: Vi
     assert media_item.caption == "A nice trip"
     assert media_item.tags == "vacation, trip"
     assert media_item.exif_datetime is not None
+    mock_extract.assert_called_once_with(filepath, 120.5, 1920, 1080)
 
+@patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
 @patch("picframe.core.metadata.video_strategy.subprocess.run")
 @patch("picframe.core.metadata.video_strategy.os.stat")
-def test_extract_exception_fallback(mock_stat: MagicMock, mock_run: MagicMock, strategy: VideoMetadataStrategy) -> None:
+def test_extract_exception_fallback(mock_stat: MagicMock, mock_run: MagicMock, mock_extract: MagicMock, strategy: VideoMetadataStrategy) -> None:
     # Mock subprocess.run to raise an exception
     import subprocess
     mock_run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
@@ -109,6 +112,7 @@ def test_extract_exception_fallback(mock_stat: MagicMock, mock_run: MagicMock, s
     assert media_item.last_modified == 1600000002.0
     assert media_item.width is None
     assert media_item.height is None
+    mock_extract.assert_not_called()
 
 @patch("picframe.core.metadata.video_strategy.os.stat")
 def test_extract_os_error(mock_stat: MagicMock, strategy: VideoMetadataStrategy) -> None:

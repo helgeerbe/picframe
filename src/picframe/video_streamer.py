@@ -308,26 +308,25 @@ class VideoFrameExtractor:
             if width != self.display_width or height != self.display_height:
                 frame = frame.resize((self.display_width, self.display_height),
                                      resample=Image.Resampling.BICUBIC)
-        elif width != self.display_width or height != self.display_height:
+        else:
+            # Legacy behavior: always scale to fit within display dimensions
+            # while maintaining aspect ratio, adding black bars if necessary.
             frame = self._scale_frame(frame)
         return frame
 
-    def _get_frame_as_numpy(self, dimensions: Tuple[int, int],
-                            seek_time: float) -> Optional[np.ndarray]:
+    def _get_frame_as_image(self, seek_time: float) -> Optional[Image.Image]:
         """
         Retrieve a frame from the video at a specific time.
 
         Parameters:
         -----------
-        dimensions : Tuple[int, int]
-            The dimensions of the video frame (width, height).
         seek_time : float
             The time in seconds to seek to in the video.
 
         Returns:
         --------
-        Optional[np.ndarray]
-            The video frame as a NumPy array, or None if retrieval fails.
+        Optional[Image.Image]
+            The video frame as a Pillow Image object, or None if retrieval fails.
         """
         try:
             # Build ffmpeg command
@@ -337,8 +336,7 @@ class VideoFrameExtractor:
                 "-i", self.video_path,
                 "-vframes", "1",
                 "-f", "image2pipe",
-                "-pix_fmt", "rgb24",
-                "-vcodec", "rawvideo",
+                "-vcodec", "mjpeg",
                 "-"
             ]
 
@@ -346,12 +344,11 @@ class VideoFrameExtractor:
             process = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                      check=True)
 
-            # Convert raw bytes to numpy array
-            width, height = dimensions
-            frame = np.frombuffer(process.stdout, dtype=np.uint8).reshape((height, width, 3))
-
-            return frame
-        except (subprocess.CalledProcessError, KeyError, ValueError, IndexError, TypeError) as e:
+            import io
+            image = Image.open(io.BytesIO(process.stdout))
+            image.load()
+            return image
+        except (subprocess.CalledProcessError, IOError, ValueError) as e:
             self.logger.warning("Failed to retrieve video frame: %s", e)
             return None
 
@@ -405,18 +402,29 @@ class VideoFrameExtractor:
             self.logger.error("Error: Invalid video rotation.")
             return None
 
-        first_frame = self._get_frame_as_numpy(metadata.dimensions, 0)
-        last_frame = self._get_frame_as_numpy(metadata.dimensions, metadata.duration - 0.1)
+        first_image = self._get_frame_as_image(0)
+        
+        last_image = None
+        for offset in [0.1, 0.5, 1.0, 2.0]:
+            if metadata.duration > offset:
+                last_image = self._get_frame_as_image(metadata.duration - offset)
+                if last_image is not None:
+                    break
+                    
+        if last_image is None and first_image is not None:
+            last_image = first_image.copy()
 
         sar = getattr(metadata, "sample_aspect_ratio", "1:1")
 
-        if first_frame is not None and last_frame is not None:
+        if first_image is not None and last_image is not None:
 
-            first_image = Image.fromarray(first_frame)
-            last_image = Image.fromarray(last_frame)
             # Apply sample_aspect_ratio scaling if needed
             first_image = self._apply_sample_aspect_ratio(first_image, sar)
             last_image = self._apply_sample_aspect_ratio(last_image, sar)
+            
+            first_image = self._process_video_frame(first_image)
+            last_image = self._process_video_frame(last_image)
+            
             # save as JPEG
             try:
                 with _image_file_lock:
@@ -425,8 +433,6 @@ class VideoFrameExtractor:
             except (OSError, IOError, ValueError) as e:
                 self.logger.warning("Could not save frames: %s", e)
 
-            first_image = self._process_video_frame(first_image)
-            last_image = self._process_video_frame(last_image)
             return first_image, last_image
 
         self.logger.error("Failed to retrieve frames seconds")

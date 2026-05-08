@@ -31,3 +31,5 @@ This file tracks the project's progress using a task list format.
 *   [ ] Phase 3: Video Engine Integration
 *   [ ] Phase 4: Advanced System Services & Polish
 
+## [2026-05-08 00:13:00] - Fixed TransitionCompletedEvent emission logic
+- Fixed a state tracking bug in `Pi3dRenderer` where `self._was_transitioning` was not being reset after emitting `TransitionCompletedEvent`, and wasn't being set when a transition started. This ensures the event is emitted exactly once per transition, allowing the `PlaybackEngine` to reliably start video playback.

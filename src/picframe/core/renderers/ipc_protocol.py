@@ -32,6 +32,10 @@ class IpcMessage:
 class PlayCommand(IpcMessage):
     """Command to start playing a media URI."""
     uri: str
+    x: int = 0
+    y: int = 0
+    w: int = 0
+    h: int = 0
     type: str = field(default="play", init=False)
 
 @dataclass(frozen=True)
@@ -82,6 +86,11 @@ class CapsResultEvent(IpcMessage):
     supported: bool
     type: str = field(default="caps_result", init=False)
 
+@dataclass(frozen=True)
+class FirstFrameRenderedEvent(IpcMessage):
+    """Event indicating the first frame of the video has been rendered."""
+    type: str = field(default="first_frame_rendered", init=False)
+
 def parse_ipc_message(json_str: str) -> Optional[IpcMessage]:
     """
     Parse a JSON string into the appropriate IpcMessage subclass.
@@ -114,6 +123,8 @@ def parse_ipc_message(json_str: str) -> Optional[IpcMessage]:
             return WarningEvent.from_dict(data)
         elif msg_type == "caps_result":
             return CapsResultEvent.from_dict(data)
+        elif msg_type == "first_frame_rendered":
+            return FirstFrameRenderedEvent.from_dict(data)
         else:
             return None
     except (json.JSONDecodeError, TypeError, ValueError):
