@@ -147,6 +147,24 @@ class ImageCache:
         except Exception:
             return []
 
+    def query_file_ids_with_timestamps(self, where_clause):
+        """Return [(file_id, last_modified), ...] matching ``where_clause``.
+
+        Used by age-weighted sampling. Portrait pairs are not handled here —
+        callers must fall back to ``query_cache`` when pair-joining matters.
+        """
+        cursor = self.__db.cursor()
+        cursor.row_factory = None
+        try:
+            sql = "SELECT file_id, last_modified FROM all_data WHERE {0}".format(where_clause)
+            return cursor.execute(sql).fetchall()
+        except Exception:
+            return []
+
+    @property
+    def portrait_pairs(self):
+        return self.__portrait_pairs
+
     def get_file_info(self, file_id):
         if not file_id:
             return None

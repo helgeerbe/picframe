@@ -69,7 +69,8 @@ DEFAULT_CONFIG = {
         'subdirectory': '',
         'recent_n': 3,
         'age_weighted_sampling': False,
-        'recency_bias': 2.0,
+        'recency_half_life_days': 365,
+        'sample_limit': None,
         'reshuffle_num': 1,
         'time_delay': 200.0,
         'fade_time': 10.0,
@@ -489,13 +490,9 @@ class Model:
             where_clause = "1"
 
         model_config = self.get_model_config()
-        age_weighted_sampling = model_config.get("age_weighted_sampling", False)
-        
-        if age_weighted_sampling:
-            # Use age-weighted sampling instead of recent_n binary sorting
+        if model_config.get("age_weighted_sampling", False) and self.__use_weighted_sampling():
             self.__file_list = self.__get_weighted_sample(where_clause)
         else:
-            # Original logic with recent_n
             sort_list = []
             recent_n = model_config["recent_n"]
             if recent_n > 0:
@@ -518,115 +515,68 @@ class Model:
         self.__num_run_through = 0
         self.__reload_files = False
 
+    def __use_weighted_sampling(self):
+        # Weighted sampling overrides shuffle/sort/recent_n. Warn once on first use
+        # if those would have done something, and refuse to run when portrait pairs
+        # are on (pair join isn't supported by the weighted path).
+        if getattr(self, "_Model__weighted_warned", False):
+            return self.__weighted_enabled
+        self.__weighted_warned = True
+        mc = self.get_model_config()
+        if self.__image_cache.portrait_pairs:
+            self.__logger.warning(
+                "age_weighted_sampling is not supported with portrait_pairs=True; "
+                "falling back to recent_n sorting."
+            )
+            self.__weighted_enabled = False
+            return False
+        if not self.shuffle:
+            self.__logger.warning("age_weighted_sampling overrides shuffle=False.")
+        if mc.get("recent_n", 0) > 0:
+            self.__logger.warning(
+                "age_weighted_sampling overrides recent_n=%s; the recent_n cutoff is ignored.",
+                mc["recent_n"],
+            )
+        self.__weighted_enabled = True
+        return True
+
     def __get_weighted_sample(self, where_clause):
+        """Pick photos with age-weighted random sampling, newer ones more likely.
+
+        Weighting: each photo gets weight 0.5 ** (age_days / half_life_days).
+        A photo at the half-life mark is half as likely as a brand-new one;
+        the choice of half-life decides how strong the bias is. Default 365d.
+
+        Sampling: Efraimidis–Spirakis weighted reservoir — one pass, O(N log N),
+        no replacement. The slideshow walks the resulting permutation in order,
+        so the front of the list is newer-leaning. ``sample_limit`` (None or int)
+        truncates the list to force more frequent re-shuffles on large libraries.
         """
-        Selects photos using age-based weighting instead of simple recent/old grouping.
-        
-        This creates a more natural photo viewing experience by:
-        - Giving newer photos a higher probability of being selected
-        - Still showing older photos (preventing them from being forgotten)
-        - Using smooth probability curves instead of hard cutoffs
-        - Optionally limiting the sample size to force more frequent re-shuffling
-        
-        How it works:
-        1. Calculates each photo's "age rank" from newest (0%) to oldest (100%)
-        2. Applies exponential decay weighting (newer = much higher weight)
-        3. Randomly selects photos based on these weights
-        4. Limits selection to sample_limit photos if specified
-        
-        Configuration options:
-        - 'recency_bias': Controls how strongly it favours newer photos:
-          * A value of 1.0: Creates balanced selection between old and new photos
-          * A value of 2.0: Provides moderate preference for recent photos (default)
-          * A value of 3.0: Creates strong preference for recent photos
-        - 'sample_limit': Optional limit on number of photos to sample:
-          * If None (default): Samples all available photos
-          * If set to N: Samples only N photos, causing more frequent re-shuffling
-          * Useful for devices with large photo collections to increase variety
-        """
-        # Get all files with their timestamps
-        cursor = self.__image_cache._ImageCache__db.cursor()
-        cursor.row_factory = None
-        
-        if not self.__image_cache._ImageCache__portrait_pairs:
-            sql = """SELECT file_id, last_modified FROM all_data WHERE {0}""".format(where_clause)
-            rows = cursor.execute(sql).fetchall()
-            file_data = [(row[0], row[1]) for row in rows]
-        else:
-            # Handle portrait pairs - simplified for now, using same logic as original
-            sql = """SELECT
-                        CASE
-                            WHEN is_portrait = 0 THEN file_id
-                            ELSE -1
-                        END as file_id,
-                        last_modified
-                        FROM all_data WHERE {0}""".format(where_clause)
-            rows = cursor.execute(sql).fetchall()
-            file_data = [(row[0], row[1]) for row in rows if row[0] != -1]
-        
-        if len(file_data) == 0:
+        rows = self.__image_cache.query_file_ids_with_timestamps(where_clause)
+        if not rows:
             return []
-        
-        # Calculate age percentiles and weights
-        timestamps = [data[1] for data in file_data]
-        min_time = min(timestamps)
-        max_time = max(timestamps)
-        time_range = max_time - min_time
-        
-        if time_range == 0:
-            # All photos have same timestamp, treat equally
-            weights = [1.0] * len(file_data)
-        else:
-            recency_bias = self.get_model_config().get("recency_bias", 2.0)
-            weights = []
-            for _, timestamp in file_data:
-                # Calculate age percentile (0.0 = newest, 1.0 = oldest)
-                age_percentile = (max_time - timestamp) / time_range
-                # Calculate weight using exponential decay
-                weight = math.exp(-age_percentile * recency_bias)
-                weights.append(weight)
-        
-        # Check for optional sample limit
-        sample_limit = self.get_model_config().get("sample_limit", None)
-        max_samples = len(file_data) if sample_limit is None else min(sample_limit, len(file_data))
-        
-        # Weighted sampling without replacement
-        sampled_files = []
-        remaining_files = list(range(len(file_data)))
-        remaining_weights = weights[:]
-        
-        # Sample files with their computed probabilities (up to sample_limit)
-        while remaining_files and len(sampled_files) < max_samples:
-            # Normalize weights to probabilities
-            total_weight = sum(remaining_weights)
-            if total_weight == 0:
-                break
-                
-            probabilities = [w / total_weight for w in remaining_weights]
-            
-            # Sample one file
-            rand_val = random.random()
-            cumulative_prob = 0
-            selected_idx = 0
-            
-            for i, prob in enumerate(probabilities):
-                cumulative_prob += prob
-                if rand_val <= cumulative_prob:
-                    selected_idx = i
-                    break
-            
-            # Add selected file to result
-            file_idx = remaining_files[selected_idx]
-            if not self.__image_cache._ImageCache__portrait_pairs:
-                sampled_files.append((file_data[file_idx][0],))
-            else:
-                sampled_files.append((file_data[file_idx][0],))  # Simplified for now
-            
-            # Remove from remaining
-            remaining_files.pop(selected_idx)
-            remaining_weights.pop(selected_idx)
-        
-        return sampled_files
+
+        mc = self.get_model_config()
+        half_life_days = float(mc.get("recency_half_life_days", 365)) or 365.0
+        half_life_secs = half_life_days * 86400.0
+        sample_limit = mc.get("sample_limit", None)
+        now = time.time()
+
+        # Efraimidis–Spirakis: key = u^(1/w); rank by log(key) = log(u)/w.
+        # log(u) is negative for u in (0,1); dividing by smaller w (older photo)
+        # makes log_key more negative, pushing it down the sort.
+        keyed = []
+        for file_id, last_modified in rows:
+            age_secs = max(0.0, now - last_modified)
+            weight = 0.5 ** (age_secs / half_life_secs)
+            u = random.random() or 1e-300  # avoid log(0)
+            log_key = math.log(u) / weight if weight > 0 else -math.inf
+            keyed.append((log_key, file_id))
+
+        keyed.sort(reverse=True)
+        if sample_limit is not None:
+            keyed = keyed[: int(sample_limit)]
+        return [(file_id,) for _, file_id in keyed]
 
     def __generate_random_string(self, length):
         random_bytes = os.urandom(length // 2)
