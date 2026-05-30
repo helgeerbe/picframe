@@ -517,19 +517,11 @@ class Model:
 
     def __use_weighted_sampling(self):
         # Weighted sampling overrides shuffle/sort/recent_n. Warn once on first use
-        # if those would have done something, and refuse to run when portrait pairs
-        # are on (pair join isn't supported by the weighted path).
+        # if those would have done something.
         if getattr(self, "_Model__weighted_warned", False):
             return self.__weighted_enabled
         self.__weighted_warned = True
         mc = self.get_model_config()
-        if self.__image_cache.portrait_pairs:
-            self.__logger.warning(
-                "age_weighted_sampling is not supported with portrait_pairs=True; "
-                "falling back to recent_n sorting."
-            )
-            self.__weighted_enabled = False
-            return False
         if not self.shuffle:
             self.__logger.warning("age_weighted_sampling overrides shuffle=False.")
         if mc.get("recent_n", 0) > 0:
@@ -551,6 +543,11 @@ class Model:
         no replacement. The slideshow walks the resulting permutation in order,
         so the front of the list is newer-leaning. ``sample_limit`` (None or int)
         truncates the list to force more frequent re-shuffles on large libraries.
+
+        Portrait pairing: when ``portrait_pairs`` is enabled on the image cache,
+        consecutive portrait entries in the weighted ordering are joined into
+        two-tuples so the slideshow shows them side-by-side, matching the layout
+        ``query_cache`` produces in the non-weighted path.
         """
         rows = self.__image_cache.query_file_ids_with_timestamps(where_clause)
         if not rows:
@@ -566,17 +563,44 @@ class Model:
         # log(u) is negative for u in (0,1); dividing by smaller w (older photo)
         # makes log_key more negative, pushing it down the sort.
         keyed = []
-        for file_id, last_modified in rows:
+        for file_id, last_modified, is_portrait in rows:
             age_secs = max(0.0, now - last_modified)
             weight = 0.5 ** (age_secs / half_life_secs)
             u = random.random() or 1e-300  # avoid log(0)
             log_key = math.log(u) / weight if weight > 0 else -math.inf
-            keyed.append((log_key, file_id))
+            keyed.append((log_key, file_id, bool(is_portrait)))
 
-        keyed.sort(reverse=True)
+        keyed.sort(reverse=True, key=lambda k: k[0])
         if sample_limit is not None:
             keyed = keyed[: int(sample_limit)]
-        return [(file_id,) for _, file_id in keyed]
+
+        if not self.__image_cache.portrait_pairs:
+            return [(file_id,) for _, file_id, _ in keyed]
+
+        return self.__join_portrait_pairs(keyed)
+
+    @staticmethod
+    def __join_portrait_pairs(keyed):
+        # Mirrors query_cache's pair-joining: walk the ordering, append landscapes
+        # as-is, consume portraits two-at-a-time when consecutive slots allow.
+        pair_queue = [file_id for _, file_id, is_portrait in keyed if is_portrait]
+        out = []
+        skip_portrait_slot = False
+        for _, file_id, is_portrait in keyed:
+            if not is_portrait:
+                out.append((file_id,))
+            elif skip_portrait_slot:
+                skip_portrait_slot = False
+                continue
+            elif pair_queue:
+                left = pair_queue.pop(0)
+                if pair_queue:
+                    right = pair_queue.pop(0)
+                    out.append((left, right))
+                    skip_portrait_slot = True
+                else:
+                    out.append((left,))
+        return out
 
     def __generate_random_string(self, length):
         random_bytes = os.urandom(length // 2)

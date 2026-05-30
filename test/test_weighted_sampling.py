@@ -28,6 +28,13 @@ def _stub_cache_rows(model, rows):
     model._Model__image_cache.query_file_ids_with_timestamps = MagicMock(return_value=rows)
 
 
+def _rows(specs, now=None):
+    """Build cache rows from (file_id, age_days, is_portrait) tuples."""
+    if now is None:
+        now = time.time()
+    return [(fid, now - age_days * 86400, int(is_portrait)) for fid, age_days, is_portrait in specs]
+
+
 def test_returns_empty_when_no_rows():
     m = _make_model()
     _stub_cache_rows(m, [])
@@ -36,8 +43,7 @@ def test_returns_empty_when_no_rows():
 
 def test_returns_one_tuple_per_row():
     m = _make_model()
-    now = time.time()
-    _stub_cache_rows(m, [(i, now - i * 86400) for i in range(50)])
+    _stub_cache_rows(m, _rows([(i, i, False) for i in range(50)]))
     result = m._Model__get_weighted_sample("1")
     assert len(result) == 50
     assert all(isinstance(r, tuple) and len(r) == 1 for r in result)
@@ -46,28 +52,22 @@ def test_returns_one_tuple_per_row():
 
 def test_sample_limit_truncates():
     m = _make_model(sample_limit=10)
-    now = time.time()
-    _stub_cache_rows(m, [(i, now - i * 86400) for i in range(100)])
+    _stub_cache_rows(m, _rows([(i, i, False) for i in range(100)]))
     result = m._Model__get_weighted_sample("1")
     assert len(result) == 10
 
 
 def test_sample_limit_larger_than_pool_returns_all():
     m = _make_model(sample_limit=500)
-    now = time.time()
-    _stub_cache_rows(m, [(i, now - i * 86400) for i in range(20)])
+    _stub_cache_rows(m, _rows([(i, i, False) for i in range(20)]))
     result = m._Model__get_weighted_sample("1")
     assert len(result) == 20
 
 
 def test_newer_photos_picked_more_often_with_small_limit():
-    # With a tight sample_limit and 1-day half-life over a 100-day spread,
-    # the front of the list should be dominated by newer file_ids on average.
     random.seed(42)
     m = _make_model(half_life_days=1, sample_limit=10)
-    now = time.time()
-    # file_id 0 = newest, file_id 99 = oldest
-    rows = [(i, now - i * 86400) for i in range(100)]
+    rows = _rows([(i, i, False) for i in range(100)])  # fid 0 newest, fid 99 oldest
     hits = Counter()
     for _ in range(200):
         _stub_cache_rows(m, rows)
@@ -80,30 +80,62 @@ def test_newer_photos_picked_more_often_with_small_limit():
 
 def test_equal_timestamps_keep_all_photos():
     m = _make_model()
-    ts = time.time()
-    _stub_cache_rows(m, [(i, ts) for i in range(30)])
+    _stub_cache_rows(m, _rows([(i, 0, False) for i in range(30)]))
     result = m._Model__get_weighted_sample("1")
     assert sorted(r[0] for r in result) == list(range(30))
 
 
 def test_very_old_photos_do_not_crash():
-    # 100-year-old photo with 1-day half-life used to risk overflow.
     m = _make_model(half_life_days=1)
-    now = time.time()
-    _stub_cache_rows(m, [(1, now), (2, now - 100 * 365 * 86400)])
+    _stub_cache_rows(m, _rows([(1, 0, False), (2, 100 * 365, False)]))
     result = m._Model__get_weighted_sample("1")
     assert len(result) == 2
-    # Newest should almost always win the top slot under huge bias.
     assert result[0][0] == 1
 
 
-def test_portrait_pairs_disables_weighted_sampling(caplog):
+def test_portrait_pairs_joins_consecutive_portraits():
+    random.seed(0)
     m = _make_model(portrait_pairs=True)
-    # __use_weighted_sampling is what the caller checks before invoking the sampler.
-    with caplog.at_level("WARNING"):
-        assert m._Model__use_weighted_sampling() is False
-    # Subsequent calls cache the decision and do not re-log.
-    assert m._Model__use_weighted_sampling() is False
+    # All portraits, all same age — pair-joining alone should produce 2-tuples.
+    _stub_cache_rows(m, _rows([(i, 0, True) for i in range(6)]))
+    result = m._Model__get_weighted_sample("1")
+    assert len(result) == 3
+    assert all(len(t) == 2 for t in result)
+    assert sorted(fid for t in result for fid in t) == list(range(6))
+
+
+def test_portrait_pairs_handles_odd_count():
+    random.seed(0)
+    m = _make_model(portrait_pairs=True)
+    _stub_cache_rows(m, _rows([(i, 0, True) for i in range(5)]))
+    result = m._Model__get_weighted_sample("1")
+    pair_count = sum(1 for t in result if len(t) == 2)
+    solo_count = sum(1 for t in result if len(t) == 1)
+    assert pair_count == 2 and solo_count == 1
+
+
+def test_portrait_pairs_keeps_landscapes_solo():
+    random.seed(0)
+    m = _make_model(portrait_pairs=True)
+    _stub_cache_rows(m, _rows([
+        (0, 0, False), (1, 0, True), (2, 0, True),
+        (3, 0, False), (4, 0, True),
+    ]))
+    result = m._Model__get_weighted_sample("1")
+    landscape_ids = {fid for t in result if len(t) == 1 for fid in t}
+    portrait_ids = {fid for t in result if len(t) == 2 for fid in t}
+    assert 0 in landscape_ids and 3 in landscape_ids
+    assert portrait_ids == {1, 2} or {1, 4} in [portrait_ids] or {2, 4} in [portrait_ids]
+    # Total file_ids should be preserved (the lone portrait that didn't pair shows up solo).
+    all_ids = {fid for t in result for fid in t}
+    assert all_ids == {0, 1, 2, 3, 4}
+
+
+def test_portrait_pairs_off_returns_only_singletons():
+    m = _make_model(portrait_pairs=False)
+    _stub_cache_rows(m, _rows([(i, 0, True) for i in range(4)]))
+    result = m._Model__get_weighted_sample("1")
+    assert all(len(t) == 1 for t in result)
 
 
 def test_shuffle_false_logs_warning_but_still_runs():
@@ -116,3 +148,8 @@ def test_recent_n_set_logs_warning():
     m = _make_model(recent_n=7)
     assert m._Model__use_weighted_sampling() is True
     m._Model__logger.warning.assert_called()
+
+
+def test_portrait_pairs_no_longer_disables_weighted_sampling():
+    m = _make_model(portrait_pairs=True)
+    assert m._Model__use_weighted_sampling() is True

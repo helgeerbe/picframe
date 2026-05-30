@@ -64,7 +64,7 @@ model:
   no_files_img: "~/picframe_data/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   recent_n: 7                             # default=7 (days), when shuffling file change date more recent than this number of days play before the rest
-  age_weighted_sampling: False            # default=False, when True picks photos with age-weighted random sampling; overrides shuffle/sort_cols/recent_n, not compatible with portrait_pairs # noqa: E501
+  age_weighted_sampling: False            # default=False, when True picks photos with age-weighted random sampling; overrides shuffle/sort_cols/recent_n # noqa: E501
   recency_half_life_days: 365             # default=365, a photo this old is half as likely as a brand-new one (smaller = stronger recency bias)
   sample_limit: null                      # default=null, truncate the weighted permutation to this many photos to force more frequent re-shuffles on large libraries # noqa: E501
   reshuffle_num: 1                        # default=1, times through before reshuffling
