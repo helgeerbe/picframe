@@ -76,3 +76,24 @@ def test_handle_set_config_command(config_service, mock_repo, mock_publisher):
     renderer_event = mock_publisher.publish.call_args_list[1][0][0]
     from picframe.core.events.dto import RendererConfigUpdatedEvent
     assert isinstance(renderer_event, RendererConfigUpdatedEvent)
+
+
+def test_handle_model_timing_config_publishes_renderer_update(
+    config_service, mock_repo, mock_publisher
+):
+    mock_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.fade_time": 3.0,
+        "model.time_delay": 30.0,
+    }.get(key, default)
+    mock_repo.get_app_config_bool.return_value = False
+    event = CommandEvent(
+        command=Command.SET_CONFIG,
+        payload={"model": {"time_delay": 30.0, "fade_time": 3.0}},
+    )
+
+    config_service._handle_command_event(event)
+
+    assert mock_publisher.publish.call_count == 2
+    from picframe.core.events.dto import RendererConfigUpdatedEvent
+
+    assert isinstance(mock_publisher.publish.call_args_list[1][0][0], RendererConfigUpdatedEvent)

@@ -27,5 +27,5 @@
 
 ## Verification Notes
 - Frontend type checking has passed with `npm exec vue-tsc -- -b --noEmit`.
-- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 205 passed, 1 skipped, 1 GI deprecation warning on 2026-05-31.
+- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 219 passed, 1 skipped, 1 GI deprecation warning on 2026-05-31.
 - Current tests include Python 3.14 compatibility shims for Starlette/AnyIO test hangs and avoid real socket binding in API server unit tests.

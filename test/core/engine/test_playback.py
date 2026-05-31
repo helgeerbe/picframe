@@ -80,6 +80,7 @@ def test_engine_initialization(
     
     # Verify it subscribed to commands
     mock_event_subscriber.subscribe.assert_any_call(CommandEvent, engine._handle_command)
+    mock_event_subscriber.subscribe.assert_any_call(StateEvent, engine._handle_state_event)
 
 
 def test_engine_start_stop(
@@ -205,6 +206,43 @@ def test_engine_handle_command_stop(
     assert engine._is_running is False
     # renderer.stop() is now called at the end of _run_loop, not in stop()
     assert engine._state == State.IDLE
+
+
+def test_engine_rebuilds_playlist_and_updates_delay_on_model_config_change(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    config_repo = MagicMock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.time_delay": 42.0,
+        "model.fade_time": 4.0,
+        "model.video_extensions": [".mp4"],
+    }.get(key, default)
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+    engine._state = State.PLAYING
+    engine._next_transition_time = 9999999999.0
+
+    engine._handle_state_event(
+        StateEvent(
+            state=State.CONFIG_CHANGED,
+            payload={"updated_sections": ["model"]},
+        )
+    )
+
+    assert engine._time_delay == 42.0
+    assert engine._config["fade_time"] == 4.0
+    assert engine._config["video_extensions"] == [".mp4"]
+    mock_playlist_manager.build_playlist.assert_called_once()
 
 
 def test_engine_run_loop_exit(

@@ -1,4 +1,8 @@
 {
+  "common": {
+    "help": "Hilfe",
+    "close": "Schließen"
+  },
   "nav": {
     "remote": "Fernbedienung",
     "filters": "Einstellungen & Filter",
@@ -29,7 +33,45 @@
       "codec": "Codec",
       "pixelFormat": "Pixelformat",
       "framerate": "Bildrate",
-      "bitrate": "Bitrate"
+      "bitrate": "Bitrate",
+      "displayedCount": "Angezeigt",
+      "lastDisplayed": "Zuletzt angezeigt"
+    },
+    "mediaSelection": {
+      "title": "Medienauswahl",
+      "subdirectory": "Ordner",
+      "allFolders": "Alle Ordner",
+      "dateFrom": "Von",
+      "dateTo": "Bis",
+      "location": "Ort",
+      "tags": "Tags",
+      "delay": "Dauer (s)",
+      "fade": "Blende (s)",
+      "countBadge": "{selected} / {total}",
+      "countLoading": "Zähle...",
+      "countError": "Anzahl nicht verfügbar",
+      "countTitle": "Treffer mit aktuellen Filtern aus den Dateien im gewählten Ordner: {scope}",
+      "filterHelp": "Nutze AND, OR, NOT und Klammern. Mehrere Wörter werden als eine Phrase behandelt. Chips per Klick umschalten; Shift+Klick fügt mit AND hinzu.",
+      "filterExamples": "Beispiele: family OR beach; family AND NOT beach; (family OR friends) AND holiday; New York.",
+      "chipTitle": "Klicken zum Umschalten. Shift+Klick fügt mit AND hinzu.",
+      "apply": "Anwenden",
+      "applying": "Wende an...",
+      "clear": "Filter leeren",
+      "applied": "Medienauswahl aktualisiert.",
+      "failed": "Medienauswahl konnte nicht aktualisiert werden."
+    },
+    "controls": {
+      "currentMedia": "Aktuelles Medium",
+      "turnDisplayOn": "Display einschalten",
+      "turnDisplayOff": "Display ausschalten",
+      "previous": "Vorheriges Medium",
+      "next": "Nächstes Medium",
+      "play": "Abspielen",
+      "pause": "Pause",
+      "brightness": "Helligkeit",
+      "delete": "Aktuelles Medium löschen",
+      "shuffleOn": "Zufall an",
+      "shuffleOff": "Zufall aus"
     },
     "overlays": {
       "title": "Text-Overlays",
@@ -132,6 +174,8 @@
       "follow_links": "default=False, By default, picframe will not walk down into symbolic links that resolve to directories. Set follow_links to True to visit directories pointed to by symlinks, on systems that support them.",
       "no_files_img": "default=\"PictureFrame2020img.jpg\", image to show if none selected",
       "subdirectory": "default=\"\", subdir of pic_dir - can be changed by MQTT\"",
+      "date_from": "default=\"\", frühestes Mediendatum, YYYY-MM-DD",
+      "date_to": "default=\"\", spätestes Mediendatum, YYYY-MM-DD",
       "recent_n": "default=7 (days), when shuffling file change date more recent than this number of days play before the rest",
       "reshuffle_num": "default=1, times through before reshuffling",
       "time_delay": "default=200.0, time between consecutive slide starts - can be changed by MQTT",

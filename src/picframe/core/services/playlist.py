@@ -11,7 +11,8 @@ import random
 from typing import Any
 
 from picframe.core.models.media import MediaItem, MediaType
-from picframe.core.repositories.interfaces import IMediaRepository
+from picframe.core.models.playlist import PlaylistCriteria
+from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +26,11 @@ class PlaylistManager:
     and providing the next media item to be displayed.
     """
 
-    def __init__(self, media_repository: IMediaRepository) -> None:
+    def __init__(
+        self,
+        media_repository: IMediaRepository,
+        config_repository: IConfigRepository | None = None,
+    ) -> None:
         """
         Initialize the PlaylistManager.
 
@@ -33,10 +38,13 @@ class PlaylistManager:
             media_repository: The repository used to access media metadata.
         """
         self._media_repo = media_repository
+        self._config_repo = config_repository
         self._playlist: list[dict[str, Any]] = []
         self._history: list[dict[str, Any]] = []
         self._current_index: int = -1
         self._shuffle: bool = True
+        self._run_through_count: int = 0
+        self._reshuffle_num: int = 1
 
     def build_playlist(self, shuffle: bool | None = None) -> None:
         """
@@ -50,18 +58,21 @@ class PlaylistManager:
             self._shuffle = shuffle
             
         logger.info("Building new playlist...")
-        # For now, we just get all active media.
-        # In the future, this will incorporate filtering logic based on config.
-        self._playlist = self._media_repo.get_all_media()
+        if self._config_repo is not None:
+            criteria = self._get_playlist_criteria(shuffle)
+            self._shuffle = criteria.shuffle
+            self._playlist = self._media_repo.query_media(criteria)
+        else:
+            self._playlist = self._media_repo.get_all_media()
+            if self._shuffle:
+                random.shuffle(self._playlist)
         
         if not self._playlist:
             logger.warning("No media items found to build playlist.")
             self._current_index = -1
             return
 
-        if self._shuffle:
-            random.shuffle(self._playlist)
-            
+        self._run_through_count = 0
         self._current_index = 0
         logger.info(f"Playlist built with {len(self._playlist)} items.")
 
@@ -86,8 +97,7 @@ class PlaylistManager:
 
         while True:
             if self._current_index >= len(self._playlist):
-                # Rebuild/reshuffle when we reach the end
-                self.build_playlist(shuffle=self._shuffle)
+                self._advance_playlist_cycle()
                 if not self._playlist:
                     return self._get_no_images_placeholder()
                 # If we've rebuilt and still can't find a file after a
@@ -108,6 +118,9 @@ class PlaylistManager:
                     latest_data = self._media_repo.get_media_item(media_id)
                     if latest_data and isinstance(latest_data, dict):
                         item_data = latest_data
+                    updated_data = self._media_repo.record_media_displayed(media_id)
+                    if updated_data and isinstance(updated_data, dict):
+                        item_data = updated_data
                         
                 self._history.append(item_data)
                 return self._dict_to_media_item(item_data)
@@ -129,7 +142,7 @@ class PlaylistManager:
         if not self._history:
             return None
             
-        # Fetch the latest data from the repository to ensure we have updated metadata (like geocoding)
+        # Fetch latest data so geocoding and display stats stay fresh.
         current_item = self._history[-1]
         media_id = current_item.get("id")
         if media_id:
@@ -192,6 +205,10 @@ class PlaylistManager:
                     latest_data = self._media_repo.get_media_item(media_id)
                     if latest_data and isinstance(latest_data, dict):
                         item_data = latest_data
+                    updated_data = self._media_repo.record_media_displayed(media_id)
+                    if updated_data and isinstance(updated_data, dict):
+                        item_data = updated_data
+                        self._history[-1] = updated_data
                         
                 return self._dict_to_media_item(item_data)
             else:
@@ -231,6 +248,46 @@ class PlaylistManager:
             height=0,
             orientation=1,
             is_deleted=False
+        )
+
+    def _advance_playlist_cycle(self) -> None:
+        """Loop or reshuffle when the current playlist has been exhausted."""
+        self._run_through_count += 1
+        if self._shuffle and self._run_through_count >= self._reshuffle_num:
+            self.build_playlist(shuffle=self._shuffle)
+        else:
+            self._current_index = 0
+
+    def _get_playlist_criteria(self, shuffle_override: bool | None = None) -> PlaylistCriteria:
+        """Build playlist criteria from the live configuration repository."""
+        assert self._config_repo is not None
+
+        def config_value(key: str, default: Any) -> Any:
+            return self._config_repo.get_app_config(key, default)
+
+        def config_bool(key: str, default: bool) -> bool:
+            if hasattr(self._config_repo, "get_app_config_bool"):
+                return self._config_repo.get_app_config_bool(key, default)
+            value = config_value(key, default)
+            if isinstance(value, str):
+                return value.lower() in {"1", "true", "yes", "on"}
+            return bool(value)
+
+        self._reshuffle_num = max(1, int(config_value("model.reshuffle_num", 1) or 1))
+        shuffle = config_bool("model.shuffle", self._shuffle)
+        if shuffle_override is not None:
+            shuffle = shuffle_override
+
+        return PlaylistCriteria(
+            pic_dir=str(config_value("model.pic_dir", "~/Pictures")),
+            subdirectory=str(config_value("model.subdirectory", "")),
+            date_from=config_value("model.date_from", ""),
+            date_to=config_value("model.date_to", ""),
+            location_filter=str(config_value("model.location_filter", "")),
+            tags_filter=str(config_value("model.tags_filter", "")),
+            shuffle=shuffle,
+            sort_cols=str(config_value("model.sort_cols", "fname ASC")),
+            recent_n=int(config_value("model.recent_n", 0) or 0),
         )
 
     def _dict_to_media_item(self, data: dict[str, Any]) -> MediaItem:

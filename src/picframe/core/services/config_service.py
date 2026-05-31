@@ -146,7 +146,11 @@ class ConfigService:
                     )
                 )
                 
-                if "viewer" in updated_sections or "text_overlay" in updated_sections:
+                if (
+                    "viewer" in updated_sections
+                    or "model" in updated_sections
+                    or "text_overlay" in updated_sections
+                ):
                     self._publish_renderer_config()
 
         except Exception as e:

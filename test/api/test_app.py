@@ -3,8 +3,8 @@ from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
 import httpx
+import pytest
 from fastapi import FastAPI
 
 from picframe.api.app import create_app
@@ -110,6 +110,8 @@ def test_api_get_config_with_repo() -> None:
     mock_repo.get_all_app_config.return_value = {
         "viewer.fps": 60,
         "model.pic_dir": "/tmp",
+        "model.date_from": "2024-01-01",
+        "model.date_to": "2024-02-01",
         "mqtt.use_mqtt": False,
         
         "peripherals.enable": True,
@@ -123,6 +125,8 @@ def test_api_get_config_with_repo() -> None:
     data = response.json()
     assert data["viewer"]["fps"] == 60
     assert data["model"]["pic_dir"] == "/tmp"
+    assert data["model"]["date_from"] == "2024-01-01"
+    assert data["model"]["date_to"] == "2024-02-01"
     assert data["mqtt"]["use_mqtt"] is False
     
     assert data["peripherals"]["enable"] is True
@@ -139,7 +143,7 @@ def test_api_put_config() -> None:
     
     payload = {
         "viewer": {"fps": 60},
-        "model": {"pic_dir": "/new/path"}
+        "model": {"pic_dir": "/new/path", "date_from": "2024-01-01"}
     }
     
     response = client.put("/api/config", json=payload)
@@ -147,13 +151,105 @@ def test_api_put_config() -> None:
     assert response.json() == {"status": "success"}
     
     # Verify repository was updated
-    assert mock_repo.set_app_config.call_count == 2
+    assert mock_repo.set_app_config.call_count == 3
+    mock_repo.set_app_config.assert_any_call("model.date_from", "2024-01-01")
     
     # Verify event was published
     mock_publisher.publish.assert_called_once()
     event = mock_publisher.publish.call_args[0][0]
     assert event.command.name == "SET_CONFIG"
     assert event.payload == payload
+
+
+def test_api_media_filter_options() -> None:
+    mock_config_repo = MagicMock()
+    mock_config_repo.get_app_config.return_value = "/pictures"
+    mock_media_repo = MagicMock()
+    mock_media_repo.get_filter_options.return_value = {
+        "subdirectories": ["holiday"],
+        "locations": ["Berlin"],
+        "tags": ["family"],
+        "sort_columns": [{"key": "fname", "label": "File name"}],
+    }
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_config_repo,
+        media_repository=mock_media_repo,
+    )
+    client = ASGITestClient(app)
+
+    response = client.get("/api/media/filter-options")
+
+    assert response.status_code == 200
+    assert response.json()["subdirectories"] == ["holiday"]
+    mock_media_repo.get_filter_options.assert_called_once_with("/pictures")
+
+
+def test_api_media_selection_count_uses_config_pic_dir() -> None:
+    mock_config_repo = MagicMock()
+    mock_config_repo.get_app_config.return_value = "/pictures"
+    mock_media_repo = MagicMock()
+    mock_media_repo.count_media.return_value = {
+        "selected_count": 8,
+        "total_count": 10000,
+        "scope": "subdirectory",
+        "scope_label": "holiday",
+    }
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_config_repo,
+        media_repository=mock_media_repo,
+    )
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/media/selection-count",
+        json={
+            "subdirectory": "holiday",
+            "date_from": "2024-01-01",
+            "date_to": "2024-02-01",
+            "location_filter": "Berlin OR Hamburg",
+            "tags_filter": "family AND beach",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "selected_count": 8,
+        "total_count": 10000,
+        "scope": "subdirectory",
+        "scope_label": "holiday",
+    }
+    criteria = mock_media_repo.count_media.call_args.args[0]
+    assert criteria.pic_dir == "/pictures"
+    assert criteria.subdirectory == "holiday"
+    assert criteria.date_from == "2024-01-01"
+    assert criteria.date_to == "2024-02-01"
+    assert criteria.location_filter == "Berlin OR Hamburg"
+    assert criteria.tags_filter == "family AND beach"
+    assert criteria.shuffle is False
+    assert criteria.recent_n == 0
+
+
+def test_api_media_selection_count_without_media_repo() -> None:
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/media/selection-count",
+        json={"subdirectory": "holiday"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "selected_count": 0,
+        "total_count": 0,
+        "scope": "subdirectory",
+        "scope_label": "holiday",
+    }
+
 
 def test_api_import_yaml() -> None:
     mock_repo = MagicMock()

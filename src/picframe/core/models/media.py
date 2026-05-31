@@ -55,6 +55,8 @@ class MediaItem:
     pixel_format: str | None = None
     framerate: float | None = None
     bitrate: int | None = None
+    displayed_count: int = 0
+    last_displayed: float = 0.0
     id: int | None = None
     is_deleted: bool = False
 
@@ -99,5 +101,7 @@ class MediaItem:
             "pixel_format": self.pixel_format,
             "framerate": self.framerate,
             "bitrate": self.bitrate,
+            "displayed_count": self.displayed_count,
+            "last_displayed": self.last_displayed,
             "is_deleted": int(self.is_deleted),
         }

@@ -1,4 +1,8 @@
 {
+  "common": {
+    "help": "Help",
+    "close": "Close"
+  },
   "nav": {
     "remote": "Remote",
     "filters": "Settings & Filters",
@@ -29,7 +33,45 @@
       "codec": "Codec",
       "pixelFormat": "Pixel Format",
       "framerate": "Framerate",
-      "bitrate": "Bitrate"
+      "bitrate": "Bitrate",
+      "displayedCount": "Shown",
+      "lastDisplayed": "Last Shown"
+    },
+    "mediaSelection": {
+      "title": "Media Selection",
+      "subdirectory": "Folder",
+      "allFolders": "All folders",
+      "dateFrom": "From",
+      "dateTo": "To",
+      "location": "Location",
+      "tags": "Tags",
+      "delay": "Delay (s)",
+      "fade": "Fade (s)",
+      "countBadge": "{selected} / {total}",
+      "countLoading": "Counting...",
+      "countError": "Count unavailable",
+      "countTitle": "Matching current filters out of files in selected folder: {scope}",
+      "filterHelp": "Use AND, OR, NOT and parentheses. Multiple words are treated as one phrase. Click chips to toggle terms with OR; Shift-click adds with AND.",
+      "filterExamples": "Examples: family OR beach; family AND NOT beach; (family OR friends) AND holiday; New York.",
+      "chipTitle": "Click to toggle. Shift-click adds with AND.",
+      "apply": "Apply",
+      "applying": "Applying...",
+      "clear": "Clear filters",
+      "applied": "Media selection updated.",
+      "failed": "Could not update media selection."
+    },
+    "controls": {
+      "currentMedia": "Current media",
+      "turnDisplayOn": "Turn display on",
+      "turnDisplayOff": "Turn display off",
+      "previous": "Previous media",
+      "next": "Next media",
+      "play": "Play",
+      "pause": "Pause",
+      "brightness": "Brightness",
+      "delete": "Delete current media",
+      "shuffleOn": "Shuffle on",
+      "shuffleOff": "Shuffle off"
     },
     "overlays": {
       "title": "Text Overlays",
@@ -132,6 +174,8 @@
       "follow_links": "default=False, By default, picframe will not walk down into symbolic links that resolve to directories. Set follow_links to True to visit directories pointed to by symlinks, on systems that support them.",
       "no_files_img": "default=\"PictureFrame2020img.jpg\", image to show if none selected",
       "subdirectory": "default=\"\", subdir of pic_dir - can be changed by MQTT\"",
+      "date_from": "default=\"\", earliest media date to include, YYYY-MM-DD",
+      "date_to": "default=\"\", latest media date to include, YYYY-MM-DD",
       "recent_n": "default=7 (days), when shuffling file change date more recent than this number of days play before the rest",
       "reshuffle_num": "default=1, times through before reshuffling",
       "time_delay": "default=200.0, time between consecutive slide starts - can be changed by MQTT",

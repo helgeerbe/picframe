@@ -65,7 +65,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     logger.info(f"HAL Adapters injected: {hal_adapters}")
 
     # 5. Initialize Services
-    playlist_manager = PlaylistManager(media_repo)
+    playlist_manager = PlaylistManager(media_repo, _config_repo)
     from picframe.core.services.display_power import DisplayPowerManager
     display_power_manager = DisplayPowerManager(event_bus, hal_adapters.display_power)
     from picframe.core.services.system_manager import SystemManager
@@ -164,6 +164,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         event_subscriber=event_bus,
         cors_allowed_origins=cors_origins,
         config_repository=_config_repo,
+        media_repository=media_repo,
         html_dir=html_dir or os.path.join(base_dir, "html"),
     )
     web_server = WebServer(app, port=port)

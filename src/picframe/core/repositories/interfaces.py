@@ -8,6 +8,8 @@ configuration database and the ephemeral media cache database.
 
 from typing import Any, Protocol
 
+from picframe.core.models.playlist import PlaylistCriteria
+
 
 class IConfigRepository(Protocol):
     """
@@ -173,6 +175,54 @@ class IMediaRepository(Protocol):
 
         Returns:
             A list of dictionaries containing media metadata.
+        """
+        ...
+
+    def query_media(self, criteria: PlaylistCriteria) -> list[dict[str, Any]]:
+        """
+        Retrieve active media items matching playlist selection criteria.
+
+        Args:
+            criteria: The media selection and ordering criteria.
+
+        Returns:
+            A list of dictionaries containing media metadata.
+        """
+        ...
+
+    def count_media(self, criteria: PlaylistCriteria) -> dict[str, Any]:
+        """
+        Count active media matching playlist selection criteria.
+
+        Args:
+            criteria: The media selection criteria to count.
+
+        Returns:
+            A dictionary containing selected_count, total_count, scope, and scope_label.
+        """
+        ...
+
+    def record_media_displayed(self, media_id: int) -> dict[str, Any] | None:
+        """
+        Increment display statistics for a media item.
+
+        Args:
+            media_id: The media item that was selected for display.
+
+        Returns:
+            The updated media record, or None if the item no longer exists.
+        """
+        ...
+
+    def get_filter_options(self, pic_dir: str | None = None) -> dict[str, Any]:
+        """
+        Return distinct metadata values useful for frontend filter controls.
+
+        Args:
+            pic_dir: Optional media root used to derive relative subdirectories.
+
+        Returns:
+            A dictionary containing subdirectories, locations, tags, and sort columns.
         """
         ...
 

@@ -181,6 +181,12 @@
     "subdirectory": {
       "type": "string"
     },
+    "date_from": {
+      "type": "string"
+    },
+    "date_to": {
+      "type": "string"
+    },
     "recent_n": {
       "type": "integer"
     },

@@ -6,10 +6,52 @@ const api = axios.create({
   baseURL: import.meta.env.DEV ? `http://${window.location.hostname}:9000/api` : '/api'
 })
 
+export interface FilterOptions {
+  subdirectories: string[]
+  locations: string[]
+  tags: string[]
+  sort_columns: Array<{ key: string, label: string }>
+}
+
+export interface MediaSelectionCount {
+  selected_count: number
+  total_count: number
+  scope: string
+  scope_label: string
+}
+
+function isPlainObject(value: unknown): value is Record<string, any> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+function mergeConfig(base: Record<string, any>, patch: Record<string, any>): Record<string, any> {
+  const merged = { ...base }
+  for (const [key, value] of Object.entries(patch)) {
+    merged[key] = isPlainObject(value) && isPlainObject(merged[key])
+      ? mergeConfig(merged[key], value)
+      : value
+  }
+  return merged
+}
+
 export const useConfigStore = defineStore('config', () => {
   const config = ref<Record<string, any>>({})
+  const filterOptions = ref<FilterOptions>({
+    subdirectories: [],
+    locations: [],
+    tags: [],
+    sort_columns: []
+  })
+  const selectionCount = ref<MediaSelectionCount>({
+    selected_count: 0,
+    total_count: 0,
+    scope: 'pic_dir',
+    scope_label: ''
+  })
   const isLoading = ref(false)
+  const isSelectionCountLoading = ref(false)
   const error = ref<string | null>(null)
+  const selectionCountError = ref<string | null>(null)
 
   async function fetchConfig() {
     isLoading.value = true
@@ -40,12 +82,58 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  async function savePartialConfig(partialConfig: Record<string, any>) {
+    isLoading.value = true
+    error.value = null
+    try {
+      await api.put('/config', partialConfig)
+      config.value = mergeConfig(config.value, partialConfig)
+    } catch (e: any) {
+      error.value = e.message || 'Failed to save configuration'
+      console.error(e)
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function fetchFilterOptions() {
+    try {
+      const response = await api.get('/media/filter-options')
+      filterOptions.value = response.data
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch media filter options'
+      console.error(e)
+    }
+  }
+
+  async function fetchSelectionCount(payload: Record<string, any>) {
+    isSelectionCountLoading.value = true
+    selectionCountError.value = null
+    try {
+      const response = await api.post('/media/selection-count', payload)
+      selectionCount.value = response.data
+    } catch (e: any) {
+      selectionCountError.value = e.message || 'Failed to fetch media selection count'
+      console.error(e)
+    } finally {
+      isSelectionCountLoading.value = false
+    }
+  }
+
   return {
     config,
+    filterOptions,
+    selectionCount,
     isLoading,
+    isSelectionCountLoading,
     error,
+    selectionCountError,
     fetchConfig,
-    saveConfig
+    fetchFilterOptions,
+    fetchSelectionCount,
+    saveConfig,
+    savePartialConfig
   }
 })
 

@@ -12,6 +12,23 @@ class MediaResponseDTO(BaseModel):
     location: dict[str, float] | None = None
 
 
+class MediaSelectionCountRequest(BaseModel):
+    """Remote media-selection filters used for count previews."""
+    subdirectory: str = ""
+    date_from: str = ""
+    date_to: str = ""
+    location_filter: str = ""
+    tags_filter: str = ""
+
+
+class MediaSelectionCountResponse(BaseModel):
+    """Count preview for Remote media-selection filters."""
+    selected_count: int = 0
+    total_count: int = 0
+    scope: str = "pic_dir"
+    scope_label: str = ""
+
+
 class ViewerConfig(BaseModel):
     blur_amount: int = 12
     blur_zoom: float = 1.0
@@ -77,6 +94,8 @@ class ModelConfig(BaseModel):
     follow_links: bool = False
     no_files_img: str = "~/picframe_data/data/no_pictures.jpg"
     subdirectory: str = ""
+    date_from: str = ""
+    date_to: str = ""
     recent_n: int = 7
     reshuffle_num: int = 1
     time_delay: float = 200.0

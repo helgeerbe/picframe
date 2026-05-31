@@ -11,15 +11,21 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import Body, FastAPI, WebSocket, WebSocketDisconnect, HTTPException, UploadFile, File
+from fastapi import Body, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from picframe.api.models import AppConfig, MediaResponseDTO
+from picframe.api.models import (
+    AppConfig,
+    MediaResponseDTO,
+    MediaSelectionCountRequest,
+    MediaSelectionCountResponse,
+)
 from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
-from picframe.core.repositories.interfaces import IConfigRepository
+from picframe.core.models.playlist import PlaylistCriteria
+from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +35,7 @@ def create_app(
     event_publisher: IEventPublisher | None = None,
     event_subscriber: IEventSubscriber | None = None,
     config_repository: IConfigRepository | None = None,
+    media_repository: IMediaRepository | None = None,
     html_dir: str = "~/.picframe/html",
 ) -> FastAPI:
     """
@@ -105,7 +112,8 @@ def create_app(
                 "make", "model", "lens", "f_number", "exposure_time", "iso",
                 "focal_length", "exif_datetime", "caption", "tags", "location",
                 "title", "rating", "width", "height", "orientation",
-                "duration", "codec", "pixel_format", "framerate", "bitrate"
+                "duration", "codec", "pixel_format", "framerate", "bitrate",
+                "displayed_count", "last_displayed"
             ]
             exif_data = {}
             
@@ -132,8 +140,8 @@ def create_app(
                     # We need to access the media repo to do a direct lookup
                     # This is a bit of a hack, but it ensures we get the latest location
                     # even if the event payload didn't include it
-                    import sqlite3
                     import os
+                    import sqlite3
                     db_path = os.path.expanduser("~/.picframe/data/media_cache.db3")
                     if os.path.exists(db_path):
                         with sqlite3.connect(db_path) as conn:
@@ -351,6 +359,50 @@ def create_app(
         from picframe.api.models import AppConfig
         app_config = AppConfig(**nested_config)
         return app_config.model_dump()
+
+    @app.get("/api/media/filter-options")
+    async def api_media_filter_options() -> dict[str, Any]:
+        """Return distinct values for Remote media selection controls."""
+        if not media_repository:
+            return {
+                "subdirectories": [],
+                "locations": [],
+                "tags": [],
+                "sort_columns": [],
+            }
+        pic_dir = None
+        if config_repository:
+            pic_dir = str(config_repository.get_app_config("model.pic_dir", "~/Pictures"))
+        return media_repository.get_filter_options(pic_dir)
+
+    @app.post("/api/media/selection-count")
+    async def api_media_selection_count(
+        payload: MediaSelectionCountRequest | None = Body(default=None),
+    ) -> dict[str, Any]:
+        """Return selected and folder-scope media counts for Remote filters."""
+        payload = payload or MediaSelectionCountRequest()
+        if not media_repository:
+            scope_label = payload.subdirectory.strip().strip("/")
+            return MediaSelectionCountResponse(
+                scope="subdirectory" if scope_label else "pic_dir",
+                scope_label=scope_label,
+            ).model_dump()
+
+        pic_dir = "~/Pictures"
+        if config_repository:
+            pic_dir = str(config_repository.get_app_config("model.pic_dir", pic_dir))
+        criteria = PlaylistCriteria(
+            pic_dir=pic_dir,
+            subdirectory=payload.subdirectory,
+            date_from=payload.date_from,
+            date_to=payload.date_to,
+            location_filter=payload.location_filter,
+            tags_filter=payload.tags_filter,
+            shuffle=False,
+            recent_n=0,
+        )
+        counts = media_repository.count_media(criteria)
+        return MediaSelectionCountResponse(**counts).model_dump()
 
     @app.post("/api/config/import-yaml")
     async def api_import_yaml(file: UploadFile = File(...)) -> dict[str, Any]:

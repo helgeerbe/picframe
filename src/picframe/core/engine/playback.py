@@ -68,6 +68,7 @@ class PlaybackEngine:
         
         # Subscribe to commands
         self._event_subscriber.subscribe(CommandEvent, self._handle_command)
+        self._event_subscriber.subscribe(StateEvent, self._handle_state_event)
         
         # Subscribe to video playback completion
         from picframe.core.events.dto import (
@@ -188,6 +189,43 @@ class PlaybackEngine:
         elif event.command == Command.SET_VOL:
             if self._video_player and event.payload is not None:
                 self._video_player.set_volume(float(event.payload))
+
+    def _handle_state_event(self, event: StateEvent) -> None:
+        """React to runtime configuration changes."""
+        if event.state != State.CONFIG_CHANGED:
+            return
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        updated_sections = payload.get("updated_sections", [])
+        if "model" not in updated_sections:
+            return
+
+        self._refresh_model_timing()
+        self._playlist_manager.build_playlist()
+        if self._state == State.PLAYING and self._next_transition_time != float("inf"):
+            self._next_transition_time = min(
+                self._next_transition_time,
+                time.time() + self._time_delay,
+            )
+
+    def _refresh_model_timing(self) -> None:
+        """Refresh playback timing values from live configuration."""
+        if self._config_repository:
+            self._time_delay = float(
+                self._config_repository.get_app_config(
+                    "model.time_delay", self._config.get("time_delay", 200.0)
+                )
+            )
+            self._config["fade_time"] = float(
+                self._config_repository.get_app_config(
+                    "model.fade_time", self._config.get("fade_time", 10.0)
+                )
+            )
+            self._config["video_extensions"] = self._config_repository.get_app_config(
+                "model.video_extensions",
+                self._config.get("video_extensions", [".mp4", ".mov", ".mkv", ".avi", ".webm"]),
+            )
+        else:
+            self._time_delay = float(self._config.get("time_delay", 200.0))
 
     def _handle_request_state(self) -> None:
         """Handle a request to broadcast the current state and media."""

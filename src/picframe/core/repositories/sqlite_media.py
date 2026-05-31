@@ -6,9 +6,15 @@ media metadata using a SQLite database (`media_cache.db3`).
 """
 
 import logging
+import re
 import sqlite3
+import time
+from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
+from pathlib import Path
 from typing import Any
 
+from picframe.core.models.playlist import PlaylistCriteria
 from picframe.core.repositories.interfaces import IMediaRepository
 from picframe.core.repositories.migrations import Migration, MigrationManager
 
@@ -51,6 +57,8 @@ MEDIA_MIGRATIONS = [
             pixel_format TEXT,
             framerate REAL,
             bitrate INTEGER,
+            displayed_count INTEGER DEFAULT 0 NOT NULL,
+            last_displayed REAL DEFAULT 0 NOT NULL,
             is_deleted INTEGER DEFAULT 0,
             created_at REAL DEFAULT (julianday('now')),
             updated_at REAL DEFAULT (julianday('now'))
@@ -58,6 +66,10 @@ MEDIA_MIGRATIONS = [
         CREATE INDEX IF NOT EXISTS idx_media_directory ON media(directory_id);
         CREATE INDEX IF NOT EXISTS idx_media_type ON media(media_type);
         CREATE INDEX IF NOT EXISTS idx_media_deleted ON media(is_deleted);
+        CREATE INDEX IF NOT EXISTS idx_media_last_modified ON media(last_modified);
+        CREATE INDEX IF NOT EXISTS idx_media_exif_datetime ON media(exif_datetime);
+        CREATE INDEX IF NOT EXISTS idx_media_location ON media(location);
+        CREATE INDEX IF NOT EXISTS idx_media_tags ON media(tags);
 
         CREATE TABLE IF NOT EXISTS locations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -75,8 +87,163 @@ MEDIA_MIGRATIONS = [
             UNIQUE (latitude, longitude)
         );
         """,
-    )
+    ),
 ]
+
+SORT_COLUMN_MAP = {
+    "id": "m.id",
+    "file_id": "m.id",
+    "filepath": "m.filepath",
+    "fname": "m.filepath",
+    "filename": "m.filename",
+    "last_modified": "m.last_modified",
+    "orientation": "m.orientation",
+    "exif_datetime": "m.exif_datetime",
+    "f_number": "m.f_number",
+    "exposure_time": "m.exposure_time",
+    "iso": "m.iso",
+    "focal_length": "m.focal_length",
+    "make": "m.make",
+    "model": "m.model",
+    "lens": "m.lens",
+    "rating": "m.rating",
+    "latitude": "m.latitude",
+    "longitude": "m.longitude",
+    "width": "m.width",
+    "height": "m.height",
+    "title": "m.title",
+    "caption": "m.caption",
+    "tags": "m.tags",
+    "is_portrait": "m.is_portrait",
+    "location": "COALESCE(l.address, m.location)",
+    "displayed_count": "m.displayed_count",
+    "last_displayed": "m.last_displayed",
+}
+
+SORT_COLUMNS_FOR_UI = [
+    {"key": "fname", "label": "File name"},
+    {"key": "exif_datetime", "label": "Date taken"},
+    {"key": "last_modified", "label": "Modified date"},
+    {"key": "rating", "label": "Rating"},
+    {"key": "location", "label": "Location"},
+    {"key": "displayed_count", "label": "Shown count"},
+    {"key": "last_displayed", "label": "Last shown"},
+]
+
+
+@dataclass(frozen=True)
+class _FilterToken:
+    kind: str
+    value: str
+
+
+class _FilterParser:
+    """Translate a small boolean text-filter language into parameterized SQL."""
+
+    _token_re = re.compile(r'"([^"]+)"|(\()|(\))|\b(AND|OR|NOT)\b|([^\s()]+)', re.I)
+
+    def __init__(self, expression: str, column_sql: str) -> None:
+        self._tokens = self._tokenize(expression)
+        self._column_sql = column_sql
+        self._index = 0
+        self.params: list[Any] = []
+
+    @classmethod
+    def _tokenize(cls, expression: str) -> list[_FilterToken]:
+        tokens: list[_FilterToken] = []
+        for match in cls._token_re.finditer(expression):
+            quoted, left, right, operator, term = match.groups()
+            if quoted:
+                tokens.append(_FilterToken("term", quoted))
+            elif left:
+                tokens.append(_FilterToken("left", left))
+            elif right:
+                tokens.append(_FilterToken("right", right))
+            elif operator:
+                tokens.append(_FilterToken("operator", operator.upper()))
+            elif term:
+                tokens.append(_FilterToken("term", term))
+        return tokens
+
+    def parse(self) -> str | None:
+        if not self._tokens:
+            return None
+        sql = self._parse_or()
+        if sql is None or self._peek() is not None:
+            return None
+        return sql
+
+    def _peek(self) -> _FilterToken | None:
+        return self._tokens[self._index] if self._index < len(self._tokens) else None
+
+    def _consume(self) -> _FilterToken | None:
+        token = self._peek()
+        if token is not None:
+            self._index += 1
+        return token
+
+    def _parse_or(self) -> str | None:
+        sql = self._parse_and()
+        if sql is None:
+            return None
+        while self._peek_is_operator("OR"):
+            self._consume()
+            rhs = self._parse_and()
+            if rhs is None:
+                return None
+            sql = f"({sql} OR {rhs})"
+        return sql
+
+    def _parse_and(self) -> str | None:
+        sql = self._parse_not()
+        if sql is None:
+            return None
+        while self._peek_is_operator("AND"):
+            self._consume()
+            rhs = self._parse_not()
+            if rhs is None:
+                return None
+            sql = f"({sql} AND {rhs})"
+        return sql
+
+    def _parse_not(self) -> str | None:
+        token = self._peek()
+        if token and token.kind == "operator" and token.value == "NOT":
+            self._consume()
+            sql = self._parse_not()
+            return f"(NOT {sql})" if sql is not None else None
+        return self._parse_primary()
+
+    def _parse_primary(self) -> str | None:
+        token = self._consume()
+        if token is None:
+            return None
+        if token.kind == "left":
+            sql = self._parse_or()
+            closing = self._consume()
+            if sql is None or closing is None or closing.kind != "right":
+                return None
+            return f"({sql})"
+        if token.kind != "term":
+            return None
+        phrase = [token.value]
+        while True:
+            next_peek = self._peek()
+            if next_peek is None or next_peek.kind != "term":
+                break
+            next_token = self._consume()
+            if next_token is not None:
+                phrase.append(next_token.value)
+        self.params.append(f"%{self._escape_like(' '.join(phrase).lower())}%")
+        return f"LOWER(COALESCE({self._column_sql}, '')) LIKE ? ESCAPE '\\'"
+
+    def _peek_is_operator(self, value: str) -> bool:
+        token = self._peek()
+        return token is not None and token.kind == "operator" and token.value == value
+
+    @staticmethod
+    def _escape_like(value: str) -> str:
+        return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 
 class SQLiteMediaRepository(IMediaRepository):
@@ -121,6 +288,16 @@ class SQLiteMediaRepository(IMediaRepository):
         Returns:
             The ID of the newly inserted or updated media item.
         """
+        existing = None
+        filepath = media_data.get("filepath")
+        if filepath:
+            existing = self.get_media_by_path(str(filepath))
+        if existing:
+            if not media_data.get("id"):
+                media_data["id"] = existing["id"]
+            media_data.setdefault("displayed_count", existing.get("displayed_count", 0))
+            media_data.setdefault("last_displayed", existing.get("last_displayed", 0.0))
+
         columns = ", ".join(media_data.keys())
         placeholders = ", ".join("?" for _ in media_data)
         
@@ -145,7 +322,8 @@ class SQLiteMediaRepository(IMediaRepository):
             """
             SELECT m.*, COALESCE(l.address, m.location) as location
             FROM media m
-            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4) AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
+                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
             WHERE m.filepath = ?
             """,
             (filepath,)
@@ -181,7 +359,8 @@ class SQLiteMediaRepository(IMediaRepository):
             """
             SELECT m.*, COALESCE(l.address, m.location) as location
             FROM media m
-            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4) AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
+                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
             WHERE m.id = ?
             """,
             (media_id,)
@@ -242,11 +421,250 @@ class SQLiteMediaRepository(IMediaRepository):
             """
             SELECT m.*, COALESCE(l.address, m.location) as location
             FROM media m
-            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4) AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
+                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
             WHERE m.is_deleted = 0
             """
         )
         return [dict(row) for row in cursor.fetchall()]
+
+    def query_media(self, criteria: PlaylistCriteria) -> list[dict[str, Any]]:
+        """
+        Retrieve active media matching playlist criteria.
+        """
+        where_clauses, params = self._build_media_where(criteria)
+        order_clause = self._build_order_clause(criteria)
+
+        cursor = self._conn.execute(
+            f"""
+            SELECT m.*, COALESCE(l.address, m.location) as location
+            FROM media m
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
+                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            WHERE {" AND ".join(where_clauses)}
+            ORDER BY {order_clause}
+            """,
+            params,
+        )
+        return [dict(row) for row in cursor.fetchall()]
+
+    def count_media(self, criteria: PlaylistCriteria) -> dict[str, Any]:
+        """
+        Count active media matching playlist criteria and the active folder scope.
+        """
+        selected_where, selected_params = self._build_media_where(criteria)
+        total_where, total_params = self._build_media_where(
+            criteria,
+            include_date_filters=False,
+            include_text_filters=False,
+        )
+        scope_label = (criteria.subdirectory or "").strip().strip("/")
+        return {
+            "selected_count": self._count_media_where(selected_where, selected_params),
+            "total_count": self._count_media_where(total_where, total_params),
+            "scope": "subdirectory" if scope_label else "pic_dir",
+            "scope_label": scope_label or str(Path(criteria.pic_dir or "").expanduser()),
+        }
+
+    def record_media_displayed(self, media_id: int) -> dict[str, Any] | None:
+        """Increment display statistics and return the updated media item."""
+        with self._conn:
+            self._conn.execute(
+                """
+                UPDATE media
+                SET displayed_count = COALESCE(displayed_count, 0) + 1,
+                    last_displayed = ?,
+                    updated_at = julianday('now')
+                WHERE id = ? AND is_deleted = 0
+                """,
+                (time.time(), media_id),
+            )
+        return self.get_media_item(media_id)
+
+    def get_filter_options(self, pic_dir: str | None = None) -> dict[str, Any]:
+        """Return distinct values for Remote filter controls."""
+        cursor = self._conn.execute(
+            """
+            SELECT m.filepath, COALESCE(l.address, m.location) as location, m.tags
+            FROM media m
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
+                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            WHERE m.is_deleted = 0
+            """
+        )
+        subdirectories: set[str] = set()
+        locations: set[str] = set()
+        tags: set[str] = set()
+        root = Path(pic_dir).expanduser() if pic_dir else None
+
+        for row in cursor.fetchall():
+            filepath = row["filepath"]
+            if filepath:
+                parent = Path(filepath).expanduser().parent
+                subdirectory = self._relative_subdirectory(parent, root)
+                if subdirectory:
+                    subdirectories.add(subdirectory)
+            location = row["location"]
+            if location:
+                locations.add(str(location))
+            for tag in str(row["tags"] or "").split(","):
+                tag = tag.strip()
+                if tag:
+                    tags.add(tag)
+
+        return {
+            "subdirectories": sorted(subdirectories, key=str.casefold),
+            "locations": sorted(locations, key=str.casefold),
+            "tags": sorted(tags, key=str.casefold),
+            "sort_columns": SORT_COLUMNS_FOR_UI,
+        }
+
+    def _build_media_where(
+        self,
+        criteria: PlaylistCriteria,
+        *,
+        include_date_filters: bool = True,
+        include_text_filters: bool = True,
+    ) -> tuple[list[str], list[Any]]:
+        where_clauses = ["m.is_deleted = 0"]
+        params: list[Any] = []
+
+        media_root = self._path_prefix(criteria.pic_dir, criteria.subdirectory)
+        if media_root:
+            where_clauses.append("m.filepath LIKE ?")
+            params.append(f"{media_root}%")
+
+        if include_date_filters:
+            timestamp_expr = "COALESCE(NULLIF(m.exif_datetime, 0), m.last_modified)"
+            date_from = self._parse_date_boundary(criteria.date_from, end_of_day=False)
+            date_to = self._parse_date_boundary(criteria.date_to, end_of_day=True)
+            if date_from is not None:
+                where_clauses.append(f"{timestamp_expr} >= ?")
+                params.append(date_from)
+            if date_to is not None:
+                where_clauses.append(f"{timestamp_expr} <= ?")
+                params.append(date_to)
+
+        if include_text_filters:
+            for expression, column in (
+                (criteria.location_filter, "COALESCE(l.address, m.location)"),
+                (criteria.tags_filter, "m.tags"),
+            ):
+                sql, filter_params = self._build_text_filter(expression, column)
+                if sql:
+                    where_clauses.append(f"({sql})")
+                    params.extend(filter_params)
+
+        return where_clauses, params
+
+    def _count_media_where(self, where_clauses: list[str], params: list[Any]) -> int:
+        cursor = self._conn.execute(
+            f"""
+            SELECT COUNT(DISTINCT m.id)
+            FROM media m
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
+                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            WHERE {" AND ".join(where_clauses)}
+            """,
+            params,
+        )
+        return int(cursor.fetchone()[0])
+
+    @staticmethod
+    def _path_prefix(pic_dir: str, subdirectory: str) -> str:
+        root = Path(pic_dir or "").expanduser()
+        if not str(root):
+            return ""
+        subdirectory = (subdirectory or "").strip().strip("/")
+        base = root / subdirectory if subdirectory else root
+        return str(base).rstrip("/") + "/"
+
+    @staticmethod
+    def _parse_date_boundary(value: str | float | int | None, *, end_of_day: bool) -> float | None:
+        if value in (None, ""):
+            return None
+        if isinstance(value, (int, float)):
+            return float(value)
+        value_str = str(value).strip()
+        if not value_str:
+            return None
+        try:
+            return float(value_str)
+        except ValueError:
+            pass
+        for date_format in ("%Y-%m-%d", "%Y/%m/%d", "%Y.%m.%d", "%Y,%m,%d"):
+            try:
+                dt = datetime.strptime(value_str, date_format).replace(tzinfo=UTC)
+                if end_of_day:
+                    dt = dt + timedelta(days=1) - timedelta(milliseconds=1)
+                return dt.timestamp()
+            except ValueError:
+                continue
+        logger.warning("Ignoring invalid playlist date filter: %s", value)
+        return None
+
+    @staticmethod
+    def _build_text_filter(expression: str, column_sql: str) -> tuple[str | None, list[Any]]:
+        expression = (expression or "").strip()
+        if not expression:
+            return None, []
+        parser = _FilterParser(expression, column_sql)
+        sql = parser.parse()
+        if sql is None:
+            logger.warning("Ignoring invalid playlist text filter: %s", expression)
+            return None, []
+        return sql, parser.params
+
+    @staticmethod
+    def _build_order_clause(criteria: PlaylistCriteria) -> str:
+        order_parts: list[str] = []
+        if criteria.recent_n and criteria.recent_n > 0:
+            threshold = time.time() - (float(criteria.recent_n) * 24 * 60 * 60)
+            order_parts.append(
+                f"CASE WHEN m.last_modified >= {threshold:.6f} THEN 0 ELSE 1 END ASC"
+            )
+
+        if criteria.shuffle:
+            order_parts.append("RANDOM()")
+            return ", ".join(order_parts)
+
+        parsed_sort = SQLiteMediaRepository._parse_sort_columns(criteria.sort_cols)
+        order_parts.extend(parsed_sort or ["m.filepath ASC"])
+        if "m.filepath ASC" not in order_parts:
+            order_parts.append("m.filepath ASC")
+        return ", ".join(order_parts)
+
+    @staticmethod
+    def _parse_sort_columns(sort_cols: str) -> list[str]:
+        order_parts: list[str] = []
+        for item in (sort_cols or "").split(","):
+            item = item.strip()
+            if not item:
+                continue
+            match = re.fullmatch(r"([A-Za-z_][A-Za-z0-9_]*)(?:\s+(ASC|DESC))?", item, re.I)
+            if not match:
+                logger.warning("Ignoring invalid playlist sort expression: %s", item)
+                continue
+            key, direction = match.groups()
+            column_sql = SORT_COLUMN_MAP.get(key.lower())
+            if not column_sql:
+                logger.warning("Ignoring unknown playlist sort column: %s", key)
+                continue
+            direction = (direction or "ASC").upper()
+            order_parts.append(f"{column_sql} {direction}")
+        return order_parts
+
+    @staticmethod
+    def _relative_subdirectory(parent: Path, root: Path | None) -> str:
+        if root is None:
+            return parent.name
+        try:
+            relative = parent.relative_to(root)
+        except ValueError:
+            return parent.name
+        if str(relative) == ".":
+            return ""
+        return relative.as_posix()
 
     def get_location(self, latitude: float, longitude: float) -> str | None:
         """
@@ -304,7 +722,12 @@ class SQLiteMediaRepository(IMediaRepository):
         """
         with self._conn:
             cursor = self._conn.execute(
-                "SELECT id, latitude, longitude FROM geocoding_queue ORDER BY created_at ASC LIMIT 1"
+                """
+                SELECT id, latitude, longitude
+                FROM geocoding_queue
+                ORDER BY created_at ASC
+                LIMIT 1
+                """
             )
             row = cursor.fetchone()
             if row:

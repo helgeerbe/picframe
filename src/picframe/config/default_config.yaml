@@ -1,4 +1,8 @@
+# Next-gen seed config. Runtime settings are persisted in config.db3; these
+# comments are for users and maintainers reading the seed file.
+# UI labels and help text live in the frontend locale files.
 viewer:
+  # Edge-fill rendering for photos that do not match the display aspect ratio.
   blur_amount: 12
   blur_zoom: 1.0
   blur_edges: false
@@ -22,18 +26,27 @@ viewer:
   text_opacity: 1.0
   text_x_margin: 100
   text_y_margin: 0
+  # false crops media to fill the display; true keeps the full image visible.
   fit: false
+  # true stretches video to the display; false preserves video aspect ratio.
   video_fit_display: false
+  # Highest resolution allowed for software video decode fallback.
   max_software_decode_resolution: 1280x720
   kenburns: false
+  # Optional display surface override. null means use the detected display size.
   display_x: 0
   display_y: 0
   display_w: null
   display_h: null
+  # Display power backend selector. 0 is the default next-gen backend.
   display_power: '0'
+  # Wayland output name, for example HDMI-A-1 or HDMI-A-2.
   display_hdmi: HDMI-A-1
+  # Wayland is the supported target; SDL2 is the normal pi3d path.
   use_glx: false
   use_sdl2: true
+  # Settings-only. false disables, true mats all images, a number mats images
+  # whose aspect ratio differs from the display by more than this threshold.
   mat_images: 0.01
   mat_type: null
   outer_mat_color: null
@@ -55,18 +68,33 @@ viewer:
   menu_autohide_tm: 10.0
   geo_suppress_list: []
 model:
+  # Library root indexed by the media monitor. Configure in Settings.
   pic_dir: ~/Pictures
+  # Destination used by delete/move actions.
   deleted_pictures: ~/DeletedPictures
+  # Follow directory symlinks while indexing.
   follow_links: false
   no_files_img: ~/.picframe/data/no_pictures.jpg
+  # Remote media-selection filters. subdirectory is relative to pic_dir.
   subdirectory: ''
+  # YYYY-MM-DD date range; empty values disable each bound.
+  date_from: ''
+  date_to: ''
+  # Advanced playlist controls. recent_n prioritizes recently modified media;
+  # reshuffle_num controls how many passes happen before reshuffling.
   recent_n: 7
   reshuffle_num: 1
+  # Remote timing controls, in seconds.
   time_delay: 200.0
   fade_time: 10.0
+  # Media monitor scan interval, in seconds.
   update_interval: 2.0
+  # Remote shuffle toggle.
   shuffle: true
+  # Advanced setting. Comma-separated whitelisted media columns with optional
+  # ASC/DESC, for example "fname ASC" or "exif_datetime DESC, fname ASC".
   sort_cols: fname ASC
+  # Metadata keys extracted from images and sent through media state payloads.
   image_attr:
   - PICFRAME GPS
   - PICFRAME LOCATION
@@ -95,11 +123,16 @@ model:
     - state
     - province
   - - country
+  # Deferred renderer parity feature; tracked separately from Remote filters.
   portrait_pairs: false
+  # Remote filter expressions. Use AND/OR/NOT and parentheses explicitly.
+  # Adjacent words are treated as one phrase, e.g. New York matches "New York".
+  # Empty values disable each filter.
   location_filter: ''
   tags_filter: ''
   log_level: WARNING
   log_file: ''
+  # Indexed media extensions. Keep lowercase with leading dots.
   image_extensions:
   - .jpg
   - .jpeg
@@ -115,6 +148,7 @@ model:
   - .webm
   - .hevc
 mqtt:
+  # MQTT is optional; HTTP/WebSocket is the primary next-gen control plane.
   use_mqtt: false
   server: your_mqtt_broker
   port: 1883
@@ -124,6 +158,8 @@ mqtt:
   device_id: picframe
   device_url: ''
 http:
+  # Local control-plane settings. Do not expose the server directly to the
+  # public internet.
   auth: false
   username: admin
   password: ''
@@ -136,6 +172,7 @@ http:
   cors_allowed_origins:
     - "*"
 peripherals:
+  # Optional local input shortcuts.
   input_type: null
   buttons:
     pause: ' '

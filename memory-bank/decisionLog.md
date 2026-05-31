@@ -24,6 +24,13 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Use Vue 3, Pinia, Vue Router, Tailwind CSS, vue-i18n, and Leaflet for the SPA.
 - Keep frontend map display independent from backend-rendered text overlays.
 - Keep frontend narrative metadata over the media and technical metadata in a constrained panel.
+- Runtime media-selection controls belong in the Remote view; durable library/viewer settings such as `pic_dir`, raw `sort_cols`, advanced playlist knobs, and `mat_images` stay in Settings.
+- Shuffle is an immediate Remote transport control; it saves `model.shuffle` directly and rebuilds playback through the existing config-change flow.
+- Helper text affordances must work by click/tap first; hover tooltips are only an enhancement for pointer devices.
+- Remote location/tag filters preserve legacy boolean syntax: English `AND`/`OR`/`NOT` operators, parentheses, and adjacent words as one phrase.
+- Remote media-selection match counts are previews only until Apply; `total_count` is the active file count in the selected subdirectory, or in `pic_dir` when no subdirectory is selected.
+- Next-gen media cache schema can be changed directly while unreleased; delete/rebuild local media DBs instead of carrying migrations for unpublished schema changes.
+- Restore legacy display statistics as rebuildable media-cache metadata (`displayed_count`, `last_displayed`) and expose it as read-only Remote media information.
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

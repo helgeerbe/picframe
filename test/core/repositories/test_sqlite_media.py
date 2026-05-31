@@ -5,12 +5,13 @@ This module verifies the CRUD operations for media metadata management
 using an in-memory SQLite database.
 """
 
-import sqlite3
 from collections.abc import Generator
+from pathlib import Path
 from typing import Any
 
 import pytest
 
+from picframe.core.models.playlist import PlaylistCriteria
 from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
 
 
@@ -37,6 +38,27 @@ def sample_media_data() -> dict[str, Any]:
     }
 
 
+def _media_record(
+    filepath: Path,
+    *,
+    tags: str = "",
+    location: str = "",
+    last_modified: float = 100.0,
+    exif_datetime: float | None = None,
+) -> dict[str, Any]:
+    return {
+        "filepath": str(filepath),
+        "filename": filepath.name,
+        "directory_id": 1,
+        "media_type": "image",
+        "file_size": 100,
+        "last_modified": last_modified,
+        "exif_datetime": exif_datetime,
+        "tags": tags,
+        "location": location,
+    }
+
+
 def test_repository_initialization_runs_migrations(
     media_repo: SQLiteMediaRepository,
 ) -> None:
@@ -48,6 +70,12 @@ def test_repository_initialization_runs_migrations(
     
     assert "media" in tables
     assert "schema_version" in tables
+    columns = [
+        row["name"]
+        for row in media_repo._conn.execute("PRAGMA table_info(media)").fetchall()
+    ]
+    assert "displayed_count" in columns
+    assert "last_displayed" in columns
 
 
 def test_add_and_get_media_item(
@@ -143,3 +171,276 @@ def test_add_duplicate_filepath_updates_existing(
     all_media = media_repo.get_all_media()
     assert len(all_media) == 1
     assert all_media[0]["file_size"] == 2048
+
+
+def test_record_media_displayed_preserves_stats_on_reindex(
+    media_repo: SQLiteMediaRepository, sample_media_data: dict[str, Any]
+) -> None:
+    media_id = media_repo.add_media_item(sample_media_data)
+
+    updated_item = media_repo.record_media_displayed(media_id)
+
+    assert updated_item is not None
+    assert updated_item["displayed_count"] == 1
+    assert updated_item["last_displayed"] > 0
+
+    reindexed_data = sample_media_data.copy()
+    reindexed_data["file_size"] = 4096
+    same_id = media_repo.add_media_item(reindexed_data)
+    reindexed_item = media_repo.get_media_item(same_id)
+
+    assert same_id == media_id
+    assert reindexed_item is not None
+    assert reindexed_item["displayed_count"] == 1
+    assert reindexed_item["last_displayed"] == updated_item["last_displayed"]
+
+
+def test_query_media_applies_playlist_filters_and_sorting(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    holiday = root / "holiday"
+    family = root / "family"
+    holiday.mkdir(parents=True)
+    family.mkdir()
+
+    media_repo.add_media_item(
+        {
+            "filepath": str(holiday / "beach.jpg"),
+            "filename": "beach.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 100,
+            "last_modified": 100.0,
+            "exif_datetime": 1_700_000_000.0,
+            "tags": "family, beach",
+            "location": "Barcelona",
+            "rating": 3,
+        }
+    )
+    media_repo.add_media_item(
+        {
+            "filepath": str(holiday / "city.jpg"),
+            "filename": "city.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 100,
+            "last_modified": 200.0,
+            "exif_datetime": 1_710_000_000.0,
+            "tags": "city",
+            "location": "Berlin",
+            "rating": 5,
+        }
+    )
+    media_repo.add_media_item(
+        {
+            "filepath": str(family / "portrait.jpg"),
+            "filename": "portrait.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 100,
+            "last_modified": 300.0,
+            "exif_datetime": 1_700_000_000.0,
+            "tags": "family",
+            "location": "Barcelona",
+            "rating": 4,
+        }
+    )
+
+    criteria = PlaylistCriteria(
+        pic_dir=str(root),
+        subdirectory="holiday",
+        date_from="2023-11-01",
+        date_to="2024-03-01",
+        location_filter="Barcelona",
+        tags_filter="family AND beach",
+        shuffle=False,
+        sort_cols="rating DESC",
+        recent_n=0,
+    )
+
+    result = media_repo.query_media(criteria)
+
+    assert [item["filename"] for item in result] == ["beach.jpg"]
+
+
+def test_query_media_uses_legacy_boolean_filter_phrases(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    root.mkdir()
+    media_repo.add_media_item(_media_record(root / "phrase.jpg", tags="family beach"))
+    media_repo.add_media_item(_media_record(root / "separate.jpg", tags="family, beach"))
+    media_repo.add_media_item(_media_record(root / "family.jpg", tags="family"))
+    media_repo.add_media_item(_media_record(root / "city.jpg", tags="city"))
+    media_repo.add_media_item(
+        _media_record(root / "friends-holiday.jpg", tags="friends, holiday")
+    )
+
+    def names_for(tags_filter: str) -> set[str]:
+        result = media_repo.query_media(
+            PlaylistCriteria(
+                pic_dir=str(root),
+                tags_filter=tags_filter,
+                shuffle=False,
+                sort_cols="fname ASC",
+            )
+        )
+        return {item["filename"] for item in result}
+
+    assert names_for("family beach") == {"phrase.jpg"}
+    assert names_for("family AND beach") == {"phrase.jpg", "separate.jpg"}
+    assert names_for("city OR beach") == {"city.jpg", "phrase.jpg", "separate.jpg"}
+    assert names_for("family AND NOT beach") == {"family.jpg"}
+    assert names_for("(family OR friends) AND holiday") == {"friends-holiday.jpg"}
+
+
+def test_query_media_location_filter_matches_unquoted_and_quoted_phrases(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    root.mkdir()
+    media_repo.add_media_item(
+        _media_record(root / "new-york.jpg", location="New York City")
+    )
+    media_repo.add_media_item(
+        _media_record(root / "york-new.jpg", location="York New")
+    )
+
+    for expression in ("New York", '"New York"'):
+        result = media_repo.query_media(
+            PlaylistCriteria(
+                pic_dir=str(root),
+                location_filter=expression,
+                shuffle=False,
+            )
+        )
+        assert {item["filename"] for item in result} == {"new-york.jpg"}
+
+
+def test_query_media_escapes_like_wildcards_in_filters(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    root.mkdir()
+    media_repo.add_media_item(_media_record(root / "percent.jpg", tags="100% real"))
+    media_repo.add_media_item(_media_record(root / "plain.jpg", tags="100x real"))
+    media_repo.add_media_item(_media_record(root / "underscore.jpg", tags="a_b"))
+    media_repo.add_media_item(_media_record(root / "letters.jpg", tags="axb"))
+    media_repo.add_media_item(_media_record(root / "slash.jpg", tags=r"path\tag"))
+
+    def names_for(tags_filter: str) -> set[str]:
+        result = media_repo.query_media(
+            PlaylistCriteria(pic_dir=str(root), tags_filter=tags_filter, shuffle=False)
+        )
+        return {item["filename"] for item in result}
+
+    assert names_for("%") == {"percent.jpg"}
+    assert names_for("_") == {"underscore.jpg"}
+    assert names_for("\\") == {"slash.jpg"}
+
+
+def test_count_media_uses_selected_folder_scope_and_selection_filters(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    holiday = root / "holiday"
+    family = root / "family"
+    holiday.mkdir(parents=True)
+    family.mkdir()
+    media_repo.add_media_item(
+        _media_record(
+            holiday / "beach.jpg",
+            tags="family, beach",
+            location="Barcelona",
+            exif_datetime=1_700_000_000.0,
+        )
+    )
+    media_repo.add_media_item(
+        _media_record(
+            holiday / "city.jpg",
+            tags="city",
+            location="Berlin",
+            exif_datetime=1_710_000_000.0,
+        )
+    )
+    media_repo.add_media_item(
+        _media_record(
+            holiday / "old.jpg",
+            tags="family, beach",
+            location="Barcelona",
+            exif_datetime=1_600_000_000.0,
+        )
+    )
+    media_repo.add_media_item(_media_record(family / "portrait.jpg", tags="family"))
+    media_repo.add_media_item(_media_record(tmp_path / "outside.jpg", tags="family"))
+
+    counts = media_repo.count_media(
+        PlaylistCriteria(
+            pic_dir=str(root),
+            subdirectory="holiday",
+            date_from="2023-11-01",
+            date_to="2024-03-01",
+            location_filter="Barcelona",
+            tags_filter="family AND beach",
+        )
+    )
+
+    assert counts == {
+        "selected_count": 1,
+        "total_count": 3,
+        "scope": "subdirectory",
+        "scope_label": "holiday",
+    }
+
+    all_counts = media_repo.count_media(
+        PlaylistCriteria(pic_dir=str(root), tags_filter="family")
+    )
+
+    assert all_counts["selected_count"] == 3
+    assert all_counts["total_count"] == 4
+    assert all_counts["scope"] == "pic_dir"
+    assert all_counts["scope_label"] == str(root)
+
+
+def test_query_media_ignores_invalid_filters_and_sort_columns(
+    media_repo: SQLiteMediaRepository, sample_media_data: dict[str, Any]
+) -> None:
+    media_repo.add_media_item(sample_media_data | {"tags": "family"})
+
+    criteria = PlaylistCriteria(
+        pic_dir="/path",
+        tags_filter="family AND OR",
+        shuffle=False,
+        sort_cols="unknown DESC, fname ASC",
+    )
+
+    result = media_repo.query_media(criteria)
+
+    assert [item["filename"] for item in result] == ["image.jpg"]
+
+
+def test_get_filter_options_returns_distinct_values(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    (root / "holiday").mkdir(parents=True)
+    media_repo.add_media_item(
+        {
+            "filepath": str(root / "holiday" / "beach.jpg"),
+            "filename": "beach.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 100,
+            "last_modified": 100.0,
+            "tags": "family, beach",
+            "location": "Barcelona",
+        }
+    )
+
+    options = media_repo.get_filter_options(str(root))
+
+    assert options["subdirectories"] == ["holiday"]
+    assert options["locations"] == ["Barcelona"]
+    assert options["tags"] == ["beach", "family"]
+    assert {"key": "fname", "label": "File name"} in options["sort_columns"]

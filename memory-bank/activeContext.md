@@ -1,7 +1,7 @@
 # Active Context
 
 ## Current Focus
-The current architectural focus is Phase 3-style video engine integration, especially GStreamer subprocess IPC, event routing, hardware capability discovery, software fallback policy, and seamless pi3d/GStreamer handoff.
+The current implementation focus is Phase 2 next-gen control-plane parity: Remote media selection, config-driven playlist filtering, and legacy PlaylistManager parity gaps. Phase 3-style GStreamer integration remains the next major architectural stream.
 
 ## Current Repo State
 - Branch: `v2-dev`, tracking `origin/v2-dev`.
@@ -13,9 +13,12 @@ The current architectural focus is Phase 3-style video engine integration, espec
 - Architecture docs confirm Clean Architecture, strict EDA, dual SQLite databases, HAL ports/adapters, FastAPI/Vue control plane, and Wayland-only display targeting.
 - `architecture_gst_hw_discovery.md` and `architecture_hw_limits.md` refine video playback toward GStreamer registry/caps-driven hardware discovery and threshold-based software fallback rejection.
 - `Frontend_Specification.md` defines a Vue 3 SPA with Remote, Filters, and Settings views; REST config/maintenance endpoints; WebSocket state; i18n; Leaflet maps; and separate narrative vs. technical metadata presentation.
+- Issue #648 is closed after implementing Remote media-selection controls, legacy-compatible location/tag filter expressions, live match counts, playlist filtering/sorting, timing propagation, filter-options API, shuffle transport control refinements, and displayed-count metadata. #618 tracks remaining parity follow-ups.
 
 ## Immediate Next Steps
-- Align implementation with caps-driven GStreamer discovery and fallback observability.
+- Review and test remaining #618 parity items on an Ubuntu VM, especially delete/purge and Remote filter UX with real media, then on Pi hardware when available.
+- Keep portrait-pair rendering deferred until renderer/event payload shape and hardware validation are planned.
+- Align future video work with caps-driven GStreamer discovery and fallback observability.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.
 - Continue using GitHub Issues/project board as the authoritative task state.

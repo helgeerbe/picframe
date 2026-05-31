@@ -12,20 +12,28 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Playlist/media processing foundation.
 - FastAPI control plane with config endpoints, WebSocket state, SPA serving, media serving, and system/maintenance commands.
 - Vue 3 SPA foundation with Remote, Filters, and Settings views.
+- Remote Media Selection block for playlist runtime filters and timing controls.
+- Remote filter option chips toggle selected terms; normal click appends/toggles with `OR`, Shift-click appends with `AND`, and long tag/location option lists scroll in-place.
+- Remote Shuffle moved from Media Selection to an immediate transport control that saves `model.shuffle` directly.
+- Remote transport controls use a balanced touch-first deck, and helper text icons are clickable/tappable with dialog fallback.
+- Config-driven next-gen playlist querying for subdirectory, date range, legacy-compatible location/tag boolean filters, shuffle, recent priority, reshuffle cadence, and safe `sort_cols`.
+- Live Remote media-selection count preview with selected-count / folder-scope total-count semantics.
+- Legacy display statistics parity in the media cache: `displayed_count` and `last_displayed`, shown in Remote metadata.
 - Display power/system manager HAL work and Wayland-oriented environment detection.
 - Video metadata extraction and frontend display of video technical metadata.
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.
 
 ## Current / In Progress
-- Phase 2 Control Plane/UI remains the broad current phase in local documentation.
+- Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - Video engine integration is the practical current focus: subprocess GStreamer, IPC event routing, dynamic hardware discovery, and fallback limits.
 
 ## Next
+- Validate remaining #618 playlist parity behavior on Ubuntu VM, then Pi hardware when available.
 - Complete caps-driven hardware capability discovery in the GStreamer worker.
 - Surface software fallback / unsupported-media decisions as events visible to logs and the UI.
 - Validate video handoff on target Wayland/Raspberry Pi hardware.
 - Reconcile frontend specification with actual implemented UI and fill gaps only through tracked issues.
 
 ## Known Verification State
-- Frontend no-emit type check has passed locally.
-- Backend pytest is green in the local Python 3.14.4 `.venv`: 205 passed, 1 skipped, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
+- Frontend build is green with `npm run build`.
+- Backend pytest is green in the local Python 3.14.4 `.venv`: 219 passed, 1 skipped, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
