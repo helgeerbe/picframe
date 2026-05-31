@@ -1,23 +1,63 @@
+import asyncio
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
-from fastapi.testclient import TestClient
+import httpx
+from fastapi import FastAPI
 
 from picframe.api.app import create_app
 
 
 @pytest.fixture
-def client() -> TestClient:
+def client() -> "ASGITestClient":
     app = create_app(cors_allowed_origins=["*"])
-    return TestClient(app)
+    return ASGITestClient(app)
 
-def test_health_check(client: TestClient) -> None:
+
+class ASGITestClient:
+    """Small sync wrapper around httpx ASGITransport for local API tests.
+
+    Starlette's TestClient currently hangs in this environment when running on
+    Python 3.14, while httpx's ASGITransport exercises the same ASGI app without
+    the thread-portal deadlock.
+    """
+
+    def __init__(self, app: FastAPI) -> None:
+        self._app = app
+
+    def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        async def _request() -> httpx.Response:
+            transport = httpx.ASGITransport(app=self._app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as async_client:
+                return await async_client.request(method, url, **kwargs)
+
+        return asyncio.run(_request())
+
+    def get(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request("POST", url, **kwargs)
+
+    def put(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request("PUT", url, **kwargs)
+
+    def options(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request("OPTIONS", url, **kwargs)
+
+
+def test_health_check(client: ASGITestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
-def test_cors_headers(client: TestClient) -> None:
+
+def test_cors_headers(client: ASGITestClient) -> None:
     response = client.options(
         "/health",
         headers={
@@ -42,7 +82,7 @@ def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
     (assets_dir / "app.js").write_text("console.log('app');")
 
     app = create_app(cors_allowed_origins=["*"], html_dir=str(html_dir))
-    client = TestClient(app)
+    client = ASGITestClient(app)
     
     # Test root route returns index.html
     response = client.get("/")
@@ -59,7 +99,7 @@ def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
     assert response.status_code == 200
     assert response.text == "console.log('app');"
 
-def test_api_get_config(client: TestClient) -> None:
+def test_api_get_config(client: ASGITestClient) -> None:
     # Test without config repository
     response = client.get("/api/config")
     assert response.status_code == 200
@@ -76,7 +116,7 @@ def test_api_get_config_with_repo() -> None:
     }
 
     app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
-    client = TestClient(app)
+    client = ASGITestClient(app)
     
     response = client.get("/api/config")
     assert response.status_code == 200
@@ -95,7 +135,7 @@ def test_api_put_config() -> None:
     mock_repo.get_app_config.return_value = {"fps": 30, "blur_amount": 12}
 
     app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo, event_publisher=mock_publisher)
-    client = TestClient(app)
+    client = ASGITestClient(app)
     
     payload = {
         "viewer": {"fps": 60},
@@ -120,7 +160,7 @@ def test_api_import_yaml() -> None:
     mock_publisher = MagicMock()
     
     app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo, event_publisher=mock_publisher)
-    client = TestClient(app)
+    client = ASGITestClient(app)
     
     yaml_content = """
 viewer:
@@ -156,7 +196,7 @@ def test_api_import_yaml_example_file() -> None:
     mock_publisher = MagicMock()
     
     app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo, event_publisher=mock_publisher)
-    client = TestClient(app)
+    client = ASGITestClient(app)
     
     example_yaml_path = Path(__file__).parent.parent.parent / "src" / "picframe" / "config" / "configuration_example.yaml"
     
@@ -187,7 +227,7 @@ def test_api_import_yaml_example_file() -> None:
 def test_api_import_yaml_invalid_format() -> None:
     mock_repo = MagicMock()
     app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
-    client = TestClient(app)
+    client = ASGITestClient(app)
     
     yaml_content = """
 - just a list
@@ -204,7 +244,7 @@ def test_api_import_yaml_invalid_format() -> None:
 
 def test_spa_routing_without_html_dir(tmp_path: Path) -> None:
     app = create_app(cors_allowed_origins=["*"], html_dir=str(tmp_path / "nonexistent"))
-    client = TestClient(app)
+    client = ASGITestClient(app)
     
     # Test root route returns 404 since SPA is not mounted
     response = client.get("/")

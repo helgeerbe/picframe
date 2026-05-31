@@ -21,6 +21,18 @@ from picframe.core.renderers.ipc_protocol import (
 def mock_publisher() -> MagicMock:
     return MagicMock()
 
+
+@pytest.fixture(autouse=True)
+def disable_listener_thread(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Keep unit tests from starting the renderer's IPC listener thread.
+
+    The connection object is mocked in this module, so the real listener loop
+    would spin against MagicMock return values and leak CPU/memory across the
+    test process. Event translation is tested directly through _handle_event().
+    """
+    monkeypatch.setattr(GstVideoRenderer, "_listen_for_events", lambda self: None)
+
+
 @pytest.fixture
 def media_item() -> MediaItem:
     return MediaItem(

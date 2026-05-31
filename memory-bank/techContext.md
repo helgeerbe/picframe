@@ -27,5 +27,5 @@
 
 ## Verification Notes
 - Frontend type checking has passed with `npm exec vue-tsc -- -b --noEmit`.
-- Backend pytest has been unreliable in the current sandbox/session: `.venv/bin/python -m pytest` collected tests but hung even on `test/api/test_app.py::test_health_check`.
-- Treat full test status as unknown until rerun in a suitable local environment with the expected display/media dependencies.
+- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 205 passed, 1 skipped, 1 GI deprecation warning on 2026-05-31.
+- Current tests include Python 3.14 compatibility shims for Starlette/AnyIO test hangs and avoid real socket binding in API server unit tests.

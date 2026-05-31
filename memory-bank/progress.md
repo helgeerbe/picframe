@@ -28,4 +28,4 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 
 ## Known Verification State
 - Frontend no-emit type check has passed locally.
-- Backend test status is currently unknown in this sandbox because pytest hangs after collection.
+- Backend pytest is green in the local Python 3.14.4 `.venv`: 205 passed, 1 skipped, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
