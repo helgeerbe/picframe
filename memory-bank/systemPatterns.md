@@ -1,112 +1,48 @@
-# System Patterns *Optional*
+# System Patterns
 
-This file documents recurring patterns and standards used in the project.
-It is optional, but recommended to be updated as the project evolves.
-2026-04-22 13:17:52 - Log of updates made.
+## Architecture
+- Clean Architecture / Hexagonal layering: core playback logic depends on interfaces, not FastAPI, Vue, SQLite, MQTT, pi3d, or GStreamer details.
+- Manual dependency injection in `main.py` is the composition root for repositories, services, renderers, HAL adapters, event bus, and web server.
+- Strict Event-Driven Architecture: components communicate through immutable event/command DTOs on a thread-safe PriorityQueue event bus.
+- Event bus interfaces are split into `IEventPublisher` and `IEventSubscriber` to keep component permissions narrow.
+- The runtime separates configuration (`config.db3`, persistent) from media metadata (`media_cache.db3`, rebuildable).
 
-*
+## Playback And Rendering
+- `PlaylistManager` owns media querying, filtering, shuffle, and current item selection.
+- `PlaybackEngine` owns state transitions, timing, command handling, and media-to-renderer orchestration.
+- `Pi3dRenderer` should stay presentation-focused: draw what it is commanded to draw, with local renderer state only for rendering concerns such as clock ticks.
+- pi3d/OpenGL runs on the main thread; FastAPI, MQTT, media monitoring, geocoding, and hardware input operate in background threads.
+- GStreamer video playback runs out of process in `gst_worker.py` and communicates through JSON IPC over a Unix-domain socket.
 
-## Coding Patterns
+## Video Handoff
+- The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:
+  - Extract/cache first and last video frames.
+  - Transition into the first frame with pi3d.
+  - Start GStreamer after that transition.
+  - Swap pi3d's hidden background to the last frame during video playback.
+  - Transition out from the last frame when GStreamer reaches EOS.
+- Only one renderer should actively own visible display output at a time.
 
-* [2026-04-23 10:17:00] - **Immutable DTOs (Data Transfer Objects):** All events and commands passed across the Event Bus are strictly typed, immutable Python objects using `@dataclass(frozen=True)`. This guarantees thread safety by preventing background threads from modifying events while the main thread reads them.
+## Hardware Capability Strategy
+- Prefer GStreamer registry and caps negotiation over hardcoded board/codec tables.
+- Use preflight media metadata plus decoder pad-template caps intersection to determine hardware compatibility.
+- Detect and report software fallback through GStreamer pipeline introspection.
+- Skip media that exceeds hardware limits and configured software fallback limits instead of attempting catastrophic playback.
 
-## Architectural Patterns
+## Configuration And API
+- `default_config.yaml` is the seed source for runtime configuration.
+- `ConfigService` is the anti-corruption layer between flat SQLite key/value storage and nested API/frontend JSON.
+- Pydantic `AppConfig` models validate API payloads and imported YAML.
+- Startup-only parameters such as server port stay in CLI/env vars; runtime-mutable config belongs in SQLite and `/api/config`.
 
-* [2026-05-08 16:07:00] - **First/Last Frame Sandwich Pattern:** To mitigate GStreamer initialization latency and prevent visual artifacts (black flashes, desktop exposure) during video playback, the system extracts and caches the first and last frames of a video. The `PlaybackEngine` state machine orchestrates a seamless handoff: it displays the first frame via the image renderer (`pi3d`) while GStreamer initializes in the background, swaps the background texture to the last frame during playback, and resumes the image renderer immediately when the video finishes, covering the GStreamer shutdown process.
-* [2026-05-08 16:07:00] - **Mypy Type-Safety (Comparison Overlap):** When testing state machine transitions or comparing enums/literals in `pytest`, explicit `# type: ignore[comparison-overlap]` comments may be required if the test framework or mocking strategy causes mypy to incorrectly infer non-overlapping types (e.g., comparing a mocked state to a specific `State` enum value).
+## Frontend Patterns
+- Vue 3 SPA uses Pinia stores for player state, config state, and system actions.
+- WebSocket `/ws/state` handles real-time media/state/error updates and outgoing player commands.
+- REST `/api/config` and maintenance/system endpoints handle settings and administrative actions.
+- Frontend narrative metadata belongs in the image overlay; technical metadata belongs in a constrained scrollable panel.
+- User-facing frontend strings should go through vue-i18n and stay synchronized across `en.json` and `de.json`.
 
-* [2026-05-07 21:15:00] - **Out-of-Process Rendering (IPC):** Isolating unstable native libraries (like GStreamer) into dedicated subprocesses communicating via strict JSON-over-socket IPC protocols to protect the main application's stability and prevent memory leaks from affecting the core orchestrator.
-* [2026-04-23 08:41:27] - **Clean Architecture (Hexagonal Architecture):** The system is structured into concentric layers (Core Domain, Application Layer, Infrastructure/Adapters). Dependencies point inwards, decoupling the UI (Vue/REST) and Database (SQLite) from the core media playback logic.
-* [2026-04-23 08:41:27] - **Strict Event-Driven Architecture (EDA):** A central, asynchronous Event Bus mediates all communication. The Control Plane (FastAPI/MQTT) publishes typed `CommandEvents`. The Media Orchestrator subscribes to these and publishes `RenderCommands` to the Presentation Layer.
-* [2026-04-23 08:41:27] - **State Machine Pattern:** A dedicated `PlaybackEngine` encapsulates all business logic, timing, and playback state progression. It enforces the rules for transitioning between states (e.g., `SHOWING_IMAGE`, `TRANSITIONING`, `PLAYING_VIDEO`).
-* [2026-04-23 08:41:27] - **Exclusive Renderer Ownership:** Only one rendering engine (`pi3d` or GStreamer) actively owns the EGL/OpenGL context and display hardware at any given time, preventing resource contention and compositing overhead.
-* [2026-04-23 08:41:27] - **Adapter / Strategy Pattern:** The Orchestrator interacts with a generic `RendererInterface`. `Pi3dRenderer` and `GstVideoRenderer` are concrete strategies, allowing the Orchestrator to command actions without knowing OpenGL or GStreamer specifics.
-* [2026-04-23 08:46:48] - **Strategy Pattern (Metadata Extraction):** A unified `MetadataExtractor` service uses specific strategies (`ImageMetadataStrategy`, `VideoMetadataStrategy`) to parse different file types, returning a consistent `MediaItem` domain model.
-* [2026-04-23 08:50:59] - **Modern Packaging (PEP 621):** The project utilizes a unified `pyproject.toml` for all build, dependency, and developer tooling configurations, eliminating legacy `setup.py` scripts and enforcing strict quality gates (pytest, mypy, ruff).
-* [2026-04-23 08:56:55] - **Repository Pattern (Dual-Database Strategy):** The system uses two distinct databases (`config.db3` for persistent user settings, `media_cache.db3` for ephemeral media metadata). The core logic interacts with these via strict `IConfigRepository` and `IMediaRepository` interfaces, ensuring complete decoupling of the data access layer from the business logic.
-* [2026-04-28 09:53:00] - **Database Schema Versioning & Migrations:** Strict versioning is enforced for all database schemas. A standardized migration mechanism handles schema changes sequentially, guaranteeing forward compatibility and data integrity across system updates.
-* [2026-04-23 10:12:00] - **Manual Dependency Injection (Composition Root):** All components are instantiated and wired together in a single location (`main.py`) at startup. Dependencies are passed explicitly via constructors, eliminating global state and enabling robust unit testing.
-* [2026-04-23 10:17:00] - **Interface Segregation Principle (ISP):** The Event Bus exposes distinct `IEventPublisher` and `IEventSubscriber` protocols. Components only receive the interface they need, preventing accidental cross-talk or invalid operations.
-* [2026-04-23 10:17:00] - **Separation of Concerns (SoC) - Playlist vs. Playback:** The orchestration logic is split into a `PlaylistManager` (handling media querying, filtering, and shuffle logic) and a `PlaybackEngine` (handling state transitions and timing). This allows independent unit testing of complex playlist algorithms.
-* [2026-04-23 10:17:00] - **Factory Pattern:** Used within the Composition Root to encapsulate the complex instantiation logic of dependencies (e.g., `RendererFactory`), keeping `main.py` clean and adhering to the Open/Closed Principle.
-
-## Loop Architecture & Concurrency
-
-* [2026-04-23 08:41:27] - **Asynchronous Control Loop:** FastAPI and MQTT clients run asynchronously, listening for external inputs and translating them into events without blocking the main application.
-* [2026-04-23 08:41:27] - **Synchronous Render Loop:** The `pi3d` render loop runs continuously at 60fps. It *only* executes drawing commands received via the Event Bus; it no longer decides *when* to change images or manage the playlist.
-* [2026-04-23 10:03:00] - **PriorityQueue Event Bus:** Communication between the asynchronous background threads and the synchronous main thread is handled exclusively via a thread-safe `queue.PriorityQueue`. This ensures safe cross-thread communication and allows critical commands to preempt standard events.
-
-## Testing Patterns
-
-* [2026-04-28 12:33:00] - **Test-Driven Development (TDD):** TDD is strictly mandated for all new implementations. Comprehensive, high-quality unit and integration tests must be generated *before* or *alongside* the implementation code. Code is not considered complete until it is fully covered by passing tests.
-
-## GitHub Issue Management
-
-* [2026-04-28 12:33:00] - **Strict Issue Tracking:** All tasks and subtasks must be managed via GitHub Issues.
-* [2026-04-28 12:33:00] - **Subtask Checkboxes:** Markdown subtask boxes within issue descriptions must be automatically checked off as they are completed during the development process.
-* [2026-04-28 12:56:00] - **Success Factors (Definition of Done):** Establishing "Success Factors" and a "Definition of Done" is a required standard operating procedure for all future issue workflows. Every GitHub issue must explicitly define and append these criteria. An issue cannot be closed until all Success Factors are met.
-
-## Definition of Done (Mandatory for every task)
-
-All work must satisfy ALL of the following before a task is considered done:
-
-### Development Process
-- **Single Source of Truth:** All tasks, subtasks, and project progress must be tracked via GitHub Issues and the associated GitHub Project board.
-- **Strict GitHub Issue Management:** Update issue descriptions to check off subtasks as they are completed. Ensure Success Factors are defined and met before closing.
-- Follow Test-Driven Development (TDD):
-  - Write or adapt tests first.
-  - Implement only until tests pass.
-  - Refactor while keeping tests green.
-
-### Correctness
-- Preserve existing behavior unless an explicit change is requested.
-- No regressions may be introduced.
-- The complete test suite must run successfully with zero failures.
-- All new or changed logic must be covered by appropriate tests:
-  - Unit tests
-  - Integration tests where affected
-  - Edge cases and error paths
-
-### Code Quality
-- **Comprehensive Documentation:** Every touched or created file must include:
-  - A complete module-level docstring explaining its scope and purpose.
-  - Descriptive docstrings for every class and method/function explaining their purpose, arguments, and expected behavior.
-  - Concise, precise inline comments clarifying complex, non-obvious, or threading-related logic.
-- All functions in touched modules must be fully type safe:
-  - Complete type annotations
-  - Pass project type checker with no errors
-- Follow existing architecture and coding conventions.
-- Reduce or maintain complexity; do not introduce unnecessary abstractions.
-- No dead code, unused imports, commented-out code, duplication, or technical debt.
-
-### Quality Gates (must all pass)
-- Full test suite passes
-- Linting passes with no errors
-- Formatting checks pass
-- Type checks pass
-- Existing CI quality checks pass
-- No warnings introduced unless explicitly justified
-
-### Refactoring Requirements
-- Prefer small, safe, incremental changes.
-- Refactoring should improve readability, maintainability, or structure.
-- Delete obsolete code when possible instead of preserving unused code.
-- Public interfaces/APIs remain compatible unless explicitly requested otherwise.
-- Document any intentional interface or behavior change.
-
-### Non-Functional Requirements
-- Do not introduce performance regressions in touched paths.
-- Do not introduce security regressions.
-- Respect error handling, logging, and resource management conventions.
-
-### Completion Criteria
-A task is only done when:
-- Implementation is complete
-- Tests are green
-- Quality gates pass
-- Documentation is updated (Documentation belongs to the definition of done)
-- Type safety is complete
-- Refactoring goals are achieved
-- The result is production-ready and review-ready
-
-Never mark a task complete if any item above is unmet.
+## Testing And Quality
+- TDD is expected for new work: adapt or add tests with the implementation.
+- Quality gates are pytest, mypy strict mode, ruff, frontend type checks, and relevant integration/manual checks.
+- Hardware/display-sensitive tests may require a real Wayland session or an appropriate headless compositor.

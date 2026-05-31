@@ -144,4 +144,6 @@ dmypy.json
 *.db3-shm
 *.db3-wal
 .DS_Store
-.DS_Store
+
+
+.Codexrules

@@ -1,120 +1,29 @@
 # Decision Log
 
-This file records architectural and implementation decisions using a list format.
-2026-04-28 11:37:00 - Log of updates made.
+This is a compact index of durable project decisions. Detailed rationale lives in `Architecture_Solution_Document.md`, `architecture_*.md`, `Frontend_Specification.md`, and GitHub Issues.
 
-* [2026-04-28 11:37:00] - Establish GitHub Issues and GitHub Projects as the single source of truth for project state and task tracking.
-* [2026-04-28 09:26:00] - Confirm GStreamer as the primary video rendering engine with hardware acceleration support, replacing VLC, based on the successful Phase 0 Proof of Concept.
+## Durable Decisions
+- Use the existing repository with long-lived modernization branch `v2-dev`.
+- Use GitHub Issues and the GitHub Project board as the authoritative task and progress source.
+- Build Picframe 2.0 around Clean Architecture / Hexagonal boundaries.
+- Use a strict Event-Driven Architecture with immutable DTOs and a thread-safe PriorityQueue event bus.
+- Keep event publishing and subscription as separate interfaces.
+- Split playlist selection from playback state orchestration.
+- Store persistent user settings in `config.db3` and rebuildable media metadata in `media_cache.db3`.
+- Version both databases and apply migrations through a standardized migration manager.
+- Seed configuration from `default_config.yaml`; expose nested JSON through `ConfigService` and Pydantic API models.
+- Serve the compiled Vue SPA directly through FastAPI; Vite outputs production assets into `src/picframe/html`.
+- Keep server port and DB path overrides as startup CLI/env concerns, not mutable runtime settings.
+- Use Wayland as the display protocol target; X11 is not supported.
+- Run pi3d rendering on the main thread and keep it presentation-focused.
+- Use a local renderer state machine and local render queue for high-frequency render concerns.
+- Isolate GStreamer into `gst_worker.py` subprocess IPC.
+- Prefer GStreamer registry/caps negotiation over hardcoded Raspberry Pi hardware tables.
+- Enforce a software decode ceiling with graceful skip/error events for unsupported video.
+- Use the First/Last Frame Sandwich pattern for seamless image/video handoff.
+- Use Vue 3, Pinia, Vue Router, Tailwind CSS, vue-i18n, and Leaflet for the SPA.
+- Keep frontend map display independent from backend-rendered text overlays.
+- Keep frontend narrative metadata over the media and technical metadata in a constrained panel.
 
-## Decision
-
-* [2026-05-07 21:15:00] - Isolate GStreamer video rendering into a dedicated subprocess (`gst_worker.py`) communicating via IPC (Unix Domain Sockets/multiprocessing.connection) instead of running in-process.
-* [2026-05-06 12:46:00] - Adopt a hybrid asynchronous architecture for reverse geocoding (Issue #652). The media indexer will queue rounded coordinates (4 decimal places) for a background worker to process at a rate-limited pace (2.0s interval). The `PlaybackEngine` will perform a Just-In-Time (JIT) fallback lookup if an image is selected before its location is resolved.
-* [2026-05-03 20:04:00] - Implement `GET /api/config` and `PUT /api/config` REST endpoints in FastAPI to serve and update structured configuration matching the frontend schema, interacting directly with `IConfigRepository` and publishing `SET_CONFIG` events.
-* [2026-05-03 19:35:00] - Implement `MediaMonitorService` using `watchdog` for real-time directory monitoring and integrate an asynchronous worker pool in `ImageProcessingService` for non-blocking metadata extraction.
-* [2026-04-30 14:53:00] - Refactor Pi3dRenderer into specialized components (`ImageRenderer`, `TextRenderer`, `ClockRenderer`, `OverlayRenderer`) and implement a formal state machine with a local `PriorityQueue` for render events.
-* [2026-04-29 10:15:00] - Split Phase 2 into three distinct subphases (2A: HAL & Inputs, 2B: Web Control Plane & CLI, 2C: Advanced Rendering) to mitigate integration risks and manage scope.
-* [2026-04-29 10:15:00] - Implement a CLI with `init` and `run` commands. The `init` command will bootstrap the user environment in `~/.picframe/` strictly in user-space.
-* [2026-04-29 10:15:00] - Reject the use of `sudo` within the Python application for installing system dependencies. System dependencies will be managed via explicit shell scripts or native OS packages (e.g., `.deb`).
-* [2026-04-29 10:15:00] - Configure FastAPI to serve the compiled Vue.js static files directly, omitting any separate web server (like Nginx) and omitting authentication/authorization for the local network zero-trust model.
-* [2026-04-28 11:37:00] - Establish GitHub Issues and GitHub Projects (Kanban) as the single source of truth for project state, task tracking, and subtask management, replacing local markdown files as the authoritative source.
-* [2026-04-28 09:26:00] - Confirm GStreamer as the primary video rendering engine with hardware acceleration support, replacing VLC, based on the successful Phase 0 Proof of Concept.
-* [2026-04-22 14:47:04] - Use first and last frame extraction from videos to achieve seamless transitions between pi3d (images) and GStreamer (video).
-* [2026-04-23 08:41:15] - Refactor the entire codebase to a Strict Event-Driven Architecture (EDA) using Clean Architecture principles, separating the Control Plane, State Machine, and Renderers.
-* [2026-04-23 08:41:15] - Replace direct YAML configuration management with an SQLite database as the single source of truth at runtime.
-* [2026-04-23 08:41:15] - Implement a centralized Cache Manager for extracted frames and thumbnails.
-* [2026-04-23 08:41:15] - Introduce a FastAPI backend serving a Vue.js SPA for the Web UI, providing 1:1 REST API parity with MQTT.
-* [2026-04-23 09:56:41] - Replace the built-in synchronous `http.server` with FastAPI running on the Uvicorn ASGI server to enable native WebSocket support for real-time UI updates.
-* [2026-04-23 08:46:31] - Implement a Unified Metadata Extraction Service using the Strategy Pattern to handle both images and videos consistently.
-* [2026-04-23 08:50:38] - Modernize the Python packaging pipeline by fully embracing `pyproject.toml` (PEP 621), migrating from `versioneer` to `setuptools_scm`, and integrating developer tooling configurations (pytest, mypy, ruff).
-* [2026-04-23 08:56:55] - Implement a Dual-Database Strategy using the Repository Pattern to strictly separate persistent user configuration (`config.db3`) from ephemeral media metadata (`media_cache.db3`).
-* [2026-04-28 10:17:00] - Manage the Picframe 2.0 modernization within the existing repository using a dedicated, long-lived feature branch (`v2-dev`).
-* [2026-04-28 10:09:00] - Migrate the Work Breakdown Structure (WBS) to GitHub Issues, mapping project phases to Epics/Milestones and enforcing the Definition of Done via Pull Request templates. All modernization tasks must be labeled with `next gen`.
-* [2026-04-28 09:53:00] - Enforce strict versioning for all database schemas (`config.db3` and `media_cache.db3`) and establish a standardized migration mechanism.
-* [2026-04-23 10:03:00] - Utilize a custom, thread-safe `queue.PriorityQueue` for the Event Bus to bridge asynchronous background threads (FastAPI) with the synchronous main thread (`pi3d`).
-* [2026-04-23 10:12:00] - Adopt Manual Dependency Injection (Composition Root) to manage component lifecycles and dependencies.
-* [2026-04-23 10:17:00] - Adopt Interface Segregation Principle (ISP) for the Event Bus, Immutable DTOs for events, Separation of Concerns (SoC) between Playlist and Playback, and the Factory Pattern for dependency instantiation.
-* [2026-04-23 10:33:00] - Decouple the Presentation Layer from domain logic by shifting metadata publication responsibilities entirely to the PlaybackEngine.
-* [2026-04-23 10:38:00] - Implement an asynchronous `MediaMonitorService` using `watchdog` to detect file system changes and publish `FileChangeEvent`s to the Event Bus.
-* [2026-04-23 10:42:00] - Extract legacy hardware, display power, and image processing logic into dedicated services (`HardwareInputService`, `DisplayPowerManager`, `ImageProcessingService`).
-* [2026-04-23 10:48:00] - Introduce `SchedulerService` and `SystemManager` to achieve 100% feature parity with the legacy system regarding time-based sleep/wake schedules and OS-level reboot/shutdown commands.
-* [2026-04-23 10:51:00] - Introduce a Hardware Abstraction Layer (HAL) using Ports and Adapters to ensure cross-platform compatibility across Raspberry Pi, Ubuntu, and macOS.
-* [2026-04-23 10:58:00] - Define a comprehensive Vue.js SPA Frontend Specification featuring a real-time Media Player with dynamic OpenStreetMap integration and an Administrative Dashboard for config and maintenance.
-
-## Rationale
- 
-* [2026-05-07 21:15:00] - GStreamer and underlying C libraries (hardware decoders) can be unstable, leak memory, or crash due to malformed media. Isolating it prevents fatal crashes in the main process (FastAPI, MQTT, Pi3d). IPC via sockets prevents corruption from C libraries writing directly to stdout/stderr, which would break standard stdin/stdout JSON parsing.
-* [2026-05-06 12:46:00] - This hybrid approach prevents the main media indexing thread from being blocked by slow external API calls, respects Nominatim's strict rate limits, and ensures that images displayed in the UI have the best chance of showing location data without causing rendering delays. Rounding coordinates to 4 decimal places (~11m resolution) allows for efficient caching of nearby locations in the SQLite database, significantly reducing redundant API requests.
-* [2026-05-03 20:04:00] - The frontend Settings view requires a structured JSON representation of the configuration. Implementing these endpoints provides a clean REST interface for the SPA to read and write settings, ensuring the backend remains the single source of truth via the `IConfigRepository`.
-* [2026-05-03 19:35:00] - Real-time directory monitoring with `watchdog` eliminates the need for expensive, periodic full-directory scans. Asynchronous metadata extraction prevents the main thread (and the render loop) from blocking when processing large files or network shares.
-* [2026-04-30 14:53:00] - Based on feedback from Paddy (pi3d author), the monolithic `Pi3dRenderer` is becoming complex and difficult to manage, especially with overlapping animations (fading, Ken Burns, text). Decomposing it improves maintainability. A formal state machine replaces messy conditional blocks, ensuring predictable transitions. A local `PriorityQueue` for render events prevents asynchronous delays from the main EventBus. Skipping `pi3d.Display.loop_running()` when static optimizes CPU and energy usage.
-* [2026-04-29 10:15:00] - Splitting Phase 2 ensures foundational communication and hardware layers (HAL) are solid before introducing the complexity of the web server, leaving intricate rendering features for the final step.
-* [2026-04-29 10:15:00] - A user-space `init` command safely sets up the required directory structure (`~/.picframe/`) and default assets without requiring elevated privileges.
-* [2026-04-29 10:15:00] - Executing `sudo` from Python is a critical security risk (privilege escalation, supply chain vulnerability) and an architectural anti-pattern. Relying on native package managers or explicit scripts adheres to Linux best practices.
-* [2026-04-29 10:15:00] - Serving Vue.js files via FastAPI simplifies deployment to a single standalone application process. Omitting auth fits the local-network-only constraint and reduces unnecessary complexity.
-* [2026-04-28 11:37:00] - Centralizing task tracking in GitHub ensures a single, authoritative source of truth that is tightly integrated with the codebase, pull requests, and team workflows. It prevents synchronization issues between local markdown files and the actual development progress.
-* [2026-04-28 09:26:00] - The Phase 0 PoC (`poc_video_handoff_v2.py`) successfully demonstrated that GStreamer can handle hardware-accelerated video decoding while maintaining proper Z-order and seamless handoff with pi3d. The PoC code provides concrete hints and patterns for the upcoming replacement of the legacy VLC player.
-* [2026-04-22 14:47:04] - Solves the visual flicker/black screen issue during EGL/OpenGL context switching between the two exclusive renderers. By showing a static image of the video's first/last frame in pi3d, the system can use alpha blending to seamlessly reveal or hide the underlying hardware-accelerated video layer without visual interruption.
-* [2026-04-23 08:41:15] - The current `Controller.loop()` and `ViewerDisplay.slideshow_is_running()` are tightly coupled, mixing business logic (timing, playlist) with presentation logic (OpenGL drawing). An EDA decouples these, preventing external inputs (MQTT/HTTP) from blocking the 60fps render loop and enabling robust state management for the complex pi3d/GStreamer handoff.
-* [2026-04-23 08:41:15] - SQLite allows for instant, persistent configuration changes without parsing YAML or restarting the application.
-* [2026-04-23 08:41:15] - A centralized cache prevents polluting user media directories with `.1.frame` files and simplifies cache invalidation.
-* [2026-04-23 08:41:15] - A modern Vue/FastAPI stack provides a robust, reactive UI and a standardized REST interface for external integrations.
-* [2026-04-23 09:56:41] - The legacy `http.server` cannot support WebSockets. A reactive Vue.js UI requires real-time state updates (e.g., "currently playing image changed"). FastAPI + Uvicorn provides native, asynchronous WebSocket routing, automatic OpenAPI documentation, and strict Pydantic data validation for incoming REST payloads.
-* [2026-04-23 08:46:31] - Currently, image metadata (`get_image_meta.py`) and video metadata (`video_streamer.py`) are handled separately, violating DRY and creating inconsistent data models. A unified service ensures all media types populate a single, strictly typed `MediaItem` dataclass, simplifying database interactions and playlist management.
-* [2026-04-23 08:50:38] - The existing `setup.py` and `versioneer` setup is legacy and conflicts with modern PEP 517/518/621 standards. A unified `pyproject.toml` simplifies the build process, removes injected code, and enforces the strict Quality Gates defined in our Definition of Done by centralizing linter, formatter, and type checker configurations.
-* [2026-04-23 08:56:55] - Mixing configuration state and media metadata within a single database violates the Single Responsibility Principle and Clean Architecture boundaries. A Dual-Database Strategy ensures that wiping the ephemeral media cache does not destroy persistent user settings, and allows independent schema migrations.
-* [2026-04-28 10:17:00] - Prevents fragmenting the project management and community. The `v2-dev` branch serves as the integration point for all `next gen` tasks. Once all phases are complete, recent `main` changes will be integrated, and a branch swap will be performed for the first release, ensuring a clean Git history without catastrophic merge conflicts.
-* [2026-04-28 10:09:00] - Transitions the project from static documentation to a dynamic, actionable, and traceable tracking system tightly integrated with the codebase. The `next gen` label clearly distinguishes the architectural refactoring work from standard project tickets.
-* [2026-04-28 09:53:00] - Prevents data corruption during upgrades. By tracking the `schema_version` and applying sequential SQL migration scripts, the system can safely upgrade existing databases without data loss, ensuring forward compatibility across system versions.
-* [2026-04-23 10:03:00] - `pi3d` requires the main thread, conflicting with FastAPI's async event loop. A `queue.PriorityQueue` provides a robust, dependency-free concurrency model where FastAPI runs in background threads and communicates safely with the main thread, ensuring high-priority commands are processed first.
-* [2026-04-23 10:12:00] - Manual DI is crucial for Test-Driven Development (TDD), allowing mock dependencies to be injected easily. It enforces Clean Architecture by ensuring the core domain depends on abstractions, and it provides a safe concurrency model by explicitly passing shared resources (like the Event Bus) rather than relying on global state.
-* [2026-04-23 10:17:00] - ISP prevents accidental cross-talk on the Event Bus. Immutable DTOs ensure thread safety across the PriorityQueue. SoC allows independent testing of playlist logic (shuffle/filters) vs. playback state transitions. Factories keep the Composition Root (`main.py`) clean and maintainable.
-* [2026-04-23 10:33:00] - Extracting and publishing metadata directly from the viewer loop violates the Single Responsibility Principle (SRP) and introduces unpredictable latency, causing frame drops in pi3d. Shifting this to the PlaybackEngine ensures the render loop remains unblocked and dedicated solely to drawing.
-* [2026-04-23 10:38:00] - Eliminates the need for synchronous, blocking directory scans during playback. The system can react to new, modified, or deleted media in real-time by updating the ephemeral `media_cache.db3` and adjusting the active playlist without interrupting the render loop.
-* [2026-04-23 10:42:00] - Resolves critical SRP violations in the legacy codebase. `viewer_display.py` mixed pixel rendering with OS-level screen power commands. `interface_peripherals.py` was tightly coupled to the `Controller`. `mat_image.py` lacked a formal caching service. Extracting these ensures each component has a single responsibility and communicates strictly via the Event Bus.
-* [2026-04-23 10:48:00] - The legacy system handled scheduling synchronously in the main loop and allowed direct OS commands via MQTT. The `SchedulerService` moves time evaluation to a background thread, and the `SystemManager` provides a safe, event-driven boundary for executing destructive OS commands.
-* [2026-04-23 10:51:00] - Hardcoding OS-specific commands (like `vcgencmd` or `RPi.GPIO`) directly into services breaks the application on macOS or Ubuntu, hindering developer velocity. By defining strict interfaces (`IDisplayPower`, `IHardwareInput`), the Composition Root can inject mock or OS-appropriate adapters at runtime, allowing developers to build and test the core engine on any machine.
-* [2026-04-23 10:58:00] - A modern SPA provides a superior user experience compared to static HTML. Separating the UI into a Media Player (for daily interaction) and an Admin Dashboard (for setup/maintenance) improves usability. Integrating Leaflet/OSM directly into the UI leverages the rich EXIF data extracted by the backend.
-
-## Implementation Details
-
-* [2026-04-28 11:37:00] - All detailed subtasks, status updates, and project tracking are managed via GitHub Issues and the GitHub Project board (https://github.com/users/helgeerbe/projects/3/views/2). Local memory bank files like `progress.md` will only serve as high-level summaries.
-* [2026-04-22 14:47:04] - pi3d renders the transition using the extracted first frame. Once complete, pi3d alpha is set to 0 to reveal the GStreamer video paused on the same frame. At the end of the video, pi3d alpha is set to 1 (showing the extracted last frame), and then transitions to the next media item.
-* [2026-04-23 08:41:15] - Implement a thread-safe Event Bus using `queue.PriorityQueue`. The Control Plane (FastAPI/MQTT) publishes `CommandEvents`. A central `PlaybackStateMachine` subscribes to these, manages the playlist, and publishes `RenderCommands` to the decoupled `Pi3dRenderer` and `GstVideoRenderer`.
-* [2026-04-23 08:46:31] - Create `infrastructure/media/metadata_extractor.py` using the Strategy Pattern (`ImageMetadataStrategy` via `exifread`/`PIL` and `VideoMetadataStrategy` via `ffprobe`). Both strategies return a unified `core.models.MediaItem` dataclass.
-* [2026-04-23 08:50:38] - Delete `setup.py`, `setup.cfg`, and `versioneer.py`. Update `pyproject.toml` to use `setuptools_scm` for dynamic versioning, define optional dependency groups (`[project.optional-dependencies]`) for development, and add `[tool.pytest.ini_options]`, `[tool.mypy]`, and `[tool.ruff]` configuration blocks.
-* [2026-04-23 08:56:55] - Define `IConfigRepository` and `IMediaRepository` protocols in the Application layer. Implement concrete adapters in the Infrastructure layer: `ConfigRepository` (connecting to `config.db3`) and `MediaRepository` (connecting to `media_cache.db3`). The core logic interacts only with the protocols, remaining ignorant of SQLite.
-* [2026-04-28 10:17:00] - Create the `v2-dev` branch from the current default branch. All PRs for the modernization effort must target `v2-dev`.
-* [2026-04-28 10:09:00] - Created `.github/ISSUE_TEMPLATE/task.md` and `.github/PULL_REQUEST_TEMPLATE.md` to standardize task creation and enforce the Definition of Done checklist before merging. Updated `Architecture_Solution_Document.md` to reflect the new tracking strategy.
-* [2026-04-28 09:53:00] - Include a `schema_version` table in both `config.db3` and `media_cache.db3`. Implement a migration runner that checks the current version on startup and applies any pending sequential SQL scripts (e.g., `001_initial.sql`, `002_add_field.sql`) before allowing the application to proceed.
-* [2026-04-23 10:12:00] - Implement a Composition Root in `main.py`. This script will instantiate all core components (Event Bus, Repositories, State Machine, Renderers, FastAPI, MQTT) and explicitly wire them together via constructor injection before starting the application loops.
-* [2026-04-23 10:17:00] - Define `IEventPublisher` and `IEventSubscriber`. Use `@dataclass(frozen=True)` for all events. Split `PlaybackStateMachine` into `PlaylistManager` and `PlaybackEngine`. Create factory classes/functions for complex instantiations in `main.py`.
-* [2026-04-23 10:33:00] - The PlaybackEngine retrieves an immutable MediaItem DTO from the PlaylistManager, issues a RenderCommand to the Pi3dRenderer, and immediately publishes a MediaChangedEvent to the PriorityQueue Event Bus. Background threads (FastAPI, MQTT) consume this event asynchronously to handle network broadcasting.
-* [2026-04-23 10:38:00] - Create `infrastructure/media/media_monitor.py` utilizing the `watchdog` library. It runs in a background thread, monitoring configured directories. Upon detecting a change, it publishes an immutable `FileChangeEvent` (Create, Modify, Delete) to the Event Bus. The Media Orchestrator consumes this, triggers the `MetadataExtractor` to update `media_cache.db3`, and signals the `PlaylistManager` to refresh.
-* [2026-04-23 10:42:00] - `HardwareInputService` runs in a background thread, monitoring GPIO and publishing `HardwareEvent`s. `DisplayPowerManager` subscribes to the Event Bus to handle screen on/off commands independently. `ImageProcessingService` is called by the `PlaybackEngine` to handle matting and caching before passing the final image path to the `Pi3dRenderer`.
-* [2026-04-23 10:48:00] - `SchedulerService` uses a lightweight scheduling library to publish `CommandEvent(SLEEP)` and `CommandEvent(WAKE)`. `SystemManager` subscribes to `CommandEvent(REBOOT)` and `CommandEvent(SHUTDOWN)`, executing the respective `sudo` commands.
-* [2026-04-23 10:51:00] - Define Ports in the Application layer (e.g., `core/ports/display_power.py`). Implement Adapters in the Infrastructure layer (e.g., `infrastructure/os/rpi_power.py`, `infrastructure/os/mac_power.py`). The `main.py` Composition Root detects `os.name` and `sys.platform` to instantiate and inject the correct adapter into the `DisplayPowerManager` and `HardwareInputService`.
-* [2026-04-23 10:58:00] - Created `Frontend_Specification.md`. The UI will use Vue 3, Pinia, Tailwind CSS, and Leaflet.js. It communicates with FastAPI via WebSockets for real-time playback state (Media Player) and REST APIs for configuration and maintenance tasks (Admin Dashboard).
-## [2026-04-28 14:38:00] - PlaylistManager and ImageProcessingService Gap Analysis
-*   **Context:** Implemented `PlaylistManager` and `ImageProcessingService` as part of Phase 1 (Issue #600).
-*   **Decision:** Conducted a gap analysis against the legacy `Model` and `ImageCache` classes. Identified several missing features (e.g., portrait pairs, filtering, sorting, matting, text overlays).
-*   **Rationale:** To maintain focus on the "Walking Skeleton" MVP for Phase 1, these advanced features are deferred to Phase 2 (Control Plane & UI).
-*   **Consequences:** Created GitHub issues #618 and #619 to track these deferred features. Implemented immediate fixes in `PlaylistManager` to handle missing files gracefully and return a 'no images' placeholder, which are critical for Phase 1 stability.
-
-## [2026-04-29 15:45:00] - Frontend Build Pipeline Integration
-**Decision:** Configure Vite to output compiled SPA assets directly into the backend's `src/picframe/html` directory.
-**Rationale:** Simplifies the deployment and serving process. FastAPI can be configured to mount this single directory as static files, eliminating the need for a separate web server (like Nginx) in the default setup, aligning with the "Walking Skeleton" MVP approach.
-**Implementation Details:** Updated `frontend/vite.config.ts` with `build.outDir: '../src/picframe/html'` and `emptyOutDir: true`.
-
-## [2026-04-29 15:55:00] - Database Path Overrides (Issue #628)
-**Decision:** Implement specific environment variable and command-line overrides for the SQLite database paths (`config.db3` and `media_cache.db3`), in addition to the existing configurable `base_dir`.
-**Rationale:**
-1. **SD Card Wear Mitigation:** Crucial for Raspberry Pi deployments. Allows users to point high-write databases (especially the media cache) to a RAM disk (`/dev/shm/`) or external SSD, while keeping static assets and base config on the SD card.
-2. **Containerization:** Aligns with Docker best practices by allowing specific persistent volume mounts for databases via environment variables (`PICFRAME_CONFIG_DB`, `PICFRAME_MEDIA_DB`).
-3. **Testability:** Enables passing `:memory:` or temporary file paths directly to the bootstrapper during testing without mocking the filesystem.
-**Implementation Details:** Updated `main.py` CLI parser to accept `--config-db` and `--media-db` (falling back to env vars). Updated `EnvironmentBootstrapper.__init__` to accept and use these optional overrides.
-
-## [2026-04-29 15:45:00] - Frontend Build Pipeline Integration
-**Decision:** Configure Vite to output compiled SPA assets directly into the backend's `src/picframe/html` directory.
-**Rationale:** Simplifies the deployment and serving process. FastAPI can be configured to mount this single directory as static files, eliminating the need for a separate web server (like Nginx) in the default setup, aligning with the "Walking Skeleton" MVP approach.
-**Implementation Details:** Updated `frontend/vite.config.ts` with `build.outDir: '../src/picframe/html'` and `emptyOutDir: true`.
+## Maintenance Decision
+- Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

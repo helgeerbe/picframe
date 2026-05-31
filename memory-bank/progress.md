@@ -1,35 +1,31 @@
 # Progress
 
-**Note: The authoritative source of truth for project progress, task status, and detailed subtasks is the [GitHub Project Board](https://github.com/users/helgeerbe/projects/3/views/2) and GitHub Issues. This file serves as a high-level summary.**
+## Status Summary
+GitHub Issues and the GitHub Project board are the authoritative progress tracker. This file is only a compact local summary for agent restarts.
 
-This file tracks the project's progress using a task list format.
-2026-04-28 11:37:00 - Log of updates made.
+## Completed / Substantially Implemented
+- Phase 0: GStreamer video handoff proof of concept.
+- Phase 1: Core image MVP / walking skeleton.
+- Modern packaging via `pyproject.toml` and `setuptools_scm`.
+- PriorityQueue event bus with immutable DTOs and split publisher/subscriber interfaces.
+- Dual SQLite repositories with migrations.
+- Playlist/media processing foundation.
+- FastAPI control plane with config endpoints, WebSocket state, SPA serving, media serving, and system/maintenance commands.
+- Vue 3 SPA foundation with Remote, Filters, and Settings views.
+- Display power/system manager HAL work and Wayland-oriented environment detection.
+- Video metadata extraction and frontend display of video technical metadata.
+- First/Last Frame Sandwich pattern implementation work is present in recent commit history.
 
-* [2026-04-28 09:26:00] - Marked Phase 0 as complete.
+## Current / In Progress
+- Phase 2 Control Plane/UI remains the broad current phase in local documentation.
+- Video engine integration is the practical current focus: subprocess GStreamer, IPC event routing, dynamic hardware discovery, and fallback limits.
 
-## Completed Tasks
-- [x] Ticket #608: [Task]: GstVideoRenderer Implementation
-- [x] Ticket #661: Fix UI Media Playback: Resolve Stuck Placeholder Image and Missing EXIF Metadata
-- [x] Ticket #621: [Task 2C.1]: Decouple Dynamic Overlays (Clock & Text) from Core Renderer
-- [x] Ticket #657: Refactor Configuration API to use Service Layer and Pydantic Validation
-- [x] Ticket #659: Epic: Centralized Configuration Initialization and Database Seeding
-- [x] Ticket #660: Implement Video Metadata Strategy and Extension Separation
-- [x] Ticket #649: Phase 2B: Implement System Actions via WebUI and EventBus
-- [x] Ticket #655: Implement REST endpoints for Configuration Management
+## Next
+- Complete caps-driven hardware capability discovery in the GStreamer worker.
+- Surface software fallback / unsupported-media decisions as events visible to logs and the UI.
+- Validate video handoff on target Wayland/Raspberry Pi hardware.
+- Reconcile frontend specification with actual implemented UI and fill gaps only through tracked issues.
 
-*   [2026-04-28 09:26:00] - Phase 0: Technical Spike (Video Handoff PoC)
-*   [2026-04-23 11:19:00] - Architectural Planning & Documentation (Clean Architecture, EDA, Dual-Database, HAL, Frontend Spec)
-*   [x] Phase 0: Technical Spike (Video Handoff PoC)
-*   [x] Phase 1: Core Image MVP (The "Walking Skeleton")
-*   [x] Ticket #656: Directory Scanning and ImageProcessingService Integration (MediaMonitorService, watchdog)
-
-## Current Tasks
-
-*   [-] Phase 2: Control Plane & UI (Subphased)
-
-## Next Steps
-*   [ ] Phase 3: Video Engine Integration
-*   [ ] Phase 4: Advanced System Services & Polish
-
-## [2026-05-08 00:13:00] - Fixed TransitionCompletedEvent emission logic
-- Fixed a state tracking bug in `Pi3dRenderer` where `self._was_transitioning` was not being reset after emitting `TransitionCompletedEvent`, and wasn't being set when a transition started. This ensures the event is emitted exactly once per transition, allowing the `PlaybackEngine` to reliably start video playback.
+## Known Verification State
+- Frontend no-emit type check has passed locally.
+- Backend test status is currently unknown in this sandbox because pytest hangs after collection.
