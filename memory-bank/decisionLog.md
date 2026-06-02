@@ -12,6 +12,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Store persistent user settings in `config.db3` and rebuildable media metadata in `media_cache.db3`.
 - Version both databases and apply migrations through a standardized migration manager.
 - Seed configuration from `default_config.yaml`; expose nested JSON through `ConfigService` and Pydantic API models.
+- Legacy `configuration.yaml` migration uses the explicit Settings UI / `/api/config/import-yaml` path, not a startup migration or CLI command; compatibility normalization maps supported renamed runtime keys and ignores startup-only HTTP fields managed by CLI/env.
 - Serve the compiled Vue SPA directly through FastAPI; Vite outputs production assets into `src/picframe/html`.
 - Keep server port and DB path overrides as startup CLI/env concerns, not mutable runtime settings.
 - Use Wayland as the display protocol target; X11 is not supported.

@@ -14,6 +14,7 @@ The current implementation focus is Phase 2 next-gen control-plane parity: Remot
 - `architecture_gst_hw_discovery.md` and `architecture_hw_limits.md` refine video playback toward GStreamer registry/caps-driven hardware discovery and threshold-based software fallback rejection.
 - `Frontend_Specification.md` defines a Vue 3 SPA with Remote, Filters, and Settings views; REST config/maintenance endpoints; WebSocket state; i18n; Leaflet maps; and separate narrative vs. technical metadata presentation.
 - Issue #648 is closed after implementing Remote media-selection controls, legacy-compatible location/tag filter expressions, live match counts, playlist filtering/sorting, timing propagation, filter-options API, shuffle transport control refinements, and displayed-count metadata. #618 tracks remaining parity follow-ups.
+- Issues #676 and #677 are closed after documenting legacy `configuration.yaml` import and normalizing supported legacy keys through `/api/config/import-yaml`.
 
 ## Immediate Next Steps
 - Review and test remaining #618 parity items on an Ubuntu VM, especially delete/purge and Remote filter UX with real media, then on Pi hardware when available.

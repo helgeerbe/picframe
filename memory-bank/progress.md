@@ -22,6 +22,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Display power/system manager HAL work and Wayland-oriented environment detection.
 - Video metadata extraction and frontend display of video technical metadata.
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.
+- Legacy `configuration.yaml` import follow-ups #676/#677 are complete: the Settings UI/API path is documented, `viewer.show_text` is normalized into next-gen overlay keys, `mqtt.port` is preserved, and legacy startup-only HTTP keys are intentionally ignored.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
@@ -33,6 +34,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Surface software fallback / unsupported-media decisions as events visible to logs and the UI.
 - Validate video handoff on target Wayland/Raspberry Pi hardware.
 - Reconcile frontend specification with actual implemented UI and fill gaps only through tracked issues.
+- Keep legacy import documentation aligned with the explicit UI/API import path rather than adding a separate `picframe migrate` command unless a new tracked requirement asks for headless migration.
 
 ## Known Verification State
 - Frontend build is green with `npm run build`.
