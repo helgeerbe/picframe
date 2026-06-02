@@ -138,7 +138,11 @@ def test_api_put_config() -> None:
     # Setup mock to return existing config
     mock_repo.get_app_config.return_value = {"fps": 30, "blur_amount": 12}
 
-    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo, event_publisher=mock_publisher)
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
     client = ASGITestClient(app)
     
     payload = {
@@ -255,7 +259,11 @@ def test_api_import_yaml() -> None:
     mock_repo = MagicMock()
     mock_publisher = MagicMock()
     
-    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo, event_publisher=mock_publisher)
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
     client = ASGITestClient(app)
     
     yaml_content = """
@@ -273,7 +281,10 @@ model:
     )
     
     assert response.status_code == 200
-    assert response.json() == {"status": "success", "message": "Legacy YAML configuration imported successfully"}
+    assert response.json() == {
+        "status": "success",
+        "message": "Legacy YAML configuration imported successfully",
+    }
     
     # Verify repository was updated
     assert mock_repo.set_app_config.call_count > 0
@@ -287,14 +298,145 @@ model:
     assert event.payload["model"]["pic_dir"] == "/new/yaml/path"
     assert "unknown_field" not in event.payload["viewer"]
 
+
+def test_api_import_yaml_maps_legacy_show_text() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_text: "name location"
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["text_overlay_format"] == "name location"
+    assert event.payload["viewer"]["show_text_enabled"] is True
+    assert "show_text" not in event.payload["viewer"]
+
+
+def test_api_import_yaml_maps_empty_legacy_show_text_to_disabled() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_text: "  "
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["text_overlay_format"] == ""
+    assert event.payload["viewer"]["show_text_enabled"] is False
+
+
+def test_api_import_yaml_preserves_explicit_next_gen_text_keys() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_text: "name location"
+  text_overlay_format: "title caption"
+  show_text_enabled: false
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["text_overlay_format"] == "title caption"
+    assert event.payload["viewer"]["show_text_enabled"] is False
+    assert "show_text" not in event.payload["viewer"]
+
+
+def test_api_import_yaml_imports_mqtt_port_and_ignores_startup_only_http_keys() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+mqtt:
+  port: 8883
+http:
+  use_http: true
+  path: "/tmp/picframe-html"
+  port: 9001
+  password: null
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["mqtt"]["port"] == 8883
+    assert event.payload["http"]["password"] == ""
+    assert "use_http" not in event.payload["http"]
+    assert "path" not in event.payload["http"]
+    assert "port" not in event.payload["http"]
+
+
 def test_api_import_yaml_example_file() -> None:
     mock_repo = MagicMock()
     mock_publisher = MagicMock()
     
-    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo, event_publisher=mock_publisher)
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
     client = ASGITestClient(app)
     
-    example_yaml_path = Path(__file__).parent.parent.parent / "src" / "picframe" / "config" / "configuration_example.yaml"
+    example_yaml_path = (
+        Path(__file__).parent.parent.parent
+        / "src"
+        / "picframe"
+        / "config"
+        / "configuration_example.yaml"
+    )
     
     with open(example_yaml_path, "rb") as f:
         response = client.post(
@@ -303,7 +445,10 @@ def test_api_import_yaml_example_file() -> None:
         )
         
     assert response.status_code == 200
-    assert response.json() == {"status": "success", "message": "Legacy YAML configuration imported successfully"}
+    assert response.json() == {
+        "status": "success",
+        "message": "Legacy YAML configuration imported successfully",
+    }
     
     # Verify repository was updated
     assert mock_repo.set_app_config.call_count > 0

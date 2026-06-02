@@ -25,6 +25,31 @@ This will automatically overwrite any existing databases.
 #### Database Seeding
 If the configuration database is newly created or cleared, it is automatically seeded with default values. These defaults are read from `src/picframe/config/default_config.yaml`, validated against the Pydantic models, and stored in the SQLite database.
 
+### Import Legacy `configuration.yaml`
+
+Existing users can import a legacy `configuration.yaml` after running `picframe init`.
+The import is an explicit user action: initialization creates and seeds `config.db3`
+with defaults first, then the Settings UI can merge supported legacy values into that
+database.
+
+To import a legacy configuration:
+
+1. Start Picframe and open the Settings UI.
+2. Click **Import**.
+3. Select the existing `configuration.yaml` file. Files ending in `.yaml` and `.yml`
+   are accepted.
+
+The Settings UI sends the file to `/api/config/import-yaml`. The backend validates the
+supported runtime settings and immediately writes them to `config.db3`; after a
+successful import, the Settings UI refreshes and shows the imported values.
+
+Some legacy keys are renamed during import. For example, legacy `viewer.show_text` is
+migrated to `viewer.text_overlay_format` and `viewer.show_text_enabled` unless those
+next-generation keys are already present in the imported file. Obsolete or startup-only
+legacy fields are ignored. In particular, `http.use_http`, `http.path`, and `http.port`
+are not stored in `config.db3`; startup behavior is controlled by CLI arguments and
+environment variables instead.
+
 ### CLI Parameters
 
 The `picframe run` command accepts several parameters to override default paths and ports. These parameters take precedence over any configuration database settings.

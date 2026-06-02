@@ -29,6 +29,47 @@ from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepos
 
 logger = logging.getLogger(__name__)
 
+STARTUP_ONLY_LEGACY_HTTP_KEYS = {"use_http", "path", "port"}
+
+
+def _normalize_legacy_yaml_config(yaml_data: dict[str, Any]) -> dict[str, Any]:
+    """Normalize supported legacy YAML keys before AppConfig validation."""
+    viewer = yaml_data.get("viewer")
+    if isinstance(viewer, dict):
+        if "show_text" in viewer:
+            legacy_show_text = viewer.pop("show_text")
+            text_overlay_format = "" if legacy_show_text is None else str(legacy_show_text).strip()
+            if "text_overlay_format" not in viewer:
+                viewer["text_overlay_format"] = text_overlay_format
+            if "show_text_enabled" not in viewer:
+                viewer["show_text_enabled"] = bool(text_overlay_format)
+
+        if "display_w" in viewer and viewer["display_w"] is not None:
+            viewer["display_w"] = str(viewer["display_w"])
+        if "display_h" in viewer and viewer["display_h"] is not None:
+            viewer["display_h"] = str(viewer["display_h"])
+        if "display_power" in viewer:
+            viewer["display_power"] = str(viewer["display_power"])
+
+    http = yaml_data.get("http")
+    if isinstance(http, dict):
+        if "password" in http and http["password"] is None:
+            http["password"] = ""
+
+        # These legacy HTTP keys are startup-only in next-gen Picframe.
+        for key in STARTUP_ONLY_LEGACY_HTTP_KEYS:
+            http.pop(key, None)
+
+    peripherals = yaml_data.get("peripherals")
+    if isinstance(peripherals, dict):
+        buttons = peripherals.get("buttons")
+        if isinstance(buttons, dict):
+            for key, value in buttons.items():
+                if isinstance(value, dict) and "shortcut" in value:
+                    buttons[key] = value["shortcut"]
+
+    return yaml_data
+
 
 def create_app(
     cors_allowed_origins: list[str],
@@ -134,7 +175,7 @@ def create_app(
             elif "location" in exif_data and isinstance(exif_data["location"], str):
                 exif_data["location_name"] = exif_data["location"]
                 
-            # Fallback to checking the database directly if we have coordinates but no location string
+            # Fallback to checking the database directly if coordinates are present.
             if "location_name" not in exif_data and location is not None:
                 try:
                     # We need to access the media repo to do a direct lookup
@@ -146,8 +187,13 @@ def create_app(
                     if os.path.exists(db_path):
                         with sqlite3.connect(db_path) as conn:
                             cursor = conn.execute(
-                                "SELECT address FROM locations WHERE ROUND(latitude, 4) = ROUND(?, 4) AND ROUND(longitude, 4) = ROUND(?, 4)",
-                                (location["lat"], location["lon"])
+                                """
+                                SELECT address
+                                FROM locations
+                                WHERE ROUND(latitude, 4) = ROUND(?, 4)
+                                  AND ROUND(longitude, 4) = ROUND(?, 4)
+                                """,
+                                (location["lat"], location["lon"]),
                             )
                             row = cursor.fetchone()
                             if row and row[0]:
@@ -170,8 +216,12 @@ def create_app(
         rate_limit = 10.0
         capacity = 20
         if config_repository:
-            rate_limit = float(config_repository.get_app_config("http.websocket_broadcast_rate_limit", 10.0))
-            capacity = int(config_repository.get_app_config("http.websocket_broadcast_capacity", 20))
+            rate_limit = float(
+                config_repository.get_app_config("http.websocket_broadcast_rate_limit", 10.0)
+            )
+            capacity = int(
+                config_repository.get_app_config("http.websocket_broadcast_capacity", 20)
+            )
             
         from picframe.core.utils.rate_limit import TokenBucket
         state_rate_limiter = TokenBucket(capacity=capacity, refill_rate=rate_limit)
@@ -428,26 +478,7 @@ def create_app(
             from picframe.core.services.config_service import ConfigService
             temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
             
-            # Sanitize legacy YAML data before validation
-            if "viewer" in yaml_data:
-                viewer = yaml_data["viewer"]
-                if "display_w" in viewer and viewer["display_w"] is not None:
-                    viewer["display_w"] = str(viewer["display_w"])
-                if "display_h" in viewer and viewer["display_h"] is not None:
-                    viewer["display_h"] = str(viewer["display_h"])
-                if "display_power" in viewer:
-                    viewer["display_power"] = str(viewer["display_power"])
-            
-            if "http" in yaml_data:
-                http = yaml_data["http"]
-                if "password" in http and http["password"] is None:
-                    http["password"] = ""
-                    
-            if "peripherals" in yaml_data and "buttons" in yaml_data["peripherals"]:
-                buttons = yaml_data["peripherals"]["buttons"]
-                for key, value in buttons.items():
-                    if isinstance(value, dict) and "shortcut" in value:
-                        buttons[key] = value["shortcut"]
+            yaml_data = _normalize_legacy_yaml_config(yaml_data)
 
             # Validate against AppConfig, ignoring unknown fields
             # Pydantic v2 ignores extra fields by default unless configured otherwise
@@ -459,9 +490,14 @@ def create_app(
             
             # Publish a SET_CONFIG event to notify other components
             if event_publisher:
-                event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=config_dict))
+                event_publisher.publish(
+                    CommandEvent(command=Command.SET_CONFIG, payload=config_dict)
+                )
                 
-            return {"status": "success", "message": "Legacy YAML configuration imported successfully"}
+            return {
+                "status": "success",
+                "message": "Legacy YAML configuration imported successfully",
+            }
             
         except yaml.YAMLError as e:
             raise HTTPException(status_code=400, detail=f"Invalid YAML file: {e}")

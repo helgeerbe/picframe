@@ -136,6 +136,7 @@ class ModelConfig(BaseModel):
 class MqttConfig(BaseModel):
     use_mqtt: bool = False
     server: str = "your_mqtt_broker"
+    port: int = 1883
     login: str = "name"
     password: str = "your_password"
     tls: str = ""
