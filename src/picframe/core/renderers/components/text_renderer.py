@@ -19,48 +19,72 @@ class TextRenderer:
         self._shader = shader
         self._font_file = font_file
         self._text_block: pi3d.FixedString | None = None
+        self._text_blocks: list[pi3d.FixedString] = []
         self._current_text = ""
+        self._current_texts: tuple[str, ...] = ()
 
     def update_config(self, config: OverlayConfig, brightness: float = 1.0) -> None:
         """Update the text overlay based on the new configuration."""
-        if not config.show_text or not config.text_string:
+        text_strings = tuple(config.text_strings or ())
+        if not text_strings and config.text_string:
+            text_strings = (config.text_string,)
+
+        if not config.show_text or not any(text_strings):
             self._text_block = None
+            self._text_blocks = []
             self._current_text = ""
+            self._current_texts = ()
             return
 
-        if config.text_string != self._current_text or self._text_block is None:
-            self._logger.debug(f"Rebuilding text overlay: {config.text_string}")
+        if text_strings != self._current_texts or not self._text_blocks:
+            self._logger.debug(f"Rebuilding text overlay: {text_strings}")
             self._current_text = config.text_string
+            self._current_texts = text_strings
             
             # Default styling (can be expanded via OverlayConfig later)
             font_size = 32
             margin = 20
             opacity = int(255 * 0.8 * brightness)
-            
-            # Create the FixedString
-            self._text_block = pi3d.FixedString(
-                self._font_file,
-                self._current_text,
-                font_size=font_size,
-                shadow_radius=3,
-                shader=self._shader,
-                justify="C",
-                width=self._display.width - (margin * 2),
-                color=(255, 255, 255, opacity)
+            pair_mode = len(text_strings) == 2
+            width = (
+                self._display.width // 2 - (margin * 2)
+                if pair_mode
+                else self._display.width - (margin * 2)
             )
+
+            self._text_blocks = []
             
-            # Position at the bottom
-            x = 0
-            y = - (self._display.height // 2) + (self._text_block.sprite.height // 2) + margin
-            self._text_block.sprite.position(x, y, 0.1)
-            self._text_block.sprite.set_alpha(0.0)
+            for index, text in enumerate(text_strings):
+                if not text:
+                    continue
+
+                text_block = pi3d.FixedString(
+                    self._font_file,
+                    text,
+                    font_size=font_size,
+                    shadow_radius=3,
+                    shader=self._shader,
+                    justify="C",
+                    width=width,
+                    color=(255, 255, 255, opacity)
+                )
+
+                x = 0
+                if pair_mode:
+                    x = -self._display.width // 4 if index == 0 else self._display.width // 4
+                y = - (self._display.height // 2) + (text_block.sprite.height // 2) + margin
+                text_block.sprite.position(x, y, 0.1)
+                text_block.sprite.set_alpha(0.0)
+                self._text_blocks.append(text_block)
+
+            self._text_block = self._text_blocks[0] if self._text_blocks else None
 
     def set_alpha(self, alpha: float) -> None:
         """Set the alpha transparency of the text."""
-        if self._text_block:
-            self._text_block.sprite.set_alpha(alpha)
+        for text_block in self._text_blocks:
+            text_block.sprite.set_alpha(alpha)
 
     def draw(self) -> None:
         """Draw the text overlay."""
-        if self._text_block:
-            self._text_block.sprite.draw()
+        for text_block in self._text_blocks:
+            text_block.sprite.draw()

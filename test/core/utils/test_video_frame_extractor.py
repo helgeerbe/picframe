@@ -1,7 +1,10 @@
-import pytest
-from unittest.mock import patch, MagicMock
-from PIL import Image
+import os
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
 import numpy as np
+import pytest
+from PIL import Image
 from typing import Any, Generator
 
 from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
@@ -60,6 +63,76 @@ def test_extract_and_save_frames_already_exists() -> None:
             result = VideoFrameExtractor.extract_and_save_frames("test.mp4", 10.0, 1920, 1080)
         
     assert result is True
+
+
+def test_cached_frame_path_uses_managed_cache_and_media_freshness(tmp_path: Path) -> None:
+    video_path = tmp_path / "holiday clip.mp4"
+    cache_dir = tmp_path / "cache"
+    video_path.write_bytes(b"first version")
+    os.utime(video_path, ns=(1_000_000_000, 1_000_000_000))
+
+    first_path = VideoFrameExtractor.get_cached_frame_path(
+        str(video_path), 1920, 1080, False, "first", str(cache_dir)
+    )
+    repeated_path = VideoFrameExtractor.get_cached_frame_path(
+        str(video_path), 1920, 1080, False, "first", str(cache_dir)
+    )
+    last_path = VideoFrameExtractor.get_cached_frame_path(
+        str(video_path), 1920, 1080, False, "last", str(cache_dir)
+    )
+    fit_path = VideoFrameExtractor.get_cached_frame_path(
+        str(video_path), 1920, 1080, True, "first", str(cache_dir)
+    )
+    resized_path = VideoFrameExtractor.get_cached_frame_path(
+        str(video_path), 1280, 720, False, "first", str(cache_dir)
+    )
+
+    assert first_path == repeated_path
+    assert Path(first_path).parent == cache_dir
+    assert Path(first_path).name.startswith("holiday clip-")
+    assert first_path.endswith(".1.frame")
+    assert last_path.endswith(".2.frame")
+    assert first_path != last_path
+    assert first_path != fit_path
+    assert first_path != resized_path
+    assert first_path != str(video_path.with_suffix(".1.frame"))
+
+    video_path.write_bytes(b"second version")
+    os.utime(video_path, ns=(2_000_000_000, 2_000_000_000))
+    changed_path = VideoFrameExtractor.get_cached_frame_path(
+        str(video_path), 1920, 1080, False, "first", str(cache_dir)
+    )
+
+    assert changed_path != first_path
+
+
+@patch("picframe.core.utils.video_frame_extractor.Image.open")
+def test_extract_and_save_frames_writes_managed_cache_paths(
+    mock_image_open: MagicMock,
+    mock_subprocess_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "video.mp4"
+    cache_dir = tmp_path / "cache"
+    video_path.write_bytes(b"video")
+    mock_subprocess_run.side_effect = [
+        MagicMock(returncode=0, stdout=b"fake_jpeg_data_1"),
+        MagicMock(returncode=0, stdout=b"fake_jpeg_data_2"),
+    ]
+    mock_image_open.return_value = Image.new("RGB", (1920, 1080), "black")
+
+    with patch.object(Image.Image, "save") as mock_save:
+        result = VideoFrameExtractor.extract_and_save_frames(
+            str(video_path), 10.0, 1920, 1080, cache_dir=str(cache_dir)
+        )
+
+    saved_paths = [Path(call.args[0]) for call in mock_save.call_args_list]
+    assert result is True
+    assert cache_dir.exists()
+    assert len(saved_paths) == 2
+    assert all(path.parent == cache_dir for path in saved_paths)
+    assert {path.suffix for path in saved_paths} == {".frame"}
+    assert str(video_path.with_suffix(".1.frame")) not in {str(path) for path in saved_paths}
 
 def test_scale_frame_portrait() -> None:
     extractor = VideoFrameExtractor("test.mp4", 1920, 1080, fit_display=False)

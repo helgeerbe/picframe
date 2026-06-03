@@ -60,6 +60,15 @@
       "applied": "Media selection updated.",
       "failed": "Could not update media selection."
     },
+    "pair": {
+      "left": "Left",
+      "right": "Right",
+      "deleteTitle": "Delete portrait pair",
+      "deletePrompt": "Choose which image from the current pair should be deleted.",
+      "deleteLeft": "Delete left",
+      "deleteRight": "Delete right",
+      "deleteBoth": "Delete both"
+    },
     "controls": {
       "currentMedia": "Current media",
       "turnDisplayOn": "Turn display on",

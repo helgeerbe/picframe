@@ -1,6 +1,7 @@
 """
 Unit tests for the PlaybackEngine.
 """
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -8,7 +9,7 @@ import pytest
 
 from picframe.core.engine.playback import PlaybackEngine
 from picframe.core.events.dto import Command, CommandEvent, State, StateEvent
-from picframe.core.models.media import MediaItem, MediaType
+from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
 
 
 @pytest.fixture
@@ -208,6 +209,159 @@ def test_engine_handle_command_stop(
     assert engine._state == State.IDLE
 
 
+def test_engine_trigger_next_media_portrait_pair_command(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    left = MediaItem(
+        id=1,
+        filepath="/path/to/left.jpg",
+        media_type=MediaType.IMAGE,
+        filename="left.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1.0,
+        is_portrait=True,
+        title="Left",
+    )
+    right = MediaItem(
+        id=2,
+        filepath="/path/to/right.jpg",
+        media_type=MediaType.IMAGE,
+        filename="right.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1.0,
+        is_portrait=True,
+        title="Right",
+    )
+    display_item = DisplayItem.portrait_pair(left, right)
+    mock_playlist_manager.get_next.return_value = display_item
+    config["show_text"] = "title"
+
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+
+    engine._trigger_next_media()
+
+    render_cmd = mock_renderer.execute.call_args.args[0]
+    assert render_cmd.layout == DisplayLayout.PORTRAIT_PAIR.value
+    assert render_cmd.image_paths == ("/path/to/left.jpg", "/path/to/right.jpg")
+    assert render_cmd.overlay.text_strings == ("Left", "Right")
+
+
+def test_engine_pair_overlay_uses_next_gen_text_config(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    left = MediaItem(
+        id=1,
+        filepath="/path/to/left.jpg",
+        media_type=MediaType.IMAGE,
+        filename="left.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1.0,
+        is_portrait=True,
+    )
+    right = MediaItem(
+        id=2,
+        filepath="/path/to/right.jpg",
+        media_type=MediaType.IMAGE,
+        filename="right.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1.0,
+        is_portrait=True,
+    )
+    display_item = DisplayItem.portrait_pair(left, right)
+    mock_playlist_manager.get_next.return_value = display_item
+    config_repo = MagicMock()
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "viewer.show_clock": False,
+        "viewer.show_text_enabled": True,
+    }.get(key, default)
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.clock_format": "%H:%M",
+        "viewer.text_overlay_format": "name",
+        "viewer.show_text_fm": "%b %d, %Y",
+    }.get(key, default)
+
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    engine._trigger_next_media()
+
+    render_cmd = mock_renderer.execute.call_args.args[0]
+    assert render_cmd.overlay.show_text is True
+    assert render_cmd.overlay.text_string == "left.jpg"
+    assert render_cmd.overlay.text_strings == ("left.jpg", "right.jpg")
+
+
+def test_engine_delete_pair_right_uses_payload(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    left_file = tmp_path / "left.jpg"
+    right_file = tmp_path / "right.jpg"
+    left_file.write_bytes(b"left")
+    right_file.write_bytes(b"right")
+    deleted_dir = tmp_path / "deleted"
+    left = MediaItem(
+        id=1,
+        filepath=str(left_file),
+        media_type=MediaType.IMAGE,
+        filename="left.jpg",
+        directory_id=1,
+        file_size=4,
+        last_modified=1.0,
+        is_portrait=True,
+    )
+    right = MediaItem(
+        id=2,
+        filepath=str(right_file),
+        media_type=MediaType.IMAGE,
+        filename="right.jpg",
+        directory_id=1,
+        file_size=5,
+        last_modified=1.0,
+        is_portrait=True,
+    )
+    display_item = DisplayItem.portrait_pair(left, right)
+    mock_playlist_manager.get_current.return_value = display_item
+    mock_playlist_manager.resolve_current_delete_ids.return_value = [2]
+    config["deleted_pictures"] = str(deleted_dir)
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+
+    with patch.object(engine, "_trigger_next_media"):
+        engine._handle_delete_command({"target": "right", "media_ids": [2]})
+
+    assert left_file.exists()
+    assert not right_file.exists()
+    assert (deleted_dir / "right.jpg").exists()
+    mock_playlist_manager.resolve_current_delete_ids.assert_called_once_with("right", [2])
+    mock_playlist_manager.delete_media_ids.assert_called_once_with([2])
+
+
 def test_engine_rebuilds_playlist_and_updates_delay_on_model_config_change(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
@@ -312,6 +466,187 @@ def test_engine_trigger_next_media_video(
     call_args = mock_renderer.execute.call_args[0][0]
     assert isinstance(call_args, RenderCommand)
     assert call_args.image_path == "/path/to/video.1.frame"
+
+
+def test_engine_trigger_next_media_video_uses_cache_dir(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    mock_video_player = MagicMock()
+    cache_dir = tmp_path / "cache"
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+        cache_dir=str(cache_dir),
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.MOV",
+        media_type=MediaType.VIDEO,
+        filename="video.MOV",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    mock_playlist_manager.get_next.return_value = media_item
+    mock_renderer.get_display_rect.return_value = (0, 0, 1920, 1080)
+
+    with patch("os.path.exists", return_value=True), \
+         patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames", return_value=(MagicMock(), MagicMock())):
+        engine._trigger_next_media()
+
+    from picframe.core.events.dto import RenderCommand
+    from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
+
+    expected_path = VideoFrameExtractor.get_cached_frame_path(
+        media_item.filepath,
+        1920,
+        1080,
+        False,
+        "first",
+        str(cache_dir),
+    )
+    call_args = mock_renderer.execute.call_args[0][0]
+    assert isinstance(call_args, RenderCommand)
+    assert call_args.image_path == expected_path
+
+
+def test_engine_trigger_next_media_video_plays_directly_without_frames(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    mock_playlist_manager.get_next.return_value = media_item
+    mock_renderer.get_display_rect.return_value = (10, 20, 1920, 1080)
+
+    with patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+        return_value=None,
+    ):
+        engine._trigger_next_media()
+
+    from picframe.core.events.dto import RenderCommand
+
+    render_cmd = mock_renderer.execute.call_args[0][0]
+    assert isinstance(render_cmd, RenderCommand)
+    assert render_cmd.image_path == "RESUME"
+    mock_video_player.play.assert_called_once_with(media_item, 10, 20, 1920, 1080)
+    assert engine._state == State.PLAYING
+    assert engine._next_transition_time == float("inf")
+
+
+def test_engine_video_first_frame_timeout_completes_handoff(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    config["video_first_frame_timeout"] = 0.5
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = media_item
+    engine._pending_last_img = MagicMock()
+    engine._video_first_frame_deadline = 10.0
+
+    engine._handle_video_first_frame_timeout(10.5)
+
+    assert engine._state == State.PLAYING
+    assert engine._pending_swap_media == media_item
+    assert not hasattr(engine, "_pending_video_media")
+    assert not hasattr(engine, "_video_first_frame_deadline")
+
+
+def test_engine_playback_completed_before_first_frame_advances(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+    engine._pending_last_img = MagicMock()
+    engine._pending_last_frame_path = "/cache/video.2.frame"
+    engine._video_first_frame_deadline = 10.0
+
+    from picframe.core.events.dto import PlaybackCompletedEvent, RenderCommand
+
+    engine._handle_playback_completed(PlaybackCompletedEvent())
+
+    assert engine._state == State.PLAYING
+    assert engine._next_transition_time == 0.0
+    assert not hasattr(engine, "_pending_video_media")
+    assert not hasattr(engine, "_pending_last_img")
+    assert not hasattr(engine, "_pending_last_frame_path")
+    assert not hasattr(engine, "_video_first_frame_deadline")
+    render_cmd = mock_renderer.execute.call_args[0][0]
+    assert isinstance(render_cmd, RenderCommand)
+    assert render_cmd.image_path == "RESUME"
+    mock_video_player.stop.assert_called_once_with()
 
 
 def test_engine_circuit_breaker(

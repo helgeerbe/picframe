@@ -21,20 +21,7 @@ class ImageRenderer:
         self._logger = logging.getLogger(__name__)
         self._display = display
         self._shader = shader
-        self._config = config
-        
-        # Rendering settings
-        blend_type_str = getattr(config, "blend_type", "blend")
-        self._blend_type = {"blend": 0.0, "burn": 1.0, "bump": 2.0}.get(blend_type_str, 0.0)
-        self._edge_alpha = float(getattr(config, "edge_alpha", 0.5))
-        self._fit = bool(getattr(config, "fit", False))
-        self._kenburns = bool(getattr(config, "kenburns", False))
-        if self._kenburns:
-            self._fit = False
-            
-        self._fade_time = float(getattr(config, "time_fade", 2.0))
-        self._time_delay = float(getattr(config, "time_delay", 200.0))
-        self._fps = int(getattr(config, "fps", 20))
+        self.update_config(config)
         
         # State
         self._slide: Any | None = None
@@ -48,6 +35,33 @@ class ImageRenderer:
         self._next_tm = 0.0
         
         self._init_slide()
+
+    @staticmethod
+    def _config_value(config: Any, key: str, default: Any) -> Any:
+        if isinstance(config, dict):
+            return config.get(key, default)
+        return getattr(config, key, default)
+
+    def update_config(self, config: RendererConfig | dict[str, Any]) -> None:
+        """Refresh image-rendering settings after a runtime config change."""
+        self._config = config
+
+        blend_type_str = str(self._config_value(config, "blend_type", "blend"))
+        self._blend_type = {"blend": 0.0, "burn": 1.0, "bump": 2.0}.get(blend_type_str, 0.0)
+        self._edge_alpha = float(self._config_value(config, "edge_alpha", 0.5))
+        self._fit = bool(self._config_value(config, "fit", False))
+        self._kenburns = bool(self._config_value(config, "kenburns", False))
+        if self._kenburns:
+            self._fit = False
+
+        self._fade_time = float(self._config_value(config, "time_fade", 2.0))
+        self._time_delay = float(self._config_value(config, "time_delay", 200.0))
+        self._fps = int(self._config_value(config, "fps", 20))
+
+        if getattr(self, "_slide", None):
+            self._slide.unif[47] = self._edge_alpha
+            self._slide.unif[54] = float(self._blend_type)
+            self._apply_texture_scale()
 
     def _init_slide(self) -> None:
         """Initialize the pi3d Sprite for the slide."""
@@ -91,10 +105,12 @@ class ImageRenderer:
             return False, 0.0, 0.0
 
         try:
-            if getattr(command, "image_obj", None) is not None:
-                im: Any = command.image_obj
+            if command.layout == "portrait_pair":
+                im = self._load_portrait_pair(command)
+            elif getattr(command, "image_obj", None) is not None:
+                im = command.image_obj
             else:
-                im: Any = Image.open(command.image_path)
+                im = Image.open(command.image_path)
         except Exception as e:
             self._logger.error(f"Failed to load image {command.image_path}: {e}")
             from picframe.core.exceptions import MediaProcessingError
@@ -119,32 +135,79 @@ class ImageRenderer:
             # Transfer front width/height offsets to back
             self._slide.unif[51:53] = self._slide.unif[48:50]
             
-            # Calculate aspect ratio adjustments
-            wh_rat = (self._display.width * self._sfg.iy) / (self._display.height * self._sfg.ix)
-            if (wh_rat > 1.0 and self._fit) or (wh_rat <= 1.0 and not self._fit):
-                sz1, sz2, os1, os2 = 42, 43, 48, 49
-            else:
-                sz1, sz2, os1, os2 = 43, 42, 49, 48
-                wh_rat = 1.0 / wh_rat
-                
-            self._slide.unif[sz1] = wh_rat
-            self._slide.unif[sz2] = 1.0
-            self._slide.unif[os1] = (wh_rat - 1.0) * 0.5
-            self._slide.unif[os2] = 0.0
-            
-            xstep = 0.0
-            ystep = 0.0
-            if self._kenburns:
-                xstep = self._slide.unif[48] * 2.0 / (self._time_delay - self._fade_time)
-                ystep = self._slide.unif[49] * 2.0 / (self._time_delay - self._fade_time)
-                self._slide.unif[48] = 0.0
-                self._slide.unif[49] = 0.0
+            xstep, ystep = self._apply_texture_scale()
                 
             return True, xstep, ystep
                 
         except Exception as e:
             self._logger.error(f"Failed to execute RenderCommand in ImageRenderer: {e}")
             return False, 0.0, 0.0
+
+    def _apply_texture_scale(self) -> tuple[float, float]:
+        """Apply fit/crop shader uniforms for the current front texture."""
+        if not self._slide or not self._sfg:
+            return 0.0, 0.0
+
+        wh_rat = (self._display.width * self._sfg.iy) / (self._display.height * self._sfg.ix)
+        if (wh_rat > 1.0 and self._fit) or (wh_rat <= 1.0 and not self._fit):
+            sz1, sz2, os1, os2 = 42, 43, 48, 49
+        else:
+            sz1, sz2, os1, os2 = 43, 42, 49, 48
+            wh_rat = 1.0 / wh_rat
+
+        self._slide.unif[sz1] = wh_rat
+        self._slide.unif[sz2] = 1.0
+        self._slide.unif[os1] = (wh_rat - 1.0) * 0.5
+        self._slide.unif[os2] = 0.0
+
+        if not self._kenburns:
+            return 0.0, 0.0
+
+        xstep = self._slide.unif[48] * 2.0 / (self._time_delay - self._fade_time)
+        ystep = self._slide.unif[49] * 2.0 / (self._time_delay - self._fade_time)
+        self._slide.unif[48] = 0.0
+        self._slide.unif[49] = 0.0
+        return xstep, ystep
+
+    def _load_portrait_pair(self, command: RenderCommand) -> Image.Image:
+        """Load and combine a two-image portrait pair in memory."""
+        images: list[Image.Image] = []
+        image_objs = tuple(command.image_objs or ())
+        image_paths = tuple(command.image_paths or ())
+
+        if len(image_objs) >= 2:
+            images = [image_objs[0].copy(), image_objs[1].copy()]
+        elif len(image_paths) >= 2:
+            images = [Image.open(image_paths[0]).copy(), Image.open(image_paths[1]).copy()]
+        else:
+            raise ValueError("portrait_pair render commands require two image paths or objects")
+
+        return self._create_portrait_pair_image(images[0], images[1])
+
+    @staticmethod
+    def _create_portrait_pair_image(im1: Image.Image, im2: Image.Image) -> Image.Image:
+        """Concatenate two portrait images horizontally using legacy sizing rules."""
+        sep = 8
+        if im1.mode != "RGB":
+            im1 = im1.convert("RGB")
+        if im2.mode != "RGB":
+            im2 = im2.convert("RGB")
+
+        if im1.width > im2.width:
+            im1 = im1.resize(
+                (im2.width, int(im1.height * im2.width / im1.width)),
+                resample=Image.Resampling.BICUBIC,
+            )
+        elif im2.width > im1.width:
+            im2 = im2.resize(
+                (im1.width, int(im2.height * im1.width / im2.width)),
+                resample=Image.Resampling.BICUBIC,
+            )
+
+        dst = Image.new("RGB", (im1.width + im2.width + sep, min(im1.height, im2.height)))
+        dst.paste(im1, (0, 0))
+        dst.paste(im2, (im1.width + sep, 0))
+        return dst
 
     def set_alpha(self, alpha: float) -> None:
         """Set the alpha value for the transition."""

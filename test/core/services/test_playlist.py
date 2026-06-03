@@ -2,7 +2,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from picframe.core.models.media import MediaItem, MediaType
+from picframe.core.models.media import DisplayItem, DisplayLayout, MediaType
 from picframe.core.models.playlist import PlaylistCriteria
 from picframe.core.repositories.interfaces import IMediaRepository
 from picframe.core.services.playlist import PlaylistManager
@@ -62,6 +62,7 @@ def test_build_playlist_no_shuffle(mock_media_repo: Mock) -> None:
     manager.build_playlist(shuffle=False)
     
     assert len(manager._playlist) == 3
+    assert len(manager._display_playlist) == 3
     assert manager._current_index == 0
     assert manager._playlist[0]["id"] == 1
     assert manager._playlist[1]["id"] == 2
@@ -82,7 +83,8 @@ def test_get_next(mock_isfile: Mock, mock_media_repo: Mock) -> None:
     manager.build_playlist(shuffle=False)
     
     item1 = manager.get_next()
-    assert isinstance(item1, MediaItem)
+    assert isinstance(item1, DisplayItem)
+    assert item1.layout == DisplayLayout.SINGLE
     assert item1.id == 1
     assert item1.media_type == MediaType.IMAGE
     mock_media_repo.record_media_displayed.assert_called_once_with(1)
@@ -182,3 +184,155 @@ def test_build_playlist_uses_configured_criteria(mock_media_repo: Mock) -> None:
     assert criteria.sort_cols == "rating DESC"
     assert criteria.recent_n == 14
     assert manager._reshuffle_num == 3
+
+
+@patch('os.path.isfile', return_value=True)
+def test_portrait_pairs_pair_only_images_and_exclude_videos(
+    mock_isfile: Mock,
+    mock_media_repo: Mock,
+) -> None:
+    mock_media_repo.get_all_media.return_value = [
+        {
+            "id": 1,
+            "filepath": "/path/to/portrait1.jpg",
+            "filename": "portrait1.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "is_portrait": 1,
+        },
+        {
+            "id": 2,
+            "filepath": "/path/to/video.mp4",
+            "filename": "video.mp4",
+            "directory_id": 1,
+            "media_type": "video",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "is_portrait": 1,
+        },
+        {
+            "id": 3,
+            "filepath": "/path/to/portrait2.jpg",
+            "filename": "portrait2.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "is_portrait": 1,
+        },
+        {
+            "id": 4,
+            "filepath": "/path/to/landscape.jpg",
+            "filename": "landscape.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "is_portrait": 0,
+        },
+        {
+            "id": 5,
+            "filepath": "/path/to/portrait3.jpg",
+            "filename": "portrait3.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "is_portrait": 1,
+        },
+    ]
+    mock_media_repo.record_media_displayed.side_effect = lambda media_id: next(
+        (item for item in mock_media_repo.get_all_media.return_value if item["id"] == media_id),
+        None,
+    )
+    config_repo = Mock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.reshuffle_num": 1,
+        "model.pic_dir": "/pictures",
+    }.get(key, default)
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "model.portrait_pairs": True,
+        "model.shuffle": False,
+    }.get(key, default)
+    mock_media_repo.query_media.return_value = mock_media_repo.get_all_media.return_value
+
+    manager = PlaylistManager(mock_media_repo, config_repo)
+    manager.build_playlist()
+
+    first = manager.get_next()
+    assert first is not None
+    assert first.layout == DisplayLayout.PORTRAIT_PAIR
+    assert [item.id for item in first.items] == [1, 3]
+
+    second = manager.get_next()
+    assert second is not None
+    assert second.layout == DisplayLayout.SINGLE
+    assert second.id == 2
+    assert second.media_type == MediaType.VIDEO
+
+    third = manager.get_next()
+    assert third is not None
+    assert third.layout == DisplayLayout.SINGLE
+    assert third.id == 4
+
+    fourth = manager.get_next()
+    assert fourth is not None
+    assert fourth.layout == DisplayLayout.SINGLE
+    assert fourth.id == 5
+
+    assert mock_media_repo.record_media_displayed.call_args_list[0].args == (1,)
+    assert mock_media_repo.record_media_displayed.call_args_list[1].args == (3,)
+
+
+@patch('os.path.isfile', return_value=True)
+def test_delete_current_pair_validates_target_ids(
+    mock_isfile: Mock,
+    mock_media_repo: Mock,
+) -> None:
+    mock_media_repo.get_all_media.return_value = [
+        {
+            "id": 1,
+            "filepath": "/path/to/portrait1.jpg",
+            "filename": "portrait1.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "is_portrait": 1,
+        },
+        {
+            "id": 2,
+            "filepath": "/path/to/portrait2.jpg",
+            "filename": "portrait2.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "is_portrait": 1,
+        },
+    ]
+    mock_media_repo.record_media_displayed.side_effect = lambda media_id: next(
+        (item for item in mock_media_repo.get_all_media.return_value if item["id"] == media_id),
+        None,
+    )
+    config_repo = Mock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.reshuffle_num": 1,
+        "model.pic_dir": "/pictures",
+    }.get(key, default)
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "model.portrait_pairs": True,
+        "model.shuffle": False,
+    }.get(key, default)
+    mock_media_repo.query_media.return_value = mock_media_repo.get_all_media.return_value
+
+    manager = PlaylistManager(mock_media_repo, config_repo)
+    manager.build_playlist()
+    manager.get_next()
+
+    assert manager.resolve_current_delete_ids("left", [1]) == [1]
+    assert manager.resolve_current_delete_ids("right", [2]) == [2]
+    assert manager.resolve_current_delete_ids("both", [1, 2]) == [1, 2]
+    assert manager.resolve_current_delete_ids("right", [1]) == []

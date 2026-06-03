@@ -163,3 +163,25 @@ def test_handle_command_set_config(
     mock_media_monitor_service.perform_differential_sync.assert_called_once()
     mock_media_monitor_service.start.assert_called_once()
     mock_media_repo.purge_missing_files.assert_called_once()
+
+
+def test_pause_resume_stop_lifecycle(
+    media_indexer: MediaIndexerService,
+    mock_image_strategy: MagicMock,
+    mock_image_processing_service: MagicMock,
+    mock_media_monitor_service: MagicMock,
+) -> None:
+    media_indexer.pause()
+    media_indexer._handle_file_change(FileChangeEvent(path="/test/image.jpg", event_type="created"))
+
+    mock_media_monitor_service.pause.assert_called_once()
+    mock_image_processing_service.pause.assert_called_once()
+    mock_image_strategy.extract.assert_not_called()
+
+    media_indexer.resume()
+    mock_image_processing_service.resume.assert_called_once()
+    mock_media_monitor_service.resume.assert_called_once()
+
+    media_indexer.stop()
+    media_indexer.stop()
+    mock_media_monitor_service.stop.assert_called_once()

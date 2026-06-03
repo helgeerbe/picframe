@@ -16,6 +16,7 @@ from picframe.core.events.dto import (
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.exceptions import MediaProcessingError
+from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.services.playlist import PlaylistManager
 
@@ -37,6 +38,7 @@ class PlaybackEngine:
         config: dict[str, Any],
         config_repository: Any | None = None,
         video_player: Any | None = None,
+        cache_dir: str | None = None,
     ) -> None:
         """
         Initialize the PlaybackEngine.
@@ -56,11 +58,13 @@ class PlaybackEngine:
         self._video_player = video_player
         self._config = config
         self._config_repository = config_repository
+        self._cache_dir = cache_dir
         
         self._state = State.IDLE
         self._is_running = False
         self._time_delay = float(config.get("time_delay", 200.0))
         self._next_transition_time = 0.0
+        self._video_first_frame_timeout = float(config.get("video_first_frame_timeout", 2.0))
         
         # Circuit breaker state
         self._consecutive_errors = 0
@@ -121,6 +125,7 @@ class PlaybackEngine:
             try:
                 # 2. Check if it\'s time for the next slide
                 current_time = time.time()
+                self._handle_video_first_frame_timeout(current_time)
                 if (
                     self._state == State.PLAYING
                     and current_time >= self._next_transition_time
@@ -181,7 +186,7 @@ class PlaybackEngine:
         elif event.command == Command.STOP:
             self.stop()
         elif event.command == Command.DELETE:
-            self._handle_delete_command()
+            self._handle_delete_command(event.payload)
         elif event.command == Command.PURGE_FILES:
             self._handle_purge_command()
         elif event.command == Command.REQUEST_STATE:
@@ -227,41 +232,155 @@ class PlaybackEngine:
         else:
             self._time_delay = float(self._config.get("time_delay", 200.0))
 
+    @staticmethod
+    def _as_display_item(item: Any) -> DisplayItem | None:
+        """Normalize legacy single MediaItem values to DisplayItem."""
+        if item is None:
+            return None
+        if isinstance(item, DisplayItem):
+            return item
+        if isinstance(item, MediaItem):
+            return DisplayItem.single(item)
+        return None
+
+    @staticmethod
+    def _is_video_media(media_item: MediaItem, video_extensions: tuple[str, ...]) -> bool:
+        """Return True when the media item should use the video path."""
+        return media_item.filepath.lower().endswith(video_extensions)
+
+    def _build_overlay_config(self, display_item: DisplayItem) -> Any:
+        """Build overlay configuration for single or pair display items."""
+        from picframe.core.events.dto import OverlayConfig
+
+        if self._config_repository:
+            show_clock = self._config_repository.get_app_config_bool(
+                "viewer.show_clock", self._config.get("show_clock", False)
+            )
+            clock_format = str(
+                self._config_repository.get_app_config(
+                    "viewer.clock_format", self._config.get("clock_format", "%H:%M")
+                )
+            )
+            show_text = self._config_repository.get_app_config_bool(
+                "viewer.show_text_enabled",
+                self._text_overlay_enabled(self._config.get("show_text", False)),
+            )
+        else:
+            show_clock = (
+                str(self._config.get("show_clock", False)).lower()
+                in ("true", "1", "t", "y", "yes")
+                if isinstance(self._config.get("show_clock", False), str)
+                else bool(self._config.get("show_clock", False))
+            )
+            clock_format = str(self._config.get("clock_format", "%H:%M"))
+            show_text = self._text_overlay_enabled(
+                self._config.get("show_text_enabled", self._config.get("show_text", False))
+            )
+
+        text_strings = tuple(self._generate_text_string(item) for item in display_item.items)
+        return OverlayConfig(
+            show_clock=show_clock,
+            clock_format=clock_format,
+            show_text=show_text,
+            text_string=text_strings[display_item.primary_index] if text_strings else "",
+            text_strings=text_strings if display_item.layout == DisplayLayout.PORTRAIT_PAIR else (),
+        )
+
+    @staticmethod
+    def _text_overlay_enabled(raw_value: Any) -> bool:
+        """Parse boolean or legacy text-format overlay settings."""
+        if isinstance(raw_value, bool):
+            return raw_value
+        value = str(raw_value).strip().lower()
+        return value not in {"", "0", "false", "off", "none", "no"}
+
+    def _text_overlay_format(self) -> str:
+        """Return the active text overlay format with legacy fallback."""
+        default_format = self._config.get(
+            "text_overlay_format",
+            self._config.get("show_text", ""),
+        )
+
+        if self._config_repository:
+            text_format = str(
+                self._config_repository.get_app_config(
+                    "viewer.text_overlay_format",
+                    default_format,
+                )
+            ).strip()
+            if text_format:
+                return text_format.lower()
+
+            legacy_format = str(
+                self._config_repository.get_app_config(
+                    "viewer.show_text",
+                    default_format,
+                )
+            ).strip()
+            return legacy_format.lower()
+
+        return str(default_format).strip().lower()
+
+    @staticmethod
+    def _pair_render_command(display_item: DisplayItem, overlay_config: Any) -> RenderCommand:
+        """Build a render command for an in-memory portrait pair."""
+        return RenderCommand(
+            image_path=display_item.primary.filepath,
+            overlay=overlay_config,
+            layout=display_item.layout.value,
+            image_paths=tuple(item.filepath for item in display_item.items),
+        )
+
     def _handle_request_state(self) -> None:
         """Handle a request to broadcast the current state and media."""
         self._event_publisher.publish(StateEvent(state=self._state))
-        current_media = self._playlist_manager.get_current()
-        if current_media:
-            self._event_publisher.publish(CurrentMediaChangedEvent(media_item=current_media))
+        current_display = self._as_display_item(self._playlist_manager.get_current())
+        if current_display:
+            self._event_publisher.publish(CurrentMediaChangedEvent(media_item=current_display))
         else:
             # If there's no current media (e.g., on startup before the first transition),
             # try to get the next one to populate the initial state.
             # We don't trigger a full transition here, just fetch the data.
-            if self._playlist_manager._playlist:
+            if self._playlist_manager._display_playlist:
                 # Peek at the first item without advancing the index
-                if self._playlist_manager._current_index < len(self._playlist_manager._playlist):
-                    item_data = self._playlist_manager._playlist[self._playlist_manager._current_index]
-                    media_item = self._playlist_manager._dict_to_media_item(item_data)
-                    self._event_publisher.publish(CurrentMediaChangedEvent(media_item=media_item))
+                if self._playlist_manager._current_index < len(self._playlist_manager._display_playlist):
+                    slot_data = self._playlist_manager._display_playlist[self._playlist_manager._current_index]
+                    display_item = self._playlist_manager._slot_to_display_item(slot_data)
+                    self._event_publisher.publish(CurrentMediaChangedEvent(media_item=display_item))
             else:
                 # Fallback to placeholder if playlist is empty
                 placeholder = self._playlist_manager._get_no_images_placeholder()
-                self._event_publisher.publish(CurrentMediaChangedEvent(media_item=placeholder))
+                self._event_publisher.publish(CurrentMediaChangedEvent(media_item=DisplayItem.single(placeholder)))
 
-    def _handle_delete_command(self) -> None:
+    def _handle_delete_command(self, payload: Any = None) -> None:
         """Handle the DELETE command by moving the current file and advancing."""
         import os
         import shutil
         
-        current_media = self._playlist_manager.get_current()
-        if not current_media or current_media.id == 0:
+        current_display = self._as_display_item(self._playlist_manager.get_current())
+        if not current_display or current_display.id == 0:
             self._logger.warning("No active media to delete.")
             return
-            
-        filepath = current_media.filepath
-        if not os.path.exists(filepath):
-            self._logger.warning(f"File to delete not found: {filepath}")
+
+        delete_payload = payload if isinstance(payload, dict) else {}
+        target = str(delete_payload.get("target", "left"))
+        raw_media_ids = delete_payload.get("media_ids")
+        media_ids = [int(media_id) for media_id in raw_media_ids] if isinstance(raw_media_ids, list) else None
+
+        delete_ids = self._playlist_manager.resolve_current_delete_ids(target, media_ids)
+        if not delete_ids:
+            message = "Delete request did not match the current display item."
+            self._logger.warning(message)
+            self._event_publisher.publish(
+                SystemErrorEvent(message=message, component="PlaybackEngine")
+            )
             return
+
+        items_by_id = {
+            int(item.id): item
+            for item in current_display.items
+            if item.id is not None
+        }
             
         # Determine deleted directory
         if self._config_repository:
@@ -271,23 +390,38 @@ class PlaybackEngine:
             
         deleted_dir = os.path.expanduser(deleted_dir_config)
         
+        moved_ids: list[int] = []
         try:
             os.makedirs(deleted_dir, exist_ok=True)
-            filename = os.path.basename(filepath)
-            dest_path = os.path.join(deleted_dir, filename)
-            
-            # Move the file
-            shutil.move(filepath, dest_path)
-            self._logger.info(f"Moved deleted file to: {dest_path}")
-            
-            # Mark as deleted in repository
-            self._playlist_manager.delete_current()
+            for media_id in delete_ids:
+                media_item = items_by_id.get(media_id)
+                if media_item is None:
+                    self._logger.warning("Delete target is no longer in the current display item: %s", media_id)
+                    continue
+
+                filepath = media_item.filepath
+                if not os.path.exists(filepath):
+                    self._logger.warning(f"File to delete not found: {filepath}")
+                    continue
+
+                filename = os.path.basename(filepath)
+                dest_path = os.path.join(deleted_dir, filename)
+
+                shutil.move(filepath, dest_path)
+                moved_ids.append(media_id)
+                self._logger.info(f"Moved deleted file to: {dest_path}")
+
+            if not moved_ids:
+                self._logger.warning("No files were deleted for the current delete request.")
+                return
+
+            self._playlist_manager.delete_media_ids(moved_ids)
             
             # Immediately transition to next media
             self._trigger_next_media()
             
         except Exception as e:
-            self._logger.error(f"Failed to delete file {filepath}: {e}")
+            self._logger.error(f"Failed to delete current media: {e}")
 
     def _handle_purge_command(self) -> None:
         """Handle the PURGE_FILES command by cleaning up the database."""
@@ -303,41 +437,20 @@ class PlaybackEngine:
         if hasattr(self, '_pending_video_media'):
             delattr(self, '_pending_video_media')
             
-        media_item = self._playlist_manager.get_next()
-        if media_item:
+        display_item = self._as_display_item(self._playlist_manager.get_next())
+        if display_item:
+            media_item = display_item.primary
             self._logger.info(
-                f"Transitioning to next media: {media_item.filepath}"
+                "Transitioning to next display item: %s",
+                ", ".join(item.filepath for item in display_item.items),
             )
             self._change_state(State.TRANSITIONING)
             
-            # Generate dynamic text string based on configuration
-            text_string = self._generate_text_string(media_item)
-            
-            # Send render command
-            # We pass the dynamically generated text string in the overlay config.
-            # The renderer still manages the clock and visibility toggles via IConfigRepository.
-            from picframe.core.events.dto import OverlayConfig
-            
-            # Fetch live config if available
-            if self._config_repository:
-                show_clock = self._config_repository.get_app_config_bool("viewer.show_clock", self._config.get("show_clock", False))
-                clock_format = str(self._config_repository.get_app_config("viewer.clock_format", self._config.get("clock_format", "%H:%M")))
-                show_text = bool(self._config_repository.get_app_config("viewer.show_text", self._config.get("show_text", False)))
-            else:
-                show_clock = str(self._config.get("show_clock", False)).lower() in ("true", "1", "t", "y", "yes") if isinstance(self._config.get("show_clock", False), str) else bool(self._config.get("show_clock", False))
-                clock_format = str(self._config.get("clock_format", "%H:%M"))
-                show_text = bool(self._config.get("show_text", False))
-                
-            overlay_config = OverlayConfig(
-                show_clock=show_clock,
-                clock_format=clock_format,
-                show_text=show_text,
-                text_string=text_string
-            )
+            overlay_config = self._build_overlay_config(display_item)
             
             # Check if it's a video
             video_extensions = tuple(ext.lower() for ext in self._config.get("video_extensions", ['.mp4', '.mov', '.mkv', '.avi', '.webm']))
-            is_video = media_item.filepath.lower().endswith(video_extensions)
+            is_video = self._is_video_media(media_item, video_extensions)
             
             if is_video and self._video_player:
                 # 1. On-demand fallback for missing frames
@@ -363,7 +476,15 @@ class PlaybackEngine:
                             fit_display = self._config_repository.get_app_config_bool("viewer.fit", self._config.get("fit", False))
                         else:
                             fit_display = self._config.get("fit", False)
-                        extractor = VideoFrameExtractor(media_item.filepath, display_w, display_h, fit_display=fit_display)
+                        extractor = VideoFrameExtractor(
+                            media_item.filepath,
+                            display_w,
+                            display_h,
+                            fit_display=fit_display,
+                            cache_dir=self._cache_dir,
+                        )
+                        first_frame_path = extractor.get_frame_path("first")
+                        last_frame_path = extractor.get_frame_path("last")
                         frames = extractor.get_first_and_last_frames(duration, display_w, display_h)
                         if frames:
                             first_img, last_img = frames
@@ -382,20 +503,25 @@ class PlaybackEngine:
                     # For now, we'll store the pending media item.
                     self._pending_video_media = media_item
                     self._pending_last_img = last_img
+                    self._pending_last_frame_path = last_frame_path
                     self._next_transition_time = float('inf')
                 else:
-                    self._logger.warning(f"Could not generate first frame for {media_item.filepath}, skipping video.")
-                    # Skip the video and immediately trigger the next media item
-                    # To avoid recursion in tests, we just return here if we're already in a recursive call
-                    import inspect
-                    if len([f for f in inspect.stack() if f.function == '_trigger_next_media']) > 5:
-                        return
-                    self._trigger_next_media()
-                    return
+                    self._logger.warning(
+                        "Could not generate first frame for %s; playing video directly.",
+                        media_item.filepath,
+                    )
+                    self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
+                    x, y, w, h = self._renderer.get_display_rect()
+                    self._video_player.play(media_item, x, y, w, h)
+                    self._next_transition_time = float('inf')
+                    self._change_state(State.PLAYING)
             else:
                 if self._video_player:
                     self._video_player.stop()
-                render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
+                if display_item.layout == DisplayLayout.PORTRAIT_PAIR:
+                    render_cmd = self._pair_render_command(display_item, overlay_config)
+                else:
+                    render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
                 try:
                     self._renderer.execute(render_cmd)
                     # Update timer for images
@@ -405,7 +531,7 @@ class PlaybackEngine:
                     self._handle_media_error(e)
             
             # Publish media changed event
-            self._event_publisher.publish(CurrentMediaChangedEvent(media_item=media_item))
+            self._event_publisher.publish(CurrentMediaChangedEvent(media_item=display_item))
         else:
             self._logger.warning("No media available to play")
 
@@ -416,6 +542,7 @@ class PlaybackEngine:
             if self._video_player:
                 x, y, w, h = self._renderer.get_display_rect()
                 self._video_player.play(self._pending_video_media, x, y, w, h)
+                self._video_first_frame_deadline = time.time() + self._video_first_frame_timeout
             # We don't change state to PLAYING yet. We wait for VideoFirstFrameRenderedEvent.
             # This ensures pi3d stays opaque until GStreamer is actually rendering.
         elif self._state == State.TRANSITIONING:
@@ -423,6 +550,23 @@ class PlaybackEngine:
 
     def _handle_video_first_frame_rendered(self, event: Any) -> None:
         """Handle the event indicating GStreamer has rendered its first frame."""
+        self._complete_video_first_frame_handoff()
+
+    def _handle_video_first_frame_timeout(self, current_time: float) -> None:
+        """Avoid getting stuck if GStreamer does not report first-frame readiness."""
+        deadline = getattr(self, '_video_first_frame_deadline', None)
+        if (
+            self._state == State.PREPARING_VIDEO
+            and deadline is not None
+            and current_time >= deadline
+        ):
+            self._logger.warning(
+                "Timed out waiting for GStreamer first-frame event; continuing video handoff."
+            )
+            self._complete_video_first_frame_handoff()
+
+    def _complete_video_first_frame_handoff(self) -> None:
+        """Reveal video playback and prepare the last-frame sandwich swap."""
         if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
             self._logger.info("GStreamer first frame rendered, fading out pi3d.")
             self._change_state(State.PLAYING)
@@ -431,6 +575,8 @@ class PlaybackEngine:
             self._pending_swap_media = self._pending_video_media
             self._texture_swap_time = time.time() + 1.0
             delattr(self, '_pending_video_media')
+            if hasattr(self, '_video_first_frame_deadline'):
+                delattr(self, '_video_first_frame_deadline')
 
     def _execute_texture_swap(self) -> None:
         """Execute the background texture swap on the main thread."""
@@ -440,19 +586,23 @@ class PlaybackEngine:
         
         media_item = getattr(self, '_pending_swap_media', None)
         last_img = getattr(self, '_pending_last_img', None)
+        last_frame_path = getattr(self, '_pending_last_frame_path', None)
         
         if hasattr(self, '_pending_swap_media'):
             delattr(self, '_pending_swap_media')
         if hasattr(self, '_pending_last_img'):
             delattr(self, '_pending_last_img')
+        if hasattr(self, '_pending_last_frame_path'):
+            delattr(self, '_pending_last_frame_path')
             
         self._texture_swap_time = float('inf')
         
         if not media_item:
             return
             
-        base, _ = os.path.splitext(media_item.filepath)
-        last_frame_path = base + ".2.frame"
+        if last_frame_path is None:
+            base, _ = os.path.splitext(media_item.filepath)
+            last_frame_path = base + ".2.frame"
         
         if last_img is not None:
             self._logger.info(f"Swapping background texture to last frame: {last_frame_path}")
@@ -469,6 +619,17 @@ class PlaybackEngine:
     def _handle_playback_completed(self, event: Any) -> None:
         """Handle the completion of video playback."""
         self._logger.info("Video playback completed, scheduling transition to next media.")
+        if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
+            self._logger.warning("Video playback completed before first-frame handoff.")
+            delattr(self, '_pending_video_media')
+            if hasattr(self, '_pending_last_img'):
+                delattr(self, '_pending_last_img')
+            if hasattr(self, '_pending_last_frame_path'):
+                delattr(self, '_pending_last_frame_path')
+            if hasattr(self, '_video_first_frame_deadline'):
+                delattr(self, '_video_first_frame_deadline')
+            self._change_state(State.PLAYING)
+
         # Wake up the renderer from SUSPENDED state
         self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
         
@@ -486,38 +647,19 @@ class PlaybackEngine:
         if hasattr(self, '_pending_video_media'):
             delattr(self, '_pending_video_media')
             
-        media_item = self._playlist_manager.get_previous()
-        if media_item:
+        display_item = self._as_display_item(self._playlist_manager.get_previous())
+        if display_item:
+            media_item = display_item.primary
             self._logger.info(
-                f"Transitioning to previous media: {media_item.filepath}"
+                "Transitioning to previous display item: %s",
+                ", ".join(item.filepath for item in display_item.items),
             )
             self._change_state(State.TRANSITIONING)
             
-            # Generate dynamic text string based on configuration
-            text_string = self._generate_text_string(media_item)
-            
-            # Send render command
-            from picframe.core.events.dto import OverlayConfig
-            
-            # Fetch live config if available
-            if self._config_repository:
-                show_clock = self._config_repository.get_app_config_bool("viewer.show_clock", self._config.get("show_clock", False))
-                clock_format = str(self._config_repository.get_app_config("viewer.clock_format", self._config.get("clock_format", "%H:%M")))
-                show_text = bool(self._config_repository.get_app_config("viewer.show_text", self._config.get("show_text", False)))
-            else:
-                show_clock = str(self._config.get("show_clock", False)).lower() in ("true", "1", "t", "y", "yes") if isinstance(self._config.get("show_clock", False), str) else bool(self._config.get("show_clock", False))
-                clock_format = str(self._config.get("clock_format", "%H:%M"))
-                show_text = bool(self._config.get("show_text", False))
-                
-            overlay_config = OverlayConfig(
-                show_clock=show_clock,
-                clock_format=clock_format,
-                show_text=show_text,
-                text_string=text_string
-            )
+            overlay_config = self._build_overlay_config(display_item)
             
             video_extensions = tuple(ext.lower() for ext in self._config.get("video_extensions", ['.mp4', '.mov', '.mkv', '.avi', '.webm']))
-            is_video = media_item.filepath.lower().endswith(video_extensions)
+            is_video = self._is_video_media(media_item, video_extensions)
             
             if is_video and self._video_player:
                 self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
@@ -526,7 +668,10 @@ class PlaybackEngine:
             else:
                 if self._video_player:
                     self._video_player.stop()
-                render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
+                if display_item.layout == DisplayLayout.PORTRAIT_PAIR:
+                    render_cmd = self._pair_render_command(display_item, overlay_config)
+                else:
+                    render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
                 try:
                     self._renderer.execute(render_cmd)
                     self._next_transition_time = time.time() + self._time_delay
@@ -534,7 +679,7 @@ class PlaybackEngine:
                     self._handle_media_error(e)
             
             # Publish media changed event
-            self._event_publisher.publish(CurrentMediaChangedEvent(media_item=media_item))
+            self._event_publisher.publish(CurrentMediaChangedEvent(media_item=display_item))
             
             self._change_state(State.PLAYING)
         else:
@@ -548,21 +693,24 @@ class PlaybackEngine:
             
         # Fetch the live configuration from the repository if available, otherwise use the initial config
         if self._config_repository:
-            show_text_config = str(
-                self._config_repository.get_app_config(
-                    "viewer.show_text", self._config.get("show_text", "")
-                )
-            ).lower()
+            show_text_enabled = self._config_repository.get_app_config_bool(
+                "viewer.show_text_enabled",
+                self._text_overlay_enabled(self._config.get("show_text", False)),
+            )
+            show_text_config = self._text_overlay_format()
             show_text_fm = str(
                 self._config_repository.get_app_config(
                     "viewer.show_text_fm", self._config.get("show_text_fm", "%b %d, %Y")
                 )
             )
         else:
-            show_text_config = str(self._config.get("show_text", "")).lower()
+            show_text_enabled = self._text_overlay_enabled(
+                self._config.get("show_text_enabled", self._config.get("show_text", False))
+            )
+            show_text_config = self._text_overlay_format()
             show_text_fm = str(self._config.get("show_text_fm", "%b %d, %Y"))
             
-        if not show_text_config or show_text_config == "false" or show_text_config == "off":
+        if not show_text_enabled or not self._text_overlay_enabled(show_text_config):
             return ""
             
         parts = []

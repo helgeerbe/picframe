@@ -10,6 +10,12 @@ class MediaResponseDTO(BaseModel):
     file_path: str
     exif: dict[str, Any] = Field(default_factory=dict)
     location: dict[str, float] | None = None
+    id: int | None = None
+    role: str | None = None
+    index: int | None = None
+    layout: str = "single"
+    primary_index: int = 0
+    items: list["MediaResponseDTO"] = Field(default_factory=list)
 
 
 class MediaSelectionCountRequest(BaseModel):

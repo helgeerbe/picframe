@@ -38,6 +38,7 @@ class ImageProcessingService:
             max_workers: Maximum number of threads for the worker pool.
         """
         self._cache_dir = Path(cache_dir)
+        self._paused = False
         self._ensure_cache_dir()
         self._executor = ThreadPoolExecutor(
             max_workers=max_workers, thread_name_prefix="ImageProcessingWorker"
@@ -145,6 +146,14 @@ class ImageProcessingService:
         Returns:
             A Future object representing the asynchronous execution.
         """
+        if self._paused:
+            logger.debug(f"Skipping metadata extraction while paused: {filepath}")
+            future: Future[MediaItem | None] = Future()
+            future.set_result(None)
+            if callback:
+                callback(None)
+            return future
+
         def _extract_task() -> MediaItem | None:
             try:
                 logger.debug(f"Extracting metadata for {filepath}")
@@ -159,6 +168,14 @@ class ImageProcessingService:
                 return None
 
         return self._executor.submit(_extract_task)
+
+    def pause(self) -> None:
+        """Pause acceptance of new asynchronous processing tasks."""
+        self._paused = True
+
+    def resume(self) -> None:
+        """Resume acceptance of new asynchronous processing tasks."""
+        self._paused = False
 
     def clear_cache(self) -> None:
         """Remove all files from the cache directory."""

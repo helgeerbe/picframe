@@ -112,6 +112,32 @@ The API's CORS policy is managed via the `cors_allowed_origins` parameter within
 
 **Security Note:** The default `["*"]` is permissive to ensure out-of-the-box compatibility on local networks. If you expose your Picframe API to the internet or want to strictly lock down access, you should update this setting via the Web UI or SQLite database to explicitly list your allowed domains (e.g., `["http://localhost:5173", "https://my-picframe.example.com"]`).
 
+### Maintenance Actions
+
+The Settings danger zone exposes maintenance actions that intentionally affect
+different kinds of state:
+
+*   **Purge Media Database** removes `media_cache.db3` rows for original media
+    files that no longer exist on disk. It does not clear generated cache files
+    and does not delete photos or videos.
+*   **Clear Image Cache** removes generated artifacts under the managed runtime
+    cache directory, including video transition frames. The next playback or
+    indexing pass can regenerate those files when needed. It never deletes
+    original media files.
+
+Deleting the current media item from the Remote remains separate from both
+maintenance actions; it is the operation that moves an original media file to
+the configured deleted-media location.
+
+When `model.portrait_pairs` is enabled, portrait image pairs are displayed as
+one slideshow slot with two original image files. Videos are never paired and
+always remain fullscreen. In Remote, pair metadata can be switched between the
+left and right image. Deleting a portrait pair opens a choice to delete the
+left image, the right image, or both; single-media delete behavior is unchanged.
+Portrait-pair detection uses indexed image orientation metadata. During
+unpublished next-gen development, deleting and rebuilding `media_cache.db3` is
+acceptable after changing portrait-detection behavior.
+
 ---
 
 ## Part 2: Extended Developer Guidelines & System Setup

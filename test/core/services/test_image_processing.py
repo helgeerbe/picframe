@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 from PIL import Image
@@ -146,3 +147,20 @@ def test_clear_cache(temp_cache_dir: str, sample_media_item: MediaItem) -> None:
     # Verify cache is empty
     assert not os.path.exists(cached_path)
     assert len(os.listdir(temp_cache_dir)) == 0
+
+
+def test_extract_metadata_async_returns_none_while_paused(
+    temp_cache_dir: str,
+    sample_media_item: MediaItem,
+) -> None:
+    service = ImageProcessingService(cache_dir=temp_cache_dir)
+    strategy = MagicMock()
+    callback = MagicMock()
+
+    service.pause()
+    future = service.extract_metadata_async(sample_media_item.filepath, 1, strategy, callback)
+
+    assert future.result() is None
+    strategy.extract.assert_not_called()
+    callback.assert_called_once_with(None)
+    service.shutdown()

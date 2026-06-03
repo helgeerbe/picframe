@@ -5,7 +5,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from picframe.core.events.dto import OverlayConfig, RenderCommand
+from picframe.core.events.dto import OverlayConfig, RenderCommand, RendererConfigUpdatedEvent
 from picframe.core.renderers.pi3d_renderer import Pi3dRenderer
 from picframe.core.renderers.animation_controller import RenderState
 
@@ -157,6 +157,38 @@ def test_renderer_execute_video(
     mock_image_renderer.execute.assert_called_once_with(command)
     # The state should not change to TRANSITIONING if execute returns False
     assert renderer._animation_controller._state == RenderState.STATIC
+
+
+def test_renderer_config_event_updates_image_renderer(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    """Test that runtime renderer config changes reach image scaling logic."""
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+
+    updated = RendererConfig(
+        display_w=1920,
+        display_h=1080,
+        fps=30,
+        background=(0.1, 0.1, 0.1, 1.0),
+        blend_type="blend",
+        time_delay=30.0,
+        time_fade=1.0,
+        font_file="/path/to/font.ttf",
+        fit=True,
+        kenburns=True,
+    )
+
+    renderer._handle_config_event(RendererConfigUpdatedEvent(config=updated))
+
+    mock_image_renderer.update_config.assert_called_with(updated)
+    assert renderer._kenburns is True
+    assert renderer._animation_controller._fps == 30
+    assert renderer._animation_controller._time_delay == 30.0
 
 
 def test_renderer_render_frame(

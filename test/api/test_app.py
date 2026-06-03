@@ -255,6 +255,21 @@ def test_api_media_selection_count_without_media_repo() -> None:
     }
 
 
+def test_api_clear_cache_calls_image_processing_service() -> None:
+    mock_image_processing_service = MagicMock()
+    app = create_app(
+        cors_allowed_origins=["*"],
+        image_processing_service=mock_image_processing_service,
+    )
+    client = ASGITestClient(app)
+
+    response = client.post("/api/maintenance/clear-cache")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "cache cleared"}
+    mock_image_processing_service.clear_cache.assert_called_once_with()
+
+
 def test_api_import_yaml() -> None:
     mock_repo = MagicMock()
     mock_publisher = MagicMock()

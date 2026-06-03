@@ -20,6 +20,7 @@ from picframe.core.events.dto import (
     StateEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
+from picframe.core.models.media import DisplayItem, DisplayLayout
 from picframe.core.renderers.animation_controller import AnimationController, RenderState
 from picframe.core.renderers.components.clock_renderer import ClockRenderer
 from picframe.core.renderers.components.image_renderer import ImageRenderer
@@ -133,6 +134,8 @@ class Pi3dRenderer(IRenderer):
 
     def _generate_text_string(self, media_item: Any) -> str:
         """Generate the text overlay string based on configuration and media metadata."""
+        if isinstance(media_item, DisplayItem):
+            media_item = media_item.primary
         if not media_item or getattr(media_item, "filepath", "").endswith("no_pictures.jpg"):
             return ""
             
@@ -163,24 +166,48 @@ class Pi3dRenderer(IRenderer):
             
         return " - ".join(parts)
 
+    def _generate_text_strings(self, media_item: Any) -> tuple[str, ...]:
+        """Generate one or two text overlay strings for the current display item."""
+        if isinstance(media_item, DisplayItem) and media_item.layout == DisplayLayout.PORTRAIT_PAIR:
+            return tuple(self._generate_text_string(item) for item in media_item.items)
+        text = self._generate_text_string(media_item)
+        return (text,) if text else ()
+
     def _handle_config_event(self, event: Any) -> None:
         if not isinstance(event, RendererConfigUpdatedEvent):
             return
             
         self._logger.info("Renderer received RendererConfigUpdatedEvent. Updating state.")
         self._config = event.config
+        self._fps = self._config.fps
+        self._background = self._config.background
+        self._kenburns = self._config.kenburns
+
+        anim_config = {
+            "fps": self._config.fps,
+            "time_fade": self._config.time_fade,
+            "time_delay": self._config.time_delay,
+            "show_text_tm": self._config.show_text_tm,
+            "kenburns": self._config.kenburns,
+        }
+        self._animation_controller.update_config(anim_config)
+        if self._image_renderer:
+            self._image_renderer.update_config(self._config)
         
         old_text_string = self._overlay_config.text_string
         new_text_string = old_text_string
+        new_text_strings: tuple[str, ...] = ()
         
         if self._current_media:
-            new_text_string = self._generate_text_string(self._current_media)
+            new_text_strings = self._generate_text_strings(self._current_media)
+            new_text_string = new_text_strings[0] if new_text_strings else ""
             
         self._overlay_config = OverlayConfig(
             show_clock=self._config.show_clock,
             clock_format=self._config.clock_format,
             show_text=self._config.show_text_enabled,
             text_string=new_text_string,
+            text_strings=new_text_strings if len(new_text_strings) == 2 else (),
         )
         
         if self._text_renderer:
@@ -200,9 +227,17 @@ class Pi3dRenderer(IRenderer):
             
             # Update text string when media changes
             if self._config.show_text_enabled:
-                new_text_string = self._generate_text_string(self._current_media)
-                if new_text_string != self._overlay_config.text_string:
-                    self._overlay_config = replace(self._overlay_config, text_string=new_text_string)
+                new_text_strings = self._generate_text_strings(self._current_media)
+                new_text_string = new_text_strings[0] if new_text_strings else ""
+                if (
+                    new_text_string != self._overlay_config.text_string
+                    or new_text_strings != self._overlay_config.text_strings
+                ):
+                    self._overlay_config = replace(
+                        self._overlay_config,
+                        text_string=new_text_string,
+                        text_strings=new_text_strings if len(new_text_strings) == 2 else (),
+                    )
                     if self._text_renderer:
                         self._text_renderer.update_config(self._overlay_config)
                     self._animation_controller.force_redraw(2)
@@ -256,7 +291,9 @@ class Pi3dRenderer(IRenderer):
             
         if command.overlay:
             self._overlay_config = replace(
-                self._overlay_config, text_string=command.overlay.text_string
+                self._overlay_config,
+                text_string=command.overlay.text_string,
+                text_strings=command.overlay.text_strings,
             )
             
         try:

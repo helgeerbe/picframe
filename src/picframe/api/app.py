@@ -77,6 +77,7 @@ def create_app(
     event_subscriber: IEventSubscriber | None = None,
     config_repository: IConfigRepository | None = None,
     media_repository: IMediaRepository | None = None,
+    image_processing_service: Any | None = None,
     html_dir: str = "~/.picframe/html",
 ) -> FastAPI:
     """
@@ -133,22 +134,7 @@ def create_app(
                 media_dict = cast(dict[str, Any], event.media_item)
             else:
                 media_dict = {"raw": str(event.media_item)}
-                
-            # Extract file path
-            file_path = media_dict.get("file_path") or media_dict.get("filepath")
-            if not file_path:
-                file_path = "no_pictures.jpg"
-                
-            # Map backend fields to frontend expected fields
-            location = None
-            if "latitude" in media_dict and "longitude" in media_dict:
-                if media_dict["latitude"] is not None and media_dict["longitude"] is not None:
-                    location = {
-                        "lat": media_dict["latitude"],
-                        "lon": media_dict["longitude"]
-                    }
-            
-            # Group EXIF data
+
             exif_keys = [
                 "make", "model", "lens", "f_number", "exposure_time", "iso",
                 "focal_length", "exif_datetime", "caption", "tags", "location",
@@ -156,55 +142,94 @@ def create_app(
                 "duration", "codec", "pixel_format", "framerate", "bitrate",
                 "displayed_count", "last_displayed"
             ]
-            exif_data = {}
-            
-            # Check if exif data is already nested
-            if "exif" in media_dict and isinstance(media_dict["exif"], dict):
-                exif_data = media_dict["exif"]
-            else:
-                for key in exif_keys:
-                    if key in media_dict and media_dict[key] is not None:
-                        # Don't overwrite the location object we just created
-                        if key == "location" and isinstance(media_dict[key], dict):
-                            continue
-                        exif_data[key] = media_dict[key]
-                        
-            # Ensure location_name is set in exif_data for the frontend MapComponent
-            if "location" in media_dict and isinstance(media_dict["location"], str):
-                exif_data["location_name"] = media_dict["location"]
-            elif "location" in exif_data and isinstance(exif_data["location"], str):
-                exif_data["location_name"] = exif_data["location"]
-                
-            # Fallback to checking the database directly if coordinates are present.
-            if "location_name" not in exif_data and location is not None:
-                try:
-                    # We need to access the media repo to do a direct lookup
-                    # This is a bit of a hack, but it ensures we get the latest location
-                    # even if the event payload didn't include it
-                    import os
-                    import sqlite3
-                    db_path = os.path.expanduser("~/.picframe/data/media_cache.db3")
-                    if os.path.exists(db_path):
-                        with sqlite3.connect(db_path) as conn:
-                            cursor = conn.execute(
-                                """
-                                SELECT address
-                                FROM locations
-                                WHERE ROUND(latitude, 4) = ROUND(?, 4)
-                                  AND ROUND(longitude, 4) = ROUND(?, 4)
-                                """,
-                                (location["lat"], location["lon"]),
-                            )
-                            row = cursor.fetchone()
-                            if row and row[0]:
-                                exif_data["location_name"] = row[0]
-                except Exception as e:
-                    logger.error(f"Error fetching location from database: {e}")
-            
+
+            def to_media_dto(item_dict: dict[str, Any]) -> MediaResponseDTO:
+                file_path = item_dict.get("file_path") or item_dict.get("filepath")
+                if not file_path:
+                    file_path = "no_pictures.jpg"
+
+                location = None
+                if "latitude" in item_dict and "longitude" in item_dict:
+                    if item_dict["latitude"] is not None and item_dict["longitude"] is not None:
+                        location = {
+                            "lat": item_dict["latitude"],
+                            "lon": item_dict["longitude"]
+                        }
+
+                exif_data: dict[str, Any] = {}
+                if "exif" in item_dict and isinstance(item_dict["exif"], dict):
+                    exif_data = dict(item_dict["exif"])
+                else:
+                    for key in exif_keys:
+                        if key in item_dict and item_dict[key] is not None:
+                            if key == "location" and isinstance(item_dict[key], dict):
+                                continue
+                            exif_data[key] = item_dict[key]
+
+                if "location" in item_dict and isinstance(item_dict["location"], str):
+                    exif_data["location_name"] = item_dict["location"]
+                elif "location" in exif_data and isinstance(exif_data["location"], str):
+                    exif_data["location_name"] = exif_data["location"]
+
+                if "location_name" not in exif_data and location is not None:
+                    try:
+                        import os
+                        import sqlite3
+                        db_path = os.path.expanduser("~/.picframe/data/media_cache.db3")
+                        if os.path.exists(db_path):
+                            with sqlite3.connect(db_path) as conn:
+                                cursor = conn.execute(
+                                    """
+                                    SELECT address
+                                    FROM locations
+                                    WHERE ROUND(latitude, 4) = ROUND(?, 4)
+                                      AND ROUND(longitude, 4) = ROUND(?, 4)
+                                    """,
+                                    (location["lat"], location["lon"]),
+                                )
+                                row = cursor.fetchone()
+                                if row and row[0]:
+                                    exif_data["location_name"] = row[0]
+                    except Exception as e:
+                        logger.error(f"Error fetching location from database: {e}")
+
+                return MediaResponseDTO(
+                    file_path=str(file_path),
+                    exif=exif_data,
+                    location=location,
+                    id=item_dict.get("id"),
+                    role=item_dict.get("role"),
+                    index=item_dict.get("index"),
+                )
+
+            layout = str(media_dict.get("layout", "single"))
+            primary_index = int(media_dict.get("primary_index", 0) or 0)
+            item_dicts = media_dict.get("items")
+            if not isinstance(item_dicts, list) or not item_dicts:
+                item_dicts = [media_dict]
+
+            item_dtos = [
+                to_media_dto(cast(dict[str, Any], item))
+                for item in item_dicts
+                if isinstance(item, dict)
+            ]
+            if not item_dtos:
+                item_dtos = [to_media_dto(media_dict)]
+                primary_index = 0
+            if primary_index < 0 or primary_index >= len(item_dtos):
+                primary_index = 0
+
+            primary_dto = item_dtos[primary_index]
             dto = MediaResponseDTO(
-                file_path=file_path,
-                exif=exif_data,
-                location=location
+                file_path=primary_dto.file_path,
+                exif=primary_dto.exif,
+                location=primary_dto.location,
+                id=primary_dto.id,
+                role=primary_dto.role,
+                index=primary_dto.index,
+                layout=layout,
+                primary_index=primary_index,
+                items=item_dtos,
             )
                 
             msg = json.dumps({"type": "MediaChangedEvent", "media": dto.model_dump()})
@@ -303,7 +328,15 @@ def create_app(
                             elif command_str == "DISPLAY_OFF":
                                 event_publisher.publish(CommandEvent(command=Command.DISPLAY_OFF))
                             elif command_str == "DELETE":
-                                event_publisher.publish(CommandEvent(command=Command.DELETE))
+                                delete_payload = {
+                                    k: v for k, v in payload.items() if k != "command"
+                                }
+                                event_publisher.publish(
+                                    CommandEvent(
+                                        command=Command.DELETE,
+                                        payload=delete_payload or None,
+                                    )
+                                )
                             elif command_str == "PURGE_FILES":
                                 event_publisher.publish(CommandEvent(command=Command.PURGE_FILES))
                             elif command_str == "STOP":
@@ -384,6 +417,17 @@ def create_app(
         if event_publisher:
             event_publisher.publish(CommandEvent(command=Command.PURGE_FILES))
         return {"status": "purging database"}
+
+    @app.post("/api/maintenance/clear-cache")
+    async def api_clear_cache() -> dict[str, str]:
+        """Clear generated image and video-frame cache artifacts."""
+        if not image_processing_service:
+            return {
+                "status": "error",
+                "message": "Image cache service not available",
+            }
+        image_processing_service.clear_cache()
+        return {"status": "cache cleared"}
 
     @app.get("/api/config")
     async def api_get_config() -> dict[str, Any]:

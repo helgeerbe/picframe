@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, computed, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { usePlayerStore } from '../stores/player'
+import type { MediaItem } from '../stores/player'
 import { useConfigStore } from '../stores/config'
 import { useI18n } from 'vue-i18n'
 import {
@@ -72,6 +73,8 @@ const mediaSelection = reactive({
 const selectionMessage = ref('')
 const isApplyingSelection = ref(false)
 const isSavingShuffle = ref(false)
+const selectedPairIndex = ref(0)
+const showPairDeleteDialog = ref(false)
 let selectionCountTimer: number | undefined
 
 // Initialize WebSocket connection if not already connected
@@ -152,6 +155,14 @@ onBeforeUnmount(() => {
   }
 })
 
+watch(
+  () => currentMedia.value,
+  (media) => {
+    selectedPairIndex.value = media?.primary_index ?? 0
+    showPairDeleteDialog.value = false
+  }
+)
+
 const togglePlayPause = () => {
   if (isPlaying.value) {
     playerStore.pause()
@@ -194,6 +205,47 @@ const toggleShuffle = async () => {
   } finally {
     isSavingShuffle.value = false
   }
+}
+
+const currentMediaItems = computed(() => {
+  if (currentMedia.value?.items?.length) return currentMedia.value.items
+  return currentMedia.value ? [currentMedia.value] : []
+})
+
+const isPortraitPair = computed(() => {
+  return currentMedia.value?.layout === 'portrait_pair' && currentMediaItems.value.length >= 2
+})
+
+const selectedMediaItem = computed(() => {
+  const items = currentMediaItems.value
+  if (!items.length) return null
+  const index = Math.min(Math.max(selectedPairIndex.value, 0), items.length - 1)
+  return items[index]
+})
+
+const pairSideLabel = (index: number) => index === 0 ? t('remote.pair.left') : t('remote.pair.right')
+
+const handleDeleteClick = () => {
+  if (isPortraitPair.value) {
+    showPairDeleteDialog.value = true
+    return
+  }
+  playerStore.sendCommand('DELETE')
+}
+
+const pairDeleteIds = (target: 'left' | 'right' | 'both') => {
+  const items = currentMediaItems.value
+  if (target === 'left') return items[0]?.id != null ? [items[0].id] : []
+  if (target === 'right') return items[1]?.id != null ? [items[1].id] : []
+  return items.map((item) => item.id).filter((id): id is number => id != null)
+}
+
+const deletePair = (target: 'left' | 'right' | 'both') => {
+  playerStore.sendCommand('DELETE', {
+    target,
+    media_ids: pairDeleteIds(target)
+  })
+  showPairDeleteDialog.value = false
 }
 
 const cloneConfig = () => JSON.parse(JSON.stringify(appConfig.value || {}))
@@ -398,21 +450,33 @@ const filterHelpText = computed(() => {
 })
 
 // Computed properties for safe access
-const displayFileName = computed(() => {
-  if (!currentMedia.value?.file_path) return t('remote.unknownFile')
+const fileNameFor = (media: MediaItem | null) => {
+  if (!media?.file_path) return t('remote.unknownFile')
   try {
-    const url = new URL(currentMedia.value.file_path, window.location.origin)
+    const url = new URL(media.file_path, window.location.origin)
     const pathParam = url.searchParams.get('path')
     const pathToUse = pathParam || url.pathname
     const decoded = decodeURIComponent(pathToUse)
     return decoded.split('/').pop() || t('remote.unknownFile')
   } catch (e) {
-    return currentMedia.value.file_path.split('/').pop() || t('remote.unknownFile')
+    return media.file_path.split('/').pop() || t('remote.unknownFile')
   }
+}
+
+const displayFileName = computed(() => {
+  return fileNameFor(selectedMediaItem.value)
+})
+
+const currentMediaTags = computed(() => {
+  const tags = selectedMediaItem.value?.exif?.tags
+  return String(tags || '')
+    .split(',')
+    .map((tag) => tag.trim())
+    .filter(Boolean)
 })
 
 const metadataFields = computed(() => {
-  const data = currentMedia.value?.exif || {}
+  const data = selectedMediaItem.value?.exif || {}
   const fields = []
 
   // Title
@@ -609,12 +673,36 @@ const metadataFields = computed(() => {
           
           <!-- Image Preview Area -->
           <div class="relative w-full bg-black/5 dark:bg-black/40 flex items-center justify-center overflow-hidden group aspect-video">
+            <div
+              v-if="isPortraitPair"
+              class="absolute inset-0 grid grid-cols-2 gap-2 p-2"
+            >
+              <button
+                v-for="(item, index) in currentMediaItems.slice(0, 2)"
+                :key="item.id ?? item.file_path"
+                type="button"
+                @click="selectedPairIndex = index"
+                :aria-pressed="selectedPairIndex === index"
+                class="relative min-w-0 overflow-hidden rounded-lg bg-black/40 focus:outline-none focus:ring-2 focus:ring-white/80"
+                :class="selectedPairIndex === index ? 'ring-2 ring-sky-300' : 'ring-1 ring-white/10'"
+              >
+                <img
+                  :src="item.file_path"
+                  :alt="pairSideLabel(index)"
+                  class="h-full w-full object-contain"
+                  @error="console.error('Failed to load image:', item.file_path)"
+                />
+                <span class="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm">
+                  {{ pairSideLabel(index) }}
+                </span>
+              </button>
+            </div>
             <img
-              v-if="currentMedia?.file_path"
-              :src="currentMedia.file_path"
+              v-else-if="selectedMediaItem?.file_path"
+              :src="selectedMediaItem.file_path"
               :alt="t('remote.controls.currentMedia')"
               class="absolute inset-0 w-full h-full object-contain transition-transform duration-1000 ease-out group-hover:scale-[1.02]"
-              @error="console.error('Failed to load image:', currentMedia.file_path)"
+              @error="console.error('Failed to load image:', selectedMediaItem?.file_path)"
             />
             <div v-else class="flex flex-col items-center text-gray-400 dark:text-gray-500">
               <PhotoIcon class="w-24 h-24 mb-4 opacity-20" />
@@ -629,20 +717,33 @@ const metadataFields = computed(() => {
               <div class="flex-1 min-w-0 pr-4 pointer-events-none">
                 <!-- Title (Always visible) -->
                 <h2 class="text-2xl font-bold text-white truncate drop-shadow-md transition-transform duration-500 group-hover:-translate-y-1">
-                  {{ currentMedia?.exif?.title || displayFileName }}
+                  {{ selectedMediaItem?.exif?.title || displayFileName }}
                 </h2>
                 
                 <!-- Progressive Disclosure: Caption & Tags (Visible on hover) -->
                 <div class="grid grid-rows-[0fr] group-hover:grid-rows-[1fr] transition-all duration-500 ease-in-out opacity-0 group-hover:opacity-100">
                   <div class="overflow-hidden">
-                    <p v-if="currentMedia?.exif?.caption" class="text-sm text-gray-200 mt-2 line-clamp-3 drop-shadow">
-                      {{ currentMedia.exif.caption }}
+                    <p v-if="selectedMediaItem?.exif?.caption" class="text-sm text-gray-200 mt-2 line-clamp-3 drop-shadow">
+                      {{ selectedMediaItem.exif.caption }}
                     </p>
                     
-                    <div v-if="currentMedia?.exif?.tags" class="flex overflow-x-auto hide-scrollbar space-x-2 mt-3 pb-1 pointer-events-auto">
-                      <span v-for="tag in currentMedia.exif.tags.split(',')" :key="tag" class="whitespace-nowrap px-2.5 py-1 bg-white/20 hover:bg-white/30 backdrop-blur-md rounded-full text-xs text-white transition-colors cursor-default">
-                        {{ tag.trim() }}
-                      </span>
+                    <div v-if="currentMediaTags.length" class="flex overflow-x-auto hide-scrollbar space-x-2 mt-3 pb-1 pointer-events-auto">
+                      <button
+                        v-for="tag in currentMediaTags"
+                        :key="tag"
+                        type="button"
+                        :aria-pressed="filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))"
+                        :title="t('remote.mediaSelection.chipTitle')"
+                        @click.stop="setTagFilter(tag, $event)"
+                        :class="[
+                          'whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-md transition-colors focus:outline-none focus:ring-2 focus:ring-white/70',
+                          filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))
+                            ? 'border-sky-300 bg-sky-500/90'
+                            : 'border-white/15 bg-white/20 hover:bg-white/30'
+                        ]"
+                      >
+                        {{ tag }}
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -650,7 +751,7 @@ const metadataFields = computed(() => {
               
               <button
                 type="button"
-                @click="playerStore.sendCommand('DELETE')"
+                @click="handleDeleteClick"
                 class="pointer-events-auto inline-flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-600/85 text-white opacity-90 shadow-lg backdrop-blur-sm transition-all hover:scale-105 hover:bg-red-500 focus:scale-105 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500/50 active:scale-95 lg:opacity-0 lg:group-hover:opacity-100"
                 :aria-label="t('remote.controls.delete')"
                 :title="t('remote.controls.delete')"
@@ -762,9 +863,9 @@ const metadataFields = computed(() => {
 
         <!-- Map Card -->
         <MapComponent
-          :latitude="currentMedia?.location?.lat"
-          :longitude="currentMedia?.location?.lon"
-          :location-name="currentMedia?.exif?.location_name"
+          :latitude="selectedMediaItem?.location?.lat"
+          :longitude="selectedMediaItem?.location?.lon"
+          :location-name="selectedMediaItem?.exif?.location_name"
         />
       </div>
 
@@ -966,6 +1067,26 @@ const metadataFields = computed(() => {
               </div>
               <h3 class="text-lg font-bold text-gray-900 dark:text-white tracking-tight">{{ t('remote.mediaDetails') }}</h3>
             </div>
+            <div
+              v-if="isPortraitPair"
+              class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-900/50"
+            >
+              <button
+                v-for="(_, index) in currentMediaItems.slice(0, 2)"
+                :key="index"
+                type="button"
+                @click="selectedPairIndex = index"
+                :aria-pressed="selectedPairIndex === index"
+                :class="[
+                  'rounded-md px-3 py-1.5 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
+                  selectedPairIndex === index
+                    ? 'bg-white text-indigo-700 shadow-sm dark:bg-gray-700 dark:text-indigo-200'
+                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
+                ]"
+              >
+                {{ pairSideLabel(index) }}
+              </button>
+            </div>
           </div>
           
           <div class="p-6 max-h-[400px] overflow-y-auto custom-scrollbar">
@@ -987,6 +1108,73 @@ const metadataFields = computed(() => {
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <div
+      v-if="showPairDeleteDialog"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="t('remote.pair.deleteTitle')"
+    >
+      <div class="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-800">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ t('remote.pair.deleteTitle') }}</h3>
+            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('remote.pair.deletePrompt') }}</p>
+          </div>
+          <button
+            type="button"
+            @click="showPairDeleteDialog = false"
+            class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500/50 dark:hover:bg-gray-700 dark:hover:text-gray-100"
+            :aria-label="t('settings.cancel')"
+          >
+            <XMarkIcon class="h-5 w-5" />
+          </button>
+        </div>
+
+        <div class="mt-5 grid grid-cols-2 gap-3">
+          <div
+            v-for="(item, index) in currentMediaItems.slice(0, 2)"
+            :key="item.id ?? item.file_path"
+            class="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50"
+          >
+            <div class="aspect-video bg-black/80">
+              <img :src="item.file_path" :alt="pairSideLabel(index)" class="h-full w-full object-contain" />
+            </div>
+            <div class="p-3">
+              <p class="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ pairSideLabel(index) }}</p>
+              <p class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100" :title="fileNameFor(item)">
+                {{ fileNameFor(item) }}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <button
+            type="button"
+            @click="deletePair('left')"
+            class="inline-flex items-center justify-center rounded-xl bg-red-100 px-4 py-2.5 text-sm font-bold text-red-700 transition-colors hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500/50 dark:bg-red-600 dark:text-white dark:hover:bg-red-500"
+          >
+            {{ t('remote.pair.deleteLeft') }}
+          </button>
+          <button
+            type="button"
+            @click="deletePair('right')"
+            class="inline-flex items-center justify-center rounded-xl bg-red-100 px-4 py-2.5 text-sm font-bold text-red-700 transition-colors hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500/50 dark:bg-red-600 dark:text-white dark:hover:bg-red-500"
+          >
+            {{ t('remote.pair.deleteRight') }}
+          </button>
+          <button
+            type="button"
+            @click="deletePair('both')"
+            class="inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+          >
+            {{ t('remote.pair.deleteBoth') }}
+          </button>
+        </div>
       </div>
     </div>
   </div>

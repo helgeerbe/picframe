@@ -43,6 +43,8 @@ class MediaIndexerService:
         self.media_monitor_service = media_monitor_service
         self.image_strategy = image_strategy
         self.video_strategy = video_strategy
+        self._paused = False
+        self._stopped = False
         
         # Initialize and start the geocoding worker
         self.geocoding_worker = GeocodingWorker(media_repository, config_repository, event_subscriber)
@@ -66,6 +68,10 @@ class MediaIndexerService:
         return self.config_repository.add_directory(dir_path)
 
     def _handle_file_change(self, event: FileChangeEvent) -> None:
+        if self._paused or self._stopped:
+            logger.debug(f"Ignoring file change while indexer is paused/stopped: {event.path}")
+            return
+
         try:
             if event.event_type in ("created", "modified"):
                 logger.debug(f"Indexing file: {event.path}")
@@ -114,6 +120,9 @@ class MediaIndexerService:
             logger.error(f"Error indexing file {event.path}: {e}")
 
     def _handle_command(self, event: CommandEvent) -> None:
+        if self._stopped:
+            return
+
         if event.command == Command.SET_CONFIG:
             payload = event.payload or {}
             if "model" in payload and "pic_dir" in payload["model"]:
@@ -137,3 +146,31 @@ class MediaIndexerService:
                 # 4. Purge missing files from the database
                 purged_count = self.media_repository.purge_missing_files()
                 logger.info(f"Purged {purged_count} missing files from the database.")
+
+    def pause(self) -> None:
+        """Pause indexing and file monitoring."""
+        if self._paused or self._stopped:
+            return
+        logger.info("Pausing MediaIndexerService.")
+        self._paused = True
+        self.media_monitor_service.pause()
+        self.image_processing_service.pause()
+
+    def resume(self) -> None:
+        """Resume indexing after reconciling missed filesystem changes."""
+        if self._stopped or not self._paused:
+            return
+        logger.info("Resuming MediaIndexerService.")
+        self._paused = False
+        self.image_processing_service.resume()
+        self.media_monitor_service.resume()
+
+    def stop(self) -> None:
+        """Stop indexing, monitoring, and background geocoding."""
+        if self._stopped:
+            return
+        logger.info("Stopping MediaIndexerService.")
+        self._stopped = True
+        self._paused = False
+        self.media_monitor_service.stop()
+        self.geocoding_worker.stop()

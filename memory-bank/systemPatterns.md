@@ -8,20 +8,23 @@
 - The runtime separates configuration (`config.db3`, persistent) from media metadata (`media_cache.db3`, rebuildable).
 
 ## Playback And Rendering
-- `PlaylistManager` owns media querying, filtering, shuffle, and current item selection.
+- `PlaylistManager` owns media querying, filtering, shuffle, and current display-item selection.
 - `PlaybackEngine` owns state transitions, timing, command handling, and media-to-renderer orchestration.
 - `Pi3dRenderer` should stay presentation-focused: draw what it is commanded to draw, with local renderer state only for rendering concerns such as clock ticks.
 - pi3d/OpenGL runs on the main thread; FastAPI, MQTT, media monitoring, geocoding, and hardware input operate in background threads.
 - GStreamer video playback runs out of process in `gst_worker.py` and communicates through JSON IPC over a Unix-domain socket.
+- A display item is either one media item or an image-only portrait pair. Videos are never paired and always use the fullscreen video path.
+- Portrait pairs are composed in memory for rendering; they do not create persistent generated files.
 
 ## Video Handoff
 - The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:
-  - Extract/cache first and last video frames.
+  - Extract/cache first and last video frames under the managed runtime cache directory.
   - Transition into the first frame with pi3d.
   - Start GStreamer after that transition.
   - Swap pi3d's hidden background to the last frame during video playback.
   - Transition out from the last frame when GStreamer reaches EOS.
 - Only one renderer should actively own visible display output at a time.
+- Clear Image Cache removes generated cache artifacts such as video transition frames, but original media files and media database rows are handled by separate operations.
 
 ## Hardware Capability Strategy
 - Prefer GStreamer registry and caps negotiation over hardcoded board/codec tables.
@@ -40,6 +43,7 @@
 - WebSocket `/ws/state` handles real-time media/state/error updates and outgoing player commands.
 - REST `/api/config` and maintenance/system endpoints handle settings and administrative actions.
 - Frontend narrative metadata belongs in the image overlay; technical metadata belongs in a constrained scrollable panel.
+- Remote keeps primary media fields backward-compatible and uses `layout` plus `items[]` for pair preview, side-specific details, and pair delete choices.
 - User-facing frontend strings should go through vue-i18n and stay synchronized across `en.json` and `de.json`.
 
 ## Testing And Quality

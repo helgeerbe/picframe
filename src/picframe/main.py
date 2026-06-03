@@ -72,7 +72,8 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     system_manager = SystemManager(event_bus, hal_adapters.system_manager)
     
     # Initialize ImageProcessingService
-    image_processing_service = ImageProcessingService(cache_dir=os.path.join(data_dir, "cache"))
+    cache_dir = os.path.join(data_dir, "cache")
+    image_processing_service = ImageProcessingService(cache_dir=cache_dir)
     
     # Initialize MediaMonitorService
     model_config = nested_config.get("model", {})
@@ -109,14 +110,19 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     display_h_val = _config_repo.get_app_config("viewer.display_h", 0)
     display_h = int(display_h_val) if display_h_val else 0
     
-    _ = MediaIndexerService(
+    media_indexer_service = MediaIndexerService(
         event_subscriber=event_bus,
         media_repository=media_repo,
         config_repository=_config_repo,
         image_processing_service=image_processing_service,
         media_monitor_service=media_monitor_service,
         image_strategy=ImageMetadataStrategy(),
-        video_strategy=VideoMetadataStrategy(display_w=display_w, display_h=display_h, config_repository=_config_repo)
+        video_strategy=VideoMetadataStrategy(
+            display_w=display_w,
+            display_h=display_h,
+            config_repository=_config_repo,
+            cache_dir=cache_dir,
+        )
     )
 
     # 5. Initialize Renderer
@@ -153,7 +159,14 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
 
     # 6. Initialize Engine
     engine = PlaybackEngine(
-        event_bus, event_bus, playlist_manager, renderer, model_config, config_repository=_config_repo, video_player=video_player
+        event_bus,
+        event_bus,
+        playlist_manager,
+        renderer,
+        model_config,
+        config_repository=_config_repo,
+        video_player=video_player,
+        cache_dir=cache_dir,
     )
 
     # 7. Initialize Web Server
@@ -165,6 +178,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         cors_allowed_origins=cors_origins,
         config_repository=_config_repo,
         media_repository=media_repo,
+        image_processing_service=image_processing_service,
         html_dir=html_dir or os.path.join(base_dir, "html"),
     )
     web_server = WebServer(app, port=port)
@@ -177,6 +191,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         shutdown_event.set()
         web_server.stop()
         engine.stop()
+        media_indexer_service.stop()
         event_bus.stop()
         # Keep a reference to display_power_manager to prevent garbage collection
         # and allow it to handle events until the bus stops.
@@ -212,7 +227,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         time.sleep(1.0)
     finally:
         logger.info("Cleaning up...")
-        media_monitor_service.stop()
+        media_indexer_service.stop()
         image_processing_service.shutdown()
         web_server.stop()
         engine.stop()

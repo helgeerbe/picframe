@@ -87,6 +87,8 @@ class ImageMetadataStrategy(IMetadataStrategy):
             if longitude is not None:
                 longitude = round(longitude, 4)
 
+            is_portrait = self._is_portrait(width, height, orientation)
+
             return MediaItem(
                 filepath=filepath,
                 filename=filename,
@@ -108,6 +110,7 @@ class ImageMetadataStrategy(IMetadataStrategy):
                 title=title,
                 caption=caption,
                 tags=tags,
+                is_portrait=is_portrait,
                 latitude=latitude,
                 longitude=longitude,
             )
@@ -142,6 +145,27 @@ class ImageMetadataStrategy(IMetadataStrategy):
         except Exception as e:
             logger.warning(f"Error reading dimensions for {filepath}: {e}")
             return None, None
+
+    @staticmethod
+    def _is_portrait(
+        width: int | None,
+        height: int | None,
+        orientation: int | None,
+    ) -> bool | None:
+        """Return display-orientation portrait status from dimensions and EXIF orientation."""
+        if width is None or height is None:
+            return None
+
+        try:
+            orientation_value = int(orientation or 1)
+        except (TypeError, ValueError):
+            orientation_value = 1
+
+        display_width, display_height = width, height
+        if orientation_value in {5, 6, 7, 8}:
+            display_width, display_height = height, width
+
+        return display_height > display_width
 
     def _get_all_exif(self, filepath: str) -> dict[str, Any]:
         """

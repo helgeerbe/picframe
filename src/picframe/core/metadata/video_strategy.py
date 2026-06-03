@@ -22,10 +22,17 @@ class VideoMetadataStrategy(IMetadataStrategy):
     MediaItem model.
     """
 
-    def __init__(self, display_w: int = 0, display_h: int = 0, config_repository=None):
+    def __init__(
+        self,
+        display_w: int = 0,
+        display_h: int = 0,
+        config_repository=None,
+        cache_dir: str | None = None,
+    ):
         self.display_w = display_w
         self.display_h = display_h
         self._config_repository = config_repository
+        self.cache_dir = cache_dir
 
     def extract(self, filepath: str, directory_id: int) -> MediaItem | None:
         """
@@ -158,7 +165,23 @@ class VideoMetadataStrategy(IMetadataStrategy):
                 # It could be extracted from ffprobe output if needed
                 target_w = self.display_w if self.display_w > 0 else width
                 target_h = self.display_h if self.display_h > 0 else height
-                VideoFrameExtractor.extract_and_save_frames(filepath, duration, target_w, target_h)
+                fit_display = False
+                if self._config_repository is not None:
+                    fit_display = self._config_repository.get_app_config_bool(
+                        "viewer.fit", False
+                    )
+                frame_cache_kwargs = {}
+                if fit_display:
+                    frame_cache_kwargs["fit_display"] = fit_display
+                if self.cache_dir is not None:
+                    frame_cache_kwargs["cache_dir"] = self.cache_dir
+                VideoFrameExtractor.extract_and_save_frames(
+                    filepath,
+                    duration,
+                    target_w,
+                    target_h,
+                    **frame_cache_kwargs,
+                )
 
             return MediaItem(
                 filepath=filepath,

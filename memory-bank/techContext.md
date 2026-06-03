@@ -15,7 +15,7 @@
 ## Runtime Components
 - `picframe init` bootstraps user-space state under `~/.picframe/`.
 - `picframe run` starts repositories, event bus, HAL adapters, media monitor/indexer, pi3d renderer, GStreamer video renderer, playback engine, and FastAPI server.
-- Config database defaults to `<base_dir>/data/config.db3`; media cache defaults to `<base_dir>/data/media_cache.db3`.
+- Config database defaults to `<base_dir>/data/config.db3`; media cache defaults to `<base_dir>/data/media_cache.db3`; generated cache artifacts live under `<base_dir>/data/cache`.
 - `PICFRAME_DIR`, `PICFRAME_PORT`, `PICFRAME_CONFIG_DB`, `PICFRAME_MEDIA_DB`, and `PICFRAME_HTML_DIR` can override defaults.
 
 ## Display And Media Constraints
@@ -27,5 +27,5 @@
 
 ## Verification Notes
 - Frontend type checking has passed with `npm exec vue-tsc -- -b --noEmit`.
-- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 219 passed, 1 skipped, 1 GI deprecation warning on 2026-05-31.
+- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 240 passed, 1 skipped, 1 GI deprecation warning on 2026-06-03.
 - Current tests include Python 3.14 compatibility shims for Starlette/AnyIO test hangs and avoid real socket binding in API server unit tests.

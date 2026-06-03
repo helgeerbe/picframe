@@ -16,6 +16,13 @@ class MediaType(StrEnum):
     VIDEO = "video"
 
 
+class DisplayLayout(StrEnum):
+    """Enumeration of slideshow display layouts."""
+
+    SINGLE = "single"
+    PORTRAIT_PAIR = "portrait_pair"
+
+
 @dataclass
 class MediaItem:
     """
@@ -105,3 +112,81 @@ class MediaItem:
             "last_displayed": self.last_displayed,
             "is_deleted": int(self.is_deleted),
         }
+
+
+@dataclass
+class DisplayItem:
+    """
+    Represents one slideshow slot.
+
+    A display item may contain a single media item or two portrait image items.
+    The first item is the primary item for backward-compatible metadata and
+    delete semantics.
+    """
+
+    layout: DisplayLayout
+    items: list[MediaItem]
+    primary_index: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.items:
+            raise ValueError("DisplayItem requires at least one media item")
+        if self.primary_index < 0 or self.primary_index >= len(self.items):
+            raise ValueError("DisplayItem primary_index is out of range")
+        if self.layout == DisplayLayout.PORTRAIT_PAIR:
+            if len(self.items) != 2:
+                raise ValueError("Portrait pair display items require exactly two items")
+            if any(item.media_type != MediaType.IMAGE for item in self.items):
+                raise ValueError("Portrait pairs can only contain image media")
+        elif len(self.items) != 1:
+            raise ValueError("Single display items require exactly one item")
+
+    @classmethod
+    def single(cls, item: MediaItem) -> "DisplayItem":
+        """Create a single-media display item."""
+        return cls(layout=DisplayLayout.SINGLE, items=[item])
+
+    @classmethod
+    def portrait_pair(cls, left: MediaItem, right: MediaItem) -> "DisplayItem":
+        """Create a two-image portrait-pair display item."""
+        return cls(layout=DisplayLayout.PORTRAIT_PAIR, items=[left, right])
+
+    @property
+    def primary(self) -> MediaItem:
+        """Return the primary media item."""
+        return self.items[self.primary_index]
+
+    @property
+    def filepath(self) -> str:
+        """Backward-compatible primary filepath."""
+        return self.primary.filepath
+
+    @property
+    def filename(self) -> str:
+        """Backward-compatible primary filename."""
+        return self.primary.filename
+
+    @property
+    def id(self) -> int | None:
+        """Backward-compatible primary media ID."""
+        return self.primary.id
+
+    @property
+    def media_type(self) -> MediaType:
+        """Backward-compatible primary media type."""
+        return self.primary.media_type
+
+    def to_dict(self) -> dict[str, object]:
+        """Return a payload with primary fields plus display layout data."""
+        primary_data = self.primary.to_dict()
+        primary_data["layout"] = self.layout.value
+        primary_data["primary_index"] = self.primary_index
+        primary_data["items"] = [
+            {
+                **item.to_dict(),
+                "role": "left" if index == 0 else "right",
+                "index": index,
+            }
+            for index, item in enumerate(self.items)
+        ]
+        return primary_data

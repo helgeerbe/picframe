@@ -84,6 +84,53 @@ def test_extract_success(mock_stat: MagicMock, mock_run: MagicMock, mock_extract
     assert media_item.exif_datetime is not None
     mock_extract.assert_called_once_with(filepath, 120.5, 1920, 1080)
 
+
+@patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
+@patch("picframe.core.metadata.video_strategy.subprocess.run")
+@patch("picframe.core.metadata.video_strategy.os.stat")
+def test_extract_passes_cache_dir_and_fit_mode(
+    mock_stat: MagicMock,
+    mock_run: MagicMock,
+    mock_extract: MagicMock,
+) -> None:
+    mock_stat_result = MagicMock()
+    mock_stat_result.st_size = 1024
+    mock_stat_result.st_mtime = 1600000000.0
+    mock_stat.return_value = mock_stat_result
+    mock_run_result = MagicMock()
+    mock_run_result.stdout = """
+    {
+        "format": {"duration": "10.0"},
+        "streams": [
+            {
+                "codec_type": "video",
+                "width": 1920,
+                "height": 1080
+            }
+        ]
+    }
+    """
+    mock_run.return_value = mock_run_result
+    mock_config_repo = MagicMock()
+    mock_config_repo.get_app_config_bool.return_value = True
+    strategy = VideoMetadataStrategy(
+        display_w=1280,
+        display_h=720,
+        config_repository=mock_config_repo,
+        cache_dir="/tmp/picframe-cache",
+    )
+
+    strategy.extract("/path/to/video.mp4", 1)
+
+    mock_extract.assert_called_once_with(
+        "/path/to/video.mp4",
+        10.0,
+        1280,
+        720,
+        fit_display=True,
+        cache_dir="/tmp/picframe-cache",
+    )
+
 @patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
 @patch("picframe.core.metadata.video_strategy.subprocess.run")
 @patch("picframe.core.metadata.video_strategy.os.stat")

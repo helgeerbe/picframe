@@ -97,6 +97,49 @@ def test_extract_success(
     assert result.title == "Test Title"
     assert result.caption == "Test Caption"
     assert result.tags == "test, image"
+    assert result.is_portrait is True
+
+
+def _extract_with_dimensions(
+    strategy: ImageMetadataStrategy,
+    dimensions: tuple[int, int],
+    orientation: int,
+):
+    with (
+        patch("os.path.isfile", return_value=True),
+        patch("os.stat") as mock_stat,
+        patch.object(strategy, "_get_dimensions", return_value=dimensions),
+        patch.object(strategy, "_get_all_exif", return_value={"orientation": orientation}),
+        patch.object(strategy, "_get_iptc_data", return_value={}),
+        patch.object(strategy, "_get_xmp_data", return_value={}),
+    ):
+        mock_stat_result = MagicMock()
+        mock_stat_result.st_size = 1024
+        mock_stat_result.st_mtime = 1678886400.0
+        mock_stat.return_value = mock_stat_result
+
+        return strategy.extract("/path/to/image.jpg", 1)
+
+
+@pytest.mark.parametrize(
+    ("dimensions", "orientation", "expected_is_portrait"),
+    [
+        ((1920, 1080), 1, False),
+        ((1080, 1920), 1, True),
+        ((1920, 1080), 6, True),
+    ],
+)
+def test_extract_sets_orientation_aware_is_portrait(
+    strategy: ImageMetadataStrategy,
+    dimensions: tuple[int, int],
+    orientation: int,
+    expected_is_portrait: bool,
+) -> None:
+    """Test that images are marked portrait based on display orientation."""
+    result = _extract_with_dimensions(strategy, dimensions, orientation)
+
+    assert result is not None
+    assert result.is_portrait is expected_is_portrait
 
 
 @patch("os.path.isfile")

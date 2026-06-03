@@ -126,6 +126,7 @@ class OverlayConfig:
     clock_format: str = "%H:%M"
     show_text: bool = False
     text_string: str = ""
+    text_strings: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -181,15 +182,21 @@ class RenderCommand(Event):
     An instruction for the Presentation Layer to draw a specific image.
 
     Attributes:
-        image_path: The absolute path to the image file to render.
+        image_path: The primary absolute path to the image file to render.
         overlay: Optional configuration for text overlays.
         background_only: If True, load the image into the background buffer without transitioning.
+        layout: "single" or "portrait_pair".
+        image_paths: Optional all image paths for multi-image layouts.
+        image_objs: Optional preloaded image objects matching image_paths.
     """
 
     image_path: str
     overlay: OverlayConfig | None = None
     background_only: bool = False
     image_obj: Any = None
+    layout: str = "single"
+    image_paths: tuple[str, ...] | None = None
+    image_objs: tuple[Any, ...] | None = None
 
     @property
     def priority(self) -> int:

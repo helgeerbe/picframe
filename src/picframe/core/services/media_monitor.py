@@ -188,6 +188,15 @@ class MediaMonitorService:
             self._running = False
             logger.info("MediaMonitorService stopped.")
 
+    def pause(self) -> None:
+        """Pause media monitoring without changing configured directories."""
+        self.stop()
+
+    def resume(self) -> None:
+        """Resume media monitoring after reconciling missed changes."""
+        self.perform_differential_sync()
+        self.start()
+
     def perform_differential_sync(self) -> None:
         """
         Performs a fast differential sync on startup using os.walk().

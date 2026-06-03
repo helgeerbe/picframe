@@ -4,6 +4,7 @@ from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
+from PIL import Image
 
 from picframe.core.events.dto import RenderCommand
 from picframe.core.renderers.components.image_renderer import ImageRenderer
@@ -77,6 +78,58 @@ def test_image_renderer_initialization(
         renderer._slide.set_shader.assert_called_once_with(shader)
 
 
+def test_image_renderer_initialization_honors_fit_true(
+    mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
+) -> None:
+    """Test that fit=True is honored when initializing from config."""
+    shader = MagicMock()
+    renderer = ImageRenderer(mock_display, shader, {**config, "fit": True})
+
+    assert renderer._fit is True
+
+
+def test_image_renderer_update_config_refreshes_fit(
+    mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
+) -> None:
+    """Test that runtime config changes refresh image scaling settings."""
+    shader = MagicMock()
+    renderer = ImageRenderer(mock_display, shader, config)
+
+    renderer.update_config(
+        {
+            **config,
+            "blend_type": "burn",
+            "edge_alpha": 0.25,
+            "fit": True,
+            "time_delay": 30.0,
+        }
+    )
+
+    assert renderer._fit is True
+    assert renderer._time_delay == 30.0
+    if renderer._slide:
+        assert renderer._slide.unif[47] == 0.25
+        assert renderer._slide.unif[54] == 1.0
+
+
+def test_image_renderer_update_config_rescales_current_texture(
+    mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
+) -> None:
+    """Test that fit changes rescale an already-loaded portrait texture."""
+    shader = MagicMock()
+    renderer = ImageRenderer(mock_display, shader, config)
+    renderer._sfg = MagicMock(ix=600, iy=1200)
+
+    renderer.update_config({**config, "fit": True})
+
+    expected_wh_ratio = (1920 * 1200) / (1080 * 600)
+    if renderer._slide:
+        assert renderer._slide.unif[42] == pytest.approx(expected_wh_ratio)
+        assert renderer._slide.unif[43] == 1.0
+        assert renderer._slide.unif[48] == pytest.approx((expected_wh_ratio - 1.0) * 0.5)
+        assert renderer._slide.unif[49] == 0.0
+
+
 def test_image_renderer_execute_video(
     mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
 ) -> None:
@@ -138,6 +191,17 @@ def test_image_renderer_execute_image(
     assert renderer._next_tm == 100.0 + 200.0
     assert renderer._sfg == mock_texture
     assert renderer._sbg == mock_texture  # First image, so sbg is set to sfg
+
+
+def test_image_renderer_create_portrait_pair_image() -> None:
+    left = Image.new("RGB", (400, 800), "red")
+    right = Image.new("RGB", (200, 600), "blue")
+
+    result = ImageRenderer._create_portrait_pair_image(left, right)
+
+    assert result.mode == "RGB"
+    assert result.width == 408
+    assert result.height == 400
 
 
 def test_image_renderer_set_alpha(

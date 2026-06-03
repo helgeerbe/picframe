@@ -5,7 +5,7 @@ This module verifies the initialization and serialization of the MediaItem
 dataclass.
 """
 
-from picframe.core.models.media import MediaItem, MediaType
+from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
 
 
 def test_media_item_initialization() -> None:
@@ -108,3 +108,36 @@ def test_media_item_to_dict() -> None:
     assert data["location"] == "New York, USA"
     assert data["duration"] == 60.5
     assert data["is_deleted"] == 1  # Boolean converted to int
+
+
+def test_display_item_pair_to_dict() -> None:
+    left = MediaItem(
+        id=1,
+        filepath="/path/to/left.jpg",
+        filename="left.jpg",
+        directory_id=1,
+        media_type=MediaType.IMAGE,
+        file_size=1024,
+        last_modified=1.0,
+        is_portrait=True,
+    )
+    right = MediaItem(
+        id=2,
+        filepath="/path/to/right.jpg",
+        filename="right.jpg",
+        directory_id=1,
+        media_type=MediaType.IMAGE,
+        file_size=1024,
+        last_modified=1.0,
+        is_portrait=True,
+    )
+
+    display_item = DisplayItem.portrait_pair(left, right)
+    data = display_item.to_dict()
+
+    assert display_item.layout == DisplayLayout.PORTRAIT_PAIR
+    assert data["filepath"] == "/path/to/left.jpg"
+    assert data["layout"] == "portrait_pair"
+    assert data["primary_index"] == 0
+    assert data["items"][0]["role"] == "left"
+    assert data["items"][1]["role"] == "right"

@@ -60,6 +60,15 @@
       "applied": "Medienauswahl aktualisiert.",
       "failed": "Medienauswahl konnte nicht aktualisiert werden."
     },
+    "pair": {
+      "left": "Links",
+      "right": "Rechts",
+      "deleteTitle": "Portrait-Paar löschen",
+      "deletePrompt": "Wähle, welches Bild aus dem aktuellen Paar gelöscht werden soll.",
+      "deleteLeft": "Links löschen",
+      "deleteRight": "Rechts löschen",
+      "deleteBoth": "Beide löschen"
+    },
     "controls": {
       "currentMedia": "Aktuelles Medium",
       "turnDisplayOn": "Display einschalten",

@@ -11,6 +11,8 @@ import logging
 import os
 import subprocess
 import threading
+from hashlib import sha256
+from pathlib import Path
 from typing import cast
 
 from PIL import Image
@@ -26,8 +28,14 @@ class VideoFrameExtractor:
     to facilitate seamless transitions in the playback engine.
     """
 
-    def __init__(self, video_path: str, display_width: int, display_height: int,
-                 fit_display: bool = False) -> None:
+    def __init__(
+        self,
+        video_path: str,
+        display_width: int,
+        display_height: int,
+        fit_display: bool = False,
+        cache_dir: str | None = None,
+    ) -> None:
         """
         Initialize the VideoFrameExtractor.
 
@@ -37,12 +45,70 @@ class VideoFrameExtractor:
             display_height: The target height of the display in pixels.
             fit_display: If True, scales the image to fit within the display dimensions
                          while maintaining aspect ratio. If False, fills the display.
+            cache_dir: Optional directory for generated frame cache files. If omitted,
+                       legacy sidecar frame paths are used next to the video.
         """
         self.video_path: str = video_path
         self.display_width: int = display_width
         self.display_height: int = display_height
         self.fit_display: bool = fit_display
+        self.cache_dir: str | None = cache_dir
         self.logger: logging.Logger = logging.getLogger("VideoFrameExtractor")
+
+    @staticmethod
+    def _source_fingerprint(video_path: str) -> tuple[int, int]:
+        try:
+            stat = os.stat(video_path)
+            mtime_ns = getattr(stat, "st_mtime_ns", int(stat.st_mtime * 1_000_000_000))
+            return int(stat.st_size), int(mtime_ns)
+        except OSError:
+            return 0, 0
+
+    @staticmethod
+    def get_cached_frame_path(
+        video_path: str,
+        width: int,
+        height: int,
+        fit_display: bool,
+        role: str,
+        cache_dir: str | None = None,
+    ) -> str:
+        """Return the deterministic path for a cached transition frame."""
+        role_suffix = {"first": "1", "last": "2"}.get(role)
+        if role_suffix is None:
+            raise ValueError(f"Unknown frame role: {role}")
+
+        if not cache_dir:
+            base, _ = os.path.splitext(video_path)
+            return f"{base}.{role_suffix}.frame"
+
+        file_size, mtime_ns = VideoFrameExtractor._source_fingerprint(video_path)
+        absolute_path = os.path.abspath(os.path.expanduser(video_path))
+        signature = "|".join(
+            [
+                absolute_path,
+                str(file_size),
+                str(mtime_ns),
+                str(width),
+                str(height),
+                str(bool(fit_display)),
+                role,
+            ]
+        )
+        digest = sha256(signature.encode("utf-8")).hexdigest()[:24]
+        safe_stem = Path(video_path).stem[:48] or "video"
+        return str(Path(cache_dir).expanduser() / f"{safe_stem}-{digest}.{role_suffix}.frame")
+
+    def get_frame_path(self, role: str) -> str:
+        """Return the cached frame path for this extractor instance."""
+        return self.get_cached_frame_path(
+            self.video_path,
+            self.display_width,
+            self.display_height,
+            self.fit_display,
+            role,
+            self.cache_dir,
+        )
 
     def _scale_frame(self, frame: Image.Image) -> Image.Image:
         """
@@ -112,7 +178,11 @@ class VideoFrameExtractor:
             image = Image.open(io.BytesIO(process.stdout))
             image.load()
             return image
-        except (OSError, subprocess.CalledProcessError, ValueError) as e:
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else e.stderr
+            self.logger.warning("Failed to retrieve video frame: %s", stderr or e)
+            return None
+        except (OSError, ValueError) as e:
             self.logger.warning("Failed to retrieve video frame: %s", e)
             return None
 
@@ -142,7 +212,13 @@ class VideoFrameExtractor:
 
     @staticmethod
     def extract_and_save_frames(
-        video_path: str, duration: float, width: int, height: int, sar: str = "1:1", fit_display: bool = False
+        video_path: str,
+        duration: float,
+        width: int,
+        height: int,
+        sar: str = "1:1",
+        fit_display: bool = False,
+        cache_dir: str | None = None,
     ) -> bool:
         """
         Extract and save the first and last frames of the video to disk.
@@ -156,15 +232,20 @@ class VideoFrameExtractor:
             width: The width of the video in pixels.
             height: The height of the video in pixels.
             sar: The Sample Aspect Ratio string (default: "1:1").
+            fit_display: Whether frames are cached for fit-display mode.
+            cache_dir: Optional directory for generated frame cache files.
 
         Returns:
             True if both frames were successfully extracted and saved (or already exist),
             False otherwise.
         """
         logger = logging.getLogger("VideoFrameExtractor")
-        base, _ = os.path.splitext(video_path)
-        first_path = base + ".1.frame"
-        last_path = base + ".2.frame"
+        first_path = VideoFrameExtractor.get_cached_frame_path(
+            video_path, width, height, fit_display, "first", cache_dir
+        )
+        last_path = VideoFrameExtractor.get_cached_frame_path(
+            video_path, width, height, fit_display, "last", cache_dir
+        )
 
         if os.path.exists(first_path) and os.path.exists(last_path):
             return True
@@ -173,8 +254,11 @@ class VideoFrameExtractor:
             logger.error("Error: Invalid video dimensions or duration.")
             return False
 
+        if cache_dir:
+            Path(cache_dir).expanduser().mkdir(parents=True, exist_ok=True)
+
         # Create a temporary instance just to use the extraction methods
-        extractor = VideoFrameExtractor(video_path, width, height, fit_display=fit_display)
+        extractor = VideoFrameExtractor(video_path, width, height, fit_display=fit_display, cache_dir=cache_dir)
         
         first_image = extractor._get_frame_as_image(0)
         
@@ -223,12 +307,19 @@ class VideoFrameExtractor:
             A tuple containing the first and last frames as Pillow Image objects,
             or None if extraction or loading fails.
         """
-        base, _ = os.path.splitext(self.video_path)
-        first_path = base + ".1.frame"
-        last_path = base + ".2.frame"
+        first_path = self.get_frame_path("first")
+        last_path = self.get_frame_path("last")
 
         # Ensure frames exist
-        self.extract_and_save_frames(self.video_path, duration, width, height, sar)
+        self.extract_and_save_frames(
+            self.video_path,
+            duration,
+            width,
+            height,
+            sar,
+            fit_display=self.fit_display,
+            cache_dir=self.cache_dir,
+        )
 
         if os.path.exists(first_path) and os.path.exists(last_path):
             try:
@@ -244,7 +335,13 @@ class VideoFrameExtractor:
         return None
 
     @staticmethod
-    def get_first_frame_as_image(video_path: str) -> Image.Image | None:
+    def get_first_frame_as_image(
+        video_path: str,
+        width: int = 0,
+        height: int = 0,
+        fit_display: bool = False,
+        cache_dir: str | None = None,
+    ) -> Image.Image | None:
         """
         Retrieve the cached first frame of a video as a Pillow Image object.
 
@@ -253,13 +350,18 @@ class VideoFrameExtractor:
 
         Args:
             video_path: The absolute path to the video file.
+            width: The display width used for cached-frame keying.
+            height: The display height used for cached-frame keying.
+            fit_display: Whether fit-display mode is part of the cache key.
+            cache_dir: Optional managed cache directory.
 
         Returns:
             The first frame as a Pillow Image object, or None if the cached file
             does not exist or cannot be loaded.
         """
-        base, _ = os.path.splitext(video_path)
-        path = base + ".1.frame"
+        path = VideoFrameExtractor.get_cached_frame_path(
+            video_path, width, height, fit_display, "first", cache_dir
+        )
 
         if os.path.exists(path):
             try:

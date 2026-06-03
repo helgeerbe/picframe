@@ -1,7 +1,7 @@
 # Active Context
 
 ## Current Focus
-The current implementation focus is Phase 2 next-gen control-plane parity: Remote media selection, config-driven playlist filtering, and legacy PlaylistManager parity gaps. Phase 3-style GStreamer integration remains the next major architectural stream.
+The current implementation focus is Phase 2 next-gen control-plane parity cleanup after ticket #618. Phase 3-style GStreamer integration remains the next major architectural stream.
 
 ## Current Repo State
 - Branch: `v2-dev`, tracking `origin/v2-dev`.
@@ -15,10 +15,11 @@ The current implementation focus is Phase 2 next-gen control-plane parity: Remot
 - `Frontend_Specification.md` defines a Vue 3 SPA with Remote, Filters, and Settings views; REST config/maintenance endpoints; WebSocket state; i18n; Leaflet maps; and separate narrative vs. technical metadata presentation.
 - Issue #648 is closed after implementing Remote media-selection controls, legacy-compatible location/tag filter expressions, live match counts, playlist filtering/sorting, timing propagation, filter-options API, shuffle transport control refinements, and displayed-count metadata. #618 tracks remaining parity follow-ups.
 - Issues #676 and #677 are closed after documenting legacy `configuration.yaml` import and normalizing supported legacy keys through `/api/config/import-yaml`.
+- Recent #618 work added clickable current-media tags in Remote, managed cache storage for generated video transition frames, Clear Image Cache API/service wiring, playback guards so videos continue after generated frames are cleared, image-only portrait-pair display items/rendering/Remote UX, pair delete target selection, internal monitor/indexer/processing lifecycle controls, and real-media Raspberry Pi validation.
 
 ## Immediate Next Steps
-- Review and test remaining #618 parity items on an Ubuntu VM, especially delete/purge and Remote filter UX with real media, then on Pi hardware when available.
-- Keep portrait-pair rendering deferred until renderer/event payload shape and hardware validation are planned.
+- Post/keep final #618 validation status and close or board-update the issue when ready.
+- Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
 - Align future video work with caps-driven GStreamer discovery and fallback observability.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

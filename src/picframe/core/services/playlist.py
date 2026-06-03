@@ -7,10 +7,11 @@ handles shuffling logic, and maintains playback history.
 """
 
 import logging
+import os
 import random
 from typing import Any
 
-from picframe.core.models.media import MediaItem, MediaType
+from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
 from picframe.core.models.playlist import PlaylistCriteria
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 
@@ -40,11 +41,13 @@ class PlaylistManager:
         self._media_repo = media_repository
         self._config_repo = config_repository
         self._playlist: list[dict[str, Any]] = []
-        self._history: list[dict[str, Any]] = []
+        self._display_playlist: list[list[dict[str, Any]]] = []
+        self._history: list[list[dict[str, Any]]] = []
         self._current_index: int = -1
         self._shuffle: bool = True
         self._run_through_count: int = 0
         self._reshuffle_num: int = 1
+        self._portrait_pairs: bool = False
 
     def build_playlist(self, shuffle: bool | None = None) -> None:
         """
@@ -66,105 +69,157 @@ class PlaylistManager:
             self._playlist = self._media_repo.get_all_media()
             if self._shuffle:
                 random.shuffle(self._playlist)
-        
-        if not self._playlist:
+            self._portrait_pairs = False
+
+        self._display_playlist = self._build_display_playlist(self._playlist)
+
+        if not self._display_playlist:
             logger.warning("No media items found to build playlist.")
             self._current_index = -1
             return
 
         self._run_through_count = 0
         self._current_index = 0
-        logger.info(f"Playlist built with {len(self._playlist)} items.")
+        logger.info(
+            "Playlist built with %s media items and %s display slots.",
+            len(self._playlist),
+            len(self._display_playlist),
+        )
 
-    def get_next(self) -> MediaItem | None:
+    def get_next(self) -> DisplayItem | None:
         """
-        Get the next media item in the playlist.
+        Get the next display item in the playlist.
         Skips items whose files no longer exist on disk.
 
         Returns:
-            The next MediaItem, or a placeholder if the playlist is empty
-            or all files are missing.
+            The next DisplayItem, or a placeholder display item if the
+            playlist is empty or all files are missing.
         """
-        import os
-        
-        if not self._playlist:
+        if not self._display_playlist:
             self.build_playlist(shuffle=self._shuffle)
-            if not self._playlist:
-                return self._get_no_images_placeholder()
+            if not self._display_playlist:
+                return DisplayItem.single(self._get_no_images_placeholder())
 
         original_index = self._current_index
         looped = False
 
         while True:
-            if self._current_index >= len(self._playlist):
+            if self._current_index >= len(self._display_playlist):
                 self._advance_playlist_cycle()
-                if not self._playlist:
-                    return self._get_no_images_placeholder()
+                if not self._display_playlist:
+                    return DisplayItem.single(self._get_no_images_placeholder())
                 # If we've rebuilt and still can't find a file after a
                 # full pass, break
                 if looped:
-                    return self._get_no_images_placeholder()
+                    return DisplayItem.single(self._get_no_images_placeholder())
                 looped = True
 
-            item_data = self._playlist[self._current_index]
+            slot_data = self._display_playlist[self._current_index]
             self._current_index += 1
             
-            # Check if file exists
-            filepath = item_data.get("filepath")
-            if filepath and os.path.isfile(filepath):
-                # Fetch latest data to ensure we have updated metadata (like geocoding)
-                media_id = item_data.get("id")
-                if media_id:
-                    latest_data = self._media_repo.get_media_item(media_id)
-                    if latest_data and isinstance(latest_data, dict):
-                        item_data = latest_data
-                    updated_data = self._media_repo.record_media_displayed(media_id)
-                    if updated_data and isinstance(updated_data, dict):
-                        item_data = updated_data
-                        
-                self._history.append(item_data)
-                return self._dict_to_media_item(item_data)
-            else:
-                logger.warning(f"File not found, skipping: {filepath}")
+            prepared_slot = self._prepare_slot_for_display(slot_data)
+            if prepared_slot:
+                self._history.append(prepared_slot)
+                return self._slot_to_display_item(prepared_slot)
                 
             # Prevent infinite loop if all files in a non-empty playlist
             # are missing
             if looped and self._current_index == original_index:
-                return self._get_no_images_placeholder()
+                return DisplayItem.single(self._get_no_images_placeholder())
 
-    def get_current(self) -> MediaItem | None:
+    def get_current(self) -> DisplayItem | None:
         """
-        Get the currently playing media item.
+        Get the currently playing display item.
         
         Returns:
-            The current MediaItem, or None if no item is playing.
+            The current DisplayItem, or None if no item is playing.
         """
         if not self._history:
             return None
             
         # Fetch latest data so geocoding and display stats stay fresh.
-        current_item = self._history[-1]
-        media_id = current_item.get("id")
-        if media_id:
-            latest_data = self._media_repo.get_media_item(media_id)
-            if latest_data:
-                # Update history with latest data
-                self._history[-1] = latest_data
-                return self._dict_to_media_item(latest_data)
-                
-        return self._dict_to_media_item(current_item)
+        current_slot = self._history[-1]
+        fresh_slot: list[dict[str, Any]] = []
+        for item_data in current_slot:
+            media_id = item_data.get("id")
+            if media_id:
+                latest_data = self._media_repo.get_media_item(media_id)
+                if latest_data and isinstance(latest_data, dict):
+                    fresh_slot.append(latest_data)
+                    continue
+            fresh_slot.append(item_data)
 
-    def delete_current(self) -> None:
+        self._history[-1] = fresh_slot
+        return self._slot_to_display_item(fresh_slot)
+
+    def delete_current(
+        self,
+        target: str = "left",
+        media_ids: list[int] | None = None,
+    ) -> list[int]:
         """
-        Mark the current media item as deleted in the repository.
+        Mark selected current media items as deleted in the repository.
+
+        Args:
+            target: One of "left", "right", or "both".
+            media_ids: Optional current media IDs selected by the UI.
+
+        Returns:
+            The deleted media IDs. An empty list means validation failed or
+            there was no current item.
         """
-        if not self._history:
-            return
-            
-        current_item = self._history[-1]
-        media_id = current_item.get("id")
-        if media_id:
+        selected_ids = self.resolve_current_delete_ids(target, media_ids)
+        for media_id in selected_ids:
             self._media_repo.delete_media_item(media_id)
+        return selected_ids
+
+    def delete_media_ids(self, media_ids: list[int]) -> None:
+        """Mark specific media IDs as deleted."""
+        for media_id in media_ids:
+            self._media_repo.delete_media_item(media_id)
+
+    def resolve_current_delete_ids(
+        self,
+        target: str = "left",
+        media_ids: list[int] | None = None,
+    ) -> list[int]:
+        """Resolve and validate delete IDs against the current display item."""
+        current = self.get_current()
+        if current is None or current.id == 0:
+            return []
+
+        current_ids = [
+            int(item.id)
+            for item in current.items
+            if item.id is not None and item.id != 0
+        ]
+        if not current_ids:
+            return []
+
+        if current.layout == DisplayLayout.SINGLE:
+            selected_ids = [current_ids[current.primary_index]]
+        else:
+            if target == "left":
+                selected_ids = [current_ids[0]]
+            elif target == "right" and len(current_ids) > 1:
+                selected_ids = [current_ids[1]]
+            elif target == "both":
+                selected_ids = list(current_ids)
+            else:
+                return []
+
+        if media_ids is not None:
+            requested = [int(media_id) for media_id in media_ids]
+            if sorted(requested) != sorted(selected_ids):
+                logger.warning(
+                    "Rejecting stale or mismatched delete payload. requested=%s current=%s target=%s",
+                    requested,
+                    current_ids,
+                    target,
+                )
+                return []
+
+        return selected_ids
             
     def purge_missing_files(self) -> int:
         """
@@ -175,46 +230,31 @@ class PlaylistManager:
         """
         return self._media_repo.purge_missing_files()
 
-    def get_previous(self) -> MediaItem | None:
+    def get_previous(self) -> DisplayItem | None:
         """
-        Get the previously played media item from history.
+        Get the previously played display item from history.
         Skips items whose files no longer exist on disk.
 
         Returns:
-            The previous MediaItem, or None if history is empty.
+            The previous DisplayItem, or None if history is empty.
         """
-        import os
-        
         while len(self._history) >= 2:
             # Remove current item from history
             self._history.pop()
             # Get the previous item (now the last item in history)
-            item_data = self._history[-1]
+            slot_data = self._history[-1]
             
             # Adjust current index so get_next() works correctly
             # after get_previous()
             if self._current_index > 0:
                 self._current_index -= 1
-                
-            # Check if file exists
-            filepath = item_data.get("filepath")
-            if filepath and os.path.isfile(filepath):
-                # Fetch latest data to ensure we have updated metadata (like geocoding)
-                media_id = item_data.get("id")
-                if media_id:
-                    latest_data = self._media_repo.get_media_item(media_id)
-                    if latest_data and isinstance(latest_data, dict):
-                        item_data = latest_data
-                    updated_data = self._media_repo.record_media_displayed(media_id)
-                    if updated_data and isinstance(updated_data, dict):
-                        item_data = updated_data
-                        self._history[-1] = updated_data
-                        
-                return self._dict_to_media_item(item_data)
+
+            prepared_slot = self._prepare_slot_for_display(slot_data)
+            if prepared_slot:
+                self._history[-1] = prepared_slot
+                return self._slot_to_display_item(prepared_slot)
             else:
-                logger.warning(
-                    f"Previous file not found, skipping: {filepath}"
-                )
+                logger.warning("Previous display slot has no existing files, skipping.")
                 # Continue loop to try the next previous item
                 
         return None
@@ -277,6 +317,7 @@ class PlaylistManager:
         shuffle = config_bool("model.shuffle", self._shuffle)
         if shuffle_override is not None:
             shuffle = shuffle_override
+        self._portrait_pairs = config_bool("model.portrait_pairs", False)
 
         return PlaylistCriteria(
             pic_dir=str(config_value("model.pic_dir", "~/Pictures")),
@@ -289,6 +330,86 @@ class PlaylistManager:
             sort_cols=str(config_value("model.sort_cols", "fname ASC")),
             recent_n=int(config_value("model.recent_n", 0) or 0),
         )
+
+    def _build_display_playlist(
+        self,
+        playlist: list[dict[str, Any]],
+    ) -> list[list[dict[str, Any]]]:
+        """Build display slots from raw playlist rows."""
+        if not self._portrait_pairs:
+            return [[item] for item in playlist]
+
+        portrait_rows = [item for item in playlist if self._is_pairable_portrait(item)]
+        portrait_index = 0
+        skip_portrait_slot = False
+        display_playlist: list[list[dict[str, Any]]] = []
+
+        for item in playlist:
+            if not self._is_pairable_portrait(item):
+                display_playlist.append([item])
+                continue
+
+            if skip_portrait_slot:
+                skip_portrait_slot = False
+                continue
+
+            if portrait_index >= len(portrait_rows):
+                continue
+
+            slot = [portrait_rows[portrait_index]]
+            portrait_index += 1
+            if portrait_index < len(portrait_rows):
+                slot.append(portrait_rows[portrait_index])
+                portrait_index += 1
+                skip_portrait_slot = True
+            display_playlist.append(slot)
+
+        return display_playlist
+
+    @staticmethod
+    def _is_pairable_portrait(item: dict[str, Any]) -> bool:
+        """Return True when a row can participate in a portrait pair."""
+        return (
+            str(item.get("media_type", "image")).lower() == MediaType.IMAGE.value
+            and bool(item.get("is_portrait"))
+        )
+
+    def _prepare_slot_for_display(
+        self,
+        slot_data: list[dict[str, Any]],
+    ) -> list[dict[str, Any]]:
+        """Drop missing files, refresh metadata, and record display stats."""
+        prepared_slot: list[dict[str, Any]] = []
+
+        for item_data in slot_data:
+            filepath = item_data.get("filepath")
+            if not filepath or not os.path.isfile(filepath):
+                logger.warning(f"File not found, skipping: {filepath}")
+                continue
+
+            media_id = item_data.get("id")
+            if media_id:
+                latest_data = self._media_repo.get_media_item(media_id)
+                if latest_data and isinstance(latest_data, dict):
+                    item_data = latest_data
+                updated_data = self._media_repo.record_media_displayed(media_id)
+                if updated_data and isinstance(updated_data, dict):
+                    item_data = updated_data
+
+            prepared_slot.append(item_data)
+
+        return prepared_slot
+
+    def _slot_to_display_item(self, slot_data: list[dict[str, Any]]) -> DisplayItem:
+        """Convert one display slot from repository rows to a DisplayItem."""
+        items = [self._dict_to_media_item(item) for item in slot_data]
+        if (
+            len(items) == 2
+            and all(item.media_type == MediaType.IMAGE for item in items)
+            and all(item.is_portrait for item in items)
+        ):
+            return DisplayItem.portrait_pair(items[0], items[1])
+        return DisplayItem.single(items[0])
 
     def _dict_to_media_item(self, data: dict[str, Any]) -> MediaItem:
         """

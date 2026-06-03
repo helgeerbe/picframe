@@ -66,6 +66,14 @@ class AnimationController:
         
         self._show_text = False
 
+    def update_config(self, config: dict[str, Any]) -> None:
+        """Refresh animation timing settings after a runtime config change."""
+        self._fps = int(config.get("fps", self._fps))
+        self._fade_time = float(config.get("time_fade", self._fade_time))
+        self._time_delay = float(config.get("time_delay", self._time_delay))
+        self._text_show_time = float(config.get("show_text_tm", self._text_show_time))
+        self._kenburns = bool(config.get("kenburns", self._kenburns))
+
     def start_transition(
         self, current_time: float, kb_xstep: float = 0.0, kb_ystep: float = 0.0
     ) -> None:

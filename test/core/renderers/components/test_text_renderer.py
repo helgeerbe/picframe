@@ -49,3 +49,27 @@ def test_text_renderer_draw(text_renderer):
     with patch.object(text_renderer._text_block.sprite, 'draw') as mock_draw:
         text_renderer.draw()
         mock_draw.assert_called_once()
+
+
+def test_text_renderer_pair_text_blocks(text_renderer):
+    config = OverlayConfig(show_text=True, text_string="Left", text_strings=("Left", "Right"))
+    text_renderer.update_config(config)
+
+    assert len(text_renderer._text_blocks) == 2
+
+
+def test_text_renderer_draws_pair_text_blocks(text_renderer):
+    config = OverlayConfig(show_text=True, text_string="Left", text_strings=("Left", "Right"))
+    text_renderer.update_config(config)
+
+    assert len(text_renderer._text_blocks) == 2
+    draw_mocks = [
+        patch.object(text_block.sprite, "draw")
+        for text_block in text_renderer._text_blocks
+    ]
+
+    with draw_mocks[0] as left_draw, draw_mocks[1] as right_draw:
+        text_renderer.draw()
+
+    left_draw.assert_called_once()
+    right_draw.assert_called_once()
