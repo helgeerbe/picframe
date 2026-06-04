@@ -15,6 +15,8 @@ viewer:
   text_justify: "L"                       # text justification L, C or R
   text_bkg_hgt: 0.25                      # default=0.25 (0.0-1.0), percentage of screen height for text background texture
   text_opacity: 1.0                       # default=1.0 (0.0-1.0), alpha value of text overlay
+  text_x_margin: 100                      # default=100 pixels in from edge of screen or half screen if portrait pairs
+  text_y_margin: 0                        # default=0 this is additional margin to half the font height. A negative value would move text down
   fit: False                              # default=False, True => scale image so all visible and leave 'gaps'
                                           #                False => crop image so no 'gaps'
   video_fit_display: False                # default=False, True => scale video to match display size (video may have distortion)
@@ -24,7 +26,8 @@ viewer:
   display_y: 0                            # offset from top of screen (can be negative)
   display_w: null                         # width of display surface (null->None will use max returned by hardware)
   display_h: null                         # height of display surface
-  display_power: 2                        # default=0. choices={0, 1, 2}, 0 will use legacy `vcgencmd`, 1 will use `xset`, 2 will use 'wlr-randr' to blank the display
+  display_power: 2                        # default=0. choices={0, 1, 2, 3}, 0 => legacy `vcgencmd`, 1 => `xset`, 2 => 'wlr-randr', 3 => .../drm/card.../status (needed for multiple screens?) to blank the display
+  display_hdmi: "HDMI-A-1"                # default="HDMI-A-1" which is marked "HDMI 0" and is nearest the power. Change to "HDMI-A-2" if you use "HDMI 1"
   use_glx: False                          # default=False. Set to True on linux with xserver running. NB use_sdl2 might need to be False for this to work.
   use_sdl2: True                          # default=True. pysdl2 can use display without xserver, it should be installed as a dependency of pi3d
                                           # but might need `sudo apt install libsdl2-dev` if picframe gives errors about missing sdl2
@@ -61,6 +64,9 @@ model:
   no_files_img: "~/picframe_data/data/no_pictures.jpg" # default="PictureFrame2020img.jpg", image to show if none selected
   subdirectory: ""                        # default="", subdir of pic_dir - can be changed by MQTT"
   recent_n: 7                             # default=7 (days), when shuffling file change date more recent than this number of days play before the rest
+  age_weighted_sampling: False            # default=False, when True picks photos with age-weighted random sampling; overrides shuffle/sort_cols/recent_n # noqa: E501
+  recency_half_life_days: 365             # default=365, a photo this old is half as likely as a brand-new one (smaller = stronger recency bias)
+  sample_limit: null                      # default=null, truncate the weighted permutation to this many photos to force more frequent re-shuffles on large libraries # noqa: E501
   reshuffle_num: 1                        # default=1, times through before reshuffling
   time_delay: 200.0                       # default=200.0, time between consecutive slide starts - can be changed by MQTT
   fade_time: 10.0                         # default=10.0, change time during which slides overlap - can be changed by MQTT"

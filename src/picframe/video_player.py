@@ -13,6 +13,7 @@ from typing import Optional
 import os
 import vlc  # type: ignore
 import sdl2  # type: ignore
+import signal
 
 
 class VideoPlayer:
@@ -112,7 +113,7 @@ class VideoPlayer:
                 self.logger.error("Could not set NSView: %s", e)
                 self.player.set_nsobject(None)
         elif sys.platform.startswith("linux"):
-            if wm_info.subsystem == sdl2.SDL_SYSWM_X11:
+            if wm_info.subsystem in (sdl2.SDL_SYSWM_X11, sdl2.SDL_SYSWM_KMSDRM): # KMSDRM needed for Pi zero
                 xid = wm_info.info.x11.window
                 self.logger.debug("X11 window ID: %s", xid)
                 self.player.set_xwindow(xid)
@@ -233,7 +234,8 @@ class VideoPlayer:
             if now - self._last_progress_time > 3.0:
                 self.logger.error("vlc is stuck while playing for more than 3 seconds. Stopping it!")
                 self.logger.debug("vlc current time: %d, last time: %d", current_time, self._last_time)
-                self.player.stop()
+                os.kill(os.getpid(), signal.SIGKILL) # extreme reaction!
+                #self.player.stop()
                 return False
         elif current_time == -1:  # VLC returns -1 if no media is loaded
             self.logger.warning("No media loaded or media is invalid.")

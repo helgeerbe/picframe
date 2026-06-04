@@ -3,6 +3,8 @@ import os
 import time
 import logging
 import locale
+import math
+import random
 from picframe import geo_reverse, image_cache
 
 DEFAULT_CONFIGFILE = "~/picframe_data/config/configuration.yaml"
@@ -24,6 +26,8 @@ DEFAULT_CONFIG = {
         'text_justify': 'L',
         'text_bkg_hgt': 0.25,
         'text_opacity': 1.0,
+        'text_x_margin': 100,
+        'text_y_margin': 0,
         'fit': False,
         'video_fit_display': True,
         'kenburns': False,
@@ -32,6 +36,7 @@ DEFAULT_CONFIG = {
         'display_w': None,
         'display_h': None,
         'display_power': 2,
+        'display_hdmi': "HDMI-A-1",
         'use_glx': False,                          # default=False. Set to True on linux with xserver running
         'use_sdl2': True,
         'test_key': 'test_value',
@@ -63,6 +68,9 @@ DEFAULT_CONFIG = {
         'follow_links': False,
         'subdirectory': '',
         'recent_n': 3,
+        'age_weighted_sampling': False,
+        'recency_half_life_days': 365,
+        'sample_limit': None,
         'reshuffle_num': 1,
         'time_delay': 200.0,
         'fade_time': 10.0,
@@ -194,7 +202,8 @@ class Model:
         self.__pic_dir = os.path.expanduser(model_config['pic_dir'])
         self.__subdirectory = os.path.expanduser(model_config['subdirectory'])
         self.__load_geoloc = model_config['load_geoloc']
-        self.__geo_reverse = geo_reverse.GeoReverse(model_config['geo_key'],
+        self.__geo_reverse = geo_reverse.GeoReverse(model_config['load_geoloc'],
+                                                    model_config['geo_key'],
                                                     key_list=self.get_model_config()['key_list'])
         self.__image_cache = image_cache.ImageCache(self.__pic_dir,
                                                     model_config['follow_links'],
@@ -480,28 +489,118 @@ class Model:
         else:
             where_clause = "1"
 
-        sort_list = []
-        recent_n = self.get_model_config()["recent_n"]
-        if recent_n > 0:
-            sort_list.append("last_modified < {:.0f}".format(time.time() - 3600 * 24 * recent_n))
-
-        if self.shuffle:
-            sort_list.append("RANDOM()")
+        model_config = self.get_model_config()
+        if model_config.get("age_weighted_sampling", False) and self.__use_weighted_sampling():
+            self.__file_list = self.__get_weighted_sample(where_clause)
         else:
-            if self.__col_names is None:
-                self.__col_names = self.__image_cache.get_column_names()  # do this once
-            for col in self.__sort_cols.split(","):
-                colsplit = col.split()
-                if colsplit[0] in self.__col_names and (len(colsplit) == 1 or colsplit[1].upper() in ("ASC", "DESC")):
-                    sort_list.append(col)
-            sort_list.append("fname ASC")  # always finally sort on this in case nothing else to sort on or sort_cols is "" # noqa: E501
-        sort_clause = ",".join(sort_list)
+            sort_list = []
+            recent_n = model_config["recent_n"]
+            if recent_n > 0:
+                sort_list.append("last_modified < {:.0f}".format(time.time() - 3600 * 24 * recent_n))
 
-        self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
+            if self.shuffle:
+                sort_list.append("RANDOM()")
+            else:
+                if self.__col_names is None:
+                    self.__col_names = self.__image_cache.get_column_names()  # do this once
+                for col in self.__sort_cols.split(","):
+                    colsplit = col.split()
+                    if colsplit[0] in self.__col_names and (len(colsplit) == 1 or colsplit[1].upper() in ("ASC", "DESC")):
+                        sort_list.append(col)
+                sort_list.append("fname ASC")  # always finally sort on this in case nothing else to sort on or sort_cols is "" # noqa: E501
+            sort_clause = ",".join(sort_list)
+            self.__file_list = self.__image_cache.query_cache(where_clause, sort_clause)
         self.__number_of_files = len(self.__file_list)
         self.__file_index = 0
         self.__num_run_through = 0
         self.__reload_files = False
+
+    def __use_weighted_sampling(self):
+        # Weighted sampling overrides shuffle/sort/recent_n. Warn once on first use
+        # if those would have done something.
+        if getattr(self, "_Model__weighted_warned", False):
+            return self.__weighted_enabled
+        self.__weighted_warned = True
+        mc = self.get_model_config()
+        if not self.shuffle:
+            self.__logger.warning("age_weighted_sampling overrides shuffle=False.")
+        if mc.get("recent_n", 0) > 0:
+            self.__logger.warning(
+                "age_weighted_sampling overrides recent_n=%s; the recent_n cutoff is ignored.",
+                mc["recent_n"],
+            )
+        self.__weighted_enabled = True
+        return True
+
+    def __get_weighted_sample(self, where_clause):
+        """Pick photos with age-weighted random sampling, newer ones more likely.
+
+        Weighting: each photo gets weight 0.5 ** (age_days / half_life_days).
+        A photo at the half-life mark is half as likely as a brand-new one;
+        the choice of half-life decides how strong the bias is. Default 365d.
+
+        Sampling: Efraimidis–Spirakis weighted reservoir — one pass, O(N log N),
+        no replacement. The slideshow walks the resulting permutation in order,
+        so the front of the list is newer-leaning. ``sample_limit`` (None or int)
+        truncates the list to force more frequent re-shuffles on large libraries.
+
+        Portrait pairing: when ``portrait_pairs`` is enabled on the image cache,
+        consecutive portrait entries in the weighted ordering are joined into
+        two-tuples so the slideshow shows them side-by-side, matching the layout
+        ``query_cache`` produces in the non-weighted path.
+        """
+        rows = self.__image_cache.query_file_ids_with_timestamps(where_clause)
+        if not rows:
+            return []
+
+        mc = self.get_model_config()
+        half_life_days = float(mc.get("recency_half_life_days", 365)) or 365.0
+        half_life_secs = half_life_days * 86400.0
+        sample_limit = mc.get("sample_limit", None)
+        now = time.time()
+
+        # Efraimidis–Spirakis: key = u^(1/w); rank by log(key) = log(u)/w.
+        # log(u) is negative for u in (0,1); dividing by smaller w (older photo)
+        # makes log_key more negative, pushing it down the sort.
+        keyed = []
+        for file_id, last_modified, is_portrait in rows:
+            age_secs = max(0.0, now - last_modified)
+            weight = 0.5 ** (age_secs / half_life_secs)
+            u = random.random() or 1e-300  # avoid log(0)
+            log_key = math.log(u) / weight if weight > 0 else -math.inf
+            keyed.append((log_key, file_id, bool(is_portrait)))
+
+        keyed.sort(reverse=True, key=lambda k: k[0])
+        if sample_limit is not None:
+            keyed = keyed[: int(sample_limit)]
+
+        if not self.__image_cache.portrait_pairs:
+            return [(file_id,) for _, file_id, _ in keyed]
+
+        return self.__join_portrait_pairs(keyed)
+
+    @staticmethod
+    def __join_portrait_pairs(keyed):
+        # Mirrors query_cache's pair-joining: walk the ordering, append landscapes
+        # as-is, consume portraits two-at-a-time when consecutive slots allow.
+        pair_queue = [file_id for _, file_id, is_portrait in keyed if is_portrait]
+        out = []
+        skip_portrait_slot = False
+        for _, file_id, is_portrait in keyed:
+            if not is_portrait:
+                out.append((file_id,))
+            elif skip_portrait_slot:
+                skip_portrait_slot = False
+                continue
+            elif pair_queue:
+                left = pair_queue.pop(0)
+                if pair_queue:
+                    right = pair_queue.pop(0)
+                    out.append((left, right))
+                    skip_portrait_slot = True
+                else:
+                    out.append((left,))
+        return out
 
     def __generate_random_string(self, length):
         random_bytes = os.urandom(length // 2)

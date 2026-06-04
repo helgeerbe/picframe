@@ -62,6 +62,8 @@ class ViewerDisplay:
         self.__text_justify = config['text_justify'].upper()
         self.__text_bkg_hgt = config['text_bkg_hgt'] if 0 <= config['text_bkg_hgt'] <= 1 else 0.25
         self.__text_opacity = config['text_opacity']
+        self.__text_x_margin = config['text_x_margin']
+        self.__text_y_margin = config['text_y_margin']
         self.__fit = config['fit']
         self.__video_fit_display = config['video_fit_display']
         self.__geo_suppress_list = config['geo_suppress_list']
@@ -77,6 +79,8 @@ class ViewerDisplay:
         self.__display_w = None if config['display_w'] is None else int(config['display_w'])
         self.__display_h = None if config['display_h'] is None else int(config['display_h'])
         self.__display_power = int(config['display_power'])
+        self.__display_hdmi = config['display_hdmi']
+        self.__display_drmcard = None
         self.__use_sdl2 = config['use_sdl2']
         self.__use_glx = config['use_glx']
         self.__alpha = 0.0  # alpha - proportion front image to back
@@ -146,6 +150,23 @@ class ViewerDisplay:
                 self.__logger.debug("Display ON/OFF is wlr-randr, but an error occurred")
                 self.__logger.debug("Cause: %s", e)
             return True
+        elif self.__display_power == 3:
+            if self.__display_drmcard is None:
+                card_list = [0, 1, 2] #might it ever be 2?
+            else:
+                card_list = [self.__display_drmcard]
+            for c in card_list:
+                try:
+                    output = subprocess.check_output(["cat", f"/sys/class/drm/card{c}-{self.__display_hdmi}/status"])
+                    self.__display_drmcard = c #didn't trigger FileNotFoundError so this is a valid card num
+                    if output[:9] == b'connected':
+                        return True
+                    else:
+                        return False #presume disconnected
+                except (subprocess.SubprocessError, FileNotFoundError, ValueError, OSError) as e:
+                    self.__logger.debug("Display ON/OFF is drm_card_status, but an error occurred")
+                    self.__logger.debug("Cause: %s", e)
+            return True
         else:
             self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
             return True
@@ -173,11 +194,21 @@ class ViewerDisplay:
                 self.__logger.debug("Cause: %s", e)
         elif self.__display_power == 2:
             try:  # try wlr-randr for RPi5 with wayland desktop
-                wlr_randr_cmd = ["wlr-randr", "--output", "HDMI-A-1"]
+                wlr_randr_cmd = ["wlr-randr", "--output", self.__display_hdmi]
                 wlr_randr_cmd.append('--on' if on_off else '--off')
                 subprocess.call(wlr_randr_cmd)
             except (ValueError, TypeError) as e:
                 self.__logger.debug("Display ON/OFF is wlr-randr, but an error occured")
+                self.__logger.debug("Cause: %s", e)
+        elif self.__display_power == 3:
+            try:  # try sending on or off to drm card status
+                if self.__display_drmcard is None:
+                    _ison = self.display_is_on() # should find card num
+                on_off_txt = 'on' if on_off else 'off'
+                drm_card_cmd = f"echo {on_off_txt} | sudo tee /sys/class/drm/card{self.__display_drmcard}-{self.__display_hdmi}/status"
+                os.system(drm_card_cmd)
+            except (ValueError, TypeError) as e:
+                self.__logger.debug("Display ON/OFF is drm_card, but an error occured")
                 self.__logger.debug("Cause: %s", e)
         else:
             self.__logger.warning("Unsupported setting for display_power=%d.", self.__display_power)
@@ -410,9 +441,9 @@ class ViewerDisplay:
         block = None
         if len(final_string) > 0:
             if side == 0 and not pair:
-                c_rng = self.__display.width - 100  # range for x loc from L to R justified
+                c_rng = self.__display.width - self.__text_x_margin  # range for x loc from L to R justified
             else:
-                c_rng = self.__display.width * 0.5 - 100  # range for x loc from L to R justified
+                c_rng = self.__display.width * 0.5 - self.__text_x_margin  # range for x loc from L to R justified
             opacity = int(255 * float(self.__text_opacity) * self.get_brightness())
             block = pi3d.FixedString(self.__font_file, final_string, shadow_radius=3, font_size=self.__show_text_sz,
                                      shader=self.__flat_shader, justify=self.__text_justify, width=c_rng,
@@ -426,7 +457,7 @@ class ViewerDisplay:
                 x = adj_x
             else:
                 x = adj_x + int(self.__display.width * 0.25 * (-1.0 if side == 0 else 1.0))
-            y = (block.sprite.height - self.__display.height + self.__show_text_sz) // 2
+            y = (block.sprite.height - self.__display.height + self.__show_text_sz) // 2 + self.__text_y_margin
             block.sprite.position(x, y, 0.1)
             block.sprite.set_alpha(0.0)
         if side == 0:

@@ -9,7 +9,7 @@ from picframe.video_streamer import VIDEO_EXTENSIONS, get_video_info
 
 class ImageCache:
 
-    EXTENSIONS = ['.png', '.jpg', '.jpeg', '.heif', '.heic']
+    EXTENSIONS = ['.png', '.jpg', '.jpeg', '.heif', '.heic', '.tif', '.tiff', '.bmp']
     EXIF_TO_FIELD = {'EXIF FNumber': 'f_number',
                      'Image Make': 'make',
                      'Image Model': 'model',
@@ -146,6 +146,24 @@ class ImageCache:
                 return newlist
         except Exception:
             return []
+
+    def query_file_ids_with_timestamps(self, where_clause):
+        """Return [(file_id, last_modified, is_portrait), ...] matching ``where_clause``.
+
+        Used by age-weighted sampling. ``is_portrait`` lets the caller apply
+        portrait-pair joining (see ``query_cache`` for the canonical algorithm).
+        """
+        cursor = self.__db.cursor()
+        cursor.row_factory = None
+        try:
+            sql = "SELECT file_id, last_modified, is_portrait FROM all_data WHERE {0}".format(where_clause)
+            return cursor.execute(sql).fetchall()
+        except Exception:
+            return []
+
+    @property
+    def portrait_pairs(self):
+        return self.__portrait_pairs
 
     def get_file_info(self, file_id):
         if not file_id:
