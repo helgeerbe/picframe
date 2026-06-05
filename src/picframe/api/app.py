@@ -32,6 +32,15 @@ logger = logging.getLogger(__name__)
 STARTUP_ONLY_LEGACY_HTTP_KEYS = {"use_http", "path", "port"}
 
 
+def system_error_websocket_message(event: Any) -> str:
+    """Serialize a SystemErrorEvent-compatible object for websocket clients."""
+    return json.dumps({
+        "type": "SystemErrorEvent",
+        "message": getattr(event, "message", "Unknown Error"),
+        "component": getattr(event, "component", "Unknown")
+    })
+
+
 def _normalize_legacy_yaml_config(yaml_data: dict[str, Any]) -> dict[str, Any]:
     """Normalize supported legacy YAML keys before AppConfig validation."""
     viewer = yaml_data.get("viewer")
@@ -262,11 +271,7 @@ def create_app(
         def handle_system_error(event: Any) -> None:
             # We use Any here to avoid circular imports if SystemErrorEvent is not available
             # but we expect it to be a SystemErrorEvent
-            msg = json.dumps({
-                "type": "SystemErrorEvent",
-                "message": getattr(event, "message", "Unknown Error"),
-                "component": getattr(event, "component", "Unknown")
-            })
+            msg = system_error_websocket_message(event)
             loop.call_soon_threadsafe(send_queue.put_nowait, msg)
 
         if event_subscriber:

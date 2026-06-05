@@ -44,7 +44,6 @@ dependencies = [
     "numpy",
     "ninepatch>=0.2.0",
     "pi_heif>=0.8.0",
-    "python-vlc",
     "gpiozero>=2.0.0",
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",
@@ -66,7 +65,7 @@ dev = [
 "Homepage" = "https://github.com/helgeerbe/picframe"
 
 [project.scripts]
-picframe = "picframe.start:main"
+picframe = "picframe.main:main"
 
 [tool.setuptools]
 include-package-data = true

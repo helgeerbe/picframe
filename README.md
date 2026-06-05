@@ -46,6 +46,24 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
   - toggle clock visibility
   - retrieve image meta info (exif, IPTC)
 
+## Next-Gen CLI
+
+The installed `picframe` command now uses the next-generation runtime:
+
+```bash
+picframe init
+picframe run
+```
+
+`picframe init` bootstraps user-space state under `~/.picframe`, including
+`config.db3`, `media_cache.db3`, packaged data assets, matting resources, and
+the compiled web UI. `picframe run` starts the FastAPI/Vue web control plane,
+media indexing, playback engine, pi3d renderer, and GStreamer video worker.
+
+Legacy `configuration.yaml` files are imported from the Settings UI after
+initialization; direct `picframe configuration.yaml` startup is no longer the
+public CLI path.
+
 ## Documentation
 
 [Full documentation can be found at the project's wiki](https://github.com/helgeerbe/picframe/wiki).

@@ -15,6 +15,7 @@ from picframe.core.events import (
     PriorityQueueEventBus,
     State,
     StateEvent,
+    SystemErrorEvent,
 )
 
 
@@ -159,3 +160,50 @@ def test_stop_unblocks_queue() -> None:
     # Should not hang indefinitely waiting for an event
     bus.stop()
     assert not bus._running
+
+
+def test_callback_failure_publishes_system_error_event() -> None:
+    """Subscriber failures should become one poison-pill event."""
+    bus = PriorityQueueEventBus()
+    received_errors: list[SystemErrorEvent] = []
+
+    def failing_callback(event: Any) -> None:
+        raise RuntimeError("boom")
+
+    def error_callback(event: SystemErrorEvent) -> None:
+        received_errors.append(event)
+
+    bus.subscribe(CommandEvent, failing_callback)
+    bus.subscribe(SystemErrorEvent, error_callback)
+    bus.start()
+
+    bus.publish(CommandEvent(Command.NEXT))
+
+    time.sleep(0.1)
+    bus.stop()
+
+    assert len(received_errors) == 1
+    assert received_errors[0].component == "PriorityQueueEventBus"
+    assert "CommandEvent subscriber" in received_errors[0].message
+    assert "boom" in received_errors[0].message
+
+
+def test_system_error_callback_failure_does_not_recurse() -> None:
+    """Failed poison-pill handlers are logged but do not create error loops."""
+    bus = PriorityQueueEventBus()
+    observed_errors: list[SystemErrorEvent] = []
+
+    def failing_error_callback(event: SystemErrorEvent) -> None:
+        observed_errors.append(event)
+        raise RuntimeError("error handler failed")
+
+    bus.subscribe(SystemErrorEvent, failing_error_callback)
+    bus.start()
+
+    original = SystemErrorEvent(message="original", component="test")
+    bus.publish(original)
+
+    time.sleep(0.1)
+    bus.stop()
+
+    assert observed_errors == [original]

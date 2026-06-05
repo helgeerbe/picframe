@@ -3,7 +3,7 @@
 ## Backend
 - Python package under `src/picframe`, built with PEP 621 metadata in `pyproject.toml`.
 - Runtime target: Python >= 3.11. The local `.venv` currently reports Python 3.14.4.
-- Runtime dependencies include pi3d, Pillow, PyYAML, paho-mqtt, FastAPI, Uvicorn, watchdog, python-vlc legacy support, python-multipart, gpiozero, numpy, and media/image helpers. Watchdog is isolated in the filesystem infrastructure adapter.
+- Runtime dependencies include pi3d, Pillow, PyYAML, paho-mqtt, FastAPI, Uvicorn, watchdog, python-multipart, gpiozero, numpy, and media/image helpers. Watchdog is isolated in the filesystem infrastructure adapter; VLC is no longer a next-gen runtime dependency.
 - Developer tooling is configured for pytest, mypy strict mode, and ruff.
 
 ## Frontend
@@ -13,6 +13,7 @@
 - Primary routes: Remote, Filters, Settings.
 
 ## Runtime Components
+- The installed `picframe` console script points to the next-gen CLI in `picframe.main`.
 - `picframe init` bootstraps user-space state under `~/.picframe/`.
 - `picframe run` starts repositories, event bus, HAL adapters, media monitor/indexer, pi3d renderer, GStreamer video renderer, playback engine, and FastAPI server.
 - Config database defaults to `<base_dir>/data/config.db3`; media cache defaults to `<base_dir>/data/media_cache.db3`; generated cache artifacts live under `<base_dir>/data/cache`.
@@ -28,5 +29,5 @@
 
 ## Verification Notes
 - Frontend type checking has passed with `npm exec vue-tsc -- -b --noEmit`.
-- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 263 passed, 1 skipped, 1 GI deprecation warning on 2026-06-05.
+- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 306 passed, 1 GI deprecation warning on 2026-06-05.
 - Current tests include Python 3.14 compatibility shims for Starlette/AnyIO test hangs and avoid real socket binding in API server unit tests.

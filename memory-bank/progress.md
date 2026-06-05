@@ -24,6 +24,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Ticket #611 clean-architecture cleanup: media monitoring now uses a core `IMediaMonitor` port, watchdog is isolated in an infrastructure adapter, differential sync publishes core `FileChangeEvent`s directly, and indexer config-change wiring uses `set_directories()`.
 - Ticket #619 next-gen matting parity: matting Settings fields now flow into renderer config, single images and image-only portrait pairs can be matted in memory with legacy `MatImage`, video paths remain unmatted, and `ImageProcessingService` no longer owns matting responsibilities.
 - Ticket #666 shuffle mode: `standard` keeps current random behavior, `fewer_repeats` uses existing `last_displayed` history after display-slot creation, portrait pairs remain one shuffle slot, and Remote exposes a split shuffle button.
+- Ticket #616 cleanup gate: package CLI now targets next-gen `picframe.main`, `SystemErrorEvent` poison-pill semantics are explicit, VLC is no longer a next-gen dependency, integration coverage was added, and manual Picframe validation passed before closeout.
 - Display power/system manager HAL work and Wayland-oriented environment detection.
 - Video metadata extraction and frontend display of video technical metadata.
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.
@@ -32,7 +33,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - Video engine integration remains an active architectural stream: subprocess GStreamer, IPC event routing, dynamic hardware discovery, fallback limits, and target-hardware validation.
-- Ticket #666 is implemented and manually Remote-validated: split shuffle button works, mode persists, and automated verification is green.
+- Remaining legacy runtime deletion should happen through follow-up ticket #678, after import scans and full verification.
 
 ## Next
 - Complete caps-driven hardware capability discovery in the GStreamer worker.
@@ -43,4 +44,4 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 
 ## Known Verification State
 - Frontend build is green with `npm run build`.
-- Backend pytest is green in the local Python 3.14.4 `.venv`: 298 passed, 1 skipped, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
+- Backend pytest is green in the local Python 3.14.4 `.venv`: 306 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.

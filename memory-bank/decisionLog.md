@@ -13,6 +13,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Version both databases and apply migrations through a standardized migration manager.
 - Seed configuration from `default_config.yaml`; expose nested JSON through `ConfigService` and Pydantic API models.
 - Legacy `configuration.yaml` migration uses the explicit Settings UI / `/api/config/import-yaml` path, not a startup migration or CLI command; compatibility normalization maps supported renamed runtime keys and ignores startup-only HTTP fields managed by CLI/env.
+- The installed `picframe` console script belongs to the next-gen CLI (`picframe.main`) with `init` and `run`; the legacy direct `configuration.yaml` startup path is no longer public.
 - Serve the compiled Vue SPA directly through FastAPI; Vite outputs production assets into `src/picframe/html`.
 - Keep server port and DB path overrides as startup CLI/env concerns, not mutable runtime settings.
 - Use Wayland as the display protocol target; X11 is not supported.
@@ -34,6 +35,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Restore legacy display statistics as rebuildable media-cache metadata (`displayed_count`, `last_displayed`) and expose it as read-only Remote media information.
 - Keep temporary missing media, explicit user deletes, and purge separate: missing media is soft-inactivated for NAS resilience, Remote delete moves the original and removes its cache row, and purge hard-deletes rows for files that remain missing.
 - Keep filesystem watching as an infrastructure adapter behind `IMediaMonitor`; core consumes `FileChangeEvent`s and must not import watchdog.
+- `SystemErrorEvent` is the canonical poison-pill event. Subscriber callback failures are logged and converted to one `SystemErrorEvent`; failures while handling `SystemErrorEvent` are logged without recursive error publication.
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

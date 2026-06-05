@@ -7,6 +7,8 @@
 - Event bus interfaces are split into `IEventPublisher` and `IEventSubscriber` to keep component permissions narrow.
 - The runtime separates configuration (`config.db3`, persistent) from media metadata (`media_cache.db3`, rebuildable).
 - Filesystem monitoring follows ports/adapters: core services depend on `IMediaMonitor`, while the watchdog-backed adapter lives in infrastructure.
+- The package console script enters the next-gen composition root (`picframe.main`); legacy runtime modules may remain in-tree until audited deletion proves they are unreachable.
+- `SystemErrorEvent` is the poison-pill event for critical errors and subscriber failures; event-bus error handling must avoid recursive poison-pill loops.
 
 ## Playback And Rendering
 - `PlaylistManager` owns media querying, filtering, shuffle mode behavior, and current display-item selection.

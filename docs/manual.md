@@ -7,6 +7,10 @@ This document provides comprehensive instructions for configuring and setting up
 ## Part 1: Standard User Instructions
 
 Picframe uses a centralized configuration management system backed by SQLite and validated by Pydantic.
+The installed `picframe` command uses the next-generation CLI. The public
+commands are `picframe init` and `picframe run`; legacy direct
+`picframe configuration.yaml` startup is not part of the next-generation public
+entry point.
 
 ### Initialization (`picframe init`)
 
