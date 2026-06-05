@@ -5,7 +5,11 @@ from typing import Any
 import pytest
 
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaType
-from picframe.core.models.playlist import PlaylistCriteria
+from picframe.core.models.playlist import (
+    PlaylistCriteria,
+    SHUFFLE_MODE_FEWER_REPEATS,
+    SHUFFLE_MODE_STANDARD,
+)
 from picframe.core.repositories.interfaces import IMediaRepository
 from picframe.core.services.playlist import PlaylistManager
 
@@ -203,9 +207,160 @@ def test_build_playlist_uses_configured_criteria(mock_media_repo: Mock) -> None:
     assert criteria.location_filter == "Berlin"
     assert criteria.tags_filter == "family"
     assert criteria.shuffle is False
+    assert criteria.shuffle_mode == SHUFFLE_MODE_STANDARD
     assert criteria.sort_cols == "rating DESC"
     assert criteria.recent_n == 14
     assert manager._reshuffle_num == 3
+
+
+def test_invalid_shuffle_mode_falls_back_to_standard(mock_media_repo: Mock) -> None:
+    config_repo = Mock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.shuffle_mode": "chaos",
+        "model.pic_dir": "/pictures",
+    }.get(key, default)
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "model.shuffle": True,
+        "model.portrait_pairs": False,
+    }.get(key, default)
+    mock_media_repo.query_media.return_value = mock_media_repo.get_all_media.return_value
+
+    manager = PlaylistManager(mock_media_repo, config_repo)
+    manager.build_playlist()
+
+    criteria = mock_media_repo.query_media.call_args[0][0]
+    assert criteria.shuffle_mode == SHUFFLE_MODE_STANDARD
+    assert manager._shuffle_mode == SHUFFLE_MODE_STANDARD
+
+
+def test_fewer_repeats_pushes_recently_displayed_slots_later(
+    mock_media_repo: Mock,
+) -> None:
+    rows = [
+        {
+            "id": 1,
+            "filepath": "/path/to/old.jpg",
+            "filename": "old.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "last_displayed": 100.0,
+            "is_deleted": 0,
+        },
+        {
+            "id": 2,
+            "filepath": "/path/to/middle.jpg",
+            "filename": "middle.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "last_displayed": 200.0,
+            "is_deleted": 0,
+        },
+        {
+            "id": 3,
+            "filepath": "/path/to/recent.jpg",
+            "filename": "recent.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "last_displayed": 900.0,
+            "is_deleted": 0,
+        },
+    ]
+    mock_media_repo.query_media.return_value = rows
+    config_repo = Mock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.shuffle_mode": SHUFFLE_MODE_FEWER_REPEATS,
+        "model.pic_dir": "/pictures",
+    }.get(key, default)
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "model.shuffle": True,
+        "model.portrait_pairs": False,
+    }.get(key, default)
+    candidate_orders = [
+        [rows[2], rows[1], rows[0]],
+        [rows[0], rows[1], rows[2]],
+        [rows[1], rows[2], rows[0]],
+    ]
+
+    def fake_shuffle(candidate: list[list[dict[str, Any]]]) -> None:
+        order = candidate_orders.pop(0) if candidate_orders else [rows[2], rows[0], rows[1]]
+        candidate[:] = [[item] for item in order]
+
+    manager = PlaylistManager(mock_media_repo, config_repo)
+    with patch("random.shuffle", fake_shuffle):
+        manager.build_playlist()
+
+    assert [slot[0]["id"] for slot in manager._display_playlist] == [1, 2, 3]
+
+
+def test_fewer_repeats_preserves_portrait_pair_slots(mock_media_repo: Mock) -> None:
+    rows = [
+        {
+            "id": 1,
+            "filepath": "/path/to/portrait1.jpg",
+            "filename": "portrait1.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "last_displayed": 900.0,
+            "is_portrait": 1,
+        },
+        {
+            "id": 2,
+            "filepath": "/path/to/portrait2.jpg",
+            "filename": "portrait2.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "last_displayed": 100.0,
+            "is_portrait": 1,
+        },
+        {
+            "id": 3,
+            "filepath": "/path/to/portrait3.jpg",
+            "filename": "portrait3.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "last_displayed": 200.0,
+            "is_portrait": 1,
+        },
+        {
+            "id": 4,
+            "filepath": "/path/to/portrait4.jpg",
+            "filename": "portrait4.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": 1.0,
+            "last_displayed": 300.0,
+            "is_portrait": 1,
+        },
+    ]
+    mock_media_repo.query_media.return_value = rows
+    config_repo = Mock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.shuffle_mode": SHUFFLE_MODE_FEWER_REPEATS,
+        "model.pic_dir": "/pictures",
+    }.get(key, default)
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "model.shuffle": True,
+        "model.portrait_pairs": True,
+    }.get(key, default)
+
+    manager = PlaylistManager(mock_media_repo, config_repo)
+    manager.build_playlist()
+
+    pair_ids = {tuple(item["id"] for item in slot) for slot in manager._display_playlist}
+    assert pair_ids == {(1, 2), (3, 4)}
 
 
 @patch('os.path.isfile', return_value=True)

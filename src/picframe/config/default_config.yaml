@@ -89,8 +89,9 @@ model:
   fade_time: 10.0
   # Media monitor scan interval, in seconds.
   update_interval: 2.0
-  # Remote shuffle toggle.
+  # Remote shuffle toggle and mode. Modes: standard, fewer_repeats.
   shuffle: true
+  shuffle_mode: standard
   # Advanced setting. Comma-separated whitelisted media columns with optional
   # ASC/DESC, for example "fname ASC" or "exif_datetime DESC, fname ASC".
   sort_cols: fname ASC

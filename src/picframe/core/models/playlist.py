@@ -2,6 +2,21 @@
 
 from dataclasses import dataclass
 
+SHUFFLE_MODE_STANDARD = "standard"
+SHUFFLE_MODE_FEWER_REPEATS = "fewer_repeats"
+SUPPORTED_SHUFFLE_MODES = {
+    SHUFFLE_MODE_STANDARD,
+    SHUFFLE_MODE_FEWER_REPEATS,
+}
+
+
+def normalize_shuffle_mode(value: object) -> str:
+    """Return a supported shuffle mode, falling back to standard."""
+    mode = str(value or "").strip().lower()
+    if mode in SUPPORTED_SHUFFLE_MODES:
+        return mode
+    return SHUFFLE_MODE_STANDARD
+
 
 @dataclass(frozen=True)
 class PlaylistCriteria:
@@ -14,5 +29,6 @@ class PlaylistCriteria:
     location_filter: str = ""
     tags_filter: str = ""
     shuffle: bool = True
+    shuffle_mode: str = SHUFFLE_MODE_STANDARD
     sort_cols: str = "fname ASC"
     recent_n: int = 0

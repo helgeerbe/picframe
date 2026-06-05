@@ -80,7 +80,10 @@
       "brightness": "Helligkeit",
       "delete": "Aktuelles Medium löschen",
       "shuffleOn": "Zufall an",
-      "shuffleOff": "Zufall aus"
+      "shuffleOff": "Zufall aus",
+      "shuffleMode": "Zufallsmodus",
+      "shuffleModeStandard": "Standard",
+      "shuffleModeFewerRepeats": "Weniger Wiederholungen"
     },
     "overlays": {
       "title": "Text-Overlays",
@@ -191,6 +194,7 @@
       "fade_time": "default=10.0, change time during which slides overlap - can be changed by MQTT\"",
       "update_interval": "default=2.0, time in seconds to wait between two consecutive scans for new files",
       "shuffle": "default=True, shuffle on reloading image files - can be changed by MQTT\"",
+      "shuffle_mode": "default=standard, shuffle mode used when shuffle is enabled. Choices: standard, fewer_repeats.",
       "sort_cols": "default='fname ASC' can be any columns in the table with optional ASC or DESC separated by commas fname, last_modified, file_id, orientation, exif_datetime, f_number, exposure_time, iso, focal_length, make, model, lens, rating, latitude, longitude, width, height, title, caption, tags, is_portrait, location",
       "image_attr": "image attributes send by MQTT, Keys are taken from exifread library, \"PICFRAME GPS\" is special to retrieve GPS lon/lat, \"PICFRAME LOCATION\" is special to retrieve geo reverse (load_geoloc hast to be True)",
       "load_geoloc": "get location information from open street map NB if you switch this on (recommended)",

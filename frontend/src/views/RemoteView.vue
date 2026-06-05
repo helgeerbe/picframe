@@ -35,7 +35,8 @@ import {
   MapPinIcon,
   ClockIcon,
   CheckIcon,
-  XMarkIcon
+  XMarkIcon,
+  ChevronDownIcon
 } from '@heroicons/vue/24/outline'
 import {
   PlayIcon as PlayIconSolid,
@@ -73,9 +74,40 @@ const mediaSelection = reactive({
 const selectionMessage = ref('')
 const isApplyingSelection = ref(false)
 const isSavingShuffle = ref(false)
+const isShuffleModeMenuOpen = ref(false)
+const shuffleModeMenuRef = ref<HTMLElement | null>(null)
 const selectedPairIndex = ref(0)
 const showPairDeleteDialog = ref(false)
 let selectionCountTimer: number | undefined
+
+const shuffleModes = [
+  { value: 'standard', labelKey: 'remote.controls.shuffleModeStandard' },
+  { value: 'fewer_repeats', labelKey: 'remote.controls.shuffleModeFewerRepeats' }
+] as const
+type ShuffleMode = typeof shuffleModes[number]['value']
+
+const normalizeShuffleMode = (value: unknown): ShuffleMode => {
+  return value === 'fewer_repeats' ? 'fewer_repeats' : 'standard'
+}
+
+const closeShuffleModeMenu = () => {
+  isShuffleModeMenuOpen.value = false
+}
+
+const handleDocumentClick = (event: MouseEvent) => {
+  if (!isShuffleModeMenuOpen.value) return
+  const target = event.target
+  if (!(target instanceof Node)) return
+  if (!shuffleModeMenuRef.value?.contains(target)) {
+    closeShuffleModeMenu()
+  }
+}
+
+const handleDocumentKeydown = (event: KeyboardEvent) => {
+  if (event.key === 'Escape') {
+    closeShuffleModeMenu()
+  }
+}
 
 // Initialize WebSocket connection if not already connected
 onMounted(() => {
@@ -84,6 +116,8 @@ onMounted(() => {
   }
   void configStore.fetchConfig()
   void configStore.fetchFilterOptions()
+  document.addEventListener('click', handleDocumentClick)
+  document.addEventListener('keydown', handleDocumentKeydown)
 })
 
 watch(
@@ -153,6 +187,8 @@ onBeforeUnmount(() => {
   if (selectionCountTimer !== undefined) {
     window.clearTimeout(selectionCountTimer)
   }
+  document.removeEventListener('click', handleDocumentClick)
+  document.removeEventListener('keydown', handleDocumentKeydown)
 })
 
 watch(
@@ -177,6 +213,7 @@ const handleBrightnessChange = (event: Event) => {
 }
 
 const isShuffleEnabled = computed(() => appConfig.value?.model?.shuffle ?? true)
+const shuffleMode = computed(() => normalizeShuffleMode(appConfig.value?.model?.shuffle_mode))
 
 const displayPowerTitle = computed(() => {
   return isDisplayOn.value ? t('remote.controls.turnDisplayOff') : t('remote.controls.turnDisplayOn')
@@ -190,13 +227,47 @@ const shuffleTitle = computed(() => {
   return isShuffleEnabled.value ? t('remote.controls.shuffleOn') : t('remote.controls.shuffleOff')
 })
 
+const selectedShuffleModeLabel = computed(() => {
+  const mode = shuffleModes.find((item) => item.value === shuffleMode.value) ?? shuffleModes[0]
+  return t(mode.labelKey)
+})
+
+const shuffleModeTitle = computed(() => {
+  return `${t('remote.controls.shuffleMode')}: ${selectedShuffleModeLabel.value}`
+})
+
 const toggleShuffle = async () => {
   if (isSavingShuffle.value || isConfigLoading.value) return
+  closeShuffleModeMenu()
   isSavingShuffle.value = true
   try {
     await configStore.savePartialConfig({
       model: {
         shuffle: !isShuffleEnabled.value
+      }
+    })
+    playerStore.sendCommand('REQUEST_STATE')
+  } catch (error) {
+    console.error(error)
+  } finally {
+    isSavingShuffle.value = false
+  }
+}
+
+const toggleShuffleModeMenu = () => {
+  if (isSavingShuffle.value || isConfigLoading.value) return
+  isShuffleModeMenuOpen.value = !isShuffleModeMenuOpen.value
+}
+
+const setShuffleMode = async (mode: ShuffleMode) => {
+  closeShuffleModeMenu()
+  if (isSavingShuffle.value || isConfigLoading.value) return
+  if (mode === shuffleMode.value) return
+  isSavingShuffle.value = true
+  try {
+    await configStore.savePartialConfig({
+      model: {
+        shuffle_mode: mode
       }
     })
     playerStore.sendCommand('REQUEST_STATE')
@@ -817,26 +888,74 @@ const metadataFields = computed(() => {
                 <span class="sr-only">{{ t('remote.controls.next') }}</span>
               </button>
 
-              <button
-                type="button"
-                @click="toggleShuffle"
-                :disabled="isSavingShuffle || isConfigLoading"
-                :aria-pressed="isShuffleEnabled"
-                :aria-label="shuffleTitle"
-                :title="shuffleTitle"
-                :class="[
-                  'inline-flex h-12 w-12 items-center justify-center rounded-full border transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500/50 active:scale-95',
-                  isShuffleEnabled
-                    ? 'border-indigo-100 bg-indigo-50 text-indigo-600 hover:bg-indigo-100 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300'
-                    : 'border-transparent text-gray-500 hover:bg-gray-100 hover:text-indigo-600 dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-indigo-400',
-                  isSavingShuffle || isConfigLoading ? 'opacity-60 cursor-wait' : ''
-                ]"
-              >
-                <svg class="w-6 h-6" viewBox="0 0 24 24" aria-hidden="true">
-                  <path :d="mdiShuffleVariant" fill="currentColor" />
-                </svg>
-                <span class="sr-only">{{ shuffleTitle }}</span>
-              </button>
+              <div ref="shuffleModeMenuRef" class="relative inline-flex justify-self-center">
+                <div
+                  :class="[
+                    'inline-flex h-12 items-stretch overflow-hidden rounded-full border transition-all focus-within:ring-2 focus-within:ring-indigo-500/50',
+                    isShuffleEnabled
+                      ? 'border-indigo-100 bg-indigo-50 text-indigo-600 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300'
+                      : 'border-transparent text-gray-500 dark:text-gray-400',
+                    isSavingShuffle || isConfigLoading ? 'opacity-60 cursor-wait' : ''
+                  ]"
+                >
+                  <button
+                    type="button"
+                    @click="toggleShuffle"
+                    :disabled="isSavingShuffle || isConfigLoading"
+                    :aria-pressed="isShuffleEnabled"
+                    :aria-label="shuffleTitle"
+                    :title="shuffleTitle"
+                    :class="[
+                      'inline-flex h-12 w-12 items-center justify-center transition-all focus:outline-none active:scale-95',
+                      isShuffleEnabled
+                        ? 'hover:bg-indigo-100 dark:hover:bg-indigo-500/20'
+                        : 'hover:bg-gray-100 hover:text-indigo-600 dark:hover:bg-gray-700/50 dark:hover:text-indigo-400'
+                    ]"
+                  >
+                    <svg class="w-6 h-6" viewBox="0 0 24 24" aria-hidden="true">
+                      <path :d="mdiShuffleVariant" fill="currentColor" />
+                    </svg>
+                    <span class="sr-only">{{ shuffleTitle }}</span>
+                  </button>
+                  <button
+                    type="button"
+                    @click.stop="toggleShuffleModeMenu"
+                    :disabled="isSavingShuffle || isConfigLoading"
+                    :aria-label="shuffleModeTitle"
+                    :title="shuffleModeTitle"
+                    aria-haspopup="menu"
+                    :aria-expanded="isShuffleModeMenuOpen"
+                    :class="[
+                      'inline-flex h-12 w-8 items-center justify-center border-l transition-all focus:outline-none active:scale-95',
+                      isShuffleEnabled
+                        ? 'border-indigo-200/70 hover:bg-indigo-100 dark:border-indigo-500/20 dark:hover:bg-indigo-500/20'
+                        : 'border-gray-200 hover:bg-gray-100 hover:text-indigo-600 dark:border-gray-700 dark:hover:bg-gray-700/50 dark:hover:text-indigo-400'
+                    ]"
+                  >
+                    <ChevronDownIcon :class="['h-4 w-4 transition-transform', isShuffleModeMenuOpen ? 'rotate-180' : '']" />
+                    <span class="sr-only">{{ shuffleModeTitle }}</span>
+                  </button>
+                </div>
+                <div
+                  v-if="isShuffleModeMenuOpen"
+                  class="absolute right-0 top-14 z-30 w-44 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800"
+                  role="menu"
+                  :aria-label="t('remote.controls.shuffleMode')"
+                >
+                  <button
+                    v-for="mode in shuffleModes"
+                    :key="mode.value"
+                    type="button"
+                    role="menuitemradio"
+                    :aria-checked="shuffleMode === mode.value"
+                    @click="setShuffleMode(mode.value)"
+                    class="flex h-10 w-full items-center gap-2 px-3 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700 focus:bg-indigo-50 focus:text-indigo-700 focus:outline-none dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 dark:focus:bg-indigo-500/10 dark:focus:text-indigo-200"
+                  >
+                    <CheckIcon :class="['h-4 w-4 flex-shrink-0', shuffleMode === mode.value ? 'opacity-100' : 'opacity-0']" />
+                    <span class="truncate">{{ t(mode.labelKey) }}</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             <!-- Brightness Control -->

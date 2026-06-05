@@ -108,6 +108,7 @@ class ModelConfig(BaseModel):
     fade_time: float = 10.0
     update_interval: float = 2.0
     shuffle: bool = True
+    shuffle_mode: str = "standard"
     sort_cols: str = "fname ASC"
     image_attr: list[Any] = Field(default_factory=lambda: [
         "PICFRAME GPS",

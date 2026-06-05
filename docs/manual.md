@@ -101,6 +101,21 @@ You can customize the `key_list` using any of the standard address keys returned
 *   **National:** `country`, `country_code`
 *   **Postal:** `postcode`
 
+### Remote Shuffle Modes
+
+Shuffle has two separate settings. `model.shuffle` turns shuffle on or off,
+and `model.shuffle_mode` selects how shuffled playback is ordered.
+
+*   **Standard** is the default mode and uses the normal random order.
+*   **Fewer repeats** uses the existing `last_displayed` history in
+    `media_cache.db3` to prefer items that have not been shown recently near
+    the front of the next shuffled order.
+
+Changing either setting through the Remote rebuilds playback immediately. The
+selected mode is persisted, but it only affects playback while shuffle is
+enabled. If `model.shuffle_mode` is missing or invalid, Picframe falls back to
+`standard`.
+
 ### Network & Security Configuration
 
 #### CORS (Cross-Origin Resource Sharing)

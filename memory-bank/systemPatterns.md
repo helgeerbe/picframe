@@ -9,13 +9,14 @@
 - Filesystem monitoring follows ports/adapters: core services depend on `IMediaMonitor`, while the watchdog-backed adapter lives in infrastructure.
 
 ## Playback And Rendering
-- `PlaylistManager` owns media querying, filtering, shuffle, and current display-item selection.
+- `PlaylistManager` owns media querying, filtering, shuffle mode behavior, and current display-item selection.
 - `PlaybackEngine` owns state transitions, timing, command handling, and media-to-renderer orchestration.
 - `Pi3dRenderer` should stay presentation-focused: draw what it is commanded to draw, with local renderer state only for rendering concerns such as clock ticks.
 - pi3d/OpenGL runs on the main thread; FastAPI, MQTT, media monitoring, geocoding, and hardware input operate in background threads.
 - GStreamer video playback runs out of process in `gst_worker.py` and communicates through JSON IPC over a Unix-domain socket.
 - A display item is either one media item or an image-only portrait pair. Videos are never paired and always use the fullscreen video path.
 - Portrait pairs are composed in memory for rendering; they do not create persistent generated files.
+- Shuffle mode is applied after display slots are built so portrait pairs remain one shuffled slot; `fewer_repeats` uses existing `last_displayed` history and creates no new media DB fields.
 - Matting is a renderer image-preparation concern. It wraps EXIF-corrected single images or image-only portrait pairs before pi3d texture creation, creates no persistent files in the current implementation, and never applies to videos.
 
 ## Video Handoff

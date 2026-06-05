@@ -276,6 +276,32 @@ def test_query_media_applies_playlist_filters_and_sorting(
     assert [item["filename"] for item in result] == ["beach.jpg"]
 
 
+def test_order_clause_uses_random_only_for_standard_shuffle() -> None:
+    standard_clause = SQLiteMediaRepository._build_order_clause(
+        PlaylistCriteria(shuffle=True, shuffle_mode="standard")
+    )
+    fewer_repeats_clause = SQLiteMediaRepository._build_order_clause(
+        PlaylistCriteria(shuffle=True, shuffle_mode="fewer_repeats")
+    )
+    invalid_clause = SQLiteMediaRepository._build_order_clause(
+        PlaylistCriteria(shuffle=True, shuffle_mode="unknown")
+    )
+    sorted_clause = SQLiteMediaRepository._build_order_clause(
+        PlaylistCriteria(
+            shuffle=False,
+            shuffle_mode="fewer_repeats",
+            sort_cols="rating DESC",
+        )
+    )
+
+    assert "RANDOM()" in standard_clause
+    assert "RANDOM()" not in fewer_repeats_clause
+    assert "m.filepath ASC" in fewer_repeats_clause
+    assert "RANDOM()" in invalid_clause
+    assert "RANDOM()" not in sorted_clause
+    assert sorted_clause.startswith("m.rating DESC")
+
+
 def test_query_media_uses_legacy_boolean_filter_phrases(
     media_repo: SQLiteMediaRepository, tmp_path: Path
 ) -> None:

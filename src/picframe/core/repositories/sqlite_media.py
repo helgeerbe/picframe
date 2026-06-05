@@ -14,7 +14,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from picframe.core.models.playlist import PlaylistCriteria
+from picframe.core.models.playlist import (
+    PlaylistCriteria,
+    SHUFFLE_MODE_STANDARD,
+    normalize_shuffle_mode,
+)
 from picframe.core.repositories.interfaces import IMediaRepository
 from picframe.core.repositories.migrations import Migration, MigrationManager
 
@@ -635,7 +639,10 @@ class SQLiteMediaRepository(IMediaRepository):
                 f"CASE WHEN m.last_modified >= {threshold:.6f} THEN 0 ELSE 1 END ASC"
             )
 
-        if criteria.shuffle:
+        if (
+            criteria.shuffle
+            and normalize_shuffle_mode(criteria.shuffle_mode) == SHUFFLE_MODE_STANDARD
+        ):
             order_parts.append("RANDOM()")
             return ", ".join(order_parts)
 

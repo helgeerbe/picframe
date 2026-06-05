@@ -205,6 +205,13 @@
     "shuffle": {
       "type": "boolean"
     },
+    "shuffle_mode": {
+      "type": "select",
+      "options": [
+        "standard",
+        "fewer_repeats"
+      ]
+    },
     "sort_cols": {
       "type": "string"
     },

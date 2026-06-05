@@ -14,12 +14,18 @@ from typing import Any
 from picframe.core.events.dto import FileChangeEvent
 from picframe.core.events.interfaces import IEventPublisher
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
-from picframe.core.models.playlist import PlaylistCriteria
+from picframe.core.models.playlist import (
+    PlaylistCriteria,
+    SHUFFLE_MODE_FEWER_REPEATS,
+    SHUFFLE_MODE_STANDARD,
+    normalize_shuffle_mode,
+)
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 
 logger = logging.getLogger(__name__)
 
 _FILE_MTIME_TOLERANCE = 1e-6
+_FEWER_REPEATS_CANDIDATES = 12
 
 
 class PlaylistManager:
@@ -51,6 +57,7 @@ class PlaylistManager:
         self._history: list[list[dict[str, Any]]] = []
         self._current_index: int = -1
         self._shuffle: bool = True
+        self._shuffle_mode: str = SHUFFLE_MODE_STANDARD
         self._run_through_count: int = 0
         self._reshuffle_num: int = 1
         self._portrait_pairs: bool = False
@@ -65,19 +72,23 @@ class PlaylistManager:
         """
         if shuffle is not None:
             self._shuffle = shuffle
-            
+
         logger.info("Building new playlist...")
         if self._config_repo is not None:
             criteria = self._get_playlist_criteria(shuffle)
             self._shuffle = criteria.shuffle
+            self._shuffle_mode = normalize_shuffle_mode(criteria.shuffle_mode)
             self._playlist = self._media_repo.query_media(criteria)
         else:
             self._playlist = self._media_repo.get_all_media()
             if self._shuffle:
                 random.shuffle(self._playlist)
+            self._shuffle_mode = SHUFFLE_MODE_STANDARD
             self._portrait_pairs = False
 
         self._display_playlist = self._build_display_playlist(self._playlist)
+        if self._shuffle and self._shuffle_mode == SHUFFLE_MODE_FEWER_REPEATS:
+            self._display_playlist = self._shuffle_fewer_repeats(self._display_playlist)
 
         if not self._display_playlist:
             logger.warning("No media items found to build playlist.")
@@ -318,6 +329,9 @@ class PlaylistManager:
         if shuffle_override is not None:
             shuffle = shuffle_override
         self._portrait_pairs = config_bool("model.portrait_pairs", False)
+        shuffle_mode = normalize_shuffle_mode(
+            config_value("model.shuffle_mode", SHUFFLE_MODE_STANDARD)
+        )
 
         return PlaylistCriteria(
             pic_dir=str(config_value("model.pic_dir", "~/Pictures")),
@@ -327,6 +341,7 @@ class PlaylistManager:
             location_filter=str(config_value("model.location_filter", "")),
             tags_filter=str(config_value("model.tags_filter", "")),
             shuffle=shuffle,
+            shuffle_mode=shuffle_mode,
             sort_cols=str(config_value("model.sort_cols", "fname ASC")),
             recent_n=int(config_value("model.recent_n", 0) or 0),
         )
@@ -365,6 +380,66 @@ class PlaylistManager:
             display_playlist.append(slot)
 
         return display_playlist
+
+    def _shuffle_fewer_repeats(
+        self,
+        display_playlist: list[list[dict[str, Any]]],
+    ) -> list[list[dict[str, Any]]]:
+        """Choose a random order that keeps recently displayed slots later."""
+        if len(display_playlist) <= 1:
+            return list(display_playlist)
+
+        best_candidate: list[list[dict[str, Any]]] | None = None
+        best_score: float | None = None
+
+        for _ in range(_FEWER_REPEATS_CANDIDATES):
+            candidate = list(display_playlist)
+            random.shuffle(candidate)
+            score = self._score_fewer_repeats_candidate(candidate)
+            if best_candidate is None or best_score is None or score > best_score:
+                best_candidate = candidate
+                best_score = score
+
+        return best_candidate or list(display_playlist)
+
+    @classmethod
+    def _score_fewer_repeats_candidate(
+        cls,
+        display_playlist: list[list[dict[str, Any]]],
+    ) -> float:
+        """Higher score means recently displayed slots appear later."""
+        last_displayed_values = [cls._slot_last_displayed(slot) for slot in display_playlist]
+        displayed_values = [value for value in last_displayed_values if value > 0]
+        if not displayed_values:
+            return 0.0
+
+        oldest = min(displayed_values)
+        newest = max(displayed_values)
+        count = len(last_displayed_values)
+        score = 0.0
+
+        for index, last_displayed in enumerate(last_displayed_values):
+            if last_displayed <= 0:
+                recency_penalty = 0.0
+            elif newest <= oldest:
+                recency_penalty = 1.0
+            else:
+                recency_penalty = (last_displayed - oldest) / (newest - oldest)
+            early_weight = (count - index) / count
+            score -= early_weight * recency_penalty
+
+        return score
+
+    @staticmethod
+    def _slot_last_displayed(slot: list[dict[str, Any]]) -> float:
+        """Return the newest display timestamp represented by a display slot."""
+        values: list[float] = []
+        for item in slot:
+            try:
+                values.append(float(item.get("last_displayed") or 0.0))
+            except (TypeError, ValueError):
+                values.append(0.0)
+        return max(values, default=0.0)
 
     @staticmethod
     def _is_pairable_portrait(item: dict[str, Any]) -> bool:

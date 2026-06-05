@@ -26,7 +26,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Keep frontend map display independent from backend-rendered text overlays.
 - Keep frontend narrative metadata over the media and technical metadata in a constrained panel.
 - Runtime media-selection controls belong in the Remote view; durable library/viewer settings such as `pic_dir`, raw `sort_cols`, advanced playlist knobs, and `mat_images` stay in Settings.
-- Shuffle is an immediate Remote transport control; it saves `model.shuffle` directly and rebuilds playback through the existing config-change flow.
+- Shuffle on/off is separate from shuffle mode: `model.shuffle` is the immediate Remote transport toggle, `model.shuffle_mode` persists the selected mode, missing/invalid modes fall back to `standard`, and config changes rebuild playback through the existing model-change flow.
 - Helper text affordances must work by click/tap first; hover tooltips are only an enhancement for pointer devices.
 - Remote location/tag filters preserve legacy boolean syntax: English `AND`/`OR`/`NOT` operators, parentheses, and adjacent words as one phrase.
 - Remote media-selection match counts are previews only until Apply; `total_count` is the active file count in the selected subdirectory, or in `pic_dir` when no subdirectory is selected.
