@@ -150,6 +150,13 @@ Portrait-pair detection uses indexed image orientation metadata. During
 unpublished next-gen development, deleting and rebuilding `media_cache.db3` is
 acceptable after changing portrait-detection behavior.
 
+Viewer matting settings apply during image rendering only. When
+`viewer.mat_images` enables matting, Picframe loads the image with EXIF
+orientation applied, optionally wraps single images or image-only portrait
+pairs with the configured mat style, and then creates the pi3d texture. Videos
+are never matted, original media files are never modified, and the current
+next-gen matting path creates no persistent cache artifacts.
+
 ---
 
 ## Part 2: Extended Developer Guidelines & System Setup

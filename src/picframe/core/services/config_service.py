@@ -8,7 +8,8 @@ via the EventBus (e.g., from the WebUI) and persist them to the database.
 import logging
 from typing import Any
 
-from picframe.core.events.dto import Command, CommandEvent, State, StateEvent, RendererConfig, RendererConfigUpdatedEvent
+from picframe.core.events.dto import Command, CommandEvent, State, StateEvent, RendererConfigUpdatedEvent
+from picframe.core.services.renderer_config import build_renderer_config
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.repositories.interfaces import IConfigRepository
 
@@ -164,30 +165,7 @@ class ConfigService:
             return
             
         try:
-            config = RendererConfig(
-                display_x=int(self._config_repository.get_app_config("viewer.display_x", 0)),
-                display_y=int(self._config_repository.get_app_config("viewer.display_y", 0)),
-                display_w=int(self._config_repository.get_app_config("viewer.display_w")) if self._config_repository.get_app_config("viewer.display_w") else None,
-                display_h=int(self._config_repository.get_app_config("viewer.display_h")) if self._config_repository.get_app_config("viewer.display_h") else None,
-                fps=int(self._config_repository.get_app_config("viewer.fps", 20)),
-                background=tuple(self._config_repository.get_app_config("viewer.background", [0.0, 0.0, 0.0, 1.0])),
-                use_glx=self._config_repository.get_app_config_bool("viewer.use_glx", False),
-                use_sdl2=self._config_repository.get_app_config_bool("viewer.use_sdl2", False),
-                shader_path=str(self._config_repository.get_app_config("viewer.shader", "blend_new")),
-                kenburns=self._config_repository.get_app_config_bool("viewer.kenburns", False),
-                show_clock=self._config_repository.get_app_config_bool("viewer.show_clock", False),
-                clock_format=str(self._config_repository.get_app_config("viewer.clock_format", "%H:%M")),
-                show_text_enabled=self._config_repository.get_app_config_bool("viewer.show_text_enabled", False),
-                text_overlay_format=str(self._config_repository.get_app_config("viewer.text_overlay_format", "%b %d, %Y")),
-                time_fade=float(self._config_repository.get_app_config("model.fade_time", 2.0)),
-                time_delay=float(self._config_repository.get_app_config("model.time_delay", 200.0)),
-                show_text_tm=float(self._config_repository.get_app_config("viewer.show_text_tm", 10.0)),
-                font_file=str(self._config_repository.get_app_config("viewer.font_file", "")),
-                blend_type=str(self._config_repository.get_app_config("viewer.blend_type", "blend")),
-                edge_alpha=float(self._config_repository.get_app_config("viewer.edge_alpha", 0.5)),
-                fit=self._config_repository.get_app_config_bool("viewer.fit", False),
-                video_extensions=self._config_repository.get_app_config("model.video_extensions", [".mp4", ".mov", ".avi", ".mkv"]),
-            )
+            config = build_renderer_config(self._config_repository)
             self._event_publisher.publish(RendererConfigUpdatedEvent(config=config))
         except Exception as e:
             logger.error(f"Failed to publish RendererConfigUpdatedEvent: {e}", exc_info=True)

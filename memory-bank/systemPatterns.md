@@ -16,6 +16,7 @@
 - GStreamer video playback runs out of process in `gst_worker.py` and communicates through JSON IPC over a Unix-domain socket.
 - A display item is either one media item or an image-only portrait pair. Videos are never paired and always use the fullscreen video path.
 - Portrait pairs are composed in memory for rendering; they do not create persistent generated files.
+- Matting is a renderer image-preparation concern. It wraps EXIF-corrected single images or image-only portrait pairs before pi3d texture creation, creates no persistent files in the current implementation, and never applies to videos.
 
 ## Video Handoff
 - The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:

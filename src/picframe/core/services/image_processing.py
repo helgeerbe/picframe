@@ -2,8 +2,8 @@
 ImageProcessingService for handling image manipulation tasks.
 
 This module provides the `ImageProcessingService` class, which is responsible
-for resizing, matting, and caching images for display, as well as providing
-an asynchronous worker pool for metadata extraction.
+for resizing and caching generated image artifacts, as well as providing an
+asynchronous worker pool for metadata extraction.
 """
 
 import logging
@@ -24,9 +24,9 @@ class ImageProcessingService:
     """
     Service for processing images before display.
 
-    Handles tasks such as resizing to fit the screen, applying matting
-    (borders/shadows), managing the processed image cache, and extracting
-    metadata asynchronously.
+    Handles tasks such as resizing to fit the screen, managing the processed
+    image cache, and extracting metadata asynchronously. Renderer-only visual
+    effects such as matting are applied in the render image-preparation path.
     """
 
     def __init__(self, cache_dir: str = "/tmp/picframe_cache", max_workers: int = 4) -> None:

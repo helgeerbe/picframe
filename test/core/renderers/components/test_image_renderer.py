@@ -1,5 +1,6 @@
 """Unit tests for the ImageRenderer component."""
 from collections.abc import Generator
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -145,15 +146,18 @@ def test_image_renderer_execute_video(
 
 from picframe.core.exceptions import MediaProcessingError
 
-@patch("picframe.core.renderers.components.image_renderer.Image")
+@patch("picframe.core.renderers.components.image_preparer.Image.open")
 def test_image_renderer_execute_image_error(
-    mock_image: MagicMock, mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
+    mock_image_open: MagicMock,
+    mock_pi3d: MagicMock,
+    mock_display: MagicMock,
+    config: dict[str, Any],
 ) -> None:
     """Test executing a command with an image file that fails to load."""
     shader = MagicMock()
     renderer = ImageRenderer(mock_display, shader, config)
 
-    mock_image.open.side_effect = Exception("Failed to load image")
+    mock_image_open.side_effect = Exception("Failed to load image")
 
     command = RenderCommand(image_path="/path/to/image.jpg")
 
@@ -162,35 +166,62 @@ def test_image_renderer_execute_image_error(
 
     assert "Failed to load image /path/to/image.jpg" in str(exc_info.value)
 
-@patch("picframe.core.renderers.components.image_renderer.Image")
 def test_image_renderer_execute_image(
-    mock_image: MagicMock, mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
+    mock_pi3d: MagicMock,
+    mock_display: MagicMock,
+    config: dict[str, Any],
+    tmp_path: Path,
 ) -> None:
     """Test executing a command with an image file."""
     shader = MagicMock()
     renderer = ImageRenderer(mock_display, shader, config)
 
-    mock_img_instance = MagicMock()
-    mock_image.open.return_value = mock_img_instance
+    image_path = tmp_path / "image.jpg"
+    Image.new("RGB", (1920, 1080), "red").save(image_path)
 
     mock_texture = MagicMock()
     mock_texture.ix = 1920
     mock_texture.iy = 1080
     mock_pi3d.Texture.return_value = mock_texture
 
-    command = RenderCommand(image_path="/path/to/image.jpg")
+    command = RenderCommand(image_path=str(image_path))
 
     with patch("time.time", return_value=100.0):
         result = renderer.execute(command)
 
     assert result == (True, 0.0, 0.0)
-    mock_image.open.assert_called_once_with("/path/to/image.jpg")
-    mock_pi3d.Texture.assert_called_once_with(
-        mock_img_instance, blend=True, m_repeat=True, free_after_load=True
-    )
+    texture_image = mock_pi3d.Texture.call_args.args[0]
+    assert isinstance(texture_image, Image.Image)
+    assert texture_image.size == (1920, 1080)
+    assert mock_pi3d.Texture.call_args.kwargs == {
+        "blend": True,
+        "m_repeat": True,
+        "free_after_load": True,
+    }
     assert renderer._next_tm == 100.0 + 200.0
     assert renderer._sfg == mock_texture
     assert renderer._sbg == mock_texture  # First image, so sbg is set to sfg
+
+
+def test_image_renderer_does_not_mat_preloaded_video_frame(
+    mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
+) -> None:
+    """Preloaded video transition frames stay unmatted even if matting is enabled."""
+    shader = MagicMock()
+    renderer = ImageRenderer(mock_display, shader, {**config, "mat_images": "on"})
+    frame = Image.new("RGB", (320, 180), "black")
+
+    mock_texture = MagicMock()
+    mock_texture.ix = 320
+    mock_texture.iy = 180
+    mock_pi3d.Texture.return_value = mock_texture
+
+    result = renderer.execute(RenderCommand(image_path="/tmp/generated.frame", image_obj=frame))
+
+    assert result == (True, 0.0, 0.0)
+    texture_image = mock_pi3d.Texture.call_args.args[0]
+    assert isinstance(texture_image, Image.Image)
+    assert texture_image.size == (320, 180)
 
 
 def test_image_renderer_create_portrait_pair_image() -> None:

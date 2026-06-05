@@ -22,6 +22,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Ticket #618 playlist parity follow-ups for clickable current-media tags in Remote, managed video transition frame cache artifacts, Clear Image Cache API/service wiring, video playback resilience after cache clearing, portrait-pair display items/rendering/Remote UX, pair delete target selection, internal monitor/indexer/processing lifecycle controls, and real-media Raspberry Pi validation.
 - Media cache lifecycle cleanup: restart sync skips unchanged files, reindexes only new/changed/restored files, temporary missing files are soft-inactivated and skipped, explicit Remote delete moves originals to `deleted_pictures` and removes cache rows, and display counters are preserved across reindex/restart.
 - Ticket #611 clean-architecture cleanup: media monitoring now uses a core `IMediaMonitor` port, watchdog is isolated in an infrastructure adapter, differential sync publishes core `FileChangeEvent`s directly, and indexer config-change wiring uses `set_directories()`.
+- Ticket #619 next-gen matting parity: matting Settings fields now flow into renderer config, single images and image-only portrait pairs can be matted in memory with legacy `MatImage`, video paths remain unmatted, and `ImageProcessingService` no longer owns matting responsibilities.
 - Display power/system manager HAL work and Wayland-oriented environment detection.
 - Video metadata extraction and frontend display of video technical metadata.
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.
@@ -30,6 +31,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - Video engine integration remains an active architectural stream: subprocess GStreamer, IPC event routing, dynamic hardware discovery, fallback limits, and target-hardware validation.
+- Ticket #619 still needs manual Raspberry Pi visual validation before closing.
 
 ## Next
 - Complete caps-driven hardware capability discovery in the GStreamer worker.

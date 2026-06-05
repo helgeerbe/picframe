@@ -17,6 +17,7 @@
 - `picframe run` starts repositories, event bus, HAL adapters, media monitor/indexer, pi3d renderer, GStreamer video renderer, playback engine, and FastAPI server.
 - Config database defaults to `<base_dir>/data/config.db3`; media cache defaults to `<base_dir>/data/media_cache.db3`; generated cache artifacts live under `<base_dir>/data/cache`.
 - `PICFRAME_DIR`, `PICFRAME_PORT`, `PICFRAME_CONFIG_DB`, `PICFRAME_MEDIA_DB`, and `PICFRAME_HTML_DIR` can override defaults.
+- Runtime matting resources are copied from package data into `<base_dir>/data/mat`; the next-gen renderer uses them in memory and does not write matted-image cache files.
 
 ## Display And Media Constraints
 - Wayland is the only supported display protocol.

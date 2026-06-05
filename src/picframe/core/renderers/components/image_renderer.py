@@ -12,6 +12,7 @@ import pi3d
 from PIL import Image
 
 from picframe.core.events.dto import RenderCommand, RendererConfig
+from picframe.core.renderers.components.image_preparer import ImagePreparer
 
 
 class ImageRenderer:
@@ -57,6 +58,15 @@ class ImageRenderer:
         self._fade_time = float(self._config_value(config, "time_fade", 2.0))
         self._time_delay = float(self._config_value(config, "time_delay", 200.0))
         self._fps = int(self._config_value(config, "fps", 20))
+        if hasattr(self, "_image_preparer"):
+            self._image_preparer.update_config(config)
+        else:
+            self._image_preparer = ImagePreparer(
+                (self._display.width, self._display.height),
+                config,
+                self._create_portrait_pair_image,
+                logger=self._logger,
+            )
 
         if getattr(self, "_slide", None):
             self._slide.unif[47] = self._edge_alpha
@@ -108,9 +118,9 @@ class ImageRenderer:
             if command.layout == "portrait_pair":
                 im = self._load_portrait_pair(command)
             elif getattr(command, "image_obj", None) is not None:
-                im = command.image_obj
+                im = self._image_preparer.prepare_unmatted_image(command.image_obj)
             else:
-                im = Image.open(command.image_path)
+                im = self._image_preparer.load_single_image(command.image_path)
         except Exception as e:
             self._logger.error(f"Failed to load image {command.image_path}: {e}")
             from picframe.core.exceptions import MediaProcessingError
@@ -171,18 +181,7 @@ class ImageRenderer:
 
     def _load_portrait_pair(self, command: RenderCommand) -> Image.Image:
         """Load and combine a two-image portrait pair in memory."""
-        images: list[Image.Image] = []
-        image_objs = tuple(command.image_objs or ())
-        image_paths = tuple(command.image_paths or ())
-
-        if len(image_objs) >= 2:
-            images = [image_objs[0].copy(), image_objs[1].copy()]
-        elif len(image_paths) >= 2:
-            images = [Image.open(image_paths[0]).copy(), Image.open(image_paths[1]).copy()]
-        else:
-            raise ValueError("portrait_pair render commands require two image paths or objects")
-
-        return self._create_portrait_pair_image(images[0], images[1])
+        return self._image_preparer.load_portrait_pair(command)
 
     @staticmethod
     def _create_portrait_pair_image(im1: Image.Image, im2: Image.Image) -> Image.Image:

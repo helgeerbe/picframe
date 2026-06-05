@@ -1,0 +1,69 @@
+"""Tests for renderer configuration mapping."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from picframe.core.services.renderer_config import build_renderer_config
+
+
+class FakeConfigRepository:
+    def __init__(self, values: dict[str, Any]) -> None:
+        self.values = values
+
+    def get_app_config(self, key: str, default: Any = None) -> Any:
+        return self.values.get(key, default)
+
+    def get_app_config_bool(self, key: str, default: bool = False) -> bool:
+        value = self.values.get(key, default)
+        if isinstance(value, str):
+            return value.strip().lower() in {"true", "1", "t", "y", "yes", "on"}
+        return bool(value)
+
+
+def test_build_renderer_config_maps_matting_values() -> None:
+    repo = FakeConfigRepository(
+        {
+            "viewer.display_w": "1920",
+            "viewer.display_h": "1080",
+            "viewer.background": [0.1, 0.2, 0.3, 1.0],
+            "viewer.mat_images": "on",
+            "viewer.mat_type": "float",
+            "viewer.outer_mat_color": [10, 20, 30],
+            "viewer.inner_mat_color": "40,50,60",
+            "viewer.outer_mat_border": 33,
+            "viewer.inner_mat_border": 22,
+            "viewer.outer_mat_use_texture": False,
+            "viewer.inner_mat_use_texture": True,
+            "viewer.mat_resource_folder": "~/custom-mat",
+        }
+    )
+
+    config = build_renderer_config(repo)
+
+    assert config.display_w == 1920
+    assert config.display_h == 1080
+    assert config.background == (0.1, 0.2, 0.3, 1.0)
+    assert config.mat_images == "on"
+    assert config.mat_type == "float"
+    assert config.outer_mat_color == [10, 20, 30]
+    assert config.inner_mat_color == "40,50,60"
+    assert config.outer_mat_border == 33
+    assert config.inner_mat_border == 22
+    assert config.outer_mat_use_texture is False
+    assert config.inner_mat_use_texture is True
+    assert config.mat_resource_folder == "~/custom-mat"
+
+
+def test_build_renderer_config_uses_matting_defaults() -> None:
+    config = build_renderer_config(FakeConfigRepository({}))
+
+    assert config.mat_images == 0.01
+    assert config.mat_type is None
+    assert config.outer_mat_color is None
+    assert config.inner_mat_color is None
+    assert config.outer_mat_border == 75
+    assert config.inner_mat_border == 40
+    assert config.outer_mat_use_texture is True
+    assert config.inner_mat_use_texture is False
+    assert config.mat_resource_folder == "~/.picframe/data/mat"

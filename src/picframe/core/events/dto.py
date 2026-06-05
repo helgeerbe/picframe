@@ -162,6 +162,15 @@ class RendererConfig:
     edge_alpha: float = 0.5
     fit: bool = False
     video_extensions: list[str] = field(default_factory=lambda: [".mp4", ".mov", ".avi", ".mkv"])
+    mat_images: float | bool | str = 0.01
+    mat_type: str | None = None
+    outer_mat_color: Any = None
+    inner_mat_color: Any = None
+    outer_mat_border: int = 75
+    inner_mat_border: int = 40
+    outer_mat_use_texture: bool = True
+    inner_mat_use_texture: bool = False
+    mat_resource_folder: str = "~/.picframe/data/mat"
 
 
 @dataclass(frozen=True)

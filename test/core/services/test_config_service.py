@@ -97,3 +97,39 @@ def test_handle_model_timing_config_publishes_renderer_update(
     from picframe.core.events.dto import RendererConfigUpdatedEvent
 
     assert isinstance(mock_publisher.publish.call_args_list[1][0][0], RendererConfigUpdatedEvent)
+
+
+def test_renderer_config_update_includes_matting_values(
+    config_service, mock_repo, mock_publisher
+):
+    values = {
+        "viewer.mat_images": "on",
+        "viewer.mat_type": "double_flat",
+        "viewer.outer_mat_color": [1, 2, 3],
+        "viewer.inner_mat_color": "4,5,6",
+        "viewer.outer_mat_border": 44,
+        "viewer.inner_mat_border": 24,
+        "viewer.mat_resource_folder": "~/mat",
+    }
+    bool_values = {
+        "viewer.outer_mat_use_texture": False,
+        "viewer.inner_mat_use_texture": True,
+    }
+    mock_repo.get_app_config.side_effect = lambda key, default=None: values.get(key, default)
+    mock_repo.get_app_config_bool.side_effect = lambda key, default=False: bool_values.get(key, default)
+
+    config_service._publish_renderer_config()
+
+    from picframe.core.events.dto import RendererConfigUpdatedEvent
+
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, RendererConfigUpdatedEvent)
+    assert event.config.mat_images == "on"
+    assert event.config.mat_type == "double_flat"
+    assert event.config.outer_mat_color == [1, 2, 3]
+    assert event.config.inner_mat_color == "4,5,6"
+    assert event.config.outer_mat_border == 44
+    assert event.config.inner_mat_border == 24
+    assert event.config.outer_mat_use_texture is False
+    assert event.config.inner_mat_use_texture is True
+    assert event.config.mat_resource_folder == "~/mat"
