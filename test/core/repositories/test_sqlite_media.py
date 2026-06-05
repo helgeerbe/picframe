@@ -118,7 +118,7 @@ def test_update_media_item(
 def test_delete_media_item(
     media_repo: SQLiteMediaRepository, sample_media_data: dict[str, Any]
 ) -> None:
-    """Test soft-deleting a media item."""
+    """Test marking a media item inactive."""
     media_id = media_repo.add_media_item(sample_media_data)
     
     media_repo.delete_media_item(media_id)
@@ -126,6 +126,16 @@ def test_delete_media_item(
     retrieved_item = media_repo.get_media_item(media_id)
     assert retrieved_item is not None
     assert retrieved_item["is_deleted"] == 1
+
+
+def test_remove_media_item_deletes_cache_row(
+    media_repo: SQLiteMediaRepository, sample_media_data: dict[str, Any]
+) -> None:
+    media_id = media_repo.add_media_item(sample_media_data)
+
+    media_repo.remove_media_item(media_id)
+
+    assert media_repo.get_media_item(media_id) is None
 
 
 def test_get_all_media(
@@ -186,6 +196,8 @@ def test_record_media_displayed_preserves_stats_on_reindex(
 
     reindexed_data = sample_media_data.copy()
     reindexed_data["file_size"] = 4096
+    reindexed_data["displayed_count"] = 0
+    reindexed_data["last_displayed"] = 0.0
     same_id = media_repo.add_media_item(reindexed_data)
     reindexed_item = media_repo.get_media_item(same_id)
 

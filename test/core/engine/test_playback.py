@@ -362,6 +362,74 @@ def test_engine_delete_pair_right_uses_payload(
     mock_playlist_manager.delete_media_ids.assert_called_once_with([2])
 
 
+def test_engine_delete_single_moves_file_and_removes_cache_row(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    image_file = tmp_path / "image.jpg"
+    image_file.write_bytes(b"image")
+    deleted_dir = tmp_path / "deleted"
+    media_item = MediaItem(
+        id=1,
+        filepath=str(image_file),
+        media_type=MediaType.IMAGE,
+        filename="image.jpg",
+        directory_id=1,
+        file_size=5,
+        last_modified=1.0,
+    )
+    mock_playlist_manager.get_current.return_value = DisplayItem.single(media_item)
+    mock_playlist_manager.resolve_current_delete_ids.return_value = [1]
+    config["deleted_pictures"] = str(deleted_dir)
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+
+    with patch.object(engine, "_trigger_next_media"):
+        engine._handle_delete_command()
+
+    assert not image_file.exists()
+    assert (deleted_dir / "image.jpg").exists()
+    mock_playlist_manager.delete_media_ids.assert_called_once_with([1])
+
+
+def test_engine_delete_failed_move_leaves_cache_row(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+    tmp_path: Path,
+) -> None:
+    image_file = tmp_path / "image.jpg"
+    image_file.write_bytes(b"image")
+    media_item = MediaItem(
+        id=1,
+        filepath=str(image_file),
+        media_type=MediaType.IMAGE,
+        filename="image.jpg",
+        directory_id=1,
+        file_size=5,
+        last_modified=1.0,
+    )
+    mock_playlist_manager.get_current.return_value = DisplayItem.single(media_item)
+    mock_playlist_manager.resolve_current_delete_ids.return_value = [1]
+    config["deleted_pictures"] = str(tmp_path / "deleted")
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+
+    with patch("shutil.move", side_effect=OSError("move failed")):
+        engine._handle_delete_command()
+
+    assert image_file.exists()
+    mock_playlist_manager.delete_media_ids.assert_not_called()
+
+
 def test_engine_rebuilds_playlist_and_updates_delay_on_model_config_change(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,

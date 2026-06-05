@@ -288,6 +288,7 @@ class SQLiteMediaRepository(IMediaRepository):
         Returns:
             The ID of the newly inserted or updated media item.
         """
+        media_data = dict(media_data)
         existing = None
         filepath = media_data.get("filepath")
         if filepath:
@@ -295,8 +296,8 @@ class SQLiteMediaRepository(IMediaRepository):
         if existing:
             if not media_data.get("id"):
                 media_data["id"] = existing["id"]
-            media_data.setdefault("displayed_count", existing.get("displayed_count", 0))
-            media_data.setdefault("last_displayed", existing.get("last_displayed", 0.0))
+            media_data["displayed_count"] = existing.get("displayed_count", 0)
+            media_data["last_displayed"] = existing.get("last_displayed", 0.0)
 
         columns = ", ".join(media_data.keys())
         placeholders = ", ".join("?" for _ in media_data)
@@ -333,10 +334,10 @@ class SQLiteMediaRepository(IMediaRepository):
 
     def delete_media_by_path(self, filepath: str) -> None:
         """
-        Mark a media item as deleted (soft delete) by its filepath.
+        Mark a media item as inactive by its filepath.
 
         Args:
-            filepath: The filepath of the media item to delete.
+            filepath: The filepath of the media item to mark inactive.
         """
         with self._conn:
             self._conn.execute(
@@ -398,10 +399,10 @@ class SQLiteMediaRepository(IMediaRepository):
 
     def delete_media_item(self, media_id: int) -> None:
         """
-        Mark a media item as deleted (soft delete).
+        Mark a media item as inactive.
 
         Args:
-            media_id: The ID of the media item to delete.
+            media_id: The ID of the media item to mark inactive.
         """
         with self._conn:
             self._conn.execute(
@@ -409,6 +410,16 @@ class SQLiteMediaRepository(IMediaRepository):
                 "WHERE id = ?",
                 (media_id,),
             )
+
+    def remove_media_item(self, media_id: int) -> None:
+        """
+        Remove a media item from the cache.
+
+        Args:
+            media_id: The ID of the media item to remove.
+        """
+        with self._conn:
+            self._conn.execute("DELETE FROM media WHERE id = ?", (media_id,))
 
     def get_all_media(self) -> list[dict[str, Any]]:
         """

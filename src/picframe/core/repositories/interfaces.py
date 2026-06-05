@@ -141,10 +141,19 @@ class IMediaRepository(Protocol):
 
     def delete_media_item(self, media_id: int) -> None:
         """
-        Mark a media item as deleted (soft delete) or remove it.
+        Mark a media item as inactive without removing its cache row.
 
         Args:
-            media_id: The ID of the media item to delete.
+            media_id: The ID of the media item to mark inactive.
+        """
+        ...
+
+    def remove_media_item(self, media_id: int) -> None:
+        """
+        Remove a media item from the cache.
+
+        Args:
+            media_id: The ID of the media item to remove.
         """
         ...
 
@@ -162,10 +171,10 @@ class IMediaRepository(Protocol):
 
     def delete_media_by_path(self, filepath: str) -> None:
         """
-        Mark a media item as deleted (soft delete) by its filepath.
+        Mark a media item as inactive without removing its cache row.
 
         Args:
-            filepath: The filepath of the media item to delete.
+            filepath: The filepath of the media item to mark inactive.
         """
         ...
 

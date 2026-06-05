@@ -46,6 +46,12 @@
 - Remote keeps primary media fields backward-compatible and uses `layout` plus `items[]` for pair preview, side-specific details, and pair delete choices.
 - User-facing frontend strings should go through vue-i18n and stay synchronized across `en.json` and `de.json`.
 
+## Media Cache Lifecycle
+- Restart/differential sync is idempotent for unchanged active files and reindexes only new, changed, or restored files.
+- Temporary missing files are marked inactive and skipped during playback; purge is the explicit operation that hard-deletes missing-file rows.
+- User-initiated Remote delete moves the original file to `model.deleted_pictures` and then removes the corresponding media cache row.
+- Display statistics live in `media_cache.db3` and are preserved on metadata refresh; only actual display recording updates `displayed_count` and `last_displayed`.
+
 ## Testing And Quality
 - TDD is expected for new work: adapt or add tests with the implementation.
 - Quality gates are pytest, mypy strict mode, ruff, frontend type checks, and relevant integration/manual checks.

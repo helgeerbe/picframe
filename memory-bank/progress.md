@@ -20,6 +20,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Live Remote media-selection count preview with selected-count / folder-scope total-count semantics.
 - Legacy display statistics parity in the media cache: `displayed_count` and `last_displayed`, shown in Remote metadata.
 - Ticket #618 playlist parity follow-ups for clickable current-media tags in Remote, managed video transition frame cache artifacts, Clear Image Cache API/service wiring, video playback resilience after cache clearing, portrait-pair display items/rendering/Remote UX, pair delete target selection, internal monitor/indexer/processing lifecycle controls, and real-media Raspberry Pi validation.
+- Media cache lifecycle cleanup: restart sync skips unchanged files, reindexes only new/changed/restored files, temporary missing files are soft-inactivated and skipped, explicit Remote delete moves originals to `deleted_pictures` and removes cache rows, and display counters are preserved across reindex/restart.
 - Display power/system manager HAL work and Wayland-oriented environment detection.
 - Video metadata extraction and frontend display of video technical metadata.
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.
@@ -27,11 +28,9 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
-- Ticket #618 is implemented and real-media validated in the working tree; it is ready for issue/board closure decisions.
 - Video engine integration remains an active architectural stream: subprocess GStreamer, IPC event routing, dynamic hardware discovery, fallback limits, and target-hardware validation.
 
 ## Next
-- Close or board-update #618 after the final validation comment is accepted.
 - Complete caps-driven hardware capability discovery in the GStreamer worker.
 - Surface software fallback / unsupported-media decisions as events visible to logs and the UI.
 - Validate video handoff on target Wayland/Raspberry Pi hardware.
@@ -40,4 +39,4 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 
 ## Known Verification State
 - Frontend build is green with `npm run build`.
-- Backend pytest is green in the local Python 3.14.4 `.venv`: 249 passed, 1 skipped, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
+- Backend pytest is green in the local Python 3.14.4 `.venv`: 259 passed, 1 skipped, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.

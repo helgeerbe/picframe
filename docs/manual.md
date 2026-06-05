@@ -126,14 +126,26 @@ different kinds of state:
     original media files.
 
 Deleting the current media item from the Remote remains separate from both
-maintenance actions; it is the operation that moves an original media file to
-the configured deleted-media location.
+maintenance actions; it moves the selected original media file to the
+configured deleted-media location and removes that media row from
+`media_cache.db3`.
+
+Temporarily missing files are handled differently from user deletes. If a file
+is unavailable during playback, for example because an NAS mount is temporarily
+down, Picframe marks the row inactive and skips it. A later scan reactivates
+and refreshes the row when the file exists again. Only **Purge Media Database**
+hard-deletes rows for files that are still missing on disk.
+
+Display statistics (`displayed_count` and `last_displayed`) are stored in
+`media_cache.db3`, survive normal restarts, and are preserved when unchanged
+or changed files are reindexed. Manually deleting `media_cache.db3` rebuilds
+the media cache from scratch and resets those statistics.
 
 When `model.portrait_pairs` is enabled, portrait image pairs are displayed as
 one slideshow slot with two original image files. Videos are never paired and
 always remain fullscreen. In Remote, pair metadata can be switched between the
 left and right image. Deleting a portrait pair opens a choice to delete the
-left image, the right image, or both; single-media delete behavior is unchanged.
+left image, the right image, or both.
 Portrait-pair detection uses indexed image orientation metadata. During
 unpublished next-gen development, deleting and rebuilding `media_cache.db3` is
 acceptable after changing portrait-detection behavior.

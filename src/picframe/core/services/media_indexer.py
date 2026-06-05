@@ -74,10 +74,6 @@ class MediaIndexerService:
 
         try:
             if event.event_type in ("created", "modified"):
-                logger.debug(f"Indexing file: {event.path}")
-                # Extract metadata
-                directory_id = self._get_or_create_directory_id(event.path)
-                
                 ext = os.path.splitext(event.path)[1].lower()
                 
                 # Get extensions from config
@@ -101,6 +97,20 @@ class MediaIndexerService:
                 if not strategy:
                     logger.debug(f"Skipping file with unsupported extension: {event.path}")
                     return
+
+                file_stat = self._get_file_stat(event.path)
+                if file_stat is None:
+                    logger.warning(f"File not found during indexing, marking inactive: {event.path}")
+                    self.media_repository.delete_media_by_path(event.path)
+                    return
+
+                if not self._should_index_file(event.path, file_stat):
+                    logger.debug(f"Skipping unchanged media file: {event.path}")
+                    return
+
+                logger.debug(f"Indexing file: {event.path}")
+                # Extract metadata
+                directory_id = self._get_or_create_directory_id(event.path)
                 
                 # For initial sync, we need this to be synchronous so the DB is populated
                 # before the playlist is built.
@@ -118,6 +128,33 @@ class MediaIndexerService:
                 self.media_repository.delete_media_by_path(event.path)
         except Exception as e:
             logger.error(f"Error indexing file {event.path}: {e}")
+
+    @staticmethod
+    def _get_file_stat(filepath: str) -> os.stat_result | None:
+        if not os.path.isfile(filepath):
+            return None
+        try:
+            return os.stat(filepath)
+        except OSError:
+            return None
+
+    def _should_index_file(self, filepath: str, file_stat: os.stat_result) -> bool:
+        existing = self.media_repository.get_media_by_path(filepath)
+        if not existing:
+            return True
+        if bool(existing.get("is_deleted")):
+            return True
+
+        try:
+            stored_size = int(existing.get("file_size", -1))
+            stored_mtime = float(existing.get("last_modified", -1.0))
+        except (TypeError, ValueError):
+            return True
+
+        return (
+            stored_size != int(file_stat.st_size)
+            or abs(stored_mtime - float(file_stat.st_mtime)) > 1e-6
+        )
 
     def _handle_command(self, event: CommandEvent) -> None:
         if self._stopped:
@@ -143,9 +180,7 @@ class MediaIndexerService:
                 # 3. Restart the monitor
                 self.media_monitor_service.start()
                 
-                # 4. Purge missing files from the database
-                purged_count = self.media_repository.purge_missing_files()
-                logger.info(f"Purged {purged_count} missing files from the database.")
+                logger.info("Media directory sync complete; purge remains an explicit maintenance action.")
 
     def pause(self) -> None:
         """Pause indexing and file monitoring."""

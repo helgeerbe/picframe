@@ -11,11 +11,15 @@ import os
 import random
 from typing import Any
 
+from picframe.core.events.dto import FileChangeEvent
+from picframe.core.events.interfaces import IEventPublisher
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
 from picframe.core.models.playlist import PlaylistCriteria
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 
 logger = logging.getLogger(__name__)
+
+_FILE_MTIME_TOLERANCE = 1e-6
 
 
 class PlaylistManager:
@@ -31,6 +35,7 @@ class PlaylistManager:
         self,
         media_repository: IMediaRepository,
         config_repository: IConfigRepository | None = None,
+        event_publisher: IEventPublisher | None = None,
     ) -> None:
         """
         Initialize the PlaylistManager.
@@ -40,6 +45,7 @@ class PlaylistManager:
         """
         self._media_repo = media_repository
         self._config_repo = config_repository
+        self._event_publisher = event_publisher
         self._playlist: list[dict[str, Any]] = []
         self._display_playlist: list[list[dict[str, Any]]] = []
         self._history: list[list[dict[str, Any]]] = []
@@ -100,32 +106,26 @@ class PlaylistManager:
             if not self._display_playlist:
                 return DisplayItem.single(self._get_no_images_placeholder())
 
-        original_index = self._current_index
-        looped = False
+        attempts = 0
+        max_attempts = len(self._display_playlist)
 
-        while True:
+        while attempts < max_attempts:
             if self._current_index >= len(self._display_playlist):
                 self._advance_playlist_cycle()
                 if not self._display_playlist:
                     return DisplayItem.single(self._get_no_images_placeholder())
-                # If we've rebuilt and still can't find a file after a
-                # full pass, break
-                if looped:
-                    return DisplayItem.single(self._get_no_images_placeholder())
-                looped = True
+                max_attempts = max(max_attempts, len(self._display_playlist))
 
             slot_data = self._display_playlist[self._current_index]
             self._current_index += 1
+            attempts += 1
             
             prepared_slot = self._prepare_slot_for_display(slot_data)
             if prepared_slot:
                 self._history.append(prepared_slot)
                 return self._slot_to_display_item(prepared_slot)
-                
-            # Prevent infinite loop if all files in a non-empty playlist
-            # are missing
-            if looped and self._current_index == original_index:
-                return DisplayItem.single(self._get_no_images_placeholder())
+
+        return DisplayItem.single(self._get_no_images_placeholder())
 
     def get_current(self) -> DisplayItem | None:
         """
@@ -174,9 +174,9 @@ class PlaylistManager:
         return selected_ids
 
     def delete_media_ids(self, media_ids: list[int]) -> None:
-        """Mark specific media IDs as deleted."""
+        """Remove specific media IDs from the cache after user delete moved files."""
         for media_id in media_ids:
-            self._media_repo.delete_media_item(media_id)
+            self._media_repo.remove_media_item(media_id)
 
     def resolve_current_delete_ids(
         self,
@@ -378,20 +378,34 @@ class PlaylistManager:
         self,
         slot_data: list[dict[str, Any]],
     ) -> list[dict[str, Any]]:
-        """Drop missing files, refresh metadata, and record display stats."""
+        """Drop unavailable/stale files, refresh metadata, and record display stats."""
         prepared_slot: list[dict[str, Any]] = []
 
         for item_data in slot_data:
-            filepath = item_data.get("filepath")
-            if not filepath or not os.path.isfile(filepath):
-                logger.warning(f"File not found, skipping: {filepath}")
-                continue
-
             media_id = item_data.get("id")
             if media_id:
                 latest_data = self._media_repo.get_media_item(media_id)
                 if latest_data and isinstance(latest_data, dict):
                     item_data = latest_data
+
+            if item_data.get("is_deleted"):
+                continue
+
+            filepath = item_data.get("filepath")
+            file_stat = self._get_display_file_stat(str(filepath) if filepath else "")
+            if file_stat is None:
+                logger.warning(f"File not found, marking inactive and skipping: {filepath}")
+                if media_id:
+                    self._media_repo.delete_media_item(media_id)
+                continue
+
+            if self._file_has_changed(item_data, file_stat):
+                logger.info(f"File changed before display, requesting reindex and skipping: {filepath}")
+                if filepath:
+                    self._request_reindex(str(filepath))
+                continue
+
+            if media_id:
                 updated_data = self._media_repo.record_media_displayed(media_id)
                 if updated_data and isinstance(updated_data, dict):
                     item_data = updated_data
@@ -399,6 +413,33 @@ class PlaylistManager:
             prepared_slot.append(item_data)
 
         return prepared_slot
+
+    @staticmethod
+    def _get_display_file_stat(filepath: str) -> os.stat_result | None:
+        if not filepath or not os.path.isfile(filepath):
+            return None
+        try:
+            return os.stat(filepath)
+        except OSError:
+            return None
+
+    @staticmethod
+    def _file_has_changed(item_data: dict[str, Any], file_stat: os.stat_result) -> bool:
+        try:
+            stored_size = int(item_data.get("file_size", -1))
+            stored_mtime = float(item_data.get("last_modified", -1.0))
+        except (TypeError, ValueError):
+            return True
+        return (
+            stored_size != int(file_stat.st_size)
+            or abs(stored_mtime - float(file_stat.st_mtime)) > _FILE_MTIME_TOLERANCE
+        )
+
+    def _request_reindex(self, filepath: str) -> None:
+        if self._event_publisher is not None:
+            self._event_publisher.publish(
+                FileChangeEvent(event_type="modified", path=filepath)
+            )
 
     def _slot_to_display_item(self, slot_data: list[dict[str, Any]]) -> DisplayItem:
         """Convert one display slot from repository rows to a DisplayItem."""
