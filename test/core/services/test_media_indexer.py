@@ -6,6 +6,7 @@ import pytest
 from picframe.core.services.media_indexer import MediaIndexerService
 from picframe.core.events.dto import FileChangeEvent, CommandEvent, Command
 from picframe.core.models.media import MediaItem, MediaType
+from picframe.core.ports.media_monitor import IMediaMonitor
 
 @pytest.fixture
 def mock_media_repo() -> MagicMock:
@@ -35,7 +36,7 @@ def mock_image_processing_service() -> MagicMock:
 
 @pytest.fixture
 def mock_media_monitor_service() -> MagicMock:
-    return MagicMock()
+    return MagicMock(spec=IMediaMonitor)
 
 @pytest.fixture
 def media_indexer(
@@ -281,7 +282,7 @@ def test_handle_command_set_config(
     
     # Assert
     mock_media_monitor_service.stop.assert_called_once()
-    assert mock_media_monitor_service.directories == ["/new/pic/dir"]
+    mock_media_monitor_service.set_directories.assert_called_once_with(["/new/pic/dir"])
     mock_media_monitor_service.perform_differential_sync.assert_called_once()
     mock_media_monitor_service.start.assert_called_once()
     mock_media_repo.purge_missing_files.assert_not_called()

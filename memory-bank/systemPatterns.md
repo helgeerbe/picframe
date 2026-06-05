@@ -6,6 +6,7 @@
 - Strict Event-Driven Architecture: components communicate through immutable event/command DTOs on a thread-safe PriorityQueue event bus.
 - Event bus interfaces are split into `IEventPublisher` and `IEventSubscriber` to keep component permissions narrow.
 - The runtime separates configuration (`config.db3`, persistent) from media metadata (`media_cache.db3`, rebuildable).
+- Filesystem monitoring follows ports/adapters: core services depend on `IMediaMonitor`, while the watchdog-backed adapter lives in infrastructure.
 
 ## Playback And Rendering
 - `PlaylistManager` owns media querying, filtering, shuffle, and current display-item selection.
@@ -51,6 +52,11 @@
 - Temporary missing files are marked inactive and skipped during playback; purge is the explicit operation that hard-deletes missing-file rows.
 - User-initiated Remote delete moves the original file to `model.deleted_pictures` and then removes the corresponding media cache row.
 - Display statistics live in `media_cache.db3` and are preserved on metadata refresh; only actual display recording updates `displayed_count` and `last_displayed`.
+
+## Filesystem Monitoring
+- `WatchdogMediaMonitor` is the infrastructure adapter for create/modify/delete/move events and differential sync.
+- Differential sync publishes `FileChangeEvent` directly; `MediaIndexerService` decides whether each file needs metadata extraction.
+- Monitor directory changes go through `IMediaMonitor.set_directories()` rather than direct mutable adapter state.
 
 ## Testing And Quality
 - TDD is expected for new work: adapt or add tests with the implementation.

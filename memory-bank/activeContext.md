@@ -17,9 +17,11 @@ The current implementation focus is Phase 2 next-gen control-plane parity cleanu
 - Issues #676 and #677 are closed after documenting legacy `configuration.yaml` import and normalizing supported legacy keys through `/api/config/import-yaml`.
 - Recent #618 work added clickable current-media tags in Remote, managed cache storage for generated video transition frames, Clear Image Cache API/service wiring, playback guards so videos continue after generated frames are cleared, image-only portrait-pair display items/rendering/Remote UX, pair delete target selection, internal monitor/indexer/processing lifecycle controls, and real-media Raspberry Pi validation.
 - Recent media-cache lifecycle cleanup keeps restart sync idempotent, preserves display counters across reindex, soft-inactivates temporarily missing media, and hard-removes cache rows only after explicit user delete or purge.
+- Recent #611 cleanup moved watchdog media monitoring behind a core `IMediaMonitor` port; watchdog now lives in infrastructure and differential sync emits core `FileChangeEvent`s directly.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
+- Keep filesystem watchers and other OS-specific adapters outside core; use ports such as `IMediaMonitor` for core service dependencies.
 - Align future video work with caps-driven GStreamer discovery and fallback observability.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

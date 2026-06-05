@@ -24,8 +24,8 @@ from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
 from picframe.core.services.bootstrapper import EnvironmentBootstrapper
 from picframe.core.services.config_service import ConfigService
 from picframe.core.services.image_processing import ImageProcessingService
-from picframe.core.services.media_monitor import MediaMonitorService
 from picframe.core.services.playlist import PlaylistManager
+from picframe.infrastructure.filesystem.media_monitor import WatchdogMediaMonitor
 from picframe.infrastructure.os.hal_factory import HALFactory
 
 logging.basicConfig(level=logging.INFO)
@@ -75,7 +75,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     cache_dir = os.path.join(data_dir, "cache")
     image_processing_service = ImageProcessingService(cache_dir=cache_dir)
     
-    # Initialize MediaMonitorService
+    # Initialize media monitor infrastructure adapter
     model_config = nested_config.get("model", {})
     
     pic_dir = model_config.get("pic_dir", os.path.join(data_dir, "media"))
@@ -94,7 +94,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     allowed_extensions = set(image_extensions + video_extensions)
     follow_links = model_config.get("follow_links", False)
     
-    media_monitor_service = MediaMonitorService(
+    media_monitor_service = WatchdogMediaMonitor(
         publisher=event_bus,
         directories=media_directories,
         allowed_extensions=allowed_extensions,

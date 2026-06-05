@@ -156,6 +156,20 @@ acceptable after changing portrait-detection behavior.
 
 This section defines the foundational structures and system permissions required for developing, testing, and deploying Picframe.
 
+### Developer Architecture: Media Monitoring
+
+Media monitoring follows the clean-architecture boundary used elsewhere in the
+next-gen code. The core layer defines the media-monitor port and consumes
+`FileChangeEvent` DTOs; watchdog is only the infrastructure implementation.
+
+*   Core services depend on `IMediaMonitor`, not watchdog classes.
+*   `WatchdogMediaMonitor` translates create, modify, delete, and move
+    notifications into `FileChangeEvent`s.
+*   Differential sync publishes core events directly for discovered media
+    files; the indexer decides whether each file is new, changed, restored, or
+    unchanged.
+*   Runtime wiring belongs in the composition root (`main.py`).
+
 ### Development Environment & System Setup
 
 To develop, test, and deploy Picframe, specific system packages are required depending on the host OS. The provided `docs/install_picframe.sh` script automates this process, including dynamic hardware probing for optimal video playback.

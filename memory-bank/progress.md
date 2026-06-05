@@ -21,6 +21,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Legacy display statistics parity in the media cache: `displayed_count` and `last_displayed`, shown in Remote metadata.
 - Ticket #618 playlist parity follow-ups for clickable current-media tags in Remote, managed video transition frame cache artifacts, Clear Image Cache API/service wiring, video playback resilience after cache clearing, portrait-pair display items/rendering/Remote UX, pair delete target selection, internal monitor/indexer/processing lifecycle controls, and real-media Raspberry Pi validation.
 - Media cache lifecycle cleanup: restart sync skips unchanged files, reindexes only new/changed/restored files, temporary missing files are soft-inactivated and skipped, explicit Remote delete moves originals to `deleted_pictures` and removes cache rows, and display counters are preserved across reindex/restart.
+- Ticket #611 clean-architecture cleanup: media monitoring now uses a core `IMediaMonitor` port, watchdog is isolated in an infrastructure adapter, differential sync publishes core `FileChangeEvent`s directly, and indexer config-change wiring uses `set_directories()`.
 - Display power/system manager HAL work and Wayland-oriented environment detection.
 - Video metadata extraction and frontend display of video technical metadata.
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.
@@ -39,4 +40,4 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 
 ## Known Verification State
 - Frontend build is green with `npm run build`.
-- Backend pytest is green in the local Python 3.14.4 `.venv`: 259 passed, 1 skipped, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
+- Backend pytest is green in the local Python 3.14.4 `.venv`: 263 passed, 1 skipped, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.

@@ -11,9 +11,9 @@ import os
 from picframe.core.events.dto import Command, CommandEvent, FileChangeEvent
 from picframe.core.events.interfaces import IEventSubscriber
 from picframe.core.metadata.interfaces import IMetadataStrategy
+from picframe.core.ports.media_monitor import IMediaMonitor
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 from picframe.core.services.image_processing import ImageProcessingService
-from picframe.core.services.media_monitor import MediaMonitorService  # type: ignore
 from picframe.core.services.geocoding_worker import GeocodingWorker
 
 logger = logging.getLogger(__name__)
@@ -33,7 +33,7 @@ class MediaIndexerService:
         media_repository: IMediaRepository,
         config_repository: IConfigRepository,
         image_processing_service: ImageProcessingService,
-        media_monitor_service: MediaMonitorService,
+        media_monitor_service: IMediaMonitor,
         image_strategy: IMetadataStrategy,
         video_strategy: IMetadataStrategy
     ) -> None:
@@ -166,13 +166,13 @@ class MediaIndexerService:
                 new_pic_dir = payload["model"]["pic_dir"]
                 logger.info(f"Configuration changed: pic_dir updated to {new_pic_dir}")
                 
-                # 1. Update MediaMonitorService directories
+                # 1. Update media monitor directories
                 # We need to stop it, update directories, and restart it
                 self.media_monitor_service.stop()
                 
                 # Expand user path if necessary
                 expanded_dir = os.path.expanduser(new_pic_dir)
-                self.media_monitor_service.directories = [expanded_dir]
+                self.media_monitor_service.set_directories([expanded_dir])
                 
                 # 2. Trigger a differential sync to index new files
                 self.media_monitor_service.perform_differential_sync()

@@ -207,7 +207,7 @@ class RenderCommand(Event):
 @dataclass(frozen=True)
 class FileChangeEvent(Event):
     """
-    A notification from the MediaMonitorService that the filesystem changed.
+    A notification from the media monitor that the filesystem changed.
 
     Attributes:
         event_type: The type of change (e.g., 'created', 'modified').

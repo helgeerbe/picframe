@@ -33,6 +33,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Next-gen media cache schema can be changed directly while unreleased; delete/rebuild local media DBs instead of carrying migrations for unpublished schema changes.
 - Restore legacy display statistics as rebuildable media-cache metadata (`displayed_count`, `last_displayed`) and expose it as read-only Remote media information.
 - Keep temporary missing media, explicit user deletes, and purge separate: missing media is soft-inactivated for NAS resilience, Remote delete moves the original and removes its cache row, and purge hard-deletes rows for files that remain missing.
+- Keep filesystem watching as an infrastructure adapter behind `IMediaMonitor`; core consumes `FileChangeEvent`s and must not import watchdog.
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.
