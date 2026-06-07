@@ -29,6 +29,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Ticket #666 shuffle mode: `standard` keeps current random behavior, `fewer_repeats` uses existing `last_displayed` history after display-slot creation, portrait pairs remain one shuffle slot, and Remote exposes a split shuffle button.
 - Ticket #616 cleanup gate: package CLI now targets next-gen `picframe.main`, `SystemErrorEvent` poison-pill semantics are explicit, VLC is no longer a next-gen dependency, integration coverage was added, and manual Picframe validation passed before closeout.
 - Ticket #678 audited cleanup: legacy controller/model/start/viewer/HTTP/peripheral/VLC runtime modules and their obsolete tests were removed; MQTT/Home Assistant is now a next-gen infrastructure adapter using event bus, config, and state-query ports.
+- Repository hygiene: root-level debug test scripts were removed, `README.md` remains the only root Markdown document, user docs live under `docs/user/`, and developer architecture notes live under `docs/dev/architecture/`.
 - Display power/system manager HAL work and Wayland-oriented environment detection.
 - Video metadata extraction and frontend display of video technical metadata.
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.

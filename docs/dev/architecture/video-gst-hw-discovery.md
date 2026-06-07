@@ -1,5 +1,10 @@
 # Architectural Evaluation: Dynamic Hardware Acceleration Discovery in GStreamer
 
+Status: target architecture / design note. The next-gen runtime already uses
+GStreamer for video handoff, but this document describes the desired
+caps-driven discovery and observability direction for continued hardware
+acceleration hardening.
+
 ## 1. Executive Summary
 This document evaluates the architectural approaches for managing hardware-accelerated video playback on Raspberry Pi (Wayland) using GStreamer. It contrasts static configurations with dynamic discovery mechanisms and proposes an optimal, robust design that leverages GStreamer's native registry and caps negotiation. This design eliminates manual configuration, ensures cross-generation Raspberry Pi compatibility, and provides deterministic observability for software fallbacks.
 

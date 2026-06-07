@@ -16,7 +16,7 @@ This is a viewer for a raspberry powered picture frame. For remote control it pr
 - https://github.com/helgeerbe/picframe
 - Paddy Gaunt, Jeff Godfrey, Helge Erbe
 - Licence: MIT
-- Tested on rasberry 3B+/4, Ubuntu 20.10 and Python 3.7
+- Next-generation development targets Raspberry Pi / Linux hosts with the FastAPI/Vue control plane and pi3d/GStreamer playback stack.
 
 ## History of PictureFrame
 
@@ -79,7 +79,18 @@ not exposed as MQTT/Home Assistant entities.
 
 ## Documentation
 
-[Full documentation can be found at the project's wiki](https://github.com/helgeerbe/picframe/wiki).
+Local documentation is split by audience:
+
+- [Documentation index](docs/README.md)
+- [User manual](docs/user/manual.md)
+- [Install helper script](docs/user/install_picframe.sh)
+- [Architecture overview](docs/dev/architecture/overview.md)
+- [Frontend architecture notes](docs/dev/architecture/frontend.md)
+- [GStreamer hardware discovery notes](docs/dev/architecture/video-gst-hw-discovery.md)
+- [Video hardware limits notes](docs/dev/architecture/video-hw-limits.md)
+
+Historical project documentation can also be found at the project's
+[wiki](https://github.com/helgeerbe/picframe/wiki).
 
 Please note that PictureFrame may change significantly during its development.
 Bug reports, comments, feature requests and fixes are most welcome!

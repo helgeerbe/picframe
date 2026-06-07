@@ -25,6 +25,6 @@ Picframe 2.0 modernizes the Raspberry Pi digital picture frame into a modular, e
 
 ## Memory Bank Maintenance Policy
 - Keep each core Memory Bank file concise and current; prefer rewriting stale sections over appending dated logs.
-- Store detailed design in `Architecture_Solution_Document.md`, `architecture_*.md`, and `Frontend_Specification.md`; Memory Bank should point to those documents and preserve only the decisions needed after a reset.
+- Store detailed design in `docs/dev/architecture/`; user-facing docs live in `docs/user/`. Memory Bank should point to those documents and preserve only the decisions needed after a reset.
 - Keep `activeContext.md` focused on the present: current focus, next steps, known risks, and verification state.
 - Keep `decisionLog.md` as a compact index of major decisions, not a full rationale archive.

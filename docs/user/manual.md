@@ -277,7 +277,7 @@ GStreamer is the video runtime; HAL adapters cover hardware input.
 
 ### Development Environment & System Setup
 
-To develop, test, and deploy Picframe, specific system packages are required depending on the host OS. The provided `docs/install_picframe.sh` script automates this process, including dynamic hardware probing for optimal video playback.
+To develop, test, and deploy Picframe, specific system packages are required depending on the host OS. The provided `docs/user/install_picframe.sh` script automates this process, including dynamic hardware probing for optimal video playback.
 
 #### Automated Hardware Probing and Video Acceleration
 

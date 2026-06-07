@@ -1,5 +1,10 @@
 # Frontend Specification: Picframe 2.0 (Vue.js SPA)
 
+Status: this document describes the intended frontend architecture and should
+be kept aligned with `frontend/src`. The implementation has evolved toward
+domain-specific Settings editors and pair-aware Remote media details; treat any
+older examples here as design context rather than a compatibility promise.
+
 ## 1. Executive Summary
 This document outlines the frontend architecture and user interface specification for the Picframe 2.0 Single Page Application (SPA). Built with Vue.js 3, the SPA serves as the primary control plane for the digital picture frame, communicating with the FastAPI backend via REST APIs for configuration and WebSockets for real-time playback state.
 
@@ -8,7 +13,7 @@ This document outlines the frontend architecture and user interface specificatio
 *   **Build Tool:** Vite (for fast HMR and optimized production builds)
 *   **State Management:** Pinia (replaces Vuex for modular, type-safe state)
 *   **Routing:** Vue Router 4
-*   **Styling:** Tailwind CSS (for responsive, utility-first design) + Headless UI components (e.g., modals, toggles)
+*   **Styling:** Tailwind CSS (for responsive, utility-first design) plus local Vue components for controls such as modals, toggles, path pickers, and chip editors.
 *   **Map Integration:** Leaflet.js (`leaflet` and `@vue-leaflet/vue-leaflet`) for OpenStreetMap rendering.
 *   **Network:** `axios` (REST API) and native browser `WebSocket` API.
 
@@ -74,7 +79,7 @@ The `MapComponent` is a standalone Vue component responsible for rendering an in
 A dedicated panel (`TextOverlayControls.vue`) to manage text overlays on the currently playing media.
 *   **Separation of Concerns:** These controls strictly toggle the text overlays within the backend pi3d render pipeline. They do not affect, hide, or toggle any text elements within the frontend UI itself.
 *   **Configuration Payload:** All settings are collected and transmitted as a unified configuration payload using a `SET_CONFIG` command over the WebSocket connection.
-    *   Example Payload: `{ "command": "SET_CONFIG", "payload": { "viewer": { "show_clock": true, "show_text": "title caption name date folder location" } } }`
+    *   Example Payload: `{ "command": "SET_CONFIG", "payload": { "viewer": { "show_clock": true, "show_text_enabled": true, "text_overlay_format": "title caption name date folder location" } } }`
 *   **Helper Text System (`HelperText.vue`):** A generalized, reusable helper text system is implemented for all UI elements.
     *   **Presentation Format:** The UI dynamically decides the presentation format based on the length and complexity of the helper text.
         *   **Hover Tooltip:** Used for short, simple descriptions.
@@ -89,7 +94,8 @@ This view provides robust configuration and system management, protected by basi
 
 ### 5.1 Configuration Management
 A comprehensive form interface mapping to the `config.db3` schema.
-*   **Sections:** Grouped logically (e.g., Directories, Playback Settings, MQTT, Display).
+*   **Sections:** Grouped logically (Viewer, Media/Playlist, MQTT, HTTP/Security, Peripherals, GPIO Inputs, and maintenance actions).
+*   **Domain Editors:** Settings use constrained controls such as host path pickers, ordered chips, fixed-choice lists, color pickers, date pickers, sort-rule rows, password reveal fields, shader basename selection, and the geocoding location-format builder instead of generic text inputs.
 *   **Actions:**
     *   `Save Changes`: Sends a `PUT /api/config` request.
     *   `Export Configuration`: Triggers a download of the current configuration as a JSON or YAML file.
@@ -98,9 +104,9 @@ A comprehensive form interface mapping to the `config.db3` schema.
 ### 5.2 Advanced Maintenance Operations
 A dedicated "Danger Zone" or Maintenance tab for system-level operations. All actions here require a confirmation modal to prevent accidental clicks.
 *   **Database Management:**
-    *   `Purge Media Database`: Sends a command to drop all tables in `media_cache.db3` and triggers a full background rescan. Useful if the database is corrupted or out of sync.
+    *   `Purge Media Database`: Removes media database rows for original media files that no longer exist on disk. Temporary missing media is otherwise kept inactive until purge.
 *   **Cache Management:**
-    *   `Clear Image Cache`: Deletes all pre-processed matting images and resized thumbnails from the disk cache, freeing up space.
+    *   `Clear Image Cache`: Deletes generated cache artifacts such as video transition frames. Original media files and media database rows are not removed.
 *   **System Power States:**
     *   `Reboot System`: Sends a `CommandEvent(REBOOT)` to the `SystemManager`.
     *   `Shutdown System`: Sends a `CommandEvent(SHUTDOWN)` to the `SystemManager`.

@@ -1,6 +1,6 @@
 # Decision Log
 
-This is a compact index of durable project decisions. Detailed rationale lives in `Architecture_Solution_Document.md`, `architecture_*.md`, `Frontend_Specification.md`, and GitHub Issues.
+This is a compact index of durable project decisions. Detailed rationale lives in `docs/dev/architecture/`, `docs/user/manual.md`, and GitHub Issues.
 
 ## Durable Decisions
 - Use the existing repository with long-lived modernization branch `v2-dev`.

@@ -1,5 +1,11 @@
 # Architecture Solution Document: Picframe 2.0 Modernization
 
+Status: this document is a developer architecture overview for the next-gen
+runtime. It has been moved under `docs/dev/architecture` and should be read
+alongside the current source tree, GitHub issues, and Memory Bank summaries.
+Some lower-level examples are historical design notes where the implementation
+has since been refined.
+
 ## 1. Executive Summary
 This document outlines the comprehensive architectural redesign of the `picframe` project. The goal is to transition from a tightly coupled, synchronous script to a modern, modular, and highly performant system. This modernization leverages **Clean Architecture (Hexagonal)** and a **Strict Event-Driven Architecture (EDA)** to support dynamic configuration via a FastAPI/Vue.js stack, robust state management, and hardware-accelerated video playback using GStreamer alongside `pi3d` for image transitions.
 
@@ -11,7 +17,7 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Concept:** The system is divided into strict, concentric layers (Domain, Application, Adapters, Infrastructure) where dependencies only point inwards. The core business logic has no knowledge of the UI, databases, or external frameworks.
 *   **Reasoning & Benefits:** This decouples the core media orchestration from the presentation and control layers. It allows us to swap out the UI (e.g., Vue.js instead of a local GUI) or the database (SQLite instead of YAML) without touching the core logic. It also enables pure unit testing of the business rules by mocking the outer layers. To enforce this, legacy "God Objects" are dismantled into dedicated services:
     *   **`HardwareInputService` (Control Plane):** Monitors GPIO (PIR sensors, buttons) and publishes `HardwareEvent`s.
-    *   **`ImageProcessingService` (Application Layer):** Handles CPU-intensive image matting and caching before rendering.
+    *   **Renderer image preparation:** Handles EXIF-corrected image loading and in-memory matting before pi3d texture creation.
     *   **`DisplayPowerManager` (Infrastructure Layer):** Manages OS-level screen power (vcgencmd, xset) independently of the pixel renderer.
 
 ### 2.2 Strict Event-Driven Architecture (EDA) & PriorityQueue
@@ -45,7 +51,7 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Reasoning & Benefits:** Violations of the Single Responsibility Principle (SRP), such as having the render loop extract and publish metadata, cause unpredictable latency and frame drops. By shifting this responsibility to the `PlaybackEngine`, the Main Thread remains unblocked. The `PlaybackEngine` retrieves an immutable `MediaItem` DTO from the `PlaylistManager`, instructs the renderer, and immediately publishes a `MediaChangedEvent` to the Event Bus. Background threads (FastAPI, MQTT) consume this event asynchronously, ensuring network I/O never pollutes the synchronous render loop.
 
 ### 2.9 Asynchronous Media Monitoring & Network Share Handling
-*   **Concept:** A dedicated `MediaMonitorService` (utilizing `watchdog`) runs in a background thread to detect file system changes (Create, Modify, Delete) in configured media directories. It publishes immutable `FileChangeEvent` DTOs to the Event Bus. To support network shares (NFS/SMB) mounted as subfolders, the service implements a hybrid monitoring strategy: native OS events (`inotify`/`FSEvents`) for local drives, and a configurable `PollingObserver` fallback for detected network mount points.
+*   **Concept:** Media monitoring is exposed to core services through an `IMediaMonitor` port. The watchdog-specific implementation lives in the infrastructure layer as `WatchdogMediaMonitor` and runs in a background thread to detect file system changes (Create, Modify, Delete) in configured media directories. It publishes immutable `FileChangeEvent` DTOs to the Event Bus. To support network shares (NFS/SMB) mounted as subfolders, the service implements a hybrid monitoring strategy: native OS events (`inotify`/`FSEvents`) for local drives, and a configurable `PollingObserver` fallback for detected network mount points.
 *   **Reasoning & Benefits:** Eliminates the need for synchronous, blocking directory scans during playback for local files. When a `FileChangeEvent` is consumed by the Media Orchestrator, it asynchronously triggers the `MetadataExtractor` to update the ephemeral `media_cache.db3` and signals the `PlaylistManager` to adjust the active playlist. The hybrid approach ensures the system reacts to new media in real-time on local storage while safely mitigating the limitations of network file systems (which do not reliably propagate inotify events) without crashing the application.
 *   **Symlink & Mount Point Traversal:** The service includes explicit configuration to safely follow symlinks (`follow_links=True/False`) and detect mount boundaries. When traversing directories, it checks if a subfolder is a distinct mount point (e.g., using `os.path.ismount()`). If a network mount is detected within a locally monitored directory tree, the service automatically attaches a dedicated `PollingObserver` to that specific subfolder, ensuring comprehensive coverage regardless of the underlying storage topology.
 

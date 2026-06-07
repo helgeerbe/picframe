@@ -1,5 +1,9 @@
 # Architectural Pattern: Dynamic Hardware Limitation Detection
 
+Status: target architecture / design note. The current video stack uses
+GStreamer and configurable software fallback limits; this document captures the
+intended caps-driven hardware-limit detection model for future hardening.
+
 ## 1. The Problem: Hardware-Specific Decoding Limits
 While GStreamer can dynamically discover *which* codecs are hardware-accelerated, specific hardware decoders have hard limits on the media they can process. For example, a hardware H.264 decoder might be capped at 1080p (1920x1080) at 30fps, while the same SoC might support HEVC (H.265) up to 4K (3840x2160) at 60fps. If we feed a 4K H.264 video into a 1080p-limited hardware decoder, the pipeline will fail, hang, or crash the display server.
 
