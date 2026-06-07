@@ -66,6 +66,27 @@ The `picframe run` command accepts several parameters to override default paths 
 
 *Note: The webserver port and HTML directory path are strictly managed via CLI arguments and environment variables. They are not editable via the frontend UI to prevent connection loss and synchronization issues.*
 
+### Settings UI
+
+The Settings UI uses purpose-built editors instead of raw text fields for the
+most important runtime configuration. Examples include host path pickers,
+ordered text-overlay chips, token lists for extensions and CORS origins, color
+pickers for matting, date pickers, sort-rule rows, a location-format builder
+for geocoding, and keyboard shortcut capture.
+
+Path pickers browse the Picframe host filesystem from the current user's home
+directory only. They include shortcuts such as `~`, `~/Pictures`, `~/.picframe`,
+and `~/DeletedPictures`. Attempts to browse outside the home directory,
+including symlink escapes, are rejected by the backend. Media library paths may
+be saved while missing so temporary NAS or mount outages do not force a reset.
+
+Low-level options such as renderer resource paths, WebSocket rate limits, and
+debug logging remain editable, but are grouped under collapsed Advanced areas.
+Shader selection stores the shader path without `.fs` or `.vs`; Picframe loads
+the matching shader files from that basename. Image metadata attributes and
+image/video extensions are selected from fixed supported lists. Password fields
+remain masked by default and include an eye button for temporary visibility.
+
 ### GPIO Hardware Inputs
 
 Raspberry Pi GPIO inputs are configured from the Settings UI under **GPIO Inputs**.
@@ -93,6 +114,11 @@ does not need to be restarted for a changed GPIO mapping.
 ### Geocoding Configuration (`key_list`)
 
 The `model.key_list` configuration parameter dictates how raw address data from the Nominatim reverse geocoding service is formatted into a human-readable location string.
+
+In the Settings UI this is edited as **Location format**. Each visible part is
+one output component, and the chips inside that part are fallback choices in
+priority order. Presets such as Default, Detailed, City/Region/Country, and
+City/Country write the same nested `model.key_list` structure shown below.
 
 #### Structure Requirement: List of Lists
 This parameter **must** be structured strictly as a list of lists (e.g., `[["tourism", "amenity"], ["city", "town", "village"], ["country"]]`).

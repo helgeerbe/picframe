@@ -37,6 +37,44 @@ class MediaSelectionCountResponse(BaseModel):
     scope_label: str = ""
 
 
+class FilesystemEntryDTO(BaseModel):
+    """Filesystem entry visible to the Settings path picker."""
+    name: str
+    path: str
+    is_dir: bool = False
+    is_file: bool = False
+    extension: str = ""
+
+
+class FilesystemBrowseResponse(BaseModel):
+    """Safe filesystem browse response rooted at the Picframe user's home."""
+    root: str
+    path: str
+    parent: str | None = None
+    entries: list[FilesystemEntryDTO] = Field(default_factory=list)
+    shortcuts: list[FilesystemEntryDTO] = Field(default_factory=list)
+
+
+class FilesystemValidateRequest(BaseModel):
+    """Path validation request for Settings path controls."""
+    path: str = ""
+    kind: str = "any"
+    field: str = ""
+    allow_missing: bool = False
+    extensions: list[str] = Field(default_factory=list)
+
+
+class FilesystemValidateResponse(BaseModel):
+    """Path validation result for Settings path controls."""
+    valid: bool = False
+    path: str = ""
+    exists: bool = False
+    is_dir: bool = False
+    is_file: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    error: str = ""
+
+
 class ViewerConfig(BaseModel):
     blur_amount: int = 12
     blur_zoom: float = 1.0

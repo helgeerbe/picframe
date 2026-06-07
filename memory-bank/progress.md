@@ -13,6 +13,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - FastAPI control plane with config endpoints, WebSocket state, SPA serving, media serving, and system/maintenance commands.
 - Ticket #637 control-plane hardening: Vite builds the Vue SPA into packaged FastAPI assets, `picframe init` copies the compiled UI into the runtime directory, FastAPI serves SPA routes/assets, and WebSocket media DTO location enrichment uses the injected media repository instead of hardcoded cache DB paths.
 - Vue 3 SPA foundation with Remote, Filters, and Settings views.
+- Settings UI fail-safe redesign: Settings now uses dedicated domain editors, safe host path browsing/validation rooted at the Picframe user's home directory, token/chip editors, sort-rule rows, a geocoding location-format builder, color controls, shortcut capture, fixed metadata/extension lists, shader basename selection, password reveal controls, and collapsed Advanced sections.
 - Ticket #635 hardware-input configuration: Settings now has a dedicated GPIO Inputs editor, `hardware_inputs` is validated through backend/core config paths, and `HardwareInputService` is wired into the runtime with adapter reconfiguration on Settings changes. PIR `no_motion_delay_seconds` delays no-motion commands and is cancelled by renewed motion.
 - Remote Media Selection block for playlist runtime filters and timing controls.
 - Remote filter option chips toggle selected terms; normal click appends/toggles with `OR`, Shift-click appends with `AND`, and long tag/location option lists scroll in-place.
@@ -47,4 +48,4 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 
 ## Known Verification State
 - Frontend build is green with `npm run build`.
-- Backend pytest is green in the local Python 3.14.4 `.venv`: 333 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
+- Backend pytest is green in the local Python 3.14.4 `.venv`: 338 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.

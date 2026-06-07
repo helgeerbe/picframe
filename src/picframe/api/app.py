@@ -18,6 +18,10 @@ from fastapi.staticfiles import StaticFiles
 
 from picframe.api.models import (
     AppConfig,
+    FilesystemBrowseResponse,
+    FilesystemEntryDTO,
+    FilesystemValidateRequest,
+    FilesystemValidateResponse,
     HardwareInputsConfig,
     MediaResponseDTO,
     MediaSelectionCountRequest,
@@ -38,6 +42,123 @@ MEDIA_DTO_EXIF_KEYS = [
     "duration", "codec", "pixel_format", "framerate", "bitrate",
     "displayed_count", "last_displayed"
 ]
+
+FILESYSTEM_KIND_VALUES = {"any", "file", "directory"}
+
+
+def _path_picker_root() -> Path:
+    return Path.home().expanduser().resolve()
+
+
+def _display_path(path: Path) -> str:
+    root = _path_picker_root()
+    try:
+        relative = path.resolve(strict=False).relative_to(root)
+    except ValueError:
+        return str(path)
+    if str(relative) == ".":
+        return "~"
+    return f"~/{relative.as_posix()}"
+
+
+def _resolve_home_path(path_value: str | None) -> Path:
+    root = _path_picker_root()
+    raw_path = (path_value or "").strip()
+    if not raw_path or raw_path == "~":
+        candidate = root
+    elif raw_path.startswith("~/"):
+        candidate = root / raw_path[2:]
+    else:
+        raw_candidate = Path(raw_path).expanduser()
+        candidate = raw_candidate if raw_candidate.is_absolute() else root / raw_candidate
+
+    resolved = candidate.resolve(strict=False)
+    try:
+        resolved.relative_to(root)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=403,
+            detail="Path must stay within the Picframe user's home directory",
+        ) from exc
+    return resolved
+
+
+def _filesystem_shortcuts() -> list[FilesystemEntryDTO]:
+    shortcuts = []
+    for shortcut in ("~", "~/Pictures", "~/.picframe", "~/DeletedPictures"):
+        path = _resolve_home_path(shortcut)
+        shortcuts.append(
+            FilesystemEntryDTO(
+                name=shortcut,
+                path=shortcut,
+                is_dir=path.is_dir(),
+                is_file=path.is_file(),
+                extension=path.suffix.lower(),
+            )
+        )
+    return shortcuts
+
+
+def _normalize_extensions(extensions: str | list[str] | None) -> set[str]:
+    if extensions is None:
+        return set()
+    if isinstance(extensions, str):
+        raw_values = [item.strip() for item in extensions.split(",")]
+    else:
+        raw_values = [str(item).strip() for item in extensions]
+    return {
+        value.lower() if value.startswith(".") else f".{value.lower()}"
+        for value in raw_values
+        if value
+    }
+
+
+def _filesystem_entry(path: Path) -> FilesystemEntryDTO:
+    return FilesystemEntryDTO(
+        name=path.name or _display_path(path),
+        path=_display_path(path),
+        is_dir=path.is_dir(),
+        is_file=path.is_file(),
+        extension=path.suffix.lower(),
+    )
+
+
+def _validate_path_request(payload: FilesystemValidateRequest) -> FilesystemValidateResponse:
+    kind = payload.kind if payload.kind in FILESYSTEM_KIND_VALUES else "any"
+    extensions = _normalize_extensions(payload.extensions)
+    path = _resolve_home_path(payload.path)
+    exists = path.exists()
+    warnings: list[str] = []
+
+    response = FilesystemValidateResponse(
+        valid=True,
+        path=_display_path(path),
+        exists=exists,
+        is_dir=path.is_dir(),
+        is_file=path.is_file(),
+    )
+
+    if not exists:
+        if not payload.allow_missing:
+            response.valid = False
+            response.error = "Path does not exist"
+        else:
+            warnings.append("Path does not exist yet")
+        response.warnings = warnings
+        return response
+
+    if kind == "directory" and not path.is_dir():
+        response.valid = False
+        response.error = "Path must be a directory"
+    elif kind == "file" and not path.is_file():
+        response.valid = False
+        response.error = "Path must be a file"
+    elif kind == "file" and extensions and path.suffix.lower() not in extensions:
+        response.valid = False
+        response.error = f"File extension must be one of: {', '.join(sorted(extensions))}"
+
+    response.warnings = warnings
+    return response
 
 
 def system_error_websocket_message(event: Any) -> str:
@@ -434,6 +555,63 @@ def create_app(
             }
         image_processing_service.clear_cache()
         return {"status": "cache cleared"}
+
+    @app.get("/api/filesystem/browse")
+    async def api_filesystem_browse(
+        path: str = "~",
+        kind: str = "any",
+        extensions: str = "",
+    ) -> dict[str, Any]:
+        """Browse host filesystem paths safely under the Picframe user's home."""
+        if kind not in FILESYSTEM_KIND_VALUES:
+            raise HTTPException(status_code=422, detail="Unsupported filesystem browse kind")
+
+        directory = _resolve_home_path(path)
+        if not directory.exists():
+            raise HTTPException(status_code=404, detail="Path does not exist")
+        if not directory.is_dir():
+            raise HTTPException(status_code=400, detail="Path must be a directory")
+
+        extension_set = _normalize_extensions(extensions)
+        entries: list[FilesystemEntryDTO] = []
+        try:
+            for child in directory.iterdir():
+                try:
+                    resolved_child = child.resolve(strict=False)
+                    resolved_child.relative_to(_path_picker_root())
+                except (OSError, ValueError):
+                    continue
+
+                is_dir = child.is_dir()
+                is_file = child.is_file()
+                if kind == "directory" and not is_dir:
+                    continue
+                if kind == "file" and not is_dir:
+                    if not is_file:
+                        continue
+                    if extension_set and child.suffix.lower() not in extension_set:
+                        continue
+                entries.append(_filesystem_entry(child))
+        except OSError as exc:
+            raise HTTPException(status_code=400, detail=f"Unable to read path: {exc}") from exc
+
+        entries.sort(key=lambda item: (not item.is_dir, item.name.lower()))
+        root = _path_picker_root()
+        parent = None if directory == root else _display_path(directory.parent)
+        return FilesystemBrowseResponse(
+            root=_display_path(root),
+            path=_display_path(directory),
+            parent=parent,
+            entries=entries,
+            shortcuts=_filesystem_shortcuts(),
+        ).model_dump()
+
+    @app.post("/api/filesystem/validate")
+    async def api_filesystem_validate(
+        payload: FilesystemValidateRequest,
+    ) -> dict[str, Any]:
+        """Validate a Settings path under the Picframe user's home directory."""
+        return _validate_path_request(payload).model_dump()
 
     @app.get("/api/config")
     async def api_get_config() -> dict[str, Any]:

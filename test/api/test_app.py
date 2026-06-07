@@ -100,6 +100,115 @@ def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
     assert response.text == "console.log('app');"
 
 
+def test_api_filesystem_browse_lists_home_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "Pictures").mkdir()
+    (home / "notes.txt").write_text("hello")
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/filesystem/browse")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["root"] == "~"
+    assert data["path"] == "~"
+    assert data["parent"] is None
+    assert [entry["name"] for entry in data["entries"]] == ["Pictures", "notes.txt"]
+
+
+def test_api_filesystem_browse_filters_files_by_extension(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "nested").mkdir()
+    (home / "photo.jpg").write_text("jpg")
+    (home / "movie.mov").write_text("mov")
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/filesystem/browse?kind=file&extensions=.jpg")
+
+    assert response.status_code == 200
+    assert [entry["name"] for entry in response.json()["entries"]] == ["nested", "photo.jpg"]
+
+
+def test_api_filesystem_browse_rejects_traversal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/filesystem/browse?path=../")
+
+    assert response.status_code == 403
+
+
+def test_api_filesystem_validate_rejects_symlink_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    outside = tmp_path / "outside"
+    home.mkdir()
+    outside.mkdir()
+    (home / "escape").symlink_to(outside)
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/filesystem/validate",
+        json={"path": "~/escape", "kind": "directory"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_api_filesystem_validate_allows_missing_mount_with_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/filesystem/validate",
+        json={
+            "path": "~/PicturesOnNas",
+            "kind": "directory",
+            "allow_missing": True,
+            "field": "model.pic_dir",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["valid"] is True
+    assert data["exists"] is False
+    assert data["warnings"] == ["Path does not exist yet"]
+
+
 def test_media_event_dto_uses_payload_location_name_before_repository() -> None:
     mock_media_repo = MagicMock()
 

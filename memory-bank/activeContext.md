@@ -24,6 +24,7 @@ The current implementation focus is Phase 2 next-gen control-plane parity cleanu
 - Ticket #678 replaces legacy controller-based MQTT with a next-gen Home Assistant MQTT infrastructure adapter and removes unreachable legacy runtime modules/tests. MQTT exposes playback/display/config state, targeted current-media delete, reboot, and shutdown; purge and clear-cache remain UI/REST only.
 - Ticket #637 hardening confirms the FastAPI/Vue static asset path is implemented and keeps WebSocket media DTO location enrichment behind injected repository ports rather than hardcoded cache DB paths.
 - Ticket #635 adds first-class GPIO hardware input configuration: the Settings UI edits `hardware_inputs`, backend/core validation rejects invalid mappings, and `HardwareInputService` applies changes at runtime through the HAL adapter. PIR no-motion delay is handled in core and cancels on renewed motion.
+- Recent Settings UI redesign replaces the generic schema text-field renderer with domain-specific editors and safe path browsing/validation rooted at the Picframe user's home directory. Low-level runtime options remain editable in collapsed Advanced sections. Shader values are selected/stored as basenames without `.fs`/`.vs`, image attributes and media extensions use fixed supported lists, and geocoding `key_list` is edited as ordered location parts with fallback chips.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -33,6 +34,7 @@ The current implementation focus is Phase 2 next-gen control-plane parity cleanu
 - Preserve the #678 cleanup boundary: MQTT/Home Assistant is supported through the next-gen adapter, while legacy HTTP query control, old pi3d menu/touch UI, and VLC runtime are not carried forward.
 - Preserve the #637 control-plane boundary: `main.py` chooses DB paths and injects repositories; FastAPI/WebSocket must not detect or open cache DB files directly.
 - Preserve the #635 hardware-input boundary: GPIO mappings live in `hardware_inputs`, keyboard/touch shortcuts stay in `peripherals`, only payload-free commands are allowed from hardware events, and PIR no-motion timers stay in `HardwareInputService`.
+- Preserve the Settings UI safety boundary: do not reintroduce raw JSON/text controls for domain settings when a constrained picker/chip/token/segmented control can express the same config safely.
 - Align future video work with caps-driven GStreamer discovery and fallback observability.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

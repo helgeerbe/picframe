@@ -51,6 +51,7 @@
 - WebSocket media DTO enrichment uses event payload data first and injected repository ports for cache lookups; the API layer must not open hardcoded `media_cache.db3` paths.
 - REST `/api/config` and maintenance/system endpoints handle settings and administrative actions.
 - MQTT/Home Assistant exposes playback/display/config controls, targeted delete, reboot, and shutdown; purge DB and clear-cache remain UI/REST maintenance actions.
+- Settings UI should use domain-specific controls for runtime config instead of generic JSON/string fields. Host path browsing is backed by FastAPI filesystem endpoints and is restricted to the current user's home directory. Shader settings store the basename without `.fs`/`.vs`, fixed-list settings such as media extensions and image metadata attributes should not permit arbitrary additions in the UI, and geocoding `key_list` should be edited as ordered location parts with fallback priorities rather than global free-form chips.
 - Frontend narrative metadata belongs in the image overlay; technical metadata belongs in a constrained scrollable panel.
 - Remote keeps primary media fields backward-compatible and uses `layout` plus `items[]` for pair preview, side-specific details, and pair delete choices.
 - User-facing frontend strings should go through vue-i18n and stay synchronized across `en.json` and `de.json`.

@@ -20,6 +20,32 @@ export interface MediaSelectionCount {
   scope_label: string
 }
 
+export interface FilesystemEntry {
+  name: string
+  path: string
+  is_dir: boolean
+  is_file: boolean
+  extension: string
+}
+
+export interface FilesystemBrowseResponse {
+  root: string
+  path: string
+  parent: string | null
+  entries: FilesystemEntry[]
+  shortcuts: FilesystemEntry[]
+}
+
+export interface FilesystemValidateResponse {
+  valid: boolean
+  path: string
+  exists: boolean
+  is_dir: boolean
+  is_file: boolean
+  warnings: string[]
+  error: string
+}
+
 function isPlainObject(value: unknown): value is Record<string, any> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
@@ -121,6 +147,32 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  async function browseFilesystem(params: {
+    path?: string
+    kind?: 'any' | 'file' | 'directory'
+    extensions?: string[]
+  }): Promise<FilesystemBrowseResponse> {
+    const response = await api.get('/filesystem/browse', {
+      params: {
+        path: params.path || '~',
+        kind: params.kind || 'any',
+        extensions: (params.extensions || []).join(',')
+      }
+    })
+    return response.data
+  }
+
+  async function validateFilesystemPath(payload: {
+    path: string
+    kind?: 'any' | 'file' | 'directory'
+    field?: string
+    allow_missing?: boolean
+    extensions?: string[]
+  }): Promise<FilesystemValidateResponse> {
+    const response = await api.post('/filesystem/validate', payload)
+    return response.data
+  }
+
   return {
     config,
     filterOptions,
@@ -132,6 +184,8 @@ export const useConfigStore = defineStore('config', () => {
     fetchConfig,
     fetchFilterOptions,
     fetchSelectionCount,
+    browseFilesystem,
+    validateFilesystemPath,
     saveConfig,
     savePartialConfig
   }
