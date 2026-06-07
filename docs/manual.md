@@ -66,6 +66,30 @@ The `picframe run` command accepts several parameters to override default paths 
 
 *Note: The webserver port and HTML directory path are strictly managed via CLI arguments and environment variables. They are not editable via the frontend UI to prevent connection loss and synchronization issues.*
 
+### GPIO Hardware Inputs
+
+Raspberry Pi GPIO inputs are configured from the Settings UI under **GPIO Inputs**.
+These mappings are stored in `config.db3` as `hardware_inputs` and are separate
+from the legacy-style keyboard/touch `peripherals` settings.
+
+Pins use BCM numbering. Each input has a label, a device type, a BCM pin, and
+one or more action mappings:
+
+*   **Button** inputs support `pressed` and `released`.
+*   **PIR** inputs support `motion_detected` and `no_motion`.
+
+PIR inputs can also set a no-motion delay in seconds. A value of `0` runs the
+`no_motion` command immediately. A value such as `900` waits 15 minutes before
+running it; a new `motion_detected` event cancels the pending no-motion command.
+
+The backend validates mappings before saving. Duplicate pins, unsupported input
+types, invalid actions, and commands that require payloads are rejected. GPIO
+commands are limited to payload-free commands such as playback, display power,
+text overlay refresh/toggle, sleep/wake, reboot, shutdown, and stop.
+
+Hardware input changes are applied at runtime after saving Settings. Picframe
+does not need to be restarted for a changed GPIO mapping.
+
 ### Geocoding Configuration (`key_list`)
 
 The `model.key_list` configuration parameter dictates how raw address data from the Nominatim reverse geocoding service is formatted into a human-readable location string.

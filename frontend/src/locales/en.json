@@ -117,12 +117,34 @@
     "confirmAction": "Are you sure you want to perform this action?",
     "cancel": "Cancel",
     "confirm": "Confirm",
+    "hardwareInputs": {
+      "enabled": "GPIO inputs",
+      "add": "Add input",
+      "empty": "No GPIO inputs configured",
+      "label": "Label",
+      "type": "Type",
+      "pin": "BCM pin",
+      "actions": "Actions",
+      "remove": "Remove",
+      "button": "Button",
+      "pir": "PIR",
+      "noMotionDelay": "No-motion delay (s)",
+      "duplicatePin": "Duplicate pin",
+      "noCommand": "No command",
+      "action": {
+        "pressed": "Pressed",
+        "released": "Released",
+        "motion_detected": "Motion",
+        "no_motion": "No motion"
+      }
+    },
     "sections": {
       "viewer": "Viewer Settings",
       "model": "Model Settings",
       "mqtt": "MQTT Settings",
       "http": "HTTP Settings",
-      "peripherals": "Peripherals Settings"
+      "peripherals": "Peripherals Settings",
+      "hardware_inputs": "GPIO Inputs"
     }
   },
   "config": {
@@ -248,6 +270,11 @@
       "enable": "default=False",
       "label": "default=\"Power down\"",
       "shortcut": "default=\"p\""
+    },
+    "hardware_inputs": {
+      "_title": "GPIO Inputs",
+      "enabled": "Enable Raspberry Pi GPIO input mappings.",
+      "inputs": "GPIO input mappings."
     }
   }
 }

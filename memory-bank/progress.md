@@ -13,6 +13,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - FastAPI control plane with config endpoints, WebSocket state, SPA serving, media serving, and system/maintenance commands.
 - Ticket #637 control-plane hardening: Vite builds the Vue SPA into packaged FastAPI assets, `picframe init` copies the compiled UI into the runtime directory, FastAPI serves SPA routes/assets, and WebSocket media DTO location enrichment uses the injected media repository instead of hardcoded cache DB paths.
 - Vue 3 SPA foundation with Remote, Filters, and Settings views.
+- Ticket #635 hardware-input configuration: Settings now has a dedicated GPIO Inputs editor, `hardware_inputs` is validated through backend/core config paths, and `HardwareInputService` is wired into the runtime with adapter reconfiguration on Settings changes. PIR `no_motion_delay_seconds` delays no-motion commands and is cancelled by renewed motion.
 - Remote Media Selection block for playlist runtime filters and timing controls.
 - Remote filter option chips toggle selected terms; normal click appends/toggles with `OR`, Shift-click appends with `AND`, and long tag/location option lists scroll in-place.
 - Remote Shuffle moved from Media Selection to an immediate split transport control: the main segment saves `model.shuffle`, the menu persists `model.shuffle_mode`, and missing/invalid modes fall back to `standard`.
@@ -35,7 +36,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, and target-hardware validation.
-- #637 remains open only for final verification/comment/closure tracking after the WebSocket DTO hardening pass.
+- #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
 
 ## Next
 - Complete caps-driven hardware capability discovery in the GStreamer worker.
@@ -46,4 +47,4 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 
 ## Known Verification State
 - Frontend build is green with `npm run build`.
-- Backend pytest is green in the local Python 3.14.4 `.venv`: 305 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
+- Backend pytest is green in the local Python 3.14.4 `.venv`: 333 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.

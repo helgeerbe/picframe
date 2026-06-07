@@ -18,6 +18,7 @@ from fastapi.staticfiles import StaticFiles
 
 from picframe.api.models import (
     AppConfig,
+    HardwareInputsConfig,
     MediaResponseDTO,
     MediaSelectionCountRequest,
     MediaSelectionCountResponse,
@@ -502,6 +503,51 @@ def create_app(
         )
         counts = media_repository.count_media(criteria)
         return MediaSelectionCountResponse(**counts).model_dump()
+
+    @app.get("/api/hardware-inputs")
+    async def api_get_hardware_inputs() -> dict[str, Any]:
+        """Get validated hardware input configuration."""
+        if not config_repository:
+            return HardwareInputsConfig().model_dump()
+
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None: pass
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None: pass
+            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+
+        from picframe.core.services.config_service import ConfigService
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+        nested_config = temp_service.get_nested_config()
+        return HardwareInputsConfig(**nested_config.get("hardware_inputs", {})).model_dump()
+
+    @app.put("/api/hardware-inputs")
+    async def api_put_hardware_inputs(payload: HardwareInputsConfig) -> dict[str, Any]:
+        """Update validated hardware input configuration."""
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None: pass
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None: pass
+            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+
+        from picframe.core.services.config_service import ConfigService
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+
+        config_dict = payload.model_dump()
+        temp_service.update_nested_config({"hardware_inputs": config_dict})
+
+        if event_publisher:
+            event_publisher.publish(
+                CommandEvent(command=Command.SET_CONFIG, payload={"hardware_inputs": config_dict})
+            )
+
+        return {
+            "status": "success",
+            "hardware_inputs": config_dict,
+        }
 
     @app.post("/api/config/import-yaml")
     async def api_import_yaml(file: UploadFile = File(...)) -> dict[str, Any]:

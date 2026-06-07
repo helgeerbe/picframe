@@ -11,6 +11,7 @@ from typing import Any
 from picframe.core.events.dto import Command, CommandEvent, State, StateEvent, RendererConfigUpdatedEvent
 from picframe.core.services.renderer_config import build_renderer_config
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
+from picframe.core.models.hardware_input import normalize_hardware_inputs_config
 from picframe.core.repositories.interfaces import IConfigRepository
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,7 @@ class ConfigService:
             "mqtt": {},
             "http": {},
             "peripherals": {},
+            "hardware_inputs": {},
         }
         
         if hasattr(self._config_repository, "get_all_app_config"):
@@ -95,6 +97,7 @@ class ConfigService:
                 "mqtt": self._config_repository.get_app_config("mqtt", {}),
                 "http": self._config_repository.get_app_config("http", {}),
                 "peripherals": self._config_repository.get_app_config("peripherals", {}),
+                "hardware_inputs": self._config_repository.get_app_config("hardware_inputs", {}),
             }
             
         return config
@@ -106,6 +109,12 @@ class ConfigService:
         if not self._config_repository:
             logger.warning("Cannot update config: no config repository is available")
             return
+
+        if "hardware_inputs" in nested_config:
+            nested_config = dict(nested_config)
+            nested_config["hardware_inputs"] = normalize_hardware_inputs_config(
+                nested_config["hardware_inputs"]
+            )
             
         def flatten_dict(d: dict[str, Any], parent_key: str = '') -> dict[str, Any]:
             items: list[tuple[str, Any]] = []

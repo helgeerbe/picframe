@@ -55,6 +55,23 @@ def test_update_nested_config(config_service, mock_repo):
     mock_repo.set_app_config.assert_any_call("peripherals.buttons.pause", "KEY_SPACE")
     assert mock_repo.set_app_config.call_count == 3
 
+
+def test_update_nested_config_rejects_invalid_hardware_inputs(config_service, mock_repo):
+    nested_config = {
+        "hardware_inputs": {
+            "enabled": True,
+            "inputs": {
+                "a": {"type": "button", "pin": 17, "actions": {"pressed": "NEXT"}},
+                "b": {"type": "pir", "pin": 17, "actions": {"motion_detected": "DISPLAY_ON"}},
+            },
+        }
+    }
+
+    with pytest.raises(ValueError, match="duplicate pin"):
+        config_service.update_nested_config(nested_config)
+
+    mock_repo.set_app_config.assert_not_called()
+
 def test_handle_set_config_command(config_service, mock_repo, mock_publisher):
     payload = {
         "viewer": {"fps": 60}
@@ -116,7 +133,9 @@ def test_renderer_config_update_includes_matting_values(
         "viewer.inner_mat_use_texture": True,
     }
     mock_repo.get_app_config.side_effect = lambda key, default=None: values.get(key, default)
-    mock_repo.get_app_config_bool.side_effect = lambda key, default=False: bool_values.get(key, default)
+    mock_repo.get_app_config_bool.side_effect = (
+        lambda key, default=False: bool_values.get(key, default)
+    )
 
     config_service._publish_renderer_config()
 

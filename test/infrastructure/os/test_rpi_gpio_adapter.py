@@ -9,7 +9,10 @@ from picframe.infrastructure.os.rpi_gpio_adapter import RPiGPIOAdapter
 
 @patch("picframe.infrastructure.os.rpi_gpio_adapter.Button")
 @patch("picframe.infrastructure.os.rpi_gpio_adapter.MotionSensor")
-def test_rpi_gpio_adapter_initialization(mock_motion_sensor: MagicMock, mock_button: MagicMock) -> None:
+def test_rpi_gpio_adapter_initialization(
+    mock_motion_sensor: MagicMock,
+    mock_button: MagicMock,
+) -> None:
     """Test that the adapter correctly initializes gpiozero devices based on config."""
     config = {
         "btn_next": {"type": "button", "pin": 17, "bounce_time": 0.2},
@@ -57,5 +60,20 @@ def test_rpi_gpio_adapter_callbacks(mock_button: MagicMock) -> None:
     # Simulate button release
     button_instance.when_released()
     mock_callback.assert_called_with("btn_next", "released")
+
+    adapter.stop()
+
+
+@patch("picframe.infrastructure.os.rpi_gpio_adapter.Button")
+def test_rpi_gpio_adapter_reconfigure_replaces_devices(mock_button: MagicMock) -> None:
+    """Test that reconfigure closes old devices and starts with the new mapping."""
+    adapter = RPiGPIOAdapter({"btn_next": {"type": "button", "pin": 17}})
+    adapter.start()
+    first_button = mock_button.return_value
+
+    adapter.configure({"btn_pause": {"type": "button", "pin": 22}})
+
+    first_button.close.assert_called_once()
+    assert mock_button.call_args_list[-1].args == (22,)
 
     adapter.stop()

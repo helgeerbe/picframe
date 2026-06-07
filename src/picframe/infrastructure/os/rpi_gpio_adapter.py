@@ -6,7 +6,8 @@ port using the `gpiozero` library. It supports buttons and PIR motion sensors.
 """
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from gpiozero import Button, MotionSensor
 
@@ -20,7 +21,7 @@ class RPiGPIOAdapter(IHardwareInput):
     Adapter for monitoring Raspberry Pi GPIO pins using gpiozero.
     """
 
-    def __init__(self, config: Dict[str, Dict[str, Any]]) -> None:
+    def __init__(self, config: dict[str, dict[str, Any]]) -> None:
         """
         Initialize the RPiGPIOAdapter.
 
@@ -29,8 +30,8 @@ class RPiGPIOAdapter(IHardwareInput):
                     Format: { "input_id": { "type": "button|pir", "pin": int, ... } }
         """
         self._config = config
-        self._callback: Optional[Callable[[str, str], None]] = None
-        self._devices: List[Any] = []
+        self._callback: Callable[[str, str], None] | None = None
+        self._devices: list[Any] = []
         self._is_running = False
         logger.info("RPiGPIOAdapter initialized.")
 
@@ -38,6 +39,16 @@ class RPiGPIOAdapter(IHardwareInput):
         """Register a callback for hardware events."""
         self._callback = callback
         logger.info("RPiGPIOAdapter: Callback registered.")
+
+    def configure(self, config: dict[str, dict[str, Any]]) -> None:
+        """Replace GPIO input configuration."""
+        was_running = self._is_running
+        if was_running:
+            self.stop()
+        self._config = config
+        logger.info("RPiGPIOAdapter: Configuration updated.")
+        if was_running:
+            self.start()
 
     def _notify(self, input_id: str, action: str) -> None:
         """Internal method to invoke the registered callback."""
@@ -61,7 +72,9 @@ class RPiGPIOAdapter(IHardwareInput):
             pin = settings.get("pin")
 
             if not device_type or pin is None:
-                logger.error(f"RPiGPIOAdapter: Invalid config for '{input_id}'. Missing type or pin.")
+                logger.error(
+                    f"RPiGPIOAdapter: Invalid config for '{input_id}'. Missing type or pin."
+                )
                 continue
 
             try:
@@ -82,7 +95,9 @@ class RPiGPIOAdapter(IHardwareInput):
                     logger.info(f"RPiGPIOAdapter: Configured PIR '{input_id}' on pin {pin}")
 
                 else:
-                    logger.warning(f"RPiGPIOAdapter: Unknown device type '{device_type}' for '{input_id}'")
+                    logger.warning(
+                        f"RPiGPIOAdapter: Unknown device type '{device_type}' for '{input_id}'"
+                    )
 
             except Exception as e:
                 logger.error(f"RPiGPIOAdapter: Failed to configure '{input_id}' on pin {pin}: {e}")

@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { useConfigStore, useSystemStore } from '../stores/config'
 import { useI18n } from 'vue-i18n'
 import configSchema from '../configSchema.json'
+import HardwareInputsEditor from '../components/HardwareInputsEditor.vue'
 import { 
   Cog6ToothIcon, 
   ArrowDownTrayIcon, 
@@ -62,6 +63,14 @@ watch(() => config.value, (newConfig) => {
   // Initialize localConfig with all keys from schema to prevent undefined errors
   const initializedConfig: Record<string, any> = {}
   for (const [section, props] of Object.entries(configSchema)) {
+    if (section === 'hardware_inputs') {
+      initializedConfig[section] = {
+        enabled: Boolean(newConfig?.hardware_inputs?.enabled),
+        inputs: newConfig?.hardware_inputs?.inputs || {}
+      }
+      continue
+    }
+
     initializedConfig[section] = {}
     for (const [key, propDef] of Object.entries(props as Record<string, any>)) {
       if (key === '_title') continue; // Skip _title keys from schema
@@ -293,8 +302,16 @@ const formatLabel = (key: string | undefined | null) => {
       <div class="lg:col-span-3">
         <div class="bg-white dark:bg-gray-800/90 backdrop-blur-xl shadow-xl rounded-3xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden min-h-[600px]">
           
+          <!-- Hardware Inputs Editor -->
+          <div v-if="activeTab !== 'danger' && activeTab === 'hardware_inputs' && localConfig && localConfig.hardware_inputs" class="p-6 sm:p-8">
+            <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-8 pb-4 border-b border-gray-100 dark:border-gray-700/50">
+              {{ t(`config.${activeTab}._title`, formatLabel(activeTab)) }}
+            </h2>
+            <HardwareInputsEditor v-model="localConfig.hardware_inputs" />
+          </div>
+
           <!-- Dynamic Config Form -->
-          <div v-if="activeTab !== 'danger' && localConfig && localConfig[activeTab]" class="p-6 sm:p-8">
+          <div v-else-if="activeTab !== 'danger' && localConfig && localConfig[activeTab]" class="p-6 sm:p-8">
             <h2 class="text-2xl font-bold text-gray-900 dark:text-white mb-8 pb-4 border-b border-gray-100 dark:border-gray-700/50">
               {{ t(`config.${activeTab}._title`, formatLabel(activeTab)) }}
             </h2>

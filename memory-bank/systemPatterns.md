@@ -10,6 +10,7 @@
 - The package console script enters the next-gen composition root (`picframe.main`); legacy controller/model/start/viewer/HTTP/peripheral/VLC runtime modules have been removed after audited import scans.
 - Home Assistant MQTT is an infrastructure adapter that depends on the event bus, config repository, and `ISystemStateQuery`; it must not import legacy controller/model/viewer code.
 - `SystemErrorEvent` is the poison-pill event for critical errors and subscriber failures; event-bus error handling must avoid recursive poison-pill loops.
+- GPIO hardware inputs are configured as `hardware_inputs` and validated in core before persistence or runtime use. Keyboard/touch `peripherals` remain a separate legacy-compatible config section.
 
 ## Playback And Rendering
 - `PlaylistManager` owns media querying, filtering, shuffle mode behavior, and current display-item selection.
@@ -64,6 +65,12 @@
 - `WatchdogMediaMonitor` is the infrastructure adapter for create/modify/delete/move events and differential sync.
 - Differential sync publishes `FileChangeEvent` directly; `MediaIndexerService` decides whether each file needs metadata extraction.
 - Monitor directory changes go through `IMediaMonitor.set_directories()` rather than direct mutable adapter state.
+
+## Hardware Inputs
+- `HardwareInputService` translates HAL input events to payload-free `CommandEvent`s and reloads mappings after `hardware_inputs` config changes.
+- `IHardwareInput.configure()` is the HAL boundary for runtime GPIO mapping updates; Raspberry Pi GPIO details stay in the infrastructure adapter.
+- Hardware input mappings use BCM pin numbers and reject duplicate pins, unsupported actions, and commands that require payloads.
+- PIR no-motion grace periods are core service timers (`no_motion_delay_seconds`), not GPIO adapter behavior. Renewed `motion_detected` cancels a pending delayed `no_motion` command.
 
 ## Testing And Quality
 - TDD is expected for new work: adapt or add tests with the implementation.

@@ -2,7 +2,9 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from picframe.core.models.hardware_input import normalize_hardware_inputs_config
 
 
 class MediaResponseDTO(BaseModel):
@@ -172,9 +174,21 @@ class PeripheralsConfig(BaseModel):
     label: str = ""
     shortcut: str = ""
 
+
+class HardwareInputsConfig(BaseModel):
+    enabled: bool = False
+    inputs: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_hardware_inputs(cls, data: Any) -> dict[str, Any]:
+        return normalize_hardware_inputs_config(data)
+
+
 class AppConfig(BaseModel):
     viewer: ViewerConfig = Field(default_factory=ViewerConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
     mqtt: MqttConfig = Field(default_factory=MqttConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)
     peripherals: PeripheralsConfig = Field(default_factory=PeripheralsConfig)
+    hardware_inputs: HardwareInputsConfig = Field(default_factory=HardwareInputsConfig)

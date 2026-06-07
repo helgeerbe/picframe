@@ -184,3 +184,7 @@ peripherals:
   enable: true
   label: ''
   shortcut: ''
+hardware_inputs:
+  # Optional Raspberry Pi GPIO inputs. Pins use BCM numbering.
+  enabled: false
+  inputs: {}

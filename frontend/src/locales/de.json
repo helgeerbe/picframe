@@ -117,12 +117,34 @@
     "confirmAction": "Sind Sie sicher, dass Sie diese Aktion ausführen möchten?",
     "cancel": "Abbrechen",
     "confirm": "Bestätigen",
+    "hardwareInputs": {
+      "enabled": "GPIO-Eingänge",
+      "add": "Eingang hinzufügen",
+      "empty": "Keine GPIO-Eingänge konfiguriert",
+      "label": "Bezeichnung",
+      "type": "Typ",
+      "pin": "BCM-Pin",
+      "actions": "Aktionen",
+      "remove": "Entfernen",
+      "button": "Taster",
+      "pir": "PIR",
+      "noMotionDelay": "Keine-Bewegung-Verzögerung (s)",
+      "duplicatePin": "Pin doppelt",
+      "noCommand": "Kein Kommando",
+      "action": {
+        "pressed": "Gedrückt",
+        "released": "Losgelassen",
+        "motion_detected": "Bewegung",
+        "no_motion": "Keine Bewegung"
+      }
+    },
     "sections": {
       "viewer": "Viewer-Einstellungen",
       "model": "Modell-Einstellungen",
       "mqtt": "MQTT-Einstellungen",
       "http": "HTTP-Einstellungen",
-      "peripherals": "Peripherie-Einstellungen"
+      "peripherals": "Peripherie-Einstellungen",
+      "hardware_inputs": "GPIO-Eingänge"
     }
   },
   "config": {
@@ -248,6 +270,11 @@
       "enable": "default=False",
       "label": "default=\"Power down\"",
       "shortcut": "default=\"p\""
+    },
+    "hardware_inputs": {
+      "_title": "GPIO-Eingänge",
+      "enabled": "Raspberry-Pi-GPIO-Eingänge aktivieren.",
+      "inputs": "GPIO-Eingangszuordnungen."
     }
   }
 }

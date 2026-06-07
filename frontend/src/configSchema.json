@@ -330,6 +330,15 @@
       "type": "string"
     }
   },
+  "hardware_inputs": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "inputs": {
+      "type": "object",
+      "properties": {}
+    }
+  },
   "http": {
     "auth": {
       "type": "boolean"

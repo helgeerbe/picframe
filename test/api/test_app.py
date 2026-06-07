@@ -323,6 +323,196 @@ def test_api_media_selection_count_without_media_repo() -> None:
     }
 
 
+def test_api_get_hardware_inputs_returns_validated_config() -> None:
+    mock_repo = MagicMock()
+    mock_repo.get_all_app_config.return_value = {
+        "hardware_inputs.enabled": True,
+        "hardware_inputs.inputs.next_button.type": "button",
+        "hardware_inputs.inputs.next_button.pin": 17,
+        "hardware_inputs.inputs.next_button.actions.pressed": "NEXT",
+    }
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
+    client = ASGITestClient(app)
+
+    response = client.get("/api/hardware-inputs")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "inputs": {
+            "next_button": {
+                "label": "next_button",
+                "type": "button",
+                "pin": 17,
+                "bounce_time": 0.1,
+                "actions": {"pressed": "NEXT"},
+            }
+        },
+    }
+
+
+def test_api_get_hardware_inputs_returns_pir_no_motion_delay() -> None:
+    mock_repo = MagicMock()
+    mock_repo.get_all_app_config.return_value = {
+        "hardware_inputs.enabled": True,
+        "hardware_inputs.inputs.motion.type": "pir",
+        "hardware_inputs.inputs.motion.pin": 27,
+        "hardware_inputs.inputs.motion.no_motion_delay_seconds": 900,
+        "hardware_inputs.inputs.motion.actions.motion_detected": "DISPLAY_ON",
+        "hardware_inputs.inputs.motion.actions.no_motion": "DISPLAY_OFF",
+    }
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
+    client = ASGITestClient(app)
+
+    response = client.get("/api/hardware-inputs")
+
+    assert response.status_code == 200
+    assert response.json()["inputs"]["motion"] == {
+        "label": "motion",
+        "type": "pir",
+        "pin": 27,
+        "no_motion_delay_seconds": 900.0,
+        "actions": {"motion_detected": "DISPLAY_ON", "no_motion": "DISPLAY_OFF"},
+    }
+
+
+def test_api_put_hardware_inputs_persists_and_publishes_config() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/hardware-inputs",
+        json={
+            "enabled": True,
+            "inputs": {
+                "next_button": {
+                    "type": "button",
+                    "pin": 17,
+                    "actions": {"pressed": "NEXT"},
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    mock_repo.set_app_config.assert_any_call("hardware_inputs.enabled", True)
+    mock_repo.set_app_config.assert_any_call(
+        "hardware_inputs.inputs.next_button.actions.pressed", "NEXT"
+    )
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command.name == "SET_CONFIG"
+    assert event.payload["hardware_inputs"]["inputs"]["next_button"]["pin"] == 17
+
+
+def test_api_put_hardware_inputs_persists_pir_no_motion_delay() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/hardware-inputs",
+        json={
+            "enabled": True,
+            "inputs": {
+                "motion": {
+                    "type": "pir",
+                    "pin": 27,
+                    "no_motion_delay_seconds": 900,
+                    "actions": {
+                        "motion_detected": "DISPLAY_ON",
+                        "no_motion": "DISPLAY_OFF",
+                    },
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    mock_repo.set_app_config.assert_any_call(
+        "hardware_inputs.inputs.motion.no_motion_delay_seconds", 900.0
+    )
+    event = mock_publisher.publish.call_args[0][0]
+    assert (
+        event.payload["hardware_inputs"]["inputs"]["motion"]["no_motion_delay_seconds"]
+        == 900.0
+    )
+
+
+def test_api_put_hardware_inputs_rejects_duplicate_pins() -> None:
+    app = create_app(cors_allowed_origins=["*"], config_repository=MagicMock())
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/hardware-inputs",
+        json={
+            "enabled": True,
+            "inputs": {
+                "a": {"type": "button", "pin": 17, "actions": {"pressed": "NEXT"}},
+                "b": {"type": "pir", "pin": 17, "actions": {"motion_detected": "DISPLAY_ON"}},
+            },
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_api_put_hardware_inputs_rejects_invalid_no_motion_delay() -> None:
+    app = create_app(cors_allowed_origins=["*"], config_repository=MagicMock())
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/hardware-inputs",
+        json={
+            "enabled": True,
+            "inputs": {
+                "motion": {
+                    "type": "pir",
+                    "pin": 27,
+                    "no_motion_delay_seconds": -1,
+                    "actions": {"no_motion": "DISPLAY_OFF"},
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_api_put_config_rejects_invalid_hardware_inputs() -> None:
+    app = create_app(cors_allowed_origins=["*"], config_repository=MagicMock())
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/config",
+        json={
+            "hardware_inputs": {
+                "enabled": True,
+                "inputs": {
+                    "bad": {
+                        "type": "button",
+                        "pin": 17,
+                        "actions": {"pressed": "SET_BRIGHTNESS"},
+                    }
+                },
+            }
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_api_clear_cache_calls_image_processing_service() -> None:
     mock_image_processing_service = MagicMock()
     app = create_app(

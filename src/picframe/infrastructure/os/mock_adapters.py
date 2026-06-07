@@ -7,6 +7,8 @@ or specific display servers (like Wayland) are unavailable.
 """
 
 import logging
+from collections.abc import Callable
+from typing import Any
 
 from picframe.core.ports import IDisplayPower, IHardwareInput, ISystemManager
 
@@ -51,21 +53,25 @@ class MockDisplayPower(IDisplayPower):
         return self._is_on
 
 
-from typing import Callable, Optional
-
 class MockHardwareInput(IHardwareInput):
     """Mock implementation of IHardwareInput."""
 
     def __init__(self) -> None:
         """Initialize the mock hardware input."""
         self._is_running = False
-        self._callback: Optional[Callable[[str, str], None]] = None
+        self._callback: Callable[[str, str], None] | None = None
+        self.config: dict[str, dict[str, Any]] = {}
         logger.info("MockHardwareInput initialized.")
 
     def register_callback(self, callback: Callable[[str, str], None]) -> None:
         """Register a callback for simulated hardware events."""
         self._callback = callback
         logger.info("MockHardwareInput: Callback registered.")
+
+    def configure(self, config: dict[str, dict[str, Any]]) -> None:
+        """Store simulated hardware input configuration."""
+        self.config = config
+        logger.info("MockHardwareInput: Configuration updated.")
 
     def start(self) -> None:
         """Simulate starting hardware input monitoring."""

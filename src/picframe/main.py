@@ -23,6 +23,7 @@ from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
 from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
 from picframe.core.services.bootstrapper import EnvironmentBootstrapper
 from picframe.core.services.config_service import ConfigService
+from picframe.core.services.hardware_input import HardwareInputService
 from picframe.core.services.image_processing import ImageProcessingService
 from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.state_tracker import StateTrackerService
@@ -79,6 +80,12 @@ def run_picframe(
     display_power_manager = DisplayPowerManager(event_bus, hal_adapters.display_power)
     from picframe.core.services.system_manager import SystemManager
     system_manager = SystemManager(event_bus, hal_adapters.system_manager)
+    hardware_input_service = HardwareInputService(
+        event_bus=event_bus,
+        hardware_input_adapter=hal_adapters.hardware_input,
+        config_repository=_config_repo,
+        event_subscriber=event_bus,
+    )
     
     # Initialize ImageProcessingService
     cache_dir = os.path.join(data_dir, "cache")
@@ -189,6 +196,7 @@ def run_picframe(
         shutdown_event.set()
         web_server.stop()
         mqtt_adapter.stop()
+        hardware_input_service.stop()
         engine.stop()
         media_indexer_service.stop()
         event_bus.stop()
@@ -196,6 +204,7 @@ def run_picframe(
         # and allow it to handle events until the bus stops.
         _ = display_power_manager
         _ = system_manager
+        _ = hardware_input_service
         _ = config_service
         _ = state_tracker
         sys.exit(0)
@@ -217,6 +226,9 @@ def run_picframe(
     media_monitor_service.perform_differential_sync()
     media_monitor_service.start()
 
+    logger.info("Starting Hardware Input Service...")
+    hardware_input_service.start()
+
     logger.info("Starting Playback Engine...")
     # engine.start() blocks until stopped
     try:
@@ -233,6 +245,7 @@ def run_picframe(
         media_indexer_service.stop()
         image_processing_service.shutdown()
         mqtt_adapter.stop()
+        hardware_input_service.stop()
         web_server.stop()
         engine.stop()
         event_bus.stop()
