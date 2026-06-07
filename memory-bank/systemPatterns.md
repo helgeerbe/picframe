@@ -7,7 +7,8 @@
 - Event bus interfaces are split into `IEventPublisher` and `IEventSubscriber` to keep component permissions narrow.
 - The runtime separates configuration (`config.db3`, persistent) from media metadata (`media_cache.db3`, rebuildable).
 - Filesystem monitoring follows ports/adapters: core services depend on `IMediaMonitor`, while the watchdog-backed adapter lives in infrastructure.
-- The package console script enters the next-gen composition root (`picframe.main`); legacy runtime modules may remain in-tree until audited deletion proves they are unreachable.
+- The package console script enters the next-gen composition root (`picframe.main`); legacy controller/model/start/viewer/HTTP/peripheral/VLC runtime modules have been removed after audited import scans.
+- Home Assistant MQTT is an infrastructure adapter that depends on the event bus, config repository, and `ISystemStateQuery`; it must not import legacy controller/model/viewer code.
 - `SystemErrorEvent` is the poison-pill event for critical errors and subscriber failures; event-bus error handling must avoid recursive poison-pill loops.
 
 ## Playback And Rendering
@@ -47,6 +48,7 @@
 - Vue 3 SPA uses Pinia stores for player state, config state, and system actions.
 - WebSocket `/ws/state` handles real-time media/state/error updates and outgoing player commands.
 - REST `/api/config` and maintenance/system endpoints handle settings and administrative actions.
+- MQTT/Home Assistant exposes playback/display/config controls, targeted delete, reboot, and shutdown; purge DB and clear-cache remain UI/REST maintenance actions.
 - Frontend narrative metadata belongs in the image overlay; technical metadata belongs in a constrained scrollable panel.
 - Remote keeps primary media fields backward-compatible and uses `layout` plus `items[]` for pair preview, side-specific details, and pair delete choices.
 - User-facing frontend strings should go through vue-i18n and stay synchronized across `en.json` and `de.json`.

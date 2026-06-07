@@ -36,6 +36,8 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Keep temporary missing media, explicit user deletes, and purge separate: missing media is soft-inactivated for NAS resilience, Remote delete moves the original and removes its cache row, and purge hard-deletes rows for files that remain missing.
 - Keep filesystem watching as an infrastructure adapter behind `IMediaMonitor`; core consumes `FileChangeEvent`s and must not import watchdog.
 - `SystemErrorEvent` is the canonical poison-pill event. Subscriber callback failures are logged and converted to one `SystemErrorEvent`; failures while handling `SystemErrorEvent` are logged without recursive error publication.
+- Keep Home Assistant MQTT as a supported next-gen integration, but implement it as an infrastructure adapter over event bus/config/state-query ports. MQTT exposes reboot/shutdown and targeted delete, but not purge DB or clear-cache.
+- Remove legacy controller/model/start/viewer/HTTP/peripheral/VLC runtime modules from next-gen after import scans; keep reusable helpers only where next-gen still imports them.
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

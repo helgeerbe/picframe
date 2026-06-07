@@ -15,7 +15,7 @@
 ## Runtime Components
 - The installed `picframe` console script points to the next-gen CLI in `picframe.main`.
 - `picframe init` bootstraps user-space state under `~/.picframe/`.
-- `picframe run` starts repositories, event bus, HAL adapters, media monitor/indexer, pi3d renderer, GStreamer video renderer, playback engine, and FastAPI server.
+- `picframe run` starts repositories, event bus, state tracker, optional Home Assistant MQTT adapter, HAL adapters, media monitor/indexer, pi3d renderer, GStreamer video renderer, playback engine, and FastAPI server.
 - Config database defaults to `<base_dir>/data/config.db3`; media cache defaults to `<base_dir>/data/media_cache.db3`; generated cache artifacts live under `<base_dir>/data/cache`.
 - `PICFRAME_DIR`, `PICFRAME_PORT`, `PICFRAME_CONFIG_DB`, `PICFRAME_MEDIA_DB`, and `PICFRAME_HTML_DIR` can override defaults.
 - Runtime matting resources are copied from package data into `<base_dir>/data/mat`; the next-gen renderer uses them in memory and does not write matted-image cache files.
@@ -29,5 +29,5 @@
 
 ## Verification Notes
 - Frontend type checking has passed with `npm exec vue-tsc -- -b --noEmit`.
-- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 306 passed, 1 GI deprecation warning on 2026-06-05.
+- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 301 passed, 1 GI deprecation warning on 2026-06-05.
 - Current tests include Python 3.14 compatibility shims for Starlette/AnyIO test hangs and avoid real socket binding in API server unit tests.

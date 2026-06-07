@@ -25,14 +25,22 @@ from picframe.core.services.bootstrapper import EnvironmentBootstrapper
 from picframe.core.services.config_service import ConfigService
 from picframe.core.services.image_processing import ImageProcessingService
 from picframe.core.services.playlist import PlaylistManager
+from picframe.core.services.state_tracker import StateTrackerService
 from picframe.infrastructure.filesystem.media_monitor import WatchdogMediaMonitor
+from picframe.infrastructure.mqtt import HomeAssistantMqttAdapter
 from picframe.infrastructure.os.hal_factory import HALFactory
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = None, media_db_path: str | None = None, html_dir: str | None = None) -> None:
+def run_picframe(
+    base_dir: str,
+    port: int = 9000,
+    config_db_path: str | None = None,
+    media_db_path: str | None = None,
+    html_dir: str | None = None,
+) -> None:
     """
     Composition Root for Picframe.
     Initializes and wires all components together.
@@ -52,6 +60,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
 
     # 3. Initialize Config Service (Needed for HAL)
     config_service = ConfigService(_config_repo, event_bus, event_bus)
+    state_tracker = StateTrackerService(event_bus)
     nested_config = config_service.get_nested_config()
 
     # 4. Initialize Hardware Abstraction Layer (HAL)
@@ -131,8 +140,13 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus, event_publisher=event_bus)
     
     from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
-    max_software_decode_resolution = str(_config_repo.get_app_config("viewer.max_software_decode_resolution", "1280x720"))
-    video_player = GstVideoRenderer(event_publisher=event_bus, max_software_decode_resolution=max_software_decode_resolution)
+    max_software_decode_resolution = str(
+        _config_repo.get_app_config("viewer.max_software_decode_resolution", "1280x720")
+    )
+    video_player = GstVideoRenderer(
+        event_publisher=event_bus,
+        max_software_decode_resolution=max_software_decode_resolution,
+    )
 
     # 6. Initialize Engine
     engine = PlaybackEngine(
@@ -160,6 +174,13 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
     )
     web_server = WebServer(app, port=port)
 
+    mqtt_adapter = HomeAssistantMqttAdapter(
+        config_repository=_config_repo,
+        event_publisher=event_bus,
+        event_subscriber=event_bus,
+        state_query=state_tracker,
+    )
+
     # 8. Setup Graceful Shutdown
     shutdown_event = threading.Event()
 
@@ -167,6 +188,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         logger.info("Received shutdown signal. Stopping...")
         shutdown_event.set()
         web_server.stop()
+        mqtt_adapter.stop()
         engine.stop()
         media_indexer_service.stop()
         event_bus.stop()
@@ -175,6 +197,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         _ = display_power_manager
         _ = system_manager
         _ = config_service
+        _ = state_tracker
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)
@@ -186,6 +209,9 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
 
     logger.info("Starting Web Server...")
     web_server.start()
+
+    logger.info("Starting MQTT Adapter...")
+    mqtt_adapter.start()
     
     logger.info("Starting Media Monitor Service...")
     media_monitor_service.perform_differential_sync()
@@ -206,6 +232,7 @@ def run_picframe(base_dir: str, port: int = 9000, config_db_path: str | None = N
         logger.info("Cleaning up...")
         media_indexer_service.stop()
         image_processing_service.shutdown()
+        mqtt_adapter.stop()
         web_server.stop()
         engine.stop()
         event_bus.stop()
@@ -226,26 +253,87 @@ def main() -> None:
 
     # Init command
     init_parser = subparsers.add_parser("init", help="Initialize the picframe environment")
-    init_parser.add_argument("--dir", default=os.environ.get("PICFRAME_DIR", "~/.picframe"), help="Base directory for picframe data (default: ~/.picframe or PICFRAME_DIR env var)")
-    init_parser.add_argument("--config-db", default=os.environ.get("PICFRAME_CONFIG_DB"), help="Path to config database (default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)")
-    init_parser.add_argument("--media-db", default=os.environ.get("PICFRAME_MEDIA_DB"), help="Path to media database (default: <dir>/data/media_cache.db3 or PICFRAME_MEDIA_DB env var)")
-    init_parser.add_argument("-f", "--force", action="store_true", help="Force initialization without prompting (overwrites existing databases if specified)")
+    init_parser.add_argument(
+        "--dir",
+        default=os.environ.get("PICFRAME_DIR", "~/.picframe"),
+        help="Base directory for picframe data (default: ~/.picframe or PICFRAME_DIR env var)",
+    )
+    init_parser.add_argument(
+        "--config-db",
+        default=os.environ.get("PICFRAME_CONFIG_DB"),
+        help=(
+            "Path to config database "
+            "(default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)"
+        ),
+    )
+    init_parser.add_argument(
+        "--media-db",
+        default=os.environ.get("PICFRAME_MEDIA_DB"),
+        help=(
+            "Path to media database "
+            "(default: <dir>/data/media_cache.db3 or PICFRAME_MEDIA_DB env var)"
+        ),
+    )
+    init_parser.add_argument(
+        "-f",
+        "--force",
+        action="store_true",
+        help="Force initialization without prompting (overwrites existing databases if specified)",
+    )
 
     # Run command
     run_parser = subparsers.add_parser("run", help="Run the picframe application")
-    run_parser.add_argument("--dir", default=os.environ.get("PICFRAME_DIR", "~/.picframe"), help="Base directory for picframe data (default: ~/.picframe or PICFRAME_DIR env var)")
-    run_parser.add_argument("--port", type=int, default=int(os.environ.get("PICFRAME_PORT", 9000)), help="Port for the web server (default: 9000 or PICFRAME_PORT env var)")
-    run_parser.add_argument("--config-db", default=os.environ.get("PICFRAME_CONFIG_DB"), help="Path to config database (default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)")
-    run_parser.add_argument("--media-db", default=os.environ.get("PICFRAME_MEDIA_DB"), help="Path to media database (default: <dir>/data/media_cache.db3 or PICFRAME_MEDIA_DB env var)")
-    run_parser.add_argument("--html-dir", default=os.environ.get("PICFRAME_HTML_DIR"), help="Path to frontend HTML assets (default: <dir>/html or PICFRAME_HTML_DIR env var)")
+    run_parser.add_argument(
+        "--dir",
+        default=os.environ.get("PICFRAME_DIR", "~/.picframe"),
+        help="Base directory for picframe data (default: ~/.picframe or PICFRAME_DIR env var)",
+    )
+    run_parser.add_argument(
+        "--port",
+        type=int,
+        default=int(os.environ.get("PICFRAME_PORT", 9000)),
+        help="Port for the web server (default: 9000 or PICFRAME_PORT env var)",
+    )
+    run_parser.add_argument(
+        "--config-db",
+        default=os.environ.get("PICFRAME_CONFIG_DB"),
+        help=(
+            "Path to config database "
+            "(default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)"
+        ),
+    )
+    run_parser.add_argument(
+        "--media-db",
+        default=os.environ.get("PICFRAME_MEDIA_DB"),
+        help=(
+            "Path to media database "
+            "(default: <dir>/data/media_cache.db3 or PICFRAME_MEDIA_DB env var)"
+        ),
+    )
+    run_parser.add_argument(
+        "--html-dir",
+        default=os.environ.get("PICFRAME_HTML_DIR"),
+        help="Path to frontend HTML assets (default: <dir>/html or PICFRAME_HTML_DIR env var)",
+    )
 
     args = parser.parse_args()
 
     if args.command == "init":
-        bootstrapper = EnvironmentBootstrapper(base_dir=args.dir, config_db_path=args.config_db, media_db_path=args.media_db, force=args.force)
+        bootstrapper = EnvironmentBootstrapper(
+            base_dir=args.dir,
+            config_db_path=args.config_db,
+            media_db_path=args.media_db,
+            force=args.force,
+        )
         bootstrapper.bootstrap()
     elif args.command == "run":
-        run_picframe(base_dir=args.dir, port=args.port, config_db_path=args.config_db, media_db_path=args.media_db, html_dir=args.html_dir)
+        run_picframe(
+            base_dir=args.dir,
+            port=args.port,
+            config_db_path=args.config_db,
+            media_db_path=args.media_db,
+            html_dir=args.html_dir,
+        )
     else:
         parser.print_help()
 

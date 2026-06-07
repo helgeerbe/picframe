@@ -149,7 +149,7 @@ model:
   - .webm
   - .hevc
 mqtt:
-  # MQTT is optional; HTTP/WebSocket is the primary next-gen control plane.
+  # Optional Home Assistant MQTT discovery/control integration.
   use_mqtt: false
   server: your_mqtt_broker
   port: 1883

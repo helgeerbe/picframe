@@ -7,7 +7,7 @@ The current implementation focus is Phase 2 next-gen control-plane parity cleanu
 - Branch: `v2-dev`, tracking `origin/v2-dev`.
 - Known local modification before this Memory Bank update: `.gitignore` ignores `.Codexrules`.
 - `.Codexrules` is a local instruction file and is ignored by git.
-- The source tree contains both legacy modules and the newer `src/picframe/core` architecture.
+- The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
 ## Recently Established Context
 - Architecture docs confirm Clean Architecture, strict EDA, dual SQLite databases, HAL ports/adapters, FastAPI/Vue control plane, and Wayland-only display targeting.
@@ -20,14 +20,15 @@ The current implementation focus is Phase 2 next-gen control-plane parity cleanu
 - Recent #611 cleanup moved watchdog media monitoring behind a core `IMediaMonitor` port; watchdog now lives in infrastructure and differential sync emits core `FileChangeEvent`s directly.
 - Ticket #619 is now narrowed to next-gen matting parity: existing Settings fields drive renderer-only in-memory matting for single images and image-only portrait pairs, while videos remain unmatted and no persistent mat cache artifacts are created.
 - Ticket #666 adds persistent shuffle modes: `standard` remains default/fallback, `fewer_repeats` uses existing `last_displayed` history, and the Remote control is a split shuffle toggle plus mode menu.
-- Ticket #616 makes next-gen the installed CLI path, removes VLC as a next-gen dependency, hardens `SystemErrorEvent` poison-pill behavior, adds integration coverage, and defers broad legacy runtime deletion to follow-up ticket #678.
+- Ticket #616 made next-gen the installed CLI path, removed VLC as a next-gen dependency, hardened `SystemErrorEvent` poison-pill behavior, and opened the cleanup path completed in #678.
+- Ticket #678 replaces legacy controller-based MQTT with a next-gen Home Assistant MQTT infrastructure adapter and removes unreachable legacy runtime modules/tests. MQTT exposes playback/display/config state, targeted current-media delete, reboot, and shutdown; purge and clear-cache remain UI/REST only.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
 - Keep filesystem watchers and other OS-specific adapters outside core; use ports such as `IMediaMonitor` for core service dependencies.
 - Preserve the #619 matting boundary: matting lives in renderer image preparation, not playlist, DB, REST/WebSocket, or `ImageProcessingService`.
 - Preserve the #666 shuffle boundary: shuffle mode is config/playback ordering only, uses no new media DB fields, and applies after display slots are built so portrait pairs stay together.
-- Preserve the #616 cleanup boundary: do not delete broad legacy runtime modules until follow-up ticket #678 proves they are unreachable from next-gen.
+- Preserve the #678 cleanup boundary: MQTT/Home Assistant is supported through the next-gen adapter, while legacy HTTP query control, old pi3d menu/touch UI, and VLC runtime are not carried forward.
 - Align future video work with caps-driven GStreamer discovery and fallback observability.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

@@ -11,7 +11,7 @@
 
 ## What Is PictureFrame?
 
-This is a viewer for a raspberry powered picture frame. For remote control it provides an automatic integration into [Home Assistant](https://www.home-assistant.io/) via MQTT discovery.
+This is a viewer for a raspberry powered picture frame. For remote control it provides a local web UI and an optional [Home Assistant](https://www.home-assistant.io/) integration via MQTT discovery.
 
 - https://github.com/helgeerbe/picframe
 - Paddy Gaunt, Jeff Godfrey, Helge Erbe
@@ -31,20 +31,22 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
   - photo metadata overlays (title, location, date, ...)
   - live clock
   - automatic pairing of portrait images
-  - keyboard, mouse and touch screen support
+  - optional local hardware input support
 - Filter by
   - IPTC tags
   - location
   - directories
   - date
 - Remote Control
-  - control interface for mqtt, http(s)
-  - tun on/off display
+  - FastAPI/Vue web UI with WebSocket live state
+  - optional Home Assistant MQTT discovery and control
+  - turn on/off display
   - next/prev/pause image
   - shuffle play
   - toggle metadata overlays
   - toggle clock visibility
   - retrieve image meta info (exif, IPTC)
+  - reboot or shut down the host from Settings or Home Assistant
 
 ## Next-Gen CLI
 
@@ -63,6 +65,17 @@ media indexing, playback engine, pi3d renderer, and GStreamer video worker.
 Legacy `configuration.yaml` files are imported from the Settings UI after
 initialization; direct `picframe configuration.yaml` startup is no longer the
 public CLI path.
+
+## Home Assistant / MQTT
+
+MQTT is optional in the next-generation runtime. When `mqtt.use_mqtt` is
+enabled, Picframe publishes Home Assistant discovery entities for playback,
+display, selected configuration values, current media state, targeted
+current-media delete actions, and host reboot/shutdown.
+
+Maintenance actions that clean generated or database state remain in the web
+UI/REST control plane: **Purge Media Database** and **Clear Image Cache** are
+not exposed as MQTT/Home Assistant entities.
 
 ## Documentation
 

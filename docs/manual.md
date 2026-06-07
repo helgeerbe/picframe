@@ -120,6 +120,23 @@ selected mode is persisted, but it only affects playback while shuffle is
 enabled. If `model.shuffle_mode` is missing or invalid, Picframe falls back to
 `standard`.
 
+### Home Assistant / MQTT
+
+MQTT is optional. When `mqtt.use_mqtt` is enabled, the next-generation runtime
+connects to the configured broker and publishes Home Assistant discovery
+entities for playback, display power, brightness, selected configuration
+values, current media state, and host reboot/shutdown.
+
+Deleting current media from Home Assistant uses explicit target buttons:
+**delete current / left**, **delete right**, and **delete both**. For single
+media, only the current/left action deletes the active file; right/both are
+reserved for portrait pairs and are rejected or ignored if the current display
+is not a pair.
+
+**Purge Media Database** and **Clear Image Cache** are not exposed over MQTT.
+They remain Settings/UI and REST maintenance actions so generated-cache cleanup
+and database purging stay deliberate.
+
 ### Network & Security Configuration
 
 #### CORS (Cross-Origin Resource Sharing)
@@ -195,6 +212,18 @@ next-gen code. The core layer defines the media-monitor port and consumes
     files; the indexer decides whether each file is new, changed, restored, or
     unchanged.
 *   Runtime wiring belongs in the composition root (`main.py`).
+
+### Developer Architecture: MQTT And Legacy Runtime Cleanup
+
+Home Assistant MQTT support is implemented as an infrastructure adapter. It
+uses the event bus for commands, the config repository for runtime settings,
+and `StateTrackerService` / `ISystemStateQuery` for state snapshots. It must
+not depend on legacy controller, model, viewer, or runtime modules.
+
+The legacy query-parameter HTTP interface, VLC/SDL video runtime, old
+controller/model/start entry path, and old pi3d menu/touch UI are not part of
+the next-generation public runtime. FastAPI/WebSocket is the web control plane;
+GStreamer is the video runtime; HAL adapters cover hardware input.
 
 ### Development Environment & System Setup
 
