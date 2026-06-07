@@ -22,6 +22,7 @@ The current implementation focus is Phase 2 next-gen control-plane parity cleanu
 - Ticket #666 adds persistent shuffle modes: `standard` remains default/fallback, `fewer_repeats` uses existing `last_displayed` history, and the Remote control is a split shuffle toggle plus mode menu.
 - Ticket #616 made next-gen the installed CLI path, removed VLC as a next-gen dependency, hardened `SystemErrorEvent` poison-pill behavior, and opened the cleanup path completed in #678.
 - Ticket #678 replaces legacy controller-based MQTT with a next-gen Home Assistant MQTT infrastructure adapter and removes unreachable legacy runtime modules/tests. MQTT exposes playback/display/config state, targeted current-media delete, reboot, and shutdown; purge and clear-cache remain UI/REST only.
+- Ticket #637 hardening confirms the FastAPI/Vue static asset path is implemented and keeps WebSocket media DTO location enrichment behind injected repository ports rather than hardcoded cache DB paths.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -29,6 +30,7 @@ The current implementation focus is Phase 2 next-gen control-plane parity cleanu
 - Preserve the #619 matting boundary: matting lives in renderer image preparation, not playlist, DB, REST/WebSocket, or `ImageProcessingService`.
 - Preserve the #666 shuffle boundary: shuffle mode is config/playback ordering only, uses no new media DB fields, and applies after display slots are built so portrait pairs stay together.
 - Preserve the #678 cleanup boundary: MQTT/Home Assistant is supported through the next-gen adapter, while legacy HTTP query control, old pi3d menu/touch UI, and VLC runtime are not carried forward.
+- Preserve the #637 control-plane boundary: `main.py` chooses DB paths and injects repositories; FastAPI/WebSocket must not detect or open cache DB files directly.
 - Align future video work with caps-driven GStreamer discovery and fallback observability.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

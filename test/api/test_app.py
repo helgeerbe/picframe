@@ -7,7 +7,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 
-from picframe.api.app import create_app
+from picframe.api.app import create_app, media_event_to_response_dto
 
 
 @pytest.fixture
@@ -98,6 +98,74 @@ def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
     response = client.get("/assets/app.js")
     assert response.status_code == 200
     assert response.text == "console.log('app');"
+
+
+def test_media_event_dto_uses_payload_location_name_before_repository() -> None:
+    mock_media_repo = MagicMock()
+
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "location": "Berlin",
+        },
+        media_repository=mock_media_repo,
+    )
+
+    assert dto.exif["location_name"] == "Berlin"
+    mock_media_repo.get_location.assert_not_called()
+
+
+def test_media_event_dto_uses_exif_location_before_repository() -> None:
+    mock_media_repo = MagicMock()
+
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "exif": {"location": "Hamburg"},
+        },
+        media_repository=mock_media_repo,
+    )
+
+    assert dto.exif["location_name"] == "Hamburg"
+    mock_media_repo.get_location.assert_not_called()
+
+
+def test_media_event_dto_uses_injected_repository_for_location_fallback() -> None:
+    mock_media_repo = MagicMock()
+    mock_media_repo.get_location.return_value = "Repository Berlin"
+
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "exif": {"title": "A"},
+        },
+        media_repository=mock_media_repo,
+    )
+
+    assert dto.location == {"lat": 52.5, "lon": 13.4}
+    assert dto.exif["location_name"] == "Repository Berlin"
+    mock_media_repo.get_location.assert_called_once_with(52.5, 13.4)
+
+
+def test_media_event_dto_without_repository_does_not_guess_location_path() -> None:
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "exif": {"title": "A"},
+        },
+        media_repository=None,
+    )
+
+    assert dto.location == {"lat": 52.5, "lon": 13.4}
+    assert "location_name" not in dto.exif
 
 def test_api_get_config(client: ASGITestClient) -> None:
     # Test without config repository

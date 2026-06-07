@@ -30,6 +30,13 @@ from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepos
 logger = logging.getLogger(__name__)
 
 STARTUP_ONLY_LEGACY_HTTP_KEYS = {"use_http", "path", "port"}
+MEDIA_DTO_EXIF_KEYS = [
+    "make", "model", "lens", "f_number", "exposure_time", "iso",
+    "focal_length", "exif_datetime", "caption", "tags", "location",
+    "title", "rating", "width", "height", "orientation",
+    "duration", "codec", "pixel_format", "framerate", "bitrate",
+    "displayed_count", "last_displayed"
+]
 
 
 def system_error_websocket_message(event: Any) -> str:
@@ -39,6 +46,105 @@ def system_error_websocket_message(event: Any) -> str:
         "message": getattr(event, "message", "Unknown Error"),
         "component": getattr(event, "component", "Unknown")
     })
+
+
+def _coerce_media_item_dict(media_item: Any) -> dict[str, Any]:
+    """Convert a current-media event payload into a plain mapping."""
+    if hasattr(media_item, "to_dict") and callable(media_item.to_dict):
+        return cast(dict[str, Any], media_item.to_dict())
+    if hasattr(media_item, "__dict__"):
+        return cast(dict[str, Any], media_item.__dict__)
+    if isinstance(media_item, dict):
+        return cast(dict[str, Any], media_item)
+    return {"raw": str(media_item)}
+
+
+def _media_item_to_dto(
+    item_dict: dict[str, Any],
+    media_repository: IMediaRepository | None,
+) -> MediaResponseDTO:
+    """Build a frontend media DTO without depending on a concrete cache database."""
+    file_path = item_dict.get("file_path") or item_dict.get("filepath")
+    if not file_path:
+        file_path = "no_pictures.jpg"
+
+    location = None
+    if "latitude" in item_dict and "longitude" in item_dict:
+        if item_dict["latitude"] is not None and item_dict["longitude"] is not None:
+            location = {
+                "lat": item_dict["latitude"],
+                "lon": item_dict["longitude"]
+            }
+
+    exif_data: dict[str, Any] = {}
+    if "exif" in item_dict and isinstance(item_dict["exif"], dict):
+        exif_data = dict(item_dict["exif"])
+    else:
+        for key in MEDIA_DTO_EXIF_KEYS:
+            if key in item_dict and item_dict[key] is not None:
+                if key == "location" and isinstance(item_dict[key], dict):
+                    continue
+                exif_data[key] = item_dict[key]
+
+    if "location" in item_dict and isinstance(item_dict["location"], str):
+        exif_data["location_name"] = item_dict["location"]
+    elif "location" in exif_data and isinstance(exif_data["location"], str):
+        exif_data["location_name"] = exif_data["location"]
+
+    if "location_name" not in exif_data and location is not None and media_repository:
+        try:
+            location_name = media_repository.get_location(location["lat"], location["lon"])
+            if location_name:
+                exif_data["location_name"] = location_name
+        except Exception as e:
+            logger.error(f"Error fetching location from media repository: {e}")
+
+    return MediaResponseDTO(
+        file_path=str(file_path),
+        exif=exif_data,
+        location=location,
+        id=item_dict.get("id"),
+        role=item_dict.get("role"),
+        index=item_dict.get("index"),
+    )
+
+
+def media_event_to_response_dto(
+    media_item: Any,
+    media_repository: IMediaRepository | None = None,
+) -> MediaResponseDTO:
+    """Serialize current-media event payloads for WebSocket clients."""
+    media_dict = _coerce_media_item_dict(media_item)
+
+    layout = str(media_dict.get("layout", "single"))
+    primary_index = int(media_dict.get("primary_index", 0) or 0)
+    item_dicts = media_dict.get("items")
+    if not isinstance(item_dicts, list) or not item_dicts:
+        item_dicts = [media_dict]
+
+    item_dtos = [
+        _media_item_to_dto(cast(dict[str, Any], item), media_repository)
+        for item in item_dicts
+        if isinstance(item, dict)
+    ]
+    if not item_dtos:
+        item_dtos = [_media_item_to_dto(media_dict, media_repository)]
+        primary_index = 0
+    if primary_index < 0 or primary_index >= len(item_dtos):
+        primary_index = 0
+
+    primary_dto = item_dtos[primary_index]
+    return MediaResponseDTO(
+        file_path=primary_dto.file_path,
+        exif=primary_dto.exif,
+        location=primary_dto.location,
+        id=primary_dto.id,
+        role=primary_dto.role,
+        index=primary_dto.index,
+        layout=layout,
+        primary_index=primary_index,
+        items=item_dtos,
+    )
 
 
 def _normalize_legacy_yaml_config(yaml_data: dict[str, Any]) -> dict[str, Any]:
@@ -134,113 +240,7 @@ def create_app(
         loop = asyncio.get_running_loop()
         
         def handle_media_changed(event: CurrentMediaChangedEvent) -> None:
-            media_dict: dict[str, Any] = {}
-            if hasattr(event.media_item, "to_dict") and callable(event.media_item.to_dict):
-                media_dict = cast(dict[str, Any], event.media_item.to_dict())
-            elif hasattr(event.media_item, "__dict__"):
-                media_dict = cast(dict[str, Any], event.media_item.__dict__)
-            elif isinstance(event.media_item, dict):
-                media_dict = cast(dict[str, Any], event.media_item)
-            else:
-                media_dict = {"raw": str(event.media_item)}
-
-            exif_keys = [
-                "make", "model", "lens", "f_number", "exposure_time", "iso",
-                "focal_length", "exif_datetime", "caption", "tags", "location",
-                "title", "rating", "width", "height", "orientation",
-                "duration", "codec", "pixel_format", "framerate", "bitrate",
-                "displayed_count", "last_displayed"
-            ]
-
-            def to_media_dto(item_dict: dict[str, Any]) -> MediaResponseDTO:
-                file_path = item_dict.get("file_path") or item_dict.get("filepath")
-                if not file_path:
-                    file_path = "no_pictures.jpg"
-
-                location = None
-                if "latitude" in item_dict and "longitude" in item_dict:
-                    if item_dict["latitude"] is not None and item_dict["longitude"] is not None:
-                        location = {
-                            "lat": item_dict["latitude"],
-                            "lon": item_dict["longitude"]
-                        }
-
-                exif_data: dict[str, Any] = {}
-                if "exif" in item_dict and isinstance(item_dict["exif"], dict):
-                    exif_data = dict(item_dict["exif"])
-                else:
-                    for key in exif_keys:
-                        if key in item_dict and item_dict[key] is not None:
-                            if key == "location" and isinstance(item_dict[key], dict):
-                                continue
-                            exif_data[key] = item_dict[key]
-
-                if "location" in item_dict and isinstance(item_dict["location"], str):
-                    exif_data["location_name"] = item_dict["location"]
-                elif "location" in exif_data and isinstance(exif_data["location"], str):
-                    exif_data["location_name"] = exif_data["location"]
-
-                if "location_name" not in exif_data and location is not None:
-                    try:
-                        import os
-                        import sqlite3
-                        db_path = os.path.expanduser("~/.picframe/data/media_cache.db3")
-                        if os.path.exists(db_path):
-                            with sqlite3.connect(db_path) as conn:
-                                cursor = conn.execute(
-                                    """
-                                    SELECT address
-                                    FROM locations
-                                    WHERE ROUND(latitude, 4) = ROUND(?, 4)
-                                      AND ROUND(longitude, 4) = ROUND(?, 4)
-                                    """,
-                                    (location["lat"], location["lon"]),
-                                )
-                                row = cursor.fetchone()
-                                if row and row[0]:
-                                    exif_data["location_name"] = row[0]
-                    except Exception as e:
-                        logger.error(f"Error fetching location from database: {e}")
-
-                return MediaResponseDTO(
-                    file_path=str(file_path),
-                    exif=exif_data,
-                    location=location,
-                    id=item_dict.get("id"),
-                    role=item_dict.get("role"),
-                    index=item_dict.get("index"),
-                )
-
-            layout = str(media_dict.get("layout", "single"))
-            primary_index = int(media_dict.get("primary_index", 0) or 0)
-            item_dicts = media_dict.get("items")
-            if not isinstance(item_dicts, list) or not item_dicts:
-                item_dicts = [media_dict]
-
-            item_dtos = [
-                to_media_dto(cast(dict[str, Any], item))
-                for item in item_dicts
-                if isinstance(item, dict)
-            ]
-            if not item_dtos:
-                item_dtos = [to_media_dto(media_dict)]
-                primary_index = 0
-            if primary_index < 0 or primary_index >= len(item_dtos):
-                primary_index = 0
-
-            primary_dto = item_dtos[primary_index]
-            dto = MediaResponseDTO(
-                file_path=primary_dto.file_path,
-                exif=primary_dto.exif,
-                location=primary_dto.location,
-                id=primary_dto.id,
-                role=primary_dto.role,
-                index=primary_dto.index,
-                layout=layout,
-                primary_index=primary_index,
-                items=item_dtos,
-            )
-                
+            dto = media_event_to_response_dto(event.media_item, media_repository)
             msg = json.dumps({"type": "MediaChangedEvent", "media": dto.model_dump()})
             # Use call_soon_threadsafe because this callback runs in the event bus thread
             loop.call_soon_threadsafe(send_queue.put_nowait, msg)

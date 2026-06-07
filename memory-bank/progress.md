@@ -11,6 +11,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Dual SQLite repositories with migrations.
 - Playlist/media processing foundation.
 - FastAPI control plane with config endpoints, WebSocket state, SPA serving, media serving, and system/maintenance commands.
+- Ticket #637 control-plane hardening: Vite builds the Vue SPA into packaged FastAPI assets, `picframe init` copies the compiled UI into the runtime directory, FastAPI serves SPA routes/assets, and WebSocket media DTO location enrichment uses the injected media repository instead of hardcoded cache DB paths.
 - Vue 3 SPA foundation with Remote, Filters, and Settings views.
 - Remote Media Selection block for playlist runtime filters and timing controls.
 - Remote filter option chips toggle selected terms; normal click appends/toggles with `OR`, Shift-click appends with `AND`, and long tag/location option lists scroll in-place.
@@ -34,7 +35,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, and target-hardware validation.
-- #678 still needs final verification and manual Home Assistant/Raspberry Pi validation before closeout.
+- #637 remains open only for final verification/comment/closure tracking after the WebSocket DTO hardening pass.
 
 ## Next
 - Complete caps-driven hardware capability discovery in the GStreamer worker.
@@ -45,4 +46,4 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 
 ## Known Verification State
 - Frontend build is green with `npm run build`.
-- Backend pytest is green in the local Python 3.14.4 `.venv`: 301 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
+- Backend pytest is green in the local Python 3.14.4 `.venv`: 305 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.

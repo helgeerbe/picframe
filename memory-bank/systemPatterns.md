@@ -47,6 +47,7 @@
 ## Frontend Patterns
 - Vue 3 SPA uses Pinia stores for player state, config state, and system actions.
 - WebSocket `/ws/state` handles real-time media/state/error updates and outgoing player commands.
+- WebSocket media DTO enrichment uses event payload data first and injected repository ports for cache lookups; the API layer must not open hardcoded `media_cache.db3` paths.
 - REST `/api/config` and maintenance/system endpoints handle settings and administrative actions.
 - MQTT/Home Assistant exposes playback/display/config controls, targeted delete, reboot, and shutdown; purge DB and clear-cache remain UI/REST maintenance actions.
 - Frontend narrative metadata belongs in the image overlay; technical metadata belongs in a constrained scrollable panel.
