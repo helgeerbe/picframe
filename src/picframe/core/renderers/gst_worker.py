@@ -62,6 +62,8 @@ class GstWorker:
         self.volume: float = 1.0
         self.running = True
         self.loop: Any = GLib.MainLoop() if GST_AVAILABLE else None
+        self._current_play_request: tuple[str, int, int, int, int] | None = None
+        self._software_decode_retry_attempted = False
 
     def start(self) -> None:
         """Start the worker and listen for IPC connections."""
@@ -169,8 +171,6 @@ class GstWorker:
             self._handle_check_caps(cmd.uri)
 
     def _handle_play(self, uri: str, x: int, y: int, w: int, h: int) -> None:
-        self._handle_stop()
-        
         try:
             playable, reason = self._discover_playable_video(uri)
             if not playable:
@@ -179,16 +179,40 @@ class GstWorker:
                 self._send_event(ErrorEvent(details=details))
                 return
 
-            self.pipeline = Gst.Pipeline.new("video-player")
-            uridecodebin = Gst.ElementFactory.make("uridecodebin", "decoder")
-            uridecodebin.set_property("uri", uri)
+            self._current_play_request = (uri, x, y, w, h)
+            self._software_decode_retry_attempted = False
+            self._start_pipeline(uri, x, y, w, h, force_software_decoders=False)
+        except Exception as e:
+            logger.error(f"Exception during playback setup: {e}")
+            self._send_event(ErrorEvent(details=str(e)))
+            self._handle_stop()
+
+    def _start_pipeline(
+        self,
+        uri: str,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        *,
+        force_software_decoders: bool,
+    ) -> None:
+        self._handle_stop()
+
+        try:
+            pipeline_description = self._build_pipeline_description(
+                uri,
+                x,
+                y,
+                w,
+                h,
+                force_software_decoders=force_software_decoders,
+            )
+            self.pipeline = Gst.parse_launch(pipeline_description)
+            uridecodebin = self.pipeline.get_by_name("decoder")
+            if force_software_decoders:
+                logger.info("Retrying %s with software decoders forced.", uri)
             uridecodebin.connect("autoplug-select", self._on_autoplug_select)
-            
-            sink_bin = self._create_sink_bin(x, y, w, h)
-            
-            self.pipeline.add(uridecodebin)
-            self.pipeline.add(sink_bin)
-            uridecodebin.connect("pad-added", self._on_pad_added, sink_bin)
             
             try:
                 self.pipeline.set_property("volume", self.volume)
@@ -213,6 +237,42 @@ class GstWorker:
             self._send_event(ErrorEvent(details=str(e)))
             self._handle_stop()
 
+    def _build_pipeline_description(
+        self,
+        uri: str,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        *,
+        force_software_decoders: bool,
+    ) -> str:
+        force_sw = " force-sw-decoders=true" if force_software_decoders else ""
+        sink_name = find_best_element(["waylandsink", "glimagesink", "ximagesink", "autovideosink"])
+        if not sink_name:
+            sink_name = "autovideosink"
+
+        has_render_rectangle = w > 0 and h > 0
+        sink_props = []
+        if has_render_rectangle:
+            sink_props.append(f'render-rectangle="<{x}, {y}, {w}, {h}>"')
+        else:
+            sink_props.append("fullscreen=true")
+        if sink_name == "waylandsink":
+            sink_props.append("rotate-method=8")
+        sink_props_str = " ".join(sink_props)
+
+        return (
+            f'uridecodebin name=decoder uri="{uri}"{force_sw} '
+            "decoder. ! "
+            "videoconvert ! "
+            "videoscale add-borders=false ! "
+            "videoconvert ! "
+            "video/x-raw,format=RGBA ! "
+            "alpha alpha=0.99 ! "
+            f"{sink_name} name=sink {sink_props_str}"
+        )
+
     def _discover_playable_video(self, uri: str) -> tuple[bool, str | None]:
         """Return whether GStreamer can discover at least one playable video stream."""
         try:
@@ -226,20 +286,35 @@ class GstWorker:
 
     def _create_sink_bin(self, x: int, y: int, w: int, h: int) -> Any:
         bin = Gst.Bin.new("sink_bin")
+        elements, sink_pad_element = self._build_sink_elements(x, y, w, h)
+
+        for elem in elements:
+            bin.add(elem)
+
+        self._link_elements(elements)
+
+        pad = sink_pad_element.get_static_pad("sink")
+        ghost_pad = Gst.GhostPad.new("sink", pad)
+        bin.add_pad(ghost_pad)
+
+        return bin
+
+    def _build_sink_elements(self, x: int, y: int, w: int, h: int) -> tuple[list[Any], Any]:
         hw_converter = find_best_element(["v4l2convert"])
         
         elements = []
+        queue = Gst.ElementFactory.make("queue", "video_queue")
+        elements.append(queue)
         if hw_converter:
             conv = Gst.ElementFactory.make(hw_converter, "conv")
             elements.append(conv)
-            sink_pad_element = conv
         else:
             conv1 = Gst.ElementFactory.make("videoconvert", "conv1")
             scale = Gst.ElementFactory.make("videoscale", "scale")
             scale.set_property("add-borders", False)
             conv2 = Gst.ElementFactory.make("videoconvert", "conv2")
             elements.extend([conv1, scale, conv2])
-            sink_pad_element = conv1
+        sink_pad_element = queue
             
         capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter")
         caps = Gst.Caps.from_string("video/x-raw,format=RGBA")
@@ -256,7 +331,7 @@ class GstWorker:
             
         sink = Gst.ElementFactory.make(sink_name, "sink")
         has_render_rectangle = w > 0 and h > 0
-        
+
         if not has_render_rectangle:
             try:
                 if hasattr(sink.props, 'fullscreen'):
@@ -274,20 +349,13 @@ class GstWorker:
             sink.set_property("rotate-method", 8)
             
         elements.append(sink)
-        
-        for elem in elements:
-            bin.add(elem)
-            
-        for i in range(len(elements) - 1):
-            elements[i].link(elements[i+1])
-            
-        pad = sink_pad_element.get_static_pad("sink")
-        ghost_pad = Gst.GhostPad.new("sink", pad)
-        bin.add_pad(ghost_pad)
-        
-        return bin
+        return elements, sink_pad_element
 
-    def _on_pad_added(self, element: Any, pad: Any, sink_bin: Any) -> None:
+    def _link_elements(self, elements: list[Any]) -> None:
+        for i in range(len(elements) - 1):
+            elements[i].link(elements[i + 1])
+
+    def _on_pad_added(self, element: Any, pad: Any, sink_pad_element: Any) -> None:
         caps = pad.get_current_caps()
         if not caps:
             caps = pad.query_caps()
@@ -295,11 +363,18 @@ class GstWorker:
         if caps:
             struct = caps.get_structure(0)
             name = struct.get_name()
+            logger.debug("Decoded pad added with caps: %s", caps.to_string())
             if name.startswith("video/"):
-                sink_pad = sink_bin.get_static_pad("sink")
+                sink_pad = sink_pad_element.get_static_pad("sink")
                 if not sink_pad.is_linked():
-                    pad.link(sink_pad)
-                    sink_bin.sync_state_with_parent()
+                    result = pad.link(sink_pad)
+                    if result != Gst.PadLinkReturn.OK:
+                        logger.error(
+                            "Failed to link decoded video pad to sink bin: %s",
+                            result.value_nick if hasattr(result, "value_nick") else result,
+                        )
+                    else:
+                        logger.debug("Linked decoded video pad to sink chain.")
 
     def _on_autoplug_select(self, bin: Any, pad: Any, caps: Any, factory: Any) -> int:
         klass = factory.get_metadata(Gst.ELEMENT_METADATA_KLASS)
@@ -386,14 +461,51 @@ class GstWorker:
 
     def _on_error(self, bus: Any, msg: Any) -> None:
         err, debug = msg.parse_error()
+        debug_text = str(debug or "")
+        logger.error("GStreamer error: %s", err.message)
+        if debug_text:
+            logger.error("GStreamer debug info: %s", debug_text)
+        if self._should_retry_with_software_decode(err.message, debug_text):
+            self._retry_with_software_decode(err.message, debug_text)
+            return
         self._send_event(ErrorEvent(details=err.message))
         self._handle_stop()
 
+    def _should_retry_with_software_decode(self, message: str, debug: str) -> bool:
+        if self._software_decode_retry_attempted or self._current_play_request is None:
+            return False
+        combined = f"{message}\n{debug}".lower()
+        return (
+            "not-negotiated" in combined
+            or "reason not-negotiated" in combined
+            or "internal data stream error" in combined
+        )
+
+    def _retry_with_software_decode(self, message: str, debug: str) -> None:
+        request = self._current_play_request
+        if request is None:
+            self._send_event(ErrorEvent(details=message))
+            self._handle_stop()
+            return
+
+        self._software_decode_retry_attempted = True
+        logger.warning(
+            "Hardware/autoplug video path failed; retrying with software decoders. "
+            "Message=%s Debug=%s",
+            message,
+            debug,
+        )
+        self._send_event(
+            WarningEvent(
+                warning_type="software_fallback",
+                decoder="force-sw-decoders",
+            )
+        )
+        uri, x, y, w, h = request
+        self._start_pipeline(uri, x, y, w, h, force_software_decoders=True)
+
     def _on_async_done(self, bus: Any, msg: Any) -> None:
         self._send_event(FirstFrameRenderedEvent())
-        # Ensure pipeline is playing after async-done
-        if self.pipeline:
-            self.pipeline.set_state(Gst.State.PLAYING)
         # Ensure pipeline is playing after async-done
         if self.pipeline:
             self.pipeline.set_state(Gst.State.PLAYING)

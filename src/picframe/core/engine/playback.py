@@ -77,6 +77,9 @@ class PlaybackEngine:
         self._time_delay = float(config.get("time_delay", 200.0))
         self._next_transition_time = 0.0
         self._video_first_frame_timeout = float(config.get("video_first_frame_timeout", 2.0))
+        self._video_software_fallback_first_frame_timeout = float(
+            config.get("video_software_fallback_first_frame_timeout", 8.0)
+        )
         
         # Circuit breaker state
         self._consecutive_errors = 0
@@ -91,10 +94,12 @@ class PlaybackEngine:
             PlaybackCompletedEvent,
             TransitionCompletedEvent,
             VideoFirstFrameRenderedEvent,
+            VideoPlaybackWarningEvent,
         )
         self._event_subscriber.subscribe(PlaybackCompletedEvent, self._handle_playback_completed)
         self._event_subscriber.subscribe(TransitionCompletedEvent, self._handle_transition_completed)
         self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._handle_video_first_frame_rendered)
+        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._handle_video_playback_warning)
         self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_renderer_config_event)
 
     def start(self) -> None:
@@ -667,6 +672,28 @@ class PlaybackEngine:
     def _handle_video_first_frame_rendered(self, event: Any) -> None:
         """Handle the event indicating GStreamer has rendered its first frame."""
         self._complete_video_first_frame_handoff()
+
+    def _handle_video_playback_warning(self, event: Any) -> None:
+        """Give fallback decoder startup a longer first-frame window."""
+        if (
+            self._state != State.PREPARING_VIDEO
+            or not hasattr(self, '_pending_video_media')
+            or getattr(event, "warning_type", None) != "software_fallback"
+        ):
+            return
+
+        current_deadline = getattr(self, '_video_first_frame_deadline', None)
+        fallback_deadline = (
+            time.time() + self._video_software_fallback_first_frame_timeout
+        )
+        self._video_first_frame_deadline = max(
+            current_deadline or 0.0,
+            fallback_deadline,
+        )
+        self._logger.info(
+            "Extended GStreamer first-frame deadline for software decoder fallback: %s",
+            getattr(event, "decoder", "unknown"),
+        )
 
     def _handle_video_first_frame_timeout(self, current_time: float) -> None:
         """Avoid getting stuck if GStreamer does not report first-frame readiness."""

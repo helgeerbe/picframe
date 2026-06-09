@@ -1,18 +1,18 @@
-from unittest.mock import MagicMock, patch
 import json
+from unittest.mock import MagicMock, patch
 
 import pytest
 
-from picframe.core.events.dto import PlaybackCompletedEvent, SystemErrorEvent
+from picframe.core.events.dto import (
+    PlaybackCompletedEvent,
+    SystemErrorEvent,
+    VideoPlaybackWarningEvent,
+)
 from picframe.core.models.media import MediaItem, MediaType
 from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
 from picframe.core.renderers.ipc_protocol import (
     EosEvent,
     ErrorEvent,
-    PauseCommand,
-    PlayCommand,
-    SetVolumeCommand,
-    StopCommand,
     WarningEvent,
 )
 
@@ -172,3 +172,25 @@ def test_handle_error_event(mock_exists: MagicMock, mock_client: MagicMock, mock
     assert isinstance(mock_publisher.publish.call_args_list[0][0][0], SystemErrorEvent)
     assert mock_publisher.publish.call_args_list[0][0][0].message == "Test Error"
     assert isinstance(mock_publisher.publish.call_args_list[1][0][0], PlaybackCompletedEvent)
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_handle_warning_event_publishes_video_playback_warning(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+) -> None:
+    renderer = GstVideoRenderer(mock_publisher)
+
+    renderer._handle_event(
+        WarningEvent(warning_type="software_fallback", decoder="avdec_h264")
+    )
+
+    mock_publisher.publish.assert_called_once()
+    published_event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(published_event, VideoPlaybackWarningEvent)
+    assert published_event.warning_type == "software_fallback"
+    assert published_event.decoder == "avdec_h264"

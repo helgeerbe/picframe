@@ -15,6 +15,7 @@ from picframe.core.events import (
     State,
     StateEvent,
     SystemErrorEvent,
+    VideoPlaybackWarningEvent,
 )
 
 
@@ -101,6 +102,17 @@ def test_system_error_event_priority() -> None:
         System errors should have the highest priority (1) for immediate handling.
     """
     assert SystemErrorEvent("error", "component").priority == 1
+
+
+def test_video_playback_warning_event_priority() -> None:
+    """
+    Test the priority level of VideoPlaybackWarningEvents.
+
+    Expected behavior:
+        Video playback warnings should be handled before normal state events
+        so fallback startup can adjust handoff timing promptly.
+    """
+    assert VideoPlaybackWarningEvent("software_fallback", "avdec_h264").priority == 2
 
 
 def test_event_immutability() -> None:

@@ -2,6 +2,7 @@
 GStreamer Video Renderer implementation (IPC Client).
 """
 from __future__ import annotations
+
 import logging
 import os
 import subprocess
@@ -10,17 +11,20 @@ import threading
 import time
 from multiprocessing.connection import Client, Connection
 from pathlib import Path
-from typing import Optional
 
-from picframe.core.events.dto import PlaybackCompletedEvent, SystemErrorEvent
+from picframe.core.events.dto import (
+    PlaybackCompletedEvent,
+    SystemErrorEvent,
+    VideoFirstFrameRenderedEvent,
+    VideoPlaybackWarningEvent,
+)
 from picframe.core.events.interfaces import IEventPublisher
 from picframe.core.models.media import MediaItem
 from picframe.core.renderers.interfaces import IVideoPlayer
 from picframe.core.renderers.ipc_protocol import (
-    CapsResultEvent,
-    CheckCapsCommand,
     EosEvent,
     ErrorEvent,
+    FirstFrameRenderedEvent,
     IpcMessage,
     PauseCommand,
     PlayCommand,
@@ -37,17 +41,21 @@ class GstVideoRenderer(IVideoPlayer):
     Video player implementation using an out-of-process GStreamer worker via IPC.
     """
 
-    def __init__(self, event_publisher: IEventPublisher, max_software_decode_resolution: str = "1280x720"):
+    def __init__(
+        self,
+        event_publisher: IEventPublisher,
+        max_software_decode_resolution: str = "1280x720",
+    ):
         self._publisher = event_publisher
         self._max_software_decode_resolution = max_software_decode_resolution
         self._current_media: MediaItem | None = None
         self._volume: float = 1.0
         
         self._socket_path = f"/tmp/picframe_gst_{os.getpid()}.sock"
-        self._worker_process: Optional[subprocess.Popen[bytes]] = None
-        self._conn: Optional[Connection] = None
+        self._worker_process: subprocess.Popen[bytes] | None = None
+        self._conn: Connection | None = None
         self._running = False
-        self._listener_thread: Optional[threading.Thread] = None
+        self._listener_thread: threading.Thread | None = None
         
         self._start_worker()
 
@@ -105,18 +113,26 @@ class GstVideoRenderer(IVideoPlayer):
 
     def _handle_event(self, event: IpcMessage) -> None:
         """Translate IPC events into domain events."""
-        from picframe.core.renderers.ipc_protocol import FirstFrameRenderedEvent
-        from picframe.core.events.dto import VideoFirstFrameRenderedEvent
         if isinstance(event, EosEvent):
             logger.info("Received EOS from worker.")
             self._publisher.publish(PlaybackCompletedEvent())
         elif isinstance(event, ErrorEvent):
             logger.error(f"Received Error from worker: {event.details}")
-            self._publisher.publish(SystemErrorEvent(message=event.details, component="GstVideoRenderer"))
+            self._publisher.publish(
+                SystemErrorEvent(
+                    message=event.details,
+                    component="GstVideoRenderer",
+                )
+            )
             self._publisher.publish(PlaybackCompletedEvent())
         elif isinstance(event, WarningEvent):
             logger.warning(f"Worker Warning: {event.warning_type} - {event.decoder}")
-            # Could publish a PerformanceWarningEvent here
+            self._publisher.publish(
+                VideoPlaybackWarningEvent(
+                    warning_type=event.warning_type,
+                    decoder=event.decoder,
+                )
+            )
         elif isinstance(event, FirstFrameRenderedEvent):
             logger.info("Received FirstFrameRenderedEvent from worker.")
             self._publisher.publish(VideoFirstFrameRenderedEvent())

@@ -16,6 +16,7 @@ from picframe.core.events.dto import (
     State,
     StateEvent,
     SystemErrorEvent,
+    VideoPlaybackWarningEvent,
 )
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
 from picframe.core.services.renderer_assets import RendererAssetIssue
@@ -783,6 +784,47 @@ def test_engine_video_first_frame_timeout_completes_handoff(
     assert engine._pending_swap_media == media_item
     assert not hasattr(engine, "_pending_video_media")
     assert not hasattr(engine, "_video_first_frame_deadline")
+
+
+def test_engine_software_fallback_warning_extends_first_frame_deadline(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    config["video_software_fallback_first_frame_timeout"] = 8.0
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = media_item
+    engine._video_first_frame_deadline = 10.0
+
+    with patch("picframe.core.engine.playback.time.time", return_value=11.0):
+        engine._handle_video_playback_warning(
+            VideoPlaybackWarningEvent(
+                warning_type="software_fallback",
+                decoder="avdec_h264",
+            )
+        )
+
+    assert engine._video_first_frame_deadline == 19.0
+    assert engine._state == State.PREPARING_VIDEO
 
 
 def test_engine_playback_completed_before_first_frame_advances(

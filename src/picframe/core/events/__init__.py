@@ -16,6 +16,7 @@ from .dto import (
     State,
     StateEvent,
     SystemErrorEvent,
+    VideoPlaybackWarningEvent,
 )
 from .interfaces import IEventPublisher, IEventSubscriber
 
@@ -29,6 +30,7 @@ __all__ = [
     "RenderCommand",
     "FileChangeEvent",
     "SystemErrorEvent",
+    "VideoPlaybackWarningEvent",
     "Command",
     "State",
 ]

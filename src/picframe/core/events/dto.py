@@ -269,6 +269,19 @@ class VideoFirstFrameRenderedEvent(Event):
     def priority(self) -> int:
         return 10
 
+
+@dataclass(frozen=True)
+class VideoPlaybackWarningEvent(Event):
+    """Event emitted when video playback continues with a degraded path."""
+
+    warning_type: str
+    decoder: str
+
+    @property
+    def priority(self) -> int:
+        return 2
+
+
 @dataclass(frozen=True)
 class PlaybackCompletedEvent(Event):
     """
