@@ -31,6 +31,7 @@ from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedE
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.models.playlist import PlaylistCriteria
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
+from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourcePaths
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +51,15 @@ def _path_picker_root() -> Path:
     return Path.home().expanduser().resolve()
 
 
-def _display_path(path: Path) -> str:
+def _display_path(path: Path, resource_paths: ResourcePaths | None = None) -> str:
+    if resource_paths is not None:
+        resolved = path.expanduser().resolve(strict=False)
+        try:
+            resolved.relative_to(resource_paths.data_dir)
+            return resource_paths.tokenized(resolved)
+        except ValueError:
+            pass
+
     root = _path_picker_root()
     try:
         relative = path.resolve(strict=False).relative_to(root)
@@ -61,11 +70,18 @@ def _display_path(path: Path) -> str:
     return f"~/{relative.as_posix()}"
 
 
-def _resolve_home_path(path_value: str | None) -> Path:
+def _resolve_home_path(
+    path_value: str | None,
+    resource_paths: ResourcePaths | None = None,
+) -> Path:
     root = _path_picker_root()
     raw_path = (path_value or "").strip()
     if not raw_path or raw_path == "~":
         candidate = root
+    elif resource_paths is not None and (
+        raw_path == PICFRAME_DATA_TOKEN or raw_path.startswith(f"{PICFRAME_DATA_TOKEN}/")
+    ):
+        candidate = Path(resource_paths.resolve(raw_path))
     elif raw_path.startswith("~/"):
         candidate = root / raw_path[2:]
     else:
@@ -83,10 +99,19 @@ def _resolve_home_path(path_value: str | None) -> Path:
     return resolved
 
 
-def _filesystem_shortcuts() -> list[FilesystemEntryDTO]:
+def _filesystem_shortcuts(resource_paths: ResourcePaths | None = None) -> list[FilesystemEntryDTO]:
     shortcuts = []
-    for shortcut in ("~", "~/Pictures", "~/.picframe", "~/DeletedPictures"):
-        path = _resolve_home_path(shortcut)
+    raw_shortcuts = ["~", "~/Pictures", "~/DeletedPictures"]
+    if resource_paths is not None:
+        raw_shortcuts.append(_display_path(resource_paths.base_dir, resource_paths))
+    else:
+        raw_shortcuts.append("~/.picframe")
+
+    for shortcut in dict.fromkeys(raw_shortcuts):
+        try:
+            path = _resolve_home_path(shortcut, resource_paths)
+        except HTTPException:
+            continue
         shortcuts.append(
             FilesystemEntryDTO(
                 name=shortcut,
@@ -113,26 +138,32 @@ def _normalize_extensions(extensions: str | list[str] | None) -> set[str]:
     }
 
 
-def _filesystem_entry(path: Path) -> FilesystemEntryDTO:
+def _filesystem_entry(
+    path: Path,
+    resource_paths: ResourcePaths | None = None,
+) -> FilesystemEntryDTO:
     return FilesystemEntryDTO(
-        name=path.name or _display_path(path),
-        path=_display_path(path),
+        name=path.name or _display_path(path, resource_paths),
+        path=_display_path(path, resource_paths),
         is_dir=path.is_dir(),
         is_file=path.is_file(),
         extension=path.suffix.lower(),
     )
 
 
-def _validate_path_request(payload: FilesystemValidateRequest) -> FilesystemValidateResponse:
+def _validate_path_request(
+    payload: FilesystemValidateRequest,
+    resource_paths: ResourcePaths | None = None,
+) -> FilesystemValidateResponse:
     kind = payload.kind if payload.kind in FILESYSTEM_KIND_VALUES else "any"
     extensions = _normalize_extensions(payload.extensions)
-    path = _resolve_home_path(payload.path)
+    path = _resolve_home_path(payload.path, resource_paths)
     exists = path.exists()
     warnings: list[str] = []
 
     response = FilesystemValidateResponse(
         valid=True,
-        path=_display_path(path),
+        path=_display_path(path, resource_paths),
         exists=exists,
         is_dir=path.is_dir(),
         is_file=path.is_file(),
@@ -166,7 +197,9 @@ def system_error_websocket_message(event: Any) -> str:
     return json.dumps({
         "type": "SystemErrorEvent",
         "message": getattr(event, "message", "Unknown Error"),
-        "component": getattr(event, "component", "Unknown")
+        "component": getattr(event, "component", "Unknown"),
+        "sticky": bool(getattr(event, "sticky", False)),
+        "code": getattr(event, "code", None),
     })
 
 
@@ -316,6 +349,7 @@ def create_app(
     media_repository: IMediaRepository | None = None,
     image_processing_service: Any | None = None,
     html_dir: str = "~/.picframe/html",
+    resource_paths: ResourcePaths | None = None,
 ) -> FastAPI:
     """
     Create and configure the FastAPI application instance.
@@ -329,6 +363,9 @@ def create_app(
         FastAPI: The configured application instance.
     """
     logger.info("Initializing FastAPI application...")
+    resource_paths = resource_paths or ResourcePaths.from_base_dir(
+        _path_picker_root() / ".picframe"
+    )
     
     app = FastAPI(
         title="Picframe Web Control Plane",
@@ -385,7 +422,13 @@ def create_app(
         def handle_state_changed(event: StateEvent) -> None:
             # Only rate limit state events, not media changes or critical events
             if state_rate_limiter.consume(1):
-                msg = json.dumps({"type": "StateEvent", "state": event.state.name})
+                msg = json.dumps(
+                    {
+                        "type": "StateEvent",
+                        "state": event.state.name,
+                        "payload": event.payload,
+                    }
+                )
                 loop.call_soon_threadsafe(send_queue.put_nowait, msg)
             else:
                 logger.debug("WebSocket state broadcast rate limited")
@@ -566,7 +609,7 @@ def create_app(
         if kind not in FILESYSTEM_KIND_VALUES:
             raise HTTPException(status_code=422, detail="Unsupported filesystem browse kind")
 
-        directory = _resolve_home_path(path)
+        directory = _resolve_home_path(path, resource_paths)
         if not directory.exists():
             raise HTTPException(status_code=404, detail="Path does not exist")
         if not directory.is_dir():
@@ -591,19 +634,19 @@ def create_app(
                         continue
                     if extension_set and child.suffix.lower() not in extension_set:
                         continue
-                entries.append(_filesystem_entry(child))
+                entries.append(_filesystem_entry(child, resource_paths))
         except OSError as exc:
             raise HTTPException(status_code=400, detail=f"Unable to read path: {exc}") from exc
 
         entries.sort(key=lambda item: (not item.is_dir, item.name.lower()))
         root = _path_picker_root()
-        parent = None if directory == root else _display_path(directory.parent)
+        parent = None if directory == root else _display_path(directory.parent, resource_paths)
         return FilesystemBrowseResponse(
-            root=_display_path(root),
-            path=_display_path(directory),
+            root=_display_path(root, resource_paths),
+            path=_display_path(directory, resource_paths),
             parent=parent,
             entries=entries,
-            shortcuts=_filesystem_shortcuts(),
+            shortcuts=_filesystem_shortcuts(resource_paths),
         ).model_dump()
 
     @app.post("/api/filesystem/validate")
@@ -611,7 +654,7 @@ def create_app(
         payload: FilesystemValidateRequest,
     ) -> dict[str, Any]:
         """Validate a Settings path under the Picframe user's home directory."""
-        return _validate_path_request(payload).model_dump()
+        return _validate_path_request(payload, resource_paths).model_dump()
 
     @app.get("/api/config")
     async def api_get_config() -> dict[str, Any]:

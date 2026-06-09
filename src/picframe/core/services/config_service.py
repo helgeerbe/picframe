@@ -8,11 +8,18 @@ via the EventBus (e.g., from the WebUI) and persist them to the database.
 import logging
 from typing import Any
 
-from picframe.core.events.dto import Command, CommandEvent, State, StateEvent, RendererConfigUpdatedEvent
-from picframe.core.services.renderer_config import build_renderer_config
+from picframe.core.events.dto import (
+    Command,
+    CommandEvent,
+    RendererConfigUpdatedEvent,
+    State,
+    StateEvent,
+)
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.models.hardware_input import normalize_hardware_inputs_config
 from picframe.core.repositories.interfaces import IConfigRepository
+from picframe.core.services.renderer_config import build_renderer_config
+from picframe.core.services.resource_paths import ResourcePaths
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +37,7 @@ class ConfigService:
         config_repository: IConfigRepository,
         event_subscriber: IEventSubscriber,
         event_publisher: IEventPublisher,
+        resource_paths: ResourcePaths | None = None,
     ) -> None:
         """
         Initialize the ConfigService.
@@ -42,6 +50,7 @@ class ConfigService:
         self._config_repository = config_repository
         self._event_publisher = event_publisher
         self._event_subscriber = event_subscriber
+        self._resource_paths = resource_paths
 
         # Subscribe to SET_CONFIG commands
         self._event_subscriber.subscribe(CommandEvent, self._handle_command_event)
@@ -174,7 +183,7 @@ class ConfigService:
             return
             
         try:
-            config = build_renderer_config(self._config_repository)
+            config = build_renderer_config(self._config_repository, self._resource_paths)
             self._event_publisher.publish(RendererConfigUpdatedEvent(config=config))
         except Exception as e:
             logger.error(f"Failed to publish RendererConfigUpdatedEvent: {e}", exc_info=True)

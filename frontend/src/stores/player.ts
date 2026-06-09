@@ -22,7 +22,12 @@ export const usePlayerStore = defineStore('player', () => {
   const brightness = ref(1.0)
   const isDisplayOn = ref(true)
   const isConnected = ref(false)
-  const systemError = ref<{message: string, component: string} | null>(null)
+  const systemError = ref<{
+    message: string
+    component: string
+    sticky?: boolean
+    code?: string | null
+  } | null>(null)
 
   let ws: WebSocket | null = null
 
@@ -51,17 +56,34 @@ export const usePlayerStore = defineStore('player', () => {
         } else if (data.type === 'StateEvent') {
           if (data.state === 'PLAYING') isPlaying.value = true
           if (data.state === 'PAUSED') isPlaying.value = false
+          if (data.state === 'ERROR') {
+            isPlaying.value = false
+            if (data.payload?.reason === 'invalid_renderer_config') {
+              systemError.value = {
+                message: data.payload.message,
+                component: data.payload.component || 'Pi3dRenderer',
+                sticky: true,
+                code: data.payload.reason
+              }
+            }
+          }
+          if (data.state === 'PLAYING' && systemError.value?.code === 'invalid_renderer_config') {
+            systemError.value = null
+          }
         } else if (data.type === 'SystemErrorEvent') {
           systemError.value = {
             message: data.message,
-            component: data.component
+            component: data.component,
+            sticky: data.sticky,
+            code: data.code
           }
-          // Auto-clear error after 10 seconds
-          setTimeout(() => {
-            if (systemError.value?.message === data.message) {
-              systemError.value = null
-            }
-          }, 10000)
+          if (!data.sticky) {
+            setTimeout(() => {
+              if (systemError.value?.message === data.message) {
+                systemError.value = null
+              }
+            }, 10000)
+          }
         }
       } catch (e) {
         console.error('Failed to parse WebSocket message', e)

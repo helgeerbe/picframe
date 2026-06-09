@@ -83,8 +83,8 @@ class ViewerConfig(BaseModel):
     fps: float = 20.0
     background: list[Any] = Field(default_factory=lambda: [0.2, 0.2, 0.3, 1.0])
     blend_type: str = "blend"
-    font_file: str = "~/picframe_data/data/fonts/NotoSans-Regular.ttf"
-    shader: str = "~/picframe_data/data/shaders/blend_new"
+    font_file: str = "${PICFRAME_DATA}/fonts/NotoSans-Regular.ttf"
+    shader: str = "${PICFRAME_DATA}/shaders/blend_new"
     show_text_fm: str = "%b %d, %Y"
     show_text_tm: float = 20.0
     show_text_sz: int = 40
@@ -115,7 +115,7 @@ class ViewerConfig(BaseModel):
     inner_mat_border: int = 40
     outer_mat_use_texture: bool = True
     inner_mat_use_texture: bool = False
-    mat_resource_folder: str = "~/picframe_data/data/mat"
+    mat_resource_folder: str = "${PICFRAME_DATA}/mat"
     show_clock: bool = False
     clock_justify: str = "R"
     clock_text_sz: int = 120
@@ -138,7 +138,7 @@ class ModelConfig(BaseModel):
     ])
     deleted_pictures: str = "~/DeletedPictures"
     follow_links: bool = False
-    no_files_img: str = "~/picframe_data/data/no_pictures.jpg"
+    no_files_img: str = "${PICFRAME_DATA}/no_pictures.jpg"
     subdirectory: str = ""
     date_from: str = ""
     date_to: str = ""

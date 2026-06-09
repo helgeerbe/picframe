@@ -8,6 +8,7 @@ import pytest
 from fastapi import FastAPI
 
 from picframe.api.app import create_app, media_event_to_response_dto
+from picframe.core.services.resource_paths import ResourcePaths
 
 
 @pytest.fixture
@@ -207,6 +208,38 @@ def test_api_filesystem_validate_allows_missing_mount_with_warning(
     assert data["valid"] is True
     assert data["exists"] is False
     assert data["warnings"] == ["Path does not exist yet"]
+
+
+def test_api_filesystem_validate_resolves_picframe_data_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    base_dir = home / ".picframe-dev"
+    shader_dir = base_dir / "data" / "shaders"
+    shader_dir.mkdir(parents=True)
+    (shader_dir / "blend_new.fs").write_text("fragment")
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        resource_paths=ResourcePaths.from_base_dir(base_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/filesystem/validate",
+        json={
+            "path": "${PICFRAME_DATA}/shaders/blend_new.fs",
+            "kind": "file",
+            "extensions": [".fs"],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["valid"] is True
+    assert data["path"] == "${PICFRAME_DATA}/shaders/blend_new.fs"
 
 
 def test_media_event_dto_uses_payload_location_name_before_repository() -> None:

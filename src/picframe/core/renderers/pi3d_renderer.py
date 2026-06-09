@@ -179,8 +179,15 @@ class Pi3dRenderer(IRenderer):
             
         self._logger.info("Renderer received RendererConfigUpdatedEvent. Updating state.")
         self._config = event.config
+        self._display_x = self._config.display_x
+        self._display_y = self._config.display_y
+        self._display_w = self._config.display_w
+        self._display_h = self._config.display_h
         self._fps = self._config.fps
         self._background = self._config.background
+        self._use_glx = self._config.use_glx
+        self._use_sdl2 = self._config.use_sdl2
+        self._shader_path = os.path.expanduser(self._config.shader_path)
         self._kenburns = self._config.kenburns
 
         anim_config = {

@@ -1,3 +1,4 @@
+import os
 from unittest.mock import MagicMock
 
 import pytest
@@ -151,4 +152,4 @@ def test_renderer_config_update_includes_matting_values(
     assert event.config.inner_mat_border == 24
     assert event.config.outer_mat_use_texture is False
     assert event.config.inner_mat_use_texture is True
-    assert event.config.mat_resource_folder == "~/mat"
+    assert event.config.mat_resource_folder == os.path.expanduser("~/mat")

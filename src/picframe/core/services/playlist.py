@@ -15,12 +15,13 @@ from picframe.core.events.dto import FileChangeEvent
 from picframe.core.events.interfaces import IEventPublisher
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
 from picframe.core.models.playlist import (
-    PlaylistCriteria,
     SHUFFLE_MODE_FEWER_REPEATS,
     SHUFFLE_MODE_STANDARD,
+    PlaylistCriteria,
     normalize_shuffle_mode,
 )
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
+from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourcePaths
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,7 @@ class PlaylistManager:
         media_repository: IMediaRepository,
         config_repository: IConfigRepository | None = None,
         event_publisher: IEventPublisher | None = None,
+        resource_paths: ResourcePaths | None = None,
     ) -> None:
         """
         Initialize the PlaylistManager.
@@ -52,6 +54,7 @@ class PlaylistManager:
         self._media_repo = media_repository
         self._config_repo = config_repository
         self._event_publisher = event_publisher
+        self._resource_paths = resource_paths or ResourcePaths.from_base_dir("~/.picframe")
         self._playlist: list[dict[str, Any]] = []
         self._display_playlist: list[list[dict[str, Any]]] = []
         self._history: list[list[dict[str, Any]]] = []
@@ -276,16 +279,18 @@ class PlaylistManager:
         """
         import os
         
-        # First try to find it in the user's configuration directory
-        user_dir = os.path.expanduser("~/.picframe")
-        user_no_pic_path = os.path.join(user_dir, "data", "no_pictures.jpg")
-        
-        if os.path.exists(user_no_pic_path):
-            no_pic_path = user_no_pic_path
-        else:
-            # Fallback to the source code directory
-            base_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-            no_pic_path = os.path.join(base_dir, "data", "no_pictures.jpg")
+        configured_path = None
+        if self._config_repo is not None:
+            configured_path = self._config_repo.get_app_config(
+                "model.no_files_img", f"{PICFRAME_DATA_TOKEN}/no_pictures.jpg"
+            )
+
+        no_pic_path = self._resource_paths.resolve(
+            configured_path or f"{PICFRAME_DATA_TOKEN}/no_pictures.jpg"
+        )
+
+        if not os.path.exists(no_pic_path):
+            no_pic_path = str(ResourcePaths.packaged_no_files_img())
         
         return MediaItem(
             id=0,

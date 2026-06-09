@@ -170,7 +170,7 @@ class RendererConfig:
     inner_mat_border: int = 40
     outer_mat_use_texture: bool = True
     inner_mat_use_texture: bool = False
-    mat_resource_folder: str = "~/.picframe/data/mat"
+    mat_resource_folder: str = "${PICFRAME_DATA}/mat"
 
 
 @dataclass(frozen=True)
@@ -293,6 +293,8 @@ class SystemErrorEvent(Event):
 
     message: str
     component: str
+    sticky: bool = False
+    code: str | None = None
 
     @property
     def priority(self) -> int:

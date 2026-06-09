@@ -14,8 +14,8 @@ viewer:
   - 0.3
   - 1.0
   blend_type: blend
-  font_file: ~/.picframe/data/fonts/NotoSans-Regular.ttf
-  shader: ~/.picframe/data/shaders/blend_new
+  font_file: ${PICFRAME_DATA}/fonts/NotoSans-Regular.ttf
+  shader: ${PICFRAME_DATA}/shaders/blend_new
   show_text_fm: '%b %d, %Y'
   show_text_tm: 20.0
   show_text_sz: 40
@@ -55,7 +55,7 @@ viewer:
   inner_mat_border: 40
   outer_mat_use_texture: true
   inner_mat_use_texture: false
-  mat_resource_folder: ~/.picframe/data/mat
+  mat_resource_folder: ${PICFRAME_DATA}/mat
   show_clock: false
   clock_justify: R
   clock_text_sz: 120
@@ -74,7 +74,7 @@ model:
   deleted_pictures: ~/DeletedPictures
   # Follow directory symlinks while indexing.
   follow_links: false
-  no_files_img: ~/.picframe/data/no_pictures.jpg
+  no_files_img: ${PICFRAME_DATA}/no_pictures.jpg
   # Remote media-selection filters. subdirectory is relative to pic_dir.
   subdirectory: ''
   # YYYY-MM-DD date range; empty values disable each bound.

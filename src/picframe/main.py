@@ -26,6 +26,12 @@ from picframe.core.services.config_service import ConfigService
 from picframe.core.services.hardware_input import HardwareInputService
 from picframe.core.services.image_processing import ImageProcessingService
 from picframe.core.services.playlist import PlaylistManager
+from picframe.core.services.renderer_assets import validate_renderer_assets
+from picframe.core.services.resource_paths import (
+    PICFRAME_DATA_TOKEN,
+    ResourcePaths,
+    repair_legacy_resource_defaults,
+)
 from picframe.core.services.state_tracker import StateTrackerService
 from picframe.infrastructure.filesystem.media_monitor import WatchdogMediaMonitor
 from picframe.infrastructure.mqtt import HomeAssistantMqttAdapter
@@ -49,18 +55,20 @@ def run_picframe(
     logger.info(f"Starting Picframe (Web server port: {port})...")
 
     # 1. Initialize Repositories
-    data_dir = os.path.join(os.path.expanduser(base_dir), "data")
+    resource_paths = ResourcePaths.from_base_dir(base_dir)
+    data_dir = str(resource_paths.data_dir)
     config_db_path = config_db_path or os.path.join(data_dir, "config.db3")
     media_db_path = media_db_path or os.path.join(data_dir, "media_cache.db3")
     
     _config_repo = SQLiteConfigRepository(config_db_path)
+    repair_legacy_resource_defaults(_config_repo)
     media_repo = SQLiteMediaRepository(media_db_path)
 
     # 2. Initialize Event Bus
     event_bus = PriorityQueueEventBus()
 
     # 3. Initialize Config Service (Needed for HAL)
-    config_service = ConfigService(_config_repo, event_bus, event_bus)
+    config_service = ConfigService(_config_repo, event_bus, event_bus, resource_paths)
     state_tracker = StateTrackerService(event_bus)
     nested_config = config_service.get_nested_config()
 
@@ -75,7 +83,7 @@ def run_picframe(
     logger.info(f"HAL Adapters injected: {hal_adapters}")
 
     # 5. Initialize Services
-    playlist_manager = PlaylistManager(media_repo, _config_repo, event_bus)
+    playlist_manager = PlaylistManager(media_repo, _config_repo, event_bus, resource_paths)
     from picframe.core.services.display_power import DisplayPowerManager
     display_power_manager = DisplayPowerManager(event_bus, hal_adapters.display_power)
     from picframe.core.services.system_manager import SystemManager
@@ -94,9 +102,7 @@ def run_picframe(
     # Initialize media monitor infrastructure adapter
     model_config = nested_config.get("model", {})
     
-    pic_dir = model_config.get("pic_dir", os.path.join(data_dir, "media"))
-    # Expand user path (e.g., ~)
-    pic_dir = os.path.expanduser(pic_dir)
+    pic_dir = resource_paths.resolve(model_config.get("pic_dir", os.path.join(data_dir, "media")))
     media_directories = [pic_dir]
     
     logger.info(f"Configured media directories: {media_directories}")
@@ -143,7 +149,7 @@ def run_picframe(
 
     # 5. Initialize Renderer
     from picframe.core.services.renderer_config import build_renderer_config
-    renderer_config = build_renderer_config(_config_repo)
+    renderer_config = build_renderer_config(_config_repo, resource_paths)
     renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus, event_publisher=event_bus)
     
     from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
@@ -165,6 +171,16 @@ def run_picframe(
         config_repository=_config_repo,
         video_player=video_player,
         cache_dir=cache_dir,
+        renderer_config=renderer_config,
+        renderer_asset_validator=lambda config: validate_renderer_assets(
+            config,
+            no_files_img=resource_paths.resolve(
+                _config_repo.get_app_config(
+                    "model.no_files_img", f"{PICFRAME_DATA_TOKEN}/no_pictures.jpg"
+                )
+            ),
+            packaged_no_files_img=str(ResourcePaths.packaged_no_files_img()),
+        ),
     )
 
     # 7. Initialize Web Server
@@ -177,7 +193,8 @@ def run_picframe(
         config_repository=_config_repo,
         media_repository=media_repo,
         image_processing_service=image_processing_service,
-        html_dir=html_dir or os.path.join(base_dir, "html"),
+        html_dir=html_dir or str(resource_paths.html_dir),
+        resource_paths=resource_paths,
     )
     web_server = WebServer(app, port=port)
 

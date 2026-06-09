@@ -8,8 +8,17 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from picframe.core.engine.playback import PlaybackEngine
-from picframe.core.events.dto import Command, CommandEvent, State, StateEvent
+from picframe.core.events.dto import (
+    Command,
+    CommandEvent,
+    RendererConfig,
+    RendererConfigUpdatedEvent,
+    State,
+    StateEvent,
+    SystemErrorEvent,
+)
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
+from picframe.core.services.renderer_assets import RendererAssetIssue
 
 
 @pytest.fixture
@@ -120,6 +129,108 @@ def test_engine_start_stop(
         assert engine._state == State.IDLE
 
 
+def test_engine_renderer_asset_failure_keeps_engine_alive(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    issue = RendererAssetIssue(
+        field="viewer.shader",
+        path="/missing/blend_new.vs",
+        message="Missing shader .vs file",
+    )
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        renderer_config=RendererConfig(shader_path="/missing/blend_new"),
+        renderer_asset_validator=lambda _config: [issue],
+    )
+
+    with patch.object(engine, "_run_loop"):
+        engine.start()
+
+    assert engine._is_running is True
+    assert engine._state == State.ERROR
+    mock_renderer.start.assert_not_called()
+    mock_playlist_manager.build_playlist.assert_not_called()
+    mock_event_publisher.publish.assert_any_call(
+        SystemErrorEvent(
+            message="viewer.shader: Missing shader .vs file (/missing/blend_new.vs)",
+            component="Pi3dRenderer",
+            sticky=True,
+            code="invalid_renderer_config",
+        )
+    )
+    mock_event_publisher.publish.assert_any_call(
+        StateEvent(
+            state=State.ERROR,
+            payload={
+                "component": "Pi3dRenderer",
+                "reason": "invalid_renderer_config",
+                "message": "viewer.shader: Missing shader .vs file (/missing/blend_new.vs)",
+            },
+        )
+    )
+
+
+def test_engine_retries_renderer_start_after_config_update(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    renderer_config = RendererConfig(shader_path="/valid/blend_new")
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        renderer_config=RendererConfig(shader_path="/missing/blend_new"),
+        renderer_asset_validator=lambda _config: [],
+    )
+    engine._is_running = True
+    engine._state = State.ERROR
+    mock_renderer.render_frame.side_effect = [False]
+    engine._handle_renderer_config_event(RendererConfigUpdatedEvent(config=renderer_config))
+
+    engine._run_loop()
+
+    mock_renderer.start.assert_called_once()
+    mock_playlist_manager.build_playlist.assert_called_once()
+    assert engine._state == State.PLAYING
+
+
+def test_engine_purge_does_not_rebuild_playlist_while_renderer_blocked(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    engine._state = State.ERROR
+    mock_playlist_manager.purge_missing_files.return_value = 3
+
+    engine._handle_purge_command()
+
+    mock_playlist_manager.purge_missing_files.assert_called_once()
+    mock_playlist_manager.build_playlist.assert_not_called()
+    assert engine._playlist_ready is False
+
+
 def test_engine_handle_command_next(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
@@ -200,6 +311,7 @@ def test_engine_handle_command_stop(
         mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     engine._is_running = True
+    engine._renderer_started = True
     
     event = CommandEvent(command=Command.STOP)
     engine._handle_command(event)
@@ -452,6 +564,7 @@ def test_engine_rebuilds_playlist_and_updates_delay_on_model_config_change(
         config_repository=config_repo,
     )
     engine._state = State.PLAYING
+    engine._renderer_started = True
     engine._next_transition_time = 9999999999.0
 
     engine._handle_state_event(
@@ -479,6 +592,7 @@ def test_engine_run_loop_exit(
         mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     engine._is_running = True
+    engine._renderer_started = True
     
     # Renderer is mocked to return True then False
     engine._run_loop()
@@ -732,6 +846,7 @@ def test_engine_circuit_breaker(
     )
     engine._is_running = True
     engine._state = State.PLAYING
+    engine._renderer_started = True
     
     # Mock renderer to raise MediaProcessingError
     mock_renderer.render_frame.side_effect = MediaProcessingError("Test error")
@@ -764,8 +879,8 @@ def test_playback_engine_handles_media_processing_error(
         config,
     )
     """Test that PlaybackEngine catches MediaProcessingError and skips to next media."""
-    from picframe.core.exceptions import MediaProcessingError
     from picframe.core.events.dto import State, SystemErrorEvent
+    from picframe.core.exceptions import MediaProcessingError
     
     # Setup mock to raise MediaProcessingError on render
     mock_renderer.execute.side_effect = MediaProcessingError("Test error")

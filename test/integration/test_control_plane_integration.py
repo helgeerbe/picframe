@@ -107,4 +107,6 @@ def test_websocket_system_error_payload_shape() -> None:
         "type": "SystemErrorEvent",
         "message": "boom",
         "component": "integration",
+        "sticky": False,
+        "code": None,
     }

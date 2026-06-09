@@ -5,6 +5,10 @@ from __future__ import annotations
 from typing import Any
 
 from picframe.core.events.dto import RendererConfig
+from picframe.core.services.resource_paths import (
+    PICFRAME_DATA_TOKEN,
+    ResourcePaths,
+)
 
 
 def _optional_int(raw_value: Any) -> int | None:
@@ -13,8 +17,12 @@ def _optional_int(raw_value: Any) -> int | None:
     return int(raw_value)
 
 
-def build_renderer_config(config_repository: Any) -> RendererConfig:
+def build_renderer_config(
+    config_repository: Any,
+    resource_paths: ResourcePaths | None = None,
+) -> RendererConfig:
     """Map persisted application config values into a RendererConfig DTO."""
+    paths = resource_paths or ResourcePaths.from_base_dir("~/.picframe")
     return RendererConfig(
         display_x=int(config_repository.get_app_config("viewer.display_x", 0)),
         display_y=int(config_repository.get_app_config("viewer.display_y", 0)),
@@ -26,7 +34,11 @@ def build_renderer_config(config_repository: Any) -> RendererConfig:
         ),  # type: ignore[arg-type]
         use_glx=config_repository.get_app_config_bool("viewer.use_glx", False),
         use_sdl2=config_repository.get_app_config_bool("viewer.use_sdl2", False),
-        shader_path=str(config_repository.get_app_config("viewer.shader", "blend_new")),
+        shader_path=paths.resolve(
+            config_repository.get_app_config(
+                "viewer.shader", f"{PICFRAME_DATA_TOKEN}/shaders/blend_new"
+            )
+        ),
         kenburns=config_repository.get_app_config_bool("viewer.kenburns", False),
         show_clock=config_repository.get_app_config_bool("viewer.show_clock", False),
         clock_format=str(config_repository.get_app_config("viewer.clock_format", "%H:%M")),
@@ -39,7 +51,12 @@ def build_renderer_config(config_repository: Any) -> RendererConfig:
         time_fade=float(config_repository.get_app_config("model.fade_time", 2.0)),
         time_delay=float(config_repository.get_app_config("model.time_delay", 200.0)),
         show_text_tm=float(config_repository.get_app_config("viewer.show_text_tm", 10.0)),
-        font_file=str(config_repository.get_app_config("viewer.font_file", "")),
+        font_file=paths.resolve(
+            config_repository.get_app_config(
+                "viewer.font_file",
+                f"{PICFRAME_DATA_TOKEN}/fonts/NotoSans-Regular.ttf",
+            )
+        ),
         blend_type=str(config_repository.get_app_config("viewer.blend_type", "blend")),
         edge_alpha=float(config_repository.get_app_config("viewer.edge_alpha", 0.5)),
         fit=config_repository.get_app_config_bool("viewer.fit", False),
@@ -63,8 +80,10 @@ def build_renderer_config(config_repository: Any) -> RendererConfig:
             "viewer.inner_mat_use_texture", False
         ),
         mat_resource_folder=str(
-            config_repository.get_app_config(
-                "viewer.mat_resource_folder", "~/.picframe/data/mat"
+            paths.resolve(
+                config_repository.get_app_config(
+                    "viewer.mat_resource_folder", f"{PICFRAME_DATA_TOKEN}/mat"
+                )
             )
         ),
     )

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import os
 from typing import Any
 
 from picframe.core.services.renderer_config import build_renderer_config
+from picframe.core.services.resource_paths import ResourcePaths
 
 
 class FakeConfigRepository:
@@ -52,11 +54,12 @@ def test_build_renderer_config_maps_matting_values() -> None:
     assert config.inner_mat_border == 22
     assert config.outer_mat_use_texture is False
     assert config.inner_mat_use_texture is True
-    assert config.mat_resource_folder == "~/custom-mat"
+    assert config.mat_resource_folder == os.path.expanduser("~/custom-mat")
 
 
 def test_build_renderer_config_uses_matting_defaults() -> None:
-    config = build_renderer_config(FakeConfigRepository({}))
+    resource_paths = ResourcePaths.from_base_dir("/tmp/picframe-test")
+    config = build_renderer_config(FakeConfigRepository({}), resource_paths)
 
     assert config.mat_images == 0.01
     assert config.mat_type is None
@@ -66,4 +69,6 @@ def test_build_renderer_config_uses_matting_defaults() -> None:
     assert config.inner_mat_border == 40
     assert config.outer_mat_use_texture is True
     assert config.inner_mat_use_texture is False
-    assert config.mat_resource_folder == "~/.picframe/data/mat"
+    assert config.shader_path == "/tmp/picframe-test/data/shaders/blend_new"
+    assert config.font_file == "/tmp/picframe-test/data/fonts/NotoSans-Regular.ttf"
+    assert config.mat_resource_folder == "/tmp/picframe-test/data/mat"

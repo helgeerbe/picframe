@@ -19,6 +19,7 @@ from typing import Any
 from picframe.api.models import AppConfig
 from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
 from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
+from picframe.core.services.resource_paths import repair_legacy_resource_defaults
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ class EnvironmentBootstrapper:
         # 3. Seed Configuration (Only if config was cleared or is empty)
         if config_cleared or not config_repo.get_all_app_config():
             self._seed_default_config(config_repo)
+        repair_legacy_resource_defaults(config_repo)
             
         logger.info("Bootstrap complete.")
 

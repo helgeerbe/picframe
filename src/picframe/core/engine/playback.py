@@ -3,6 +3,7 @@ Playback Engine for orchestrating media playback and rendering.
 """
 import logging
 import time
+from collections.abc import Callable
 from typing import Any
 
 from picframe.core.events.dto import (
@@ -10,6 +11,8 @@ from picframe.core.events.dto import (
     CommandEvent,
     CurrentMediaChangedEvent,
     RenderCommand,
+    RendererConfig,
+    RendererConfigUpdatedEvent,
     State,
     StateEvent,
     SystemErrorEvent,
@@ -19,6 +22,7 @@ from picframe.core.exceptions import MediaProcessingError
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.services.playlist import PlaylistManager
+from picframe.core.services.renderer_assets import format_renderer_asset_issues
 
 
 class PlaybackEngine:
@@ -39,6 +43,8 @@ class PlaybackEngine:
         config_repository: Any | None = None,
         video_player: Any | None = None,
         cache_dir: str | None = None,
+        renderer_config: RendererConfig | None = None,
+        renderer_asset_validator: Callable[[RendererConfig], list[Any]] | None = None,
     ) -> None:
         """
         Initialize the PlaybackEngine.
@@ -59,9 +65,15 @@ class PlaybackEngine:
         self._config = config
         self._config_repository = config_repository
         self._cache_dir = cache_dir
+        self._renderer_config = renderer_config
+        self._renderer_asset_validator = renderer_asset_validator or (lambda _config: [])
         
         self._state = State.IDLE
         self._is_running = False
+        self._renderer_started = False
+        self._playlist_ready = False
+        self._renderer_retry_requested = False
+        self._state_payload: Any = None
         self._time_delay = float(config.get("time_delay", 200.0))
         self._next_transition_time = 0.0
         self._video_first_frame_timeout = float(config.get("video_first_frame_timeout", 2.0))
@@ -83,24 +95,70 @@ class PlaybackEngine:
         self._event_subscriber.subscribe(PlaybackCompletedEvent, self._handle_playback_completed)
         self._event_subscriber.subscribe(TransitionCompletedEvent, self._handle_transition_completed)
         self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._handle_video_first_frame_rendered)
+        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_renderer_config_event)
 
     def start(self) -> None:
         """Start the playback engine and render loop."""
         self._logger.info("Starting PlaybackEngine")
         self._is_running = True
-        self._renderer.start()
-        
-        # Build the initial playlist before starting the loop
-        self._playlist_manager.build_playlist()
-        
-        # Initial state transition
-        self._change_state(State.PLAYING)
-        
-        # Force immediate transition for the first image
-        self._next_transition_time = 0.0
+        if self._try_start_renderer():
+            self._prepare_playback_after_renderer_start()
         
         # Main render loop
         self._run_loop()
+
+    def _prepare_playback_after_renderer_start(self) -> None:
+        """Build playlist and enter playback once the renderer is ready."""
+        self._playlist_manager.build_playlist()
+        self._playlist_ready = True
+        self._consecutive_errors = 0
+        self._change_state(State.PLAYING, payload=None)
+        self._next_transition_time = 0.0
+
+    def _renderer_error_payload(self, message: str) -> dict[str, Any]:
+        return {
+            "component": "Pi3dRenderer",
+            "reason": "invalid_renderer_config",
+            "message": message,
+        }
+
+    def _publish_renderer_blocked(self, message: str) -> None:
+        self._logger.error("Renderer blocked: %s", message)
+        self._renderer_started = False
+        self._playlist_ready = False
+        self._renderer_retry_requested = False
+        self._event_publisher.publish(
+            SystemErrorEvent(
+                message=message,
+                component="Pi3dRenderer",
+                sticky=True,
+                code="invalid_renderer_config",
+            )
+        )
+        self._change_state(State.ERROR, payload=self._renderer_error_payload(message))
+
+    def _try_start_renderer(self) -> bool:
+        """Validate renderer assets and start pi3d on the main thread."""
+        if self._renderer_config is not None:
+            try:
+                issues = self._renderer_asset_validator(self._renderer_config)
+            except Exception as error:
+                self._publish_renderer_blocked(str(error))
+                return False
+            if issues:
+                self._publish_renderer_blocked(format_renderer_asset_issues(issues))
+                return False
+
+        try:
+            self._renderer.start()
+        except Exception as error:
+            self._renderer.stop()
+            self._publish_renderer_blocked(str(error))
+            return False
+
+        self._renderer_started = True
+        self._renderer_retry_requested = False
+        return True
 
     def stop(self) -> None:
         """Stop the playback engine and render loop."""
@@ -125,6 +183,20 @@ class PlaybackEngine:
             try:
                 # 2. Check if it\'s time for the next slide
                 current_time = time.time()
+                if not self._renderer_started:
+                    if self._renderer_retry_requested and self._try_start_renderer():
+                        self._prepare_playback_after_renderer_start()
+                    else:
+                        time.sleep(0.1)
+                    continue
+
+                if self._renderer_retry_requested:
+                    self._renderer.stop()
+                    self._renderer_started = False
+                    if self._try_start_renderer():
+                        self._prepare_playback_after_renderer_start()
+                    continue
+
                 self._handle_video_first_frame_timeout(current_time)
                 if (
                     self._state == State.PLAYING
@@ -159,6 +231,14 @@ class PlaybackEngine:
     def _handle_command(self, event: CommandEvent) -> None:
         """Handle incoming commands from the Event Bus."""
         self._logger.debug(f"Received command: {event.command}")
+
+        if (
+            not self._renderer_started
+            and self._state == State.ERROR
+            and event.command in (Command.NEXT, Command.PREV, Command.PLAY)
+        ):
+            self._renderer_retry_requested = True
+            return
         
         # If we are preparing a video, we need to handle interruptions gracefully
         if self._state == State.PREPARING_VIDEO and event.command in (Command.NEXT, Command.PREV, Command.STOP):
@@ -205,12 +285,38 @@ class PlaybackEngine:
             return
 
         self._refresh_model_timing()
-        self._playlist_manager.build_playlist()
+        if self._renderer_started:
+            self._playlist_manager.build_playlist()
+            self._playlist_ready = True
         if self._state == State.PLAYING and self._next_transition_time != float("inf"):
             self._next_transition_time = min(
                 self._next_transition_time,
                 time.time() + self._time_delay,
             )
+
+    def _handle_renderer_config_event(self, event: RendererConfigUpdatedEvent) -> None:
+        """Record renderer config updates; main loop performs renderer work."""
+        if not isinstance(event, RendererConfigUpdatedEvent):
+            return
+
+        old_signature = self._renderer_asset_signature(self._renderer_config)
+        new_signature = self._renderer_asset_signature(event.config)
+        self._renderer_config = event.config
+        if not self._renderer_started or old_signature != new_signature:
+            self._renderer_retry_requested = True
+
+    @staticmethod
+    def _renderer_asset_signature(config: RendererConfig | None) -> tuple[Any, ...] | None:
+        if config is None:
+            return None
+        return (
+            config.shader_path,
+            config.font_file,
+            config.show_text_enabled,
+            config.show_clock,
+            config.mat_images,
+            config.mat_resource_folder,
+        )
 
     def _refresh_model_timing(self) -> None:
         """Refresh playback timing values from live configuration."""
@@ -333,7 +439,9 @@ class PlaybackEngine:
 
     def _handle_request_state(self) -> None:
         """Handle a request to broadcast the current state and media."""
-        self._event_publisher.publish(StateEvent(state=self._state))
+        self._event_publisher.publish(StateEvent(state=self._state, payload=self._state_payload))
+        if not self._renderer_started:
+            return
         current_display = self._as_display_item(self._playlist_manager.get_current())
         if current_display:
             self._event_publisher.publish(CurrentMediaChangedEvent(media_item=current_display))
@@ -429,11 +537,19 @@ class PlaybackEngine:
         purged_count = self._playlist_manager.purge_missing_files()
         self._logger.info(f"Purged {purged_count} missing files from database.")
         
-        # Rebuild playlist to ensure we don't try to play purged items
-        self._playlist_manager.build_playlist()
+        if self._renderer_started:
+            # Rebuild playlist to ensure we don't try to play purged items.
+            self._playlist_manager.build_playlist()
+            self._playlist_ready = True
+        else:
+            self._playlist_ready = False
 
     def _trigger_next_media(self) -> None:
         """Fetch the next media item and send a render command."""
+        if not self._renderer_started and self._state == State.ERROR:
+            self._renderer_retry_requested = True
+            return
+
         if hasattr(self, '_pending_video_media'):
             delattr(self, '_pending_video_media')
             
@@ -782,9 +898,10 @@ class PlaybackEngine:
         self._change_state(State.ERROR)
         self._is_running = False
 
-    def _change_state(self, new_state: State) -> None:
+    def _change_state(self, new_state: State, payload: Any = None) -> None:
         """Update internal state and publish a StateEvent."""
-        if self._state != new_state:
+        if self._state != new_state or self._state_payload != payload:
             self._logger.debug(f"State changed: {self._state} -> {new_state}")
             self._state = new_state
-            self._event_publisher.publish(StateEvent(state=new_state))
+            self._state_payload = payload
+            self._event_publisher.publish(StateEvent(state=new_state, payload=payload))

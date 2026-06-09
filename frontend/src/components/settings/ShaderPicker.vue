@@ -15,6 +15,7 @@ const configStore = useConfigStore()
 const browseOpen = ref(false)
 const browseState = ref<FilesystemBrowseResponse | null>(null)
 const browseError = ref('')
+const validationError = ref('')
 
 const normalizedValue = computed(() => stripShaderExtension(props.modelValue || ''))
 const counterpartState = computed(() => {
@@ -32,7 +33,7 @@ function stripShaderExtension(value: string) {
 function dirname(value: string) {
   const stripped = stripShaderExtension(value)
   const index = stripped.lastIndexOf('/')
-  if (index < 0) return '~/.picframe/data/shaders'
+  if (index < 0) return '${PICFRAME_DATA}/shaders'
   if (index === 0) return '/'
   return stripped.slice(0, index)
 }
@@ -47,7 +48,33 @@ function emitNormalized(value: string) {
   emit('update:modelValue', stripShaderExtension(value))
 }
 
-async function browse(path = dirname(normalizedValue.value || '~/.picframe/data/shaders')) {
+async function validateShader() {
+  validationError.value = ''
+  if (!normalizedValue.value) return
+
+  const checks = [
+    { path: `${normalizedValue.value}.fs`, extension: '.fs' },
+    { path: `${normalizedValue.value}.vs`, extension: '.vs' }
+  ]
+  for (const check of checks) {
+    try {
+      const result = await configStore.validateFilesystemPath({
+        path: check.path,
+        kind: 'file',
+        extensions: [check.extension]
+      })
+      if (!result.valid) {
+        validationError.value = `${check.path}: ${result.error}`
+        return
+      }
+    } catch (error: any) {
+      validationError.value = error?.response?.data?.detail || error?.message || 'Could not validate shader'
+      return
+    }
+  }
+}
+
+async function browse(path = dirname(normalizedValue.value || '${PICFRAME_DATA}/shaders')) {
   browseError.value = ''
   try {
     browseState.value = await configStore.browseFilesystem({
@@ -78,9 +105,11 @@ function selectEntry(path: string, isDir: boolean) {
 watch(() => props.modelValue, value => {
   const stripped = stripShaderExtension(value || '')
   if (value && value !== stripped) emit('update:modelValue', stripped)
+  validateShader()
 })
 
 onMounted(() => {
+  validateShader()
   if (props.modelValue) browse(dirname(props.modelValue)).then(() => {
     browseOpen.value = false
   })
@@ -107,6 +136,7 @@ onMounted(() => {
       </button>
     </div>
     <p class="text-xs text-gray-500 dark:text-gray-400">Stored without .fs/.vs: {{ normalizedValue }}</p>
+    <p v-if="validationError" class="text-xs font-medium text-red-600 dark:text-red-400">{{ validationError }}</p>
     <p v-if="browseState && (!counterpartState.hasFs || !counterpartState.hasVs)" class="text-xs font-medium text-amber-600 dark:text-amber-400">
       Shader pair incomplete for {{ basename(normalizedValue) }}.
     </p>
