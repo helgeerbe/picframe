@@ -35,6 +35,20 @@ Elements define Pad Templates that describe exactly what formats they can accept
 
 To achieve a zero-configuration, highly observable pipeline, we must combine proactive capability discovery with reactive pipeline introspection.
 
+### Current Guardrail: Playable-Stream Validation
+Before a video enters the playlist, `VideoMetadataStrategy` treats `ffprobe`
+failure, invalid probe JSON, or absence of a video stream as an unplayable
+file. The media indexer marks any existing cache row inactive for that path, so
+stale placeholder rows do not remain in rotation. Transition-frame extraction is
+best-effort only: frame-cache failure reduces handoff smoothness but does not
+make an otherwise playable video ineligible.
+
+The GStreamer worker repeats a lightweight `GstPbutils.Discoverer` check before
+building a pipeline. This protects against stale cache rows and emits a clear
+error such as "No playable video stream found" before any Wayland sink is
+created. When Picframe supplies an explicit render rectangle, the worker does
+not also request sink fullscreen; the rectangle is the positioning contract.
+
 ### Phase 1: Startup Capability Discovery (The Registry)
 During application initialization, the `GstVideoRenderer` spawns the `gst_worker.py` subprocess. The subprocess queries the `Gst.Registry`.
 1.  Iterate through all features in the registry.

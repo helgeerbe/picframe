@@ -1,7 +1,10 @@
 # Active Context
 
 ## Current Focus
-The current implementation focus is Phase 2 next-gen control-plane parity cleanup after ticket #618. Phase 3-style GStreamer integration remains the next major architectural stream.
+The current implementation focus is next-gen control-plane parity cleanup plus
+GStreamer/video reliability hardening. Caps-driven hardware discovery remains
+an active architectural stream, but invalid/unplayable video filtering is now
+implemented at indexing time.
 
 ## Current Repo State
 - Branch: `v2-dev`, tracking `origin/v2-dev`.
@@ -25,6 +28,7 @@ The current implementation focus is Phase 2 next-gen control-plane parity cleanu
 - Ticket #637 hardening confirms the FastAPI/Vue static asset path is implemented and keeps WebSocket media DTO location enrichment behind injected repository ports rather than hardcoded cache DB paths.
 - Ticket #635 adds first-class GPIO hardware input configuration: the Settings UI edits `hardware_inputs`, backend/core validation rejects invalid mappings, and `HardwareInputService` applies changes at runtime through the HAL adapter. PIR no-motion delay is handled in core and cancels on renewed motion.
 - Recent Settings UI redesign replaces the generic schema text-field renderer with domain-specific editors and safe path browsing/validation rooted at the Picframe user's home directory. Low-level runtime options remain editable in collapsed Advanced sections. Shader values are selected/stored as basenames without `.fs`/`.vs`, image attributes and media extensions use fixed supported lists, and geocoding `key_list` is edited as ordered location parts with fallback chips.
+- Recent video hardening treats failed `ffprobe`, invalid probe JSON, or no video stream as unplayable during indexing; stale video cache rows with incomplete metadata are revalidated and marked inactive if extraction fails. GStreamer worker startup now preflights discoverability before sink creation and avoids requesting fullscreen when a render rectangle is supplied.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -35,7 +39,7 @@ The current implementation focus is Phase 2 next-gen control-plane parity cleanu
 - Preserve the #637 control-plane boundary: `main.py` chooses DB paths and injects repositories; FastAPI/WebSocket must not detect or open cache DB files directly.
 - Preserve the #635 hardware-input boundary: GPIO mappings live in `hardware_inputs`, keyboard/touch shortcuts stay in `peripherals`, only payload-free commands are allowed from hardware events, and PIR no-motion timers stay in `HardwareInputService`.
 - Preserve the Settings UI safety boundary: do not reintroduce raw JSON/text controls for domain settings when a constrained picker/chip/token/segmented control can express the same config safely.
-- Align future video work with caps-driven GStreamer discovery and fallback observability.
+- Align future video work with caps-driven GStreamer discovery and fallback observability while preserving the current indexing-time unplayable-video filter.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.
 - Continue using GitHub Issues/project board as the authoritative task state.

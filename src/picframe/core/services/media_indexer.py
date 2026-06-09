@@ -13,8 +13,8 @@ from picframe.core.events.interfaces import IEventSubscriber
 from picframe.core.metadata.interfaces import IMetadataStrategy
 from picframe.core.ports.media_monitor import IMediaMonitor
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
-from picframe.core.services.image_processing import ImageProcessingService
 from picframe.core.services.geocoding_worker import GeocodingWorker
+from picframe.core.services.image_processing import ImageProcessingService
 
 logger = logging.getLogger(__name__)
 
@@ -47,7 +47,9 @@ class MediaIndexerService:
         self._stopped = False
         
         # Initialize and start the geocoding worker
-        self.geocoding_worker = GeocodingWorker(media_repository, config_repository, event_subscriber)
+        self.geocoding_worker = GeocodingWorker(
+            media_repository, config_repository, event_subscriber
+        )
         self.geocoding_worker.start()
         
         event_subscriber.subscribe(FileChangeEvent, self._handle_file_change)
@@ -100,11 +102,15 @@ class MediaIndexerService:
 
                 file_stat = self._get_file_stat(event.path)
                 if file_stat is None:
-                    logger.warning(f"File not found during indexing, marking inactive: {event.path}")
+                    logger.warning(
+                        "File not found during indexing, marking inactive: %s",
+                        event.path,
+                    )
                     self.media_repository.delete_media_by_path(event.path)
                     return
 
-                if not self._should_index_file(event.path, file_stat):
+                is_video_file = ext in video_exts
+                if not self._should_index_file(event.path, file_stat, is_video_file):
                     logger.debug(f"Skipping unchanged media file: {event.path}")
                     return
 
@@ -120,9 +126,13 @@ class MediaIndexerService:
                     
                     # Queue coordinates for reverse geocoding if present
                     if media_item.latitude is not None and media_item.longitude is not None:
-                        self.geocoding_worker.queue_lookup(media_item.latitude, media_item.longitude)
+                        self.geocoding_worker.queue_lookup(
+                            media_item.latitude, media_item.longitude
+                        )
                 else:
                     logger.warning(f"Failed to extract metadata for {event.path}")
+                    if ext in video_exts:
+                        self.media_repository.delete_media_by_path(event.path)
             elif event.event_type == "deleted":
                 logger.info(f"Removing file from index: {event.path}")
                 self.media_repository.delete_media_by_path(event.path)
@@ -138,11 +148,15 @@ class MediaIndexerService:
         except OSError:
             return None
 
-    def _should_index_file(self, filepath: str, file_stat: os.stat_result) -> bool:
+    def _should_index_file(
+        self, filepath: str, file_stat: os.stat_result, is_video_file: bool = False
+    ) -> bool:
         existing = self.media_repository.get_media_by_path(filepath)
         if not existing:
             return True
         if bool(existing.get("is_deleted")):
+            return True
+        if self._is_active_video_with_incomplete_metadata(existing, is_video_file):
             return True
 
         try:
@@ -154,6 +168,17 @@ class MediaIndexerService:
         return (
             stored_size != int(file_stat.st_size)
             or abs(stored_mtime - float(file_stat.st_mtime)) > 1e-6
+        )
+
+    @staticmethod
+    def _is_active_video_with_incomplete_metadata(
+        existing: dict[str, object], is_video_file: bool
+    ) -> bool:
+        if not is_video_file and str(existing.get("media_type", "")).lower() != "video":
+            return False
+        return (
+            existing.get("duration") in (None, 0, 0.0, "")
+            or existing.get("codec") in (None, "")
         )
 
     def _handle_command(self, event: CommandEvent) -> None:
@@ -180,7 +205,10 @@ class MediaIndexerService:
                 # 3. Restart the monitor
                 self.media_monitor_service.start()
                 
-                logger.info("Media directory sync complete; purge remains an explicit maintenance action.")
+                logger.info(
+                    "Media directory sync complete; purge remains an explicit "
+                    "maintenance action."
+                )
 
     def pause(self) -> None:
         """Pause indexing and file monitoring."""

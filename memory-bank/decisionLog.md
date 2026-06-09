@@ -23,6 +23,8 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Prefer GStreamer registry/caps negotiation over hardcoded Raspberry Pi hardware tables.
 - Enforce a software decode ceiling with graceful skip/error events for unsupported video.
 - Use the First/Last Frame Sandwich pattern for seamless image/video handoff.
+- Treat failed `ffprobe`, invalid video probe JSON, or absence of a video stream as unplayable at indexing time. Such videos are excluded from active playlists and stale cache rows are marked inactive; transition-frame cache failure is best-effort only and does not exclude an otherwise playable video.
+- The GStreamer worker must preflight URI discoverability before creating a playback sink, and an explicit render rectangle takes precedence over sink fullscreen requests.
 - Use Vue 3, Pinia, Vue Router, Tailwind CSS, vue-i18n, and Leaflet for the SPA.
 - Keep frontend map display independent from backend-rendered text overlays.
 - Keep frontend narrative metadata over the media and technical metadata in a constrained panel.

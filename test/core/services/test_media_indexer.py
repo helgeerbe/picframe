@@ -1,12 +1,14 @@
-from unittest.mock import MagicMock
+from collections.abc import Generator
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
-from picframe.core.services.media_indexer import MediaIndexerService
-from picframe.core.events.dto import FileChangeEvent, CommandEvent, Command
+from picframe.core.events.dto import Command, CommandEvent, FileChangeEvent
 from picframe.core.models.media import MediaItem, MediaType
 from picframe.core.ports.media_monitor import IMediaMonitor
+from picframe.core.services.media_indexer import MediaIndexerService
+
 
 @pytest.fixture
 def mock_media_repo() -> MagicMock:
@@ -47,14 +49,14 @@ def media_indexer(
     mock_video_strategy: MagicMock,
     mock_image_processing_service: MagicMock,
     mock_media_monitor_service: MagicMock
-) -> MediaIndexerService:
+) -> Generator[MediaIndexerService, None, None]:
     # Setup config repo to return some extensions
     mock_config_repo.get_app_config.side_effect = lambda key, default=None: {
         "model.image_extensions": [".jpg", ".jpeg", ".png"],
         "model.video_extensions": [".mp4", ".mov"]
     }.get(key, default)
     
-    return MediaIndexerService(
+    service = MediaIndexerService(
         media_repository=mock_media_repo,
         config_repository=mock_config_repo,
         event_subscriber=mock_event_subscriber,
@@ -63,6 +65,8 @@ def media_indexer(
         image_processing_service=mock_image_processing_service,
         media_monitor_service=mock_media_monitor_service
     )
+    yield service
+    service.stop()
 
 def test_handle_file_change_image(
     media_indexer: MediaIndexerService,
@@ -131,6 +135,27 @@ def test_handle_file_change_video(
     mock_media_repo.add_media_item.assert_called_once_with(mock_media_item.to_dict())
 
 
+def test_handle_file_change_invalid_video_marks_inactive(
+    media_indexer: MediaIndexerService,
+    mock_image_strategy: MagicMock,
+    mock_video_strategy: MagicMock,
+    mock_media_repo: MagicMock,
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "broken.mp4"
+    video_path.write_bytes(b"not a complete mp4")
+    event = FileChangeEvent(path=str(video_path), event_type="created")
+    mock_video_strategy.extract.return_value = None
+    media_indexer._get_or_create_directory_id = MagicMock(return_value=1)  # type: ignore
+
+    media_indexer._handle_file_change(event)
+
+    mock_video_strategy.extract.assert_called_once_with(str(video_path), 1)
+    mock_image_strategy.extract.assert_not_called()
+    mock_media_repo.add_media_item.assert_not_called()
+    mock_media_repo.delete_media_by_path.assert_called_once_with(str(video_path))
+
+
 def test_handle_file_change_skips_unchanged_active_file(
     media_indexer: MediaIndexerService,
     mock_image_strategy: MagicMock,
@@ -153,6 +178,45 @@ def test_handle_file_change_skips_unchanged_active_file(
 
     mock_image_strategy.extract.assert_not_called()
     mock_media_repo.add_media_item.assert_not_called()
+
+
+def test_handle_file_change_revalidates_video_with_incomplete_metadata(
+    media_indexer: MediaIndexerService,
+    mock_video_strategy: MagicMock,
+    mock_media_repo: MagicMock,
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "placeholder.mp4"
+    video_path.write_bytes(b"video")
+    file_stat = video_path.stat()
+    mock_media_repo.get_media_by_path.return_value = {
+        "filepath": str(video_path),
+        "file_size": file_stat.st_size,
+        "last_modified": file_stat.st_mtime,
+        "is_deleted": 0,
+        "media_type": "video",
+        "duration": 0.0,
+        "codec": None,
+    }
+    mock_media_item = MediaItem(
+        filepath=str(video_path),
+        directory_id=1,
+        filename=video_path.name,
+        media_type=MediaType.VIDEO,
+        file_size=file_stat.st_size,
+        last_modified=file_stat.st_mtime,
+        duration=10.0,
+        codec="h264",
+    )
+    mock_video_strategy.extract.return_value = mock_media_item
+    media_indexer._get_or_create_directory_id = MagicMock(return_value=1)  # type: ignore
+
+    media_indexer._handle_file_change(
+        FileChangeEvent(path=str(video_path), event_type="created")
+    )
+
+    mock_video_strategy.extract.assert_called_once_with(str(video_path), 1)
+    mock_media_repo.add_media_item.assert_called_once_with(mock_media_item.to_dict())
 
 
 def test_handle_file_change_reindexes_changed_file(

@@ -33,11 +33,12 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Display power/system manager HAL work and Wayland-oriented environment detection.
 - Video metadata extraction and frontend display of video technical metadata.
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.
+- Video indexing hardening: unprobeable videos, invalid probe JSON, and files with no video stream are skipped/marked inactive; stale placeholder video rows are revalidated; transition-frame cache failures no longer block otherwise playable videos; the GStreamer worker preflights discoverability before creating a sink.
 - Legacy `configuration.yaml` import follow-ups #676/#677 are complete: the Settings UI/API path is documented, `viewer.show_text` is normalized into next-gen overlay keys, `mqtt.port` is preserved, and legacy startup-only HTTP keys are intentionally ignored.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
-- Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, and target-hardware validation.
+- Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and target-hardware validation.
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
 
 ## Next
@@ -50,3 +51,4 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 ## Known Verification State
 - Frontend build is green with `npm run build`.
 - Backend pytest is green in the local Python 3.14.4 `.venv`: 338 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
+- Latest video hardening verification on this workspace: touched-file Ruff passed, and `.venv/bin/python -m pytest test/core/metadata/test_video_strategy.py test/core/services/test_media_indexer.py test/core/renderers test/core/engine/test_playback.py` passed with 123 tests.

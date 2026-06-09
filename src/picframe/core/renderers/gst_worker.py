@@ -49,7 +49,7 @@ except ImportError:
     logger.error("GStreamer not available. Worker cannot start.")
     GST_AVAILABLE = False
 
-from picframe.core.renderers.gst_utils import find_best_element
+from picframe.core.renderers.gst_utils import find_best_element  # noqa: E402
 
 
 class GstWorker:
@@ -98,7 +98,11 @@ class GstWorker:
                 logger.info("Main process connected.")
                 # Add the connection's file descriptor to the GLib main loop
                 if self.conn and hasattr(self.conn, 'fileno'):
-                    GLib.io_add_watch(self.conn.fileno(), GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR, self._on_ipc_data)
+                    GLib.io_add_watch(
+                        self.conn.fileno(),
+                        GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
+                        self._on_ipc_data,
+                    )
             except Exception as e:
                 logger.error(f"Failed to accept connection: {e}")
 
@@ -168,6 +172,13 @@ class GstWorker:
         self._handle_stop()
         
         try:
+            playable, reason = self._discover_playable_video(uri)
+            if not playable:
+                details = reason or "No playable video stream found."
+                logger.error(f"Skipping {uri}: {details}")
+                self._send_event(ErrorEvent(details=details))
+                return
+
             self.pipeline = Gst.Pipeline.new("video-player")
             uridecodebin = Gst.ElementFactory.make("uridecodebin", "decoder")
             uridecodebin.set_property("uri", uri)
@@ -202,6 +213,17 @@ class GstWorker:
             self._send_event(ErrorEvent(details=str(e)))
             self._handle_stop()
 
+    def _discover_playable_video(self, uri: str) -> tuple[bool, str | None]:
+        """Return whether GStreamer can discover at least one playable video stream."""
+        try:
+            discoverer = GstPbutils.Discoverer.new(5 * Gst.SECOND)
+            info = discoverer.discover_uri(uri)
+            if not info.get_video_streams():
+                return False, "No playable video stream found."
+            return True, None
+        except Exception as e:
+            return False, f"Could not discover playable video stream: {e}"
+
     def _create_sink_bin(self, x: int, y: int, w: int, h: int) -> Any:
         bin = Gst.Bin.new("sink_bin")
         hw_converter = find_best_element(["v4l2convert"])
@@ -233,14 +255,16 @@ class GstWorker:
             sink_name = "autovideosink"
             
         sink = Gst.ElementFactory.make(sink_name, "sink")
+        has_render_rectangle = w > 0 and h > 0
         
-        try:
-            if hasattr(sink.props, 'fullscreen'):
-                sink.set_property("fullscreen", True)
-        except Exception:
-            pass
+        if not has_render_rectangle:
+            try:
+                if hasattr(sink.props, 'fullscreen'):
+                    sink.set_property("fullscreen", True)
+            except Exception:
+                pass
 
-        if w > 0 and h > 0:
+        if has_render_rectangle:
             try:
                 Gst.util_set_object_arg(sink, "render-rectangle", f"<{x}, {y}, {w}, {h}>")
             except Exception as e:
@@ -280,7 +304,9 @@ class GstWorker:
     def _on_autoplug_select(self, bin: Any, pad: Any, caps: Any, factory: Any) -> int:
         klass = factory.get_metadata(Gst.ELEMENT_METADATA_KLASS)
         if klass and "Decoder" in klass and "Video" in klass and "Hardware" not in klass:
-            self._send_event(WarningEvent(warning_type="software_fallback", decoder=factory.get_name()))
+            self._send_event(
+                WarningEvent(warning_type="software_fallback", decoder=factory.get_name())
+            )
         return 0
 
     def _handle_pause(self) -> None:
@@ -383,7 +409,12 @@ class GstWorker:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="GStreamer IPC Worker")
-    parser.add_argument("--socket", required=False, default="/tmp/picframe_gst_worker.sock", help="Path to the Unix domain socket")
+    parser.add_argument(
+        "--socket",
+        required=False,
+        default="/tmp/picframe_gst_worker.sock",
+        help="Path to the Unix domain socket",
+    )
     args = parser.parse_args()
     
     worker = GstWorker(args.socket)

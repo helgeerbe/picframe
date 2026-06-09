@@ -71,117 +71,154 @@ class VideoMetadataStrategy(IMetadataStrategy):
             caption = None
             tags_str = None
 
+            # Extract video metadata using ffprobe. If ffprobe cannot discover a
+            # video stream, the file is not safe to include in the playlist.
+            cmd = [
+                "ffprobe",
+                "-v", "quiet",
+                "-print_format", "json",
+                "-show_format",
+                "-show_streams",
+                filepath
+            ]
             try:
-                # Extract video metadata using ffprobe
-                cmd = [
-                    "ffprobe",
-                    "-v", "quiet",
-                    "-print_format", "json",
-                    "-show_format",
-                    "-show_streams",
-                    filepath
-                ]
                 result = subprocess.run(cmd, capture_output=True, text=True, check=True)
                 probe_data = json.loads(result.stdout)
-
-                # Extract format-level metadata
-                if "format" in probe_data:
-                    fmt = probe_data["format"]
-                    if "duration" in fmt:
-                        duration = float(fmt["duration"])
-                    if "bit_rate" in fmt:
-                        bitrate = int(fmt["bit_rate"])
-                    
-                    format_tags = fmt.get("tags", {})
-                    
-                    # Creation date
-                    creation_time = format_tags.get("creation_time")
-                    if creation_time:
-                        try:
-                            from datetime import datetime
-                            # ffprobe usually returns ISO 8601: 2023-10-27T15:30:00.000000Z
-                            dt = datetime.fromisoformat(creation_time.replace('Z', '+00:00'))
-                            exif_datetime = dt.timestamp()
-                        except ValueError:
-                            pass
-                            
-                    # GPS Coordinates (often in format tags for mp4/mov)
-                    location = format_tags.get("location")
-                    if location:
-                        # Example format: +37.7749-122.4194/
-                        import re
-                        match = re.match(r'([+-]\d+\.\d+)([+-]\d+\.\d+)', location)
-                        if match:
-                            latitude = float(match.group(1))
-                            longitude = float(match.group(2))
-                            
-                    # Make and Model
-                    make = format_tags.get("make")
-                    model = format_tags.get("model")
-                    
-                    # Title and Caption
-                    title = format_tags.get("title")
-                    caption = format_tags.get("comment") or format_tags.get("description")
-                    
-                    # Tags/Keywords
-                    keywords = format_tags.get("keywords")
-                    if keywords:
-                        tags_str = keywords
-
-                # Extract video stream details
-                for stream in probe_data.get("streams", []):
-                    if stream.get("codec_type") == "video":
-                        width = int(stream.get("width", 0)) or None
-                        height = int(stream.get("height", 0)) or None
-                        codec = stream.get("codec_name")
-                        pixel_format = stream.get("pix_fmt")
-                        
-                        # Extract framerate
-                        r_frame_rate = stream.get("r_frame_rate")
-                        if r_frame_rate and "/" in r_frame_rate:
-                            num, den = r_frame_rate.split("/")
-                            if int(den) > 0:
-                                framerate = float(num) / float(den)
-                        
-                        # Handle rotation/orientation if present in stream tags
-                        stream_tags = stream.get("tags", {})
-                        if "rotate" in stream_tags:
-                            rotation = int(stream_tags["rotate"])
-                            if rotation == 90:
-                                orientation = 6
-                            elif rotation == 180:
-                                orientation = 3
-                            elif rotation == 270:
-                                orientation = 8
-                        break
-
             except (subprocess.CalledProcessError, json.JSONDecodeError, FileNotFoundError) as e:
-                logger.warning(f"ffprobe failed for {filepath}: {e}. Falling back to basic stats.")
+                logger.warning("Skipping unplayable video %s: ffprobe failed: %s", filepath, e)
+                return None
+
+            # Extract format-level metadata
+            if "format" in probe_data:
+                fmt = probe_data["format"]
+                if "duration" in fmt:
+                    try:
+                        duration = float(fmt["duration"])
+                    except (TypeError, ValueError):
+                        duration = 0.0
+                if "bit_rate" in fmt:
+                    try:
+                        bitrate = int(fmt["bit_rate"])
+                    except (TypeError, ValueError):
+                        bitrate = None
+
+                format_tags = fmt.get("tags", {})
+
+                # Creation date
+                creation_time = format_tags.get("creation_time")
+                if creation_time:
+                    try:
+                        from datetime import datetime
+                        # ffprobe usually returns ISO 8601: 2023-10-27T15:30:00.000000Z
+                        dt = datetime.fromisoformat(creation_time.replace('Z', '+00:00'))
+                        exif_datetime = dt.timestamp()
+                    except ValueError:
+                        pass
+
+                # GPS Coordinates (often in format tags for mp4/mov)
+                location = format_tags.get("location")
+                if location:
+                    # Example format: +37.7749-122.4194/
+                    import re
+                    match = re.match(r'([+-]\d+\.\d+)([+-]\d+\.\d+)', location)
+                    if match:
+                        latitude = float(match.group(1))
+                        longitude = float(match.group(2))
+
+                # Make and Model
+                make = format_tags.get("make")
+                model = format_tags.get("model")
+
+                # Title and Caption
+                title = format_tags.get("title")
+                caption = format_tags.get("comment") or format_tags.get("description")
+
+                # Tags/Keywords
+                keywords = format_tags.get("keywords")
+                if keywords:
+                    tags_str = keywords
+
+            video_stream = None
+            for stream in probe_data.get("streams", []):
+                if stream.get("codec_type") == "video":
+                    video_stream = stream
+                    break
+
+            if video_stream is None:
+                logger.warning("Skipping unplayable video %s: no video stream found.", filepath)
+                return None
+
+            try:
+                width = int(video_stream.get("width") or 0) or None
+            except (TypeError, ValueError):
+                width = None
+            try:
+                height = int(video_stream.get("height") or 0) or None
+            except (TypeError, ValueError):
+                height = None
+            codec = video_stream.get("codec_name")
+            pixel_format = video_stream.get("pix_fmt")
+
+            # Extract framerate
+            r_frame_rate = video_stream.get("r_frame_rate")
+            if r_frame_rate and "/" in r_frame_rate:
+                try:
+                    num, den = r_frame_rate.split("/")
+                    if int(den) > 0:
+                        framerate = float(num) / float(den)
+                except (TypeError, ValueError):
+                    framerate = None
+
+            # Handle rotation/orientation if present in stream tags
+            stream_tags = video_stream.get("tags", {})
+            if "rotate" in stream_tags:
+                try:
+                    rotation = int(stream_tags["rotate"])
+                    if rotation == 90:
+                        orientation = 6
+                    elif rotation == 180:
+                        orientation = 3
+                    elif rotation == 270:
+                        orientation = 8
+                except (TypeError, ValueError):
+                    pass
 
             # Extract and cache first/last frames
             if width and height and duration > 0:
-                from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
-                # We don't have sample_aspect_ratio easily available here, default to 1:1
-                # It could be extracted from ffprobe output if needed
-                target_w = self.display_w if self.display_w > 0 else width
-                target_h = self.display_h if self.display_h > 0 else height
-                fit_display = False
-                if self._config_repository is not None:
-                    fit_display = self._config_repository.get_app_config_bool(
-                        "viewer.fit", False
+                try:
+                    from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
+                    # We don't have sample_aspect_ratio easily available here, default to 1:1
+                    # It could be extracted from ffprobe output if needed
+                    target_w = self.display_w if self.display_w > 0 else width
+                    target_h = self.display_h if self.display_h > 0 else height
+                    fit_display = False
+                    if self._config_repository is not None:
+                        fit_display = self._config_repository.get_app_config_bool(
+                            "viewer.fit", False
+                        )
+                    frame_cache_kwargs = {}
+                    if fit_display:
+                        frame_cache_kwargs["fit_display"] = fit_display
+                    if self.cache_dir is not None:
+                        frame_cache_kwargs["cache_dir"] = self.cache_dir
+                    frames_cached = VideoFrameExtractor.extract_and_save_frames(
+                        filepath,
+                        duration,
+                        target_w,
+                        target_h,
+                        **frame_cache_kwargs,
                     )
-                frame_cache_kwargs = {}
-                if fit_display:
-                    frame_cache_kwargs["fit_display"] = fit_display
-                if self.cache_dir is not None:
-                    frame_cache_kwargs["cache_dir"] = self.cache_dir
-                VideoFrameExtractor.extract_and_save_frames(
-                    filepath,
-                    duration,
-                    target_w,
-                    target_h,
-                    **frame_cache_kwargs,
-                )
+                    if not frames_cached:
+                        logger.warning(
+                            "Could not cache transition frames for %s; video remains indexed.",
+                            filepath,
+                        )
+                except Exception as e:
+                    logger.warning(
+                        "Could not cache transition frames for %s; video remains indexed: %s",
+                        filepath,
+                        e,
+                    )
 
             return MediaItem(
                 filepath=filepath,
@@ -210,16 +247,4 @@ class VideoMetadataStrategy(IMetadataStrategy):
 
         except Exception as e:
             logger.error(f"Error extracting video metadata for {filepath}: {e}")
-            # Fallback to basic file stats if extraction fails
-            try:
-                stat = os.stat(filepath)
-                return MediaItem(
-                    filepath=filepath,
-                    directory_id=directory_id,
-                    filename=os.path.basename(filepath),
-                    media_type=MediaType.VIDEO,
-                    file_size=stat.st_size,
-                    last_modified=stat.st_mtime,
-                )
-            except OSError:
-                return None
+            return None

@@ -13,7 +13,12 @@ def strategy() -> VideoMetadataStrategy:
 @patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
 @patch("picframe.core.metadata.video_strategy.subprocess.run")
 @patch("picframe.core.metadata.video_strategy.os.stat")
-def test_extract_success(mock_stat: MagicMock, mock_run: MagicMock, mock_extract: MagicMock, strategy: VideoMetadataStrategy) -> None:
+def test_extract_success(
+    mock_stat: MagicMock,
+    mock_run: MagicMock,
+    mock_extract: MagicMock,
+    strategy: VideoMetadataStrategy,
+) -> None:
     # Mock os.stat
     mock_stat_result = MagicMock()
     mock_stat_result.st_size = 1024
@@ -134,32 +139,120 @@ def test_extract_passes_cache_dir_and_fit_mode(
 @patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
 @patch("picframe.core.metadata.video_strategy.subprocess.run")
 @patch("picframe.core.metadata.video_strategy.os.stat")
-def test_extract_exception_fallback(mock_stat: MagicMock, mock_run: MagicMock, mock_extract: MagicMock, strategy: VideoMetadataStrategy) -> None:
-    # Mock subprocess.run to raise an exception
+def test_extract_ffprobe_failure_returns_none(
+    mock_stat: MagicMock,
+    mock_run: MagicMock,
+    mock_extract: MagicMock,
+    strategy: VideoMetadataStrategy,
+) -> None:
     import subprocess
     mock_run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
-
-    # Mock os.stat to raise an exception on first call, then return a result for the fallback
     mock_stat_result = MagicMock()
     mock_stat_result.st_size = 4096
     mock_stat_result.st_mtime = 1600000002.0
-    mock_stat.side_effect = [ValueError("Test exception"), mock_stat_result]
+    mock_stat.return_value = mock_stat_result
 
     filepath = "/path/to/video3.avi"
     directory_id = 3
 
     media_item = strategy.extract(filepath, directory_id)
 
-    assert media_item is not None
-    assert media_item.filepath == filepath
-    assert media_item.directory_id == directory_id
-    assert media_item.filename == "video3.avi"
-    assert media_item.media_type == MediaType.VIDEO
-    assert media_item.file_size == 4096
-    assert media_item.last_modified == 1600000002.0
-    assert media_item.width is None
-    assert media_item.height is None
+    assert media_item is None
     mock_extract.assert_not_called()
+
+
+@patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
+@patch("picframe.core.metadata.video_strategy.subprocess.run")
+@patch("picframe.core.metadata.video_strategy.os.stat")
+def test_extract_invalid_ffprobe_json_returns_none(
+    mock_stat: MagicMock,
+    mock_run: MagicMock,
+    mock_extract: MagicMock,
+    strategy: VideoMetadataStrategy,
+) -> None:
+    mock_stat_result = MagicMock()
+    mock_stat_result.st_size = 4096
+    mock_stat_result.st_mtime = 1600000002.0
+    mock_stat.return_value = mock_stat_result
+    mock_run_result = MagicMock()
+    mock_run_result.stdout = "not json"
+    mock_run.return_value = mock_run_result
+
+    media_item = strategy.extract("/path/to/video.mp4", 1)
+
+    assert media_item is None
+    mock_extract.assert_not_called()
+
+
+@patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
+@patch("picframe.core.metadata.video_strategy.subprocess.run")
+@patch("picframe.core.metadata.video_strategy.os.stat")
+def test_extract_no_video_stream_returns_none(
+    mock_stat: MagicMock,
+    mock_run: MagicMock,
+    mock_extract: MagicMock,
+    strategy: VideoMetadataStrategy,
+) -> None:
+    mock_stat_result = MagicMock()
+    mock_stat_result.st_size = 4096
+    mock_stat_result.st_mtime = 1600000002.0
+    mock_stat.return_value = mock_stat_result
+    mock_run_result = MagicMock()
+    mock_run_result.stdout = """
+    {
+        "format": {"duration": "10.0"},
+        "streams": [
+            {
+                "codec_type": "audio",
+                "codec_name": "aac"
+            }
+        ]
+    }
+    """
+    mock_run.return_value = mock_run_result
+
+    media_item = strategy.extract("/path/to/audio_only.mp4", 1)
+
+    assert media_item is None
+    mock_extract.assert_not_called()
+
+
+@patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
+@patch("picframe.core.metadata.video_strategy.subprocess.run")
+@patch("picframe.core.metadata.video_strategy.os.stat")
+def test_extract_keeps_valid_video_when_frame_cache_fails(
+    mock_stat: MagicMock,
+    mock_run: MagicMock,
+    mock_extract: MagicMock,
+    strategy: VideoMetadataStrategy,
+) -> None:
+    mock_stat_result = MagicMock()
+    mock_stat_result.st_size = 1024
+    mock_stat_result.st_mtime = 1600000000.0
+    mock_stat.return_value = mock_stat_result
+    mock_run_result = MagicMock()
+    mock_run_result.stdout = """
+    {
+        "format": {"duration": "10.0"},
+        "streams": [
+            {
+                "codec_type": "video",
+                "codec_name": "h264",
+                "width": 1920,
+                "height": 1080
+            }
+        ]
+    }
+    """
+    mock_run.return_value = mock_run_result
+    mock_extract.return_value = False
+
+    media_item = strategy.extract("/path/to/video.mp4", 1)
+
+    assert media_item is not None
+    assert media_item.media_type == MediaType.VIDEO
+    assert media_item.codec == "h264"
+    mock_extract.assert_called_once_with("/path/to/video.mp4", 10.0, 1920, 1080)
 
 @patch("picframe.core.metadata.video_strategy.os.stat")
 def test_extract_os_error(mock_stat: MagicMock, strategy: VideoMetadataStrategy) -> None:
