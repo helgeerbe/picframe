@@ -7,6 +7,7 @@ and directory management using an in-memory SQLite database.
 
 import sqlite3
 from collections.abc import Generator
+from pathlib import Path
 
 import pytest
 
@@ -60,6 +61,39 @@ def test_get_app_config_default(config_repo: SQLiteConfigRepository) -> None:
         == "default_val"
     )
     assert config_repo.get_app_config("missing_key") is None
+
+
+def test_null_app_config_value_uses_default_and_is_skipped(
+    tmp_path: Path,
+) -> None:
+    """Test existing databases with NULL config values do not crash reads."""
+    db_path = tmp_path / "config.db3"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE app_config (
+            key TEXT PRIMARY KEY,
+            value TEXT
+        );
+        CREATE TABLE directories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT UNIQUE NOT NULL
+        );
+        CREATE TABLE schema_version (
+            version INTEGER PRIMARY KEY
+        );
+        INSERT INTO schema_version (version) VALUES (1);
+        INSERT INTO app_config (key, value) VALUES ('viewer.display_x', NULL);
+        """
+    )
+    conn.close()
+
+    repo = SQLiteConfigRepository(str(db_path))
+    try:
+        assert repo.get_app_config("viewer.display_x", 0) == 0
+        assert "viewer.display_x" not in repo.get_all_app_config()
+    finally:
+        repo.close()
 
 
 def test_update_existing_app_config(

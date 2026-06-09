@@ -89,9 +89,12 @@ class SQLiteConfigRepository(IConfigRepository):
         )
         row = cursor.fetchone()
         if row:
+            if row["value"] is None:
+                logger.warning(f"Config key has NULL value, using default: {key}")
+                return default
             try:
                 return json.loads(row["value"])
-            except json.JSONDecodeError:
+            except (TypeError, json.JSONDecodeError):
                 logger.error(f"Failed to decode JSON for config key: {key}")
                 return default
         return default
@@ -143,9 +146,14 @@ class SQLiteConfigRepository(IConfigRepository):
         cursor = self._conn.execute("SELECT key, value FROM app_config")
         config = {}
         for row in cursor.fetchall():
+            if row["value"] is None:
+                logger.warning(
+                    f"Skipping config key with NULL value: {row['key']}"
+                )
+                continue
             try:
                 config[row["key"]] = json.loads(row["value"])
-            except json.JSONDecodeError:
+            except (TypeError, json.JSONDecodeError):
                 logger.error(f"Failed to decode JSON for config key: {row['key']}")
         return config
 
