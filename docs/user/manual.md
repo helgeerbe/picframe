@@ -98,9 +98,9 @@ sudo ./install_picframe.sh --enable-service
 
 On Raspberry Pi OS Lite the default service display mode is `wayland-kiosk`,
 which starts Picframe inside the lightweight `cage` Wayland compositor instead
-of requiring a full desktop environment. If `labwc` is installed and behaves
-better on the target Pi, use `--display-mode labwc-kiosk` instead. The installer
-also enables `seatd` for kiosk compositor modes.
+of requiring a full desktop environment. The installer also installs `labwc`;
+if it behaves better on the target Pi, use `--display-mode labwc-kiosk`
+instead. The installer enables `seatd` for kiosk compositor modes.
 
 ```bash
 sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
@@ -521,7 +521,7 @@ sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb gstr
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-  build-essential ca-certificates cage dbus-user-session git locales \
+  build-essential ca-certificates cage labwc dbus-user-session git locales \
   python3 python3-dev python3-gi python3-gst-1.0 python3-pip python3-venv sudo \
   libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev \
   gir1.2-gst-plugins-base-1.0 gir1.2-gstreamer-1.0 mesa-utils \

@@ -331,6 +331,7 @@ apt-get install -y \
     build-essential \
     ca-certificates \
     cage \
+    labwc \
     dbus-user-session \
     libsdl2-dev \
     libegl1-mesa-dev \
