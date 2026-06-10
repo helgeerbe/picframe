@@ -359,6 +359,7 @@ apt-get install -y \
     git \
     sudo \
     zlib1g-dev \
+    ffmpeg \
     gstreamer1.0-libav \
     gstreamer1.0-plugins-base \
     gstreamer1.0-plugins-good \
