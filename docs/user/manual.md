@@ -33,12 +33,13 @@ curl -fsSL \
   https://raw.githubusercontent.com/helgeerbe/picframe/v2-dev/docs/user/install_picframe.sh \
   -o install_picframe.sh
 chmod +x install_picframe.sh
-sudo ./install_picframe.sh
+sudo ./install_picframe.sh --branch v2-dev
 ```
 
 The current helper script installs the required APT packages, configures basic
 hardware access groups and power-management sudoers rules, creates a virtual
-environment at `~/picframe_env`, installs Picframe, and runs:
+environment at `~/picframe_env`, installs Picframe from GitHub `main` by
+default, provisions the selected locale, and runs:
 
 ```bash
 ~/picframe_env/bin/picframe init --force
@@ -51,8 +52,52 @@ After installation, start Picframe manually with:
 ```
 
 The next-generation installer tracked in issue #667 will extend this flow with
-interactive source/branch selection, locale provisioning, complete Raspberry Pi
-OS Trixie Lite dependency setup, and optional systemd boot startup.
+the full two-stage Python orchestrator and deeper idempotent state tracking.
+
+Installer options:
+
+```bash
+# Use defaults without prompts
+sudo ./install_picframe.sh --yes
+
+# Install Picframe from GitHub v2-dev
+sudo ./install_picframe.sh --branch v2-dev
+
+# Install Picframe from GitHub v2-dev and enable boot startup
+sudo ./install_picframe.sh --branch v2-dev --enable-service
+
+# Select a locale and generate it if it is missing
+sudo ./install_picframe.sh --locale de_DE.UTF-8
+
+# Install from a local checkout
+sudo ./install_picframe.sh --source local --local-path /home/pi/Development/picframe
+
+# Install from PyPI
+sudo ./install_picframe.sh --source pypi
+```
+
+#### Optional Systemd Boot Service
+
+Pass `--enable-service` to create `/etc/systemd/system/picframe.service` and
+enable Picframe on boot:
+
+```bash
+sudo ./install_picframe.sh --enable-service
+```
+
+On Raspberry Pi OS Lite the default service display mode is `wayland-kiosk`,
+which starts Picframe inside the lightweight `cage` Wayland compositor instead
+of requiring a full desktop environment. The installer also installs and enables
+`seatd` when this mode is selected.
+
+Service commands:
+
+```bash
+sudo systemctl status picframe.service
+sudo systemctl start picframe.service
+sudo systemctl stop picframe.service
+sudo systemctl disable picframe.service
+```
 
 ### Initialization (`picframe init`)
 
@@ -107,6 +152,36 @@ The `picframe run` command accepts several parameters to override default paths 
 *   `--html-dir`: Path to frontend HTML assets (default: `<dir>/html` or `PICFRAME_HTML_DIR` env var).
 
 *Note: The webserver port and HTML directory path are strictly managed via CLI arguments and environment variables. They are not editable via the frontend UI to prevent connection loss and synchronization issues.*
+
+#### Manual Remote Start Over SSH
+
+On Raspberry Pi OS Lite, Picframe can be started manually from an SSH session
+inside the same lightweight Wayland kiosk environment used by the optional
+systemd service:
+
+```bash
+dbus-run-session -- cage -s -- bash -lc 'exec /home/pi/picframe_env/bin/picframe run --dir /home/pi/.picframe --port 9000'
+```
+
+For a development checkout using the repository virtual environment and a
+separate development base directory:
+
+```bash
+dbus-run-session -- cage -s -- bash -lc 'cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000'
+```
+
+`--html-dir` can usually be omitted because it defaults to `<dir>/html`, which
+is populated by `picframe init`. If a development base directory has not been
+initialized with frontend assets yet, point it at the checkout copy:
+
+```bash
+dbus-run-session -- cage -s -- bash -lc 'cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000 --html-dir /home/pi/Development/picframe/src/picframe/html'
+```
+
+Picframe enables `GST_V4L2_ENABLE_PROBE=1` for its GStreamer worker on
+Raspberry Pi hardware when the variable is not already set, so it does not need
+to be included in normal Picframe launch commands. Keep setting it explicitly
+for standalone GStreamer validation commands.
 
 ### Settings UI
 
@@ -304,11 +379,10 @@ paths are allowed to fall back to software only within
 
 On Raspberry Pi, GStreamer may only expose V4L2 hardware decoder elements after
 probing is enabled. Picframe enables this for its GStreamer worker on Pi
-hardware. For standalone target validation, launch with:
+hardware. For standalone target validation outside Picframe, launch the
+validation command with `GST_V4L2_ENABLE_PROBE=1`.
 
-```bash
-GST_V4L2_ENABLE_PROBE=1 dbus-run-session labwc --session 'bash -lc "cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000 --html-dir /home/pi/Development/picframe/src/picframe/html"'
-```
+Manual SSH start examples are listed in [Manual Remote Start Over SSH](#manual-remote-start-over-ssh).
 
 ---
 
@@ -374,7 +448,16 @@ sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb gstr
 #### Manual Installation (Raspberry Pi)
 ```bash
 sudo apt-get update
-sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev wlr-randr ddcutil brightnessctl i2c-tools gstreamer1.0-libav gstreamer1.0-gl gstreamer1.0-v4l2
+sudo apt-get install -y \
+  build-essential ca-certificates cage dbus-user-session git locales \
+  python3 python3-dev python3-pip python3-venv sudo \
+  libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev mesa-utils \
+  libheif1 libheif-dev libjpeg-dev libopenjp2-7 libtiff6 zlib1g-dev \
+  wlr-randr ddcutil brightnessctl i2c-tools seatd \
+  gstreamer1.0-tools gstreamer1.0-libav \
+  gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
+  gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
+  gstreamer1.0-gl gstreamer1.0-v4l2
 ```
 *(Note: `gstreamer1.0-gl` and `gstreamer1.0-v4l2` provide hardware acceleration support for the Raspberry Pi).*
 
@@ -393,16 +476,25 @@ To allow the application to reboot or shut down the host system without promptin
 
 For `sudo` (visudo):
 ```bash
-# Add the following line to /etc/sudoers (using visudo)
+# Add the following lines to /etc/sudoers (using visudo)
 # Replace 'pi' with the actual username running the application
-pi ALL=(ALL) NOPASSWD: /sbin/reboot, /sbin/shutdown
+Cmnd_Alias PICFRAME_POWER = /usr/sbin/reboot, /sbin/reboot, /usr/sbin/shutdown -h now, /sbin/shutdown -h now, /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
+pi ALL=(root) NOPASSWD: PICFRAME_POWER
 ```
 
 Alternatively, you can dynamically create a drop-in file in `/etc/sudoers.d/` for the current user:
 ```bash
-echo "$USER ALL=(ALL) NOPASSWD: /sbin/reboot, /sbin/shutdown" | sudo tee /etc/sudoers.d/picframe-power
+sudo tee /etc/sudoers.d/picframe-power >/dev/null <<EOF
+# Managed by Picframe installer.
+Cmnd_Alias PICFRAME_POWER = /usr/sbin/reboot, /sbin/reboot, /usr/sbin/shutdown -h now, /sbin/shutdown -h now, /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
+$USER ALL=(root) NOPASSWD: PICFRAME_POWER
+EOF
+sudo visudo -cf /etc/sudoers.d/picframe-power
 sudo chmod 0440 /etc/sudoers.d/picframe-power
 ```
+
+Picframe runs these commands through `sudo -n`, so missing permissions fail
+immediately instead of hanging on a password prompt.
 
 **Note on Virtual Machine Development:**
 Hardware-level display tools (`ddcutil`, `brightnessctl`, `wlr-randr`) will not function correctly within an Ubuntu Virtual Machine because hypervisors do not emulate physical I2C, PWM, or DRM interfaces. For local VM development, the application must use the `MockDisplayPower` adapter. Furthermore, hardware-accelerated video decoding may be limited or unavailable in a VM unless GPU passthrough is configured.

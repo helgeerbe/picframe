@@ -63,20 +63,21 @@ sudo ./install_picframe.sh
 ```
 
 To install from the next-generation development branch, change `main` to
-`v2-dev` in the URL:
+`v2-dev` in the installer options:
 
 ```bash
 curl -fsSL \
   https://raw.githubusercontent.com/helgeerbe/picframe/v2-dev/docs/user/install_picframe.sh \
   -o install_picframe.sh
 chmod +x install_picframe.sh
-sudo ./install_picframe.sh
+sudo ./install_picframe.sh --branch v2-dev
 ```
 
 The current helper script installs system packages, creates a Python virtual
-environment, installs Picframe, and runs `picframe init --force`. The
-next-generation installer tracked in issue #667 will add source/branch
-selection, locale provisioning, and optional systemd boot startup.
+environment, installs Picframe from GitHub `main` by default, provisions the
+selected locale, and runs `picframe init --force`. Use `--source local` or
+`--source pypi` for alternate install sources. Add `--enable-service` to create
+and enable a `picframe.service` systemd unit for boot startup.
 
 ## Next-Gen CLI
 

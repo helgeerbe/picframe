@@ -14,8 +14,14 @@ chmod +x install_picframe.sh
 sudo ./install_picframe.sh
 ```
 
-Use the `v2-dev` branch in the URL when validating next-generation installer
-changes.
+Use `--branch v2-dev` when validating next-generation installer changes:
+
+```bash
+sudo ./install_picframe.sh --branch v2-dev
+```
+
+Add `--enable-service` to create and enable the optional `picframe.service`
+systemd boot service.
 
 ## User Docs
 
