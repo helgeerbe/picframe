@@ -6,6 +6,7 @@ import pytest
 from picframe.core.events.dto import (
     PlaybackCompletedEvent,
     SystemErrorEvent,
+    VideoPlaybackDiagnosticsEvent,
     VideoPlaybackWarningEvent,
 )
 from picframe.core.models.media import MediaItem, MediaType
@@ -13,6 +14,7 @@ from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
 from picframe.core.renderers.ipc_protocol import (
     EosEvent,
     ErrorEvent,
+    VideoDiagnosticsEvent,
     WarningEvent,
 )
 
@@ -58,7 +60,85 @@ def media_item() -> MediaItem:
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
 @patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
-def test_play_video(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
+def test_worker_environment_enables_v4l2_probe_on_pi(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_client.return_value = MagicMock()
+    monkeypatch.delenv("GST_V4L2_ENABLE_PROBE", raising=False)
+    monkeypatch.setattr(
+        GstVideoRenderer,
+        "_is_raspberry_pi_hardware",
+        staticmethod(lambda: True),
+    )
+
+    GstVideoRenderer(mock_publisher)
+
+    env = mock_popen.call_args.kwargs["env"]
+    assert env["GST_V4L2_ENABLE_PROBE"] == "1"
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_worker_environment_preserves_existing_v4l2_probe_value(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_client.return_value = MagicMock()
+    monkeypatch.setenv("GST_V4L2_ENABLE_PROBE", "0")
+    monkeypatch.setattr(
+        GstVideoRenderer,
+        "_is_raspberry_pi_hardware",
+        staticmethod(lambda: True),
+    )
+
+    GstVideoRenderer(mock_publisher)
+
+    env = mock_popen.call_args.kwargs["env"]
+    assert env["GST_V4L2_ENABLE_PROBE"] == "0"
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_worker_environment_does_not_force_v4l2_probe_off_pi(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    mock_client.return_value = MagicMock()
+    monkeypatch.delenv("GST_V4L2_ENABLE_PROBE", raising=False)
+    monkeypatch.setattr(
+        GstVideoRenderer,
+        "_is_raspberry_pi_hardware",
+        staticmethod(lambda: False),
+    )
+
+    GstVideoRenderer(mock_publisher)
+
+    env = mock_popen.call_args.kwargs["env"]
+    assert "GST_V4L2_ENABLE_PROBE" not in env
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_play_video(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    media_item: MediaItem,
+) -> None:
     mock_conn = MagicMock()
     mock_client.return_value = mock_conn
     
@@ -77,11 +157,18 @@ def test_play_video(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: 
     play_dict = json.loads(play_json)
     assert play_dict["type"] == "play"
     assert "file:///path/to/video.mp4" in play_dict["uri"]
+    assert play_dict["max_software_decode_resolution"] == "1280x720"
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
 @patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
-def test_stop_video(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
+def test_stop_video(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    media_item: MediaItem,
+) -> None:
     mock_conn = MagicMock()
     mock_client.return_value = mock_conn
     
@@ -101,7 +188,11 @@ def test_stop_video(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: 
 @patch("picframe.core.renderers.gst_video_renderer.Client")
 @patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
 def test_pause_resume_video(
-    mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock, media_item: MediaItem
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    media_item: MediaItem,
 ) -> None:
     mock_conn = MagicMock()
     mock_client.return_value = mock_conn
@@ -124,7 +215,13 @@ def test_pause_resume_video(
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
 @patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
-def test_set_volume(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock, media_item: MediaItem) -> None:
+def test_set_volume(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    media_item: MediaItem,
+) -> None:
     mock_conn = MagicMock()
     mock_client.return_value = mock_conn
     
@@ -150,7 +247,12 @@ def test_set_volume(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
 @patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
-def test_handle_eos_event(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock) -> None:
+def test_handle_eos_event(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+) -> None:
     renderer = GstVideoRenderer(mock_publisher)
     
     event = EosEvent()
@@ -162,15 +264,43 @@ def test_handle_eos_event(mock_exists: MagicMock, mock_client: MagicMock, mock_p
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
 @patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
-def test_handle_error_event(mock_exists: MagicMock, mock_client: MagicMock, mock_popen: MagicMock, mock_publisher: MagicMock) -> None:
+def test_handle_error_event(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+) -> None:
     renderer = GstVideoRenderer(mock_publisher)
     
-    event = ErrorEvent(details="Test Error")
+    event = ErrorEvent(details="Test Error", code="pipeline_failed")
     renderer._handle_event(event)
     
     assert mock_publisher.publish.call_count == 2
     assert isinstance(mock_publisher.publish.call_args_list[0][0][0], SystemErrorEvent)
     assert mock_publisher.publish.call_args_list[0][0][0].message == "Test Error"
+    assert mock_publisher.publish.call_args_list[0][0][0].code == "pipeline_failed"
+    assert isinstance(mock_publisher.publish.call_args_list[1][0][0], PlaybackCompletedEvent)
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_handle_unsupported_media_error_publishes_warning_and_completion(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+) -> None:
+    renderer = GstVideoRenderer(mock_publisher)
+
+    event = ErrorEvent(details="Skipping video 1920x1080", code="unsupported_media")
+    renderer._handle_event(event)
+
+    assert mock_publisher.publish.call_count == 2
+    warning = mock_publisher.publish.call_args_list[0][0][0]
+    assert isinstance(warning, VideoPlaybackWarningEvent)
+    assert warning.warning_type == "unsupported_media"
+    assert warning.decoder == "Skipping video 1920x1080"
     assert isinstance(mock_publisher.publish.call_args_list[1][0][0], PlaybackCompletedEvent)
 
 
@@ -194,3 +324,43 @@ def test_handle_warning_event_publishes_video_playback_warning(
     assert isinstance(published_event, VideoPlaybackWarningEvent)
     assert published_event.warning_type == "software_fallback"
     assert published_event.decoder == "avdec_h264"
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_handle_video_diagnostics_event_publishes_domain_event(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+) -> None:
+    renderer = GstVideoRenderer(mock_publisher)
+
+    renderer._handle_event(
+        VideoDiagnosticsEvent(
+            pipeline_variant="hardware_direct",
+            stage="caps",
+            sink="waylandsink",
+            decoder="v4l2h264dec",
+            decoder_is_hardware=True,
+            caps="video/x-raw(memory:DMABuf)",
+            uses_dmabuf=True,
+            hardware_limit="1920x1080@60",
+            software_limit="1280x720",
+            decision="hardware_direct",
+        )
+    )
+
+    mock_publisher.publish.assert_called_once()
+    published_event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(published_event, VideoPlaybackDiagnosticsEvent)
+    assert published_event.pipeline_variant == "hardware_direct"
+    assert published_event.stage == "caps"
+    assert published_event.sink == "waylandsink"
+    assert published_event.decoder == "v4l2h264dec"
+    assert published_event.decoder_is_hardware is True
+    assert published_event.uses_dmabuf is True
+    assert published_event.hardware_limit == "1920x1080@60"
+    assert published_event.software_limit == "1280x720"
+    assert published_event.decision == "hardware_direct"

@@ -1,20 +1,44 @@
-# Architectural Pattern: Dynamic Hardware Limitation Detection
+# Architectural Pattern: Model-Aware Hardware Limitation Detection
 
-Status: target architecture / design note. The current video stack uses
-GStreamer and configurable software fallback limits; this document captures the
-intended caps-driven hardware-limit detection model for future hardening.
+Status: implemented guard pattern. The current video stack combines official
+Raspberry Pi model decode envelopes, runtime GStreamer V4L2 decoder discovery,
+and configurable software fallback limits.
 
 ## 1. The Problem: Hardware-Specific Decoding Limits
 While GStreamer can dynamically discover *which* codecs are hardware-accelerated, specific hardware decoders have hard limits on the media they can process. For example, a hardware H.264 decoder might be capped at 1080p (1920x1080) at 30fps, while the same SoC might support HEVC (H.265) up to 4K (3840x2160) at 60fps. If we feed a 4K H.264 video into a 1080p-limited hardware decoder, the pipeline will fail, hang, or crash the display server.
 
-## 2. The Anti-Pattern: OS/Hardware Sniffing
-The naive approach is to read `/proc/cpuinfo` or `/proc/device-tree/model` to determine the board (e.g., "Raspberry Pi 4 Model B") and hardcode a lookup table of its limits. 
-**Why this fails:**
-*   **Brittle:** It requires constant updates for new hardware revisions (Pi 5, Compute Modules, alternative SBCs like Orange Pi).
-*   **Inaccurate:** Firmware updates or kernel changes (e.g., switching from legacy MMAL to V4L2) can change capabilities without changing the hardware model.
+## 2. The Hybrid Source Of Truth
 
-## 3. The Recommended Pattern: Caps-Driven Limit Detection
-GStreamer's architecture already solves this problem. Hardware decoder elements (like `v4l2h264dec`) explicitly declare their maximum supported resolutions and framerates within their **Pad Templates** in the GStreamer Registry. We must leverage this as the single source of truth.
+GStreamer can discover which decoder elements are installed, but Raspberry Pi
+generations differ in codec support even when a codec is common in user media.
+Picframe therefore requires two independent confirmations before choosing a
+hardware path:
+
+*   **Official model envelope:** `/proc/device-tree/model` is mapped to a small
+    Raspberry Pi family table for H.264 and HEVC/H.265.
+*   **Runtime decoder availability:** GStreamer must expose the matching V4L2
+    decoder element for that codec.
+
+The model table intentionally stays conservative:
+
+| Model family | H.264 | HEVC/H.265 |
+| --- | --- | --- |
+| Pi 5 / Compute Module 5 | Software only | 3840x2160@60 |
+| Pi 4 / Pi 400 / Compute Module 4 | 1920x1080@60 | 3840x2160@60 |
+| Pi 3 / Compute Module 3 | 1920x1080@30 | Software only |
+| Pi Zero 2 W | 1920x1080@30 | Software only |
+| Pi Zero / Zero W / Zero WH | 1920x1080@30 if V4L2 exposes H.264 | Software only |
+
+## 3. Runtime Decoder Discovery
+GStreamer remains the final authority on what is usable in the running OS
+image. Picframe checks for codec-specific V4L2 hardware decoders:
+
+*   H.264: `v4l2h264dec` or `v4l2slh264dec`
+*   HEVC/H.265: `v4l2slh265dec`
+
+On Raspberry Pi, these elements may only appear after
+`GST_V4L2_ENABLE_PROBE=1`; the `GstVideoRenderer` sets this for its worker on
+Pi hardware unless the user already supplied a value.
 
 ### 3.1 Pre-flight Metadata Extraction
 Before GStreamer is even invoked, we utilize the `VideoMetadataStrategy` (powered by `ffprobe`) to extract the exact characteristics of the incoming media:
@@ -23,23 +47,25 @@ Before GStreamer is even invoked, we utilize the `VideoMetadataStrategy` (powere
 *   `height` (e.g., `2160`)
 *   `framerate` (e.g., `60/1`)
 
-### 3.2 GStreamer Registry Introspection
-During application startup (or cached on first use), we query the `Gst.Registry` for hardware decoders. Instead of just checking if the decoder *exists*, we inspect its `Sink Pad Template`:
-1.  Find the hardware decoder for the target codec (e.g., `v4l2h264dec`).
-2.  Extract its `Gst.Caps`.
-3.  Read the `width` and `height` ranges defined in the caps. For a 1080p-limited decoder, the caps will explicitly state `width=(int)[ 1, 1920 ], height=(int)[ 1, 1080 ]`.
+### 3.2 The Pre-Playback Decision Matrix
+When `play(media_item)` is called, the worker compares the stream facts with
+the model table and then checks GStreamer:
 
-### 3.3 The Pre-Playback Decision Matrix
-When `play(media_item)` is called, we perform a **Pre-flight Caps Intersection**:
-We construct a temporary `Gst.Caps` object representing the media file (e.g., `video/x-h264, width=3840, height=2160`) and attempt to intersect it with the hardware decoder's template caps.
-
-*   **Scenario A: Intersection Succeeds (Media <= HW Limits)**
-    *   *Action:* Proceed with the hardware-accelerated pipeline.
-*   **Scenario B: Intersection Fails (Media > HW Limits)**
-    *   *Action:* We now know hardware decoding is impossible. We must evaluate the fallback strategy.
+*   **Model supports codec, resolution, and fps; decoder exists:** use a
+    hardware pipeline.
+*   **Model does not support the codec:** force software only if the stream is
+    within `viewer.max_software_decode_resolution`; otherwise skip.
+*   **Stream exceeds model resolution or fps:** force software only if the
+    software ceiling allows it; otherwise skip.
+*   **Decoder is missing from GStreamer:** force software only if the software
+    ceiling allows it; otherwise skip.
 
 ## 4. Handling the Fallback: The "Unplayable" Scenario
-When hardware decoding is ruled out due to resolution limits, falling back to software decoding (e.g., `avdec_h264`) for 4K video on an SBC like a Raspberry Pi is almost always a fatal UX error. The CPU will peg at 100%, thermal throttling will occur, and playback will be a slideshow (e.g., 2-3 fps).
+When hardware decoding is ruled out due to model support, missing decoder
+elements, resolution, or framerate limits, falling back to software decoding
+(e.g., `avdec_h264`) for large video on an SBC like a Raspberry Pi is almost
+always a fatal UX error. The CPU will peg at 100%, thermal throttling will
+occur, and playback will be a slideshow (e.g., 2-3 fps).
 
 ### 4.1 Graceful Degradation Strategy
 Instead of a blind software fallback, the architecture should implement a **Threshold-Based Rejection**:
@@ -51,4 +77,9 @@ Instead of a blind software fallback, the architecture should implement a **Thre
     *   **Action:** The `PlaybackEngine` catches this event and immediately transitions to the next media item in the playlist, preserving the appliance's uptime and UX.
 
 ## 5. Conclusion
-By relying on GStreamer's Pad Templates rather than hardware sniffing, the application becomes completely hardware-agnostic. It will automatically support 4K on devices with 4K hardware decoders, and gracefully skip 4K files on devices limited to 1080p, ensuring a stable, crash-free experience across all generations of hardware.
+By combining official Raspberry Pi limits with runtime GStreamer discovery,
+Picframe avoids feeding unsupported streams to fragile hardware paths while
+still adapting to the installed OS image. Known-safe hardware paths are used
+when both model and decoder agree; everything else is software-gated or skipped
+so playback remains stable across Pi 5, Pi 4, Pi 3, Zero 2 W, and Zero-class
+targets.

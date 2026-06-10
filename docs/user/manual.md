@@ -243,6 +243,31 @@ pairs with the configured mat style, and then creates the pi3d texture. Videos
 are never matted, original media files are never modified, and the current
 next-gen matting path creates no persistent cache artifacts.
 
+Video playback support depends on the host hardware, GStreamer plugins, and
+display session. Picframe targets Raspberry Pi 5, Pi 4, Pi 3, Zero 2 W, and
+Zero-class boards with model-aware H.264/HEVC hardware decode limits. The
+official model envelopes and the current Raspberry Pi 4/labwc validation matrix
+are recorded in [Video format validation](video-format-validation.md), including
+known-good H.264/HEVC files and guarded HEVC Main10/HDR MOV files. The same
+page also records VLC comparison results from issue #680. VLC is only a
+diagnostic reference there; Picframe's next-generation runtime continues to use
+GStreamer.
+
+Hardware playback is selected only when the Raspberry Pi model is known to
+support the codec at the stream resolution/framerate and GStreamer exposes a
+matching V4L2 decoder. Unknown, unsupported, over-limit, or missing-decoder
+paths are allowed to fall back to software only within
+`viewer.max_software_decode_resolution`; larger files are skipped with an
+`unsupported_media` warning so the slideshow can continue.
+
+On Raspberry Pi, GStreamer may only expose V4L2 hardware decoder elements after
+probing is enabled. Picframe enables this for its GStreamer worker on Pi
+hardware. For standalone target validation, launch with:
+
+```bash
+GST_V4L2_ENABLE_PROBE=1 dbus-run-session labwc --session 'bash -lc "cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000 --html-dir /home/pi/Development/picframe/src/picframe/html"'
+```
+
 ---
 
 ## Part 2: Extended Developer Guidelines & System Setup

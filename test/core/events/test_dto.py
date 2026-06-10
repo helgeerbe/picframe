@@ -15,6 +15,7 @@ from picframe.core.events import (
     State,
     StateEvent,
     SystemErrorEvent,
+    VideoPlaybackDiagnosticsEvent,
     VideoPlaybackWarningEvent,
 )
 
@@ -113,6 +114,20 @@ def test_video_playback_warning_event_priority() -> None:
         so fallback startup can adjust handoff timing promptly.
     """
     assert VideoPlaybackWarningEvent("software_fallback", "avdec_h264").priority == 2
+
+
+def test_video_playback_diagnostics_event_priority() -> None:
+    """
+    Test the priority level of VideoPlaybackDiagnosticsEvents.
+
+    Expected behavior:
+        Video playback diagnostics are normal-priority observability events.
+    """
+    event = VideoPlaybackDiagnosticsEvent(
+        pipeline_variant="hardware_direct",
+        stage="decoder",
+    )
+    assert event.priority == 3
 
 
 def test_event_immutability() -> None:

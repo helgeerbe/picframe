@@ -34,6 +34,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Video metadata extraction and frontend display of video technical metadata.
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.
 - Video indexing hardening: unprobeable videos, invalid probe JSON, and files with no video stream are skipped/marked inactive; stale placeholder video rows are revalidated; transition-frame cache failures no longer block otherwise playable videos; the GStreamer worker preflights discoverability before creating a sink.
+- Raspberry Pi 4 GStreamer hardware playback validation: `GST_V4L2_ENABLE_PROBE=1` exposes `v4l2h264dec` and `v4l2slh265dec`; H.264 1080p and HEVC Main 8-bit 4K paths play with DMABuf and EOS. HEVC Main 8-bit MKV 4K60 plays in the standalone GStreamer `playbin` probe, while MOV/QuickTime 60 fps and Main10/HDR MOV remain guarded.
 - Legacy `configuration.yaml` import follow-ups #676/#677 are complete: the Settings UI/API path is documented, `viewer.show_text` is normalized into next-gen overlay keys, `mqtt.port` is preserved, and legacy startup-only HTTP keys are intentionally ignored.
 
 ## Current / In Progress
@@ -42,7 +43,8 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
 
 ## Next
-- Complete caps-driven hardware capability discovery in the GStreamer worker.
+- Continue caps-driven hardware capability discovery in the GStreamer worker, with Pi V4L2 probing enabled before worker startup.
+- Validate more H.264 1080p60 and HEVC container variants before relaxing additional guards.
 - Surface software fallback / unsupported-media decisions as events visible to logs and the UI.
 - Validate video handoff on target Wayland/Raspberry Pi hardware.
 - Reconcile frontend specification with actual implemented UI and fill gaps only through tracked issues.
@@ -52,3 +54,4 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Frontend build is green with `npm run build`.
 - Backend pytest is green in the local Python 3.14.4 `.venv`: 338 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
 - Latest video hardening verification on this workspace: touched-file Ruff passed, and `.venv/bin/python -m pytest test/core/metadata/test_video_strategy.py test/core/services/test_media_indexer.py test/core/renderers test/core/engine/test_playback.py` passed with 123 tests.
+- Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.

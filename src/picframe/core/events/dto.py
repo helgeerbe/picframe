@@ -283,6 +283,27 @@ class VideoPlaybackWarningEvent(Event):
 
 
 @dataclass(frozen=True)
+class VideoPlaybackDiagnosticsEvent(Event):
+    """Event emitted with renderer pipeline diagnostics."""
+
+    pipeline_variant: str
+    stage: str
+    sink: str | None = None
+    decoder: str | None = None
+    decoder_is_hardware: bool = False
+    caps: str | None = None
+    uses_dmabuf: bool = False
+    fallback_reason: str | None = None
+    hardware_limit: str | None = None
+    software_limit: str | None = None
+    decision: str | None = None
+
+    @property
+    def priority(self) -> int:
+        return 3
+
+
+@dataclass(frozen=True)
 class PlaybackCompletedEvent(Event):
     """
     An event notifying that a media item (e.g., a video) has finished playing.

@@ -5,6 +5,7 @@ Documentation is split by audience.
 ## User Docs
 
 - [User manual](user/manual.md)
+- [Video format validation](user/video-format-validation.md)
 - [Install helper script](user/install_picframe.sh)
 
 ## Developer Docs

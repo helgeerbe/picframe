@@ -16,6 +16,7 @@ from picframe.core.events.dto import (
     PlaybackCompletedEvent,
     SystemErrorEvent,
     VideoFirstFrameRenderedEvent,
+    VideoPlaybackDiagnosticsEvent,
     VideoPlaybackWarningEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher
@@ -30,6 +31,7 @@ from picframe.core.renderers.ipc_protocol import (
     PlayCommand,
     SetVolumeCommand,
     StopCommand,
+    VideoDiagnosticsEvent,
     WarningEvent,
     parse_ipc_message,
 )
@@ -63,8 +65,7 @@ class GstVideoRenderer(IVideoPlayer):
         """Spawn the GStreamer worker subprocess and establish IPC connection."""
         worker_script = Path(__file__).parent / "gst_worker.py"
         
-        env = os.environ.copy()
-        # Ensure Wayland variables are passed down
+        env = self._worker_environment()
         
         try:
             self._worker_process = subprocess.Popen(
@@ -95,6 +96,25 @@ class GstVideoRenderer(IVideoPlayer):
             logger.error(f"Failed to start GStreamer worker: {e}")
             self._cleanup()
 
+    def _worker_environment(self) -> dict[str, str]:
+        """Return the environment used for the GStreamer worker process."""
+        env = os.environ.copy()
+        if (
+            "GST_V4L2_ENABLE_PROBE" not in env
+            and self._is_raspberry_pi_hardware()
+        ):
+            env["GST_V4L2_ENABLE_PROBE"] = "1"
+        return env
+
+    @staticmethod
+    def _is_raspberry_pi_hardware() -> bool:
+        try:
+            model = Path("/proc/device-tree/model").read_text(errors="ignore")
+        except OSError:
+            return False
+        model = model.strip("\x00\n ").lower()
+        return "raspberry pi" in model or "compute module" in model
+
     def _listen_for_events(self) -> None:
         """Background thread to listen for events from the worker."""
         while self._running and self._conn:
@@ -117,11 +137,22 @@ class GstVideoRenderer(IVideoPlayer):
             logger.info("Received EOS from worker.")
             self._publisher.publish(PlaybackCompletedEvent())
         elif isinstance(event, ErrorEvent):
+            if event.code == "unsupported_media":
+                logger.warning("Unsupported video skipped by worker: %s", event.details)
+                self._publisher.publish(
+                    VideoPlaybackWarningEvent(
+                        warning_type="unsupported_media",
+                        decoder=event.details,
+                    )
+                )
+                self._publisher.publish(PlaybackCompletedEvent())
+                return
             logger.error(f"Received Error from worker: {event.details}")
             self._publisher.publish(
                 SystemErrorEvent(
                     message=event.details,
                     component="GstVideoRenderer",
+                    code=event.code,
                 )
             )
             self._publisher.publish(PlaybackCompletedEvent())
@@ -131,6 +162,37 @@ class GstVideoRenderer(IVideoPlayer):
                 VideoPlaybackWarningEvent(
                     warning_type=event.warning_type,
                     decoder=event.decoder,
+                )
+            )
+        elif isinstance(event, VideoDiagnosticsEvent):
+            logger.info(
+                "Worker video diagnostics: stage=%s variant=%s decoder=%s "
+                "hardware=%s dmabuf=%s sink=%s decision=%s fallback=%s "
+                "hardware_limit=%s software_limit=%s",
+                event.stage,
+                event.pipeline_variant,
+                event.decoder,
+                event.decoder_is_hardware,
+                event.uses_dmabuf,
+                event.sink,
+                event.decision,
+                event.fallback_reason,
+                event.hardware_limit,
+                event.software_limit,
+            )
+            self._publisher.publish(
+                VideoPlaybackDiagnosticsEvent(
+                    pipeline_variant=event.pipeline_variant,
+                    stage=event.stage,
+                    sink=event.sink,
+                    decoder=event.decoder,
+                    decoder_is_hardware=event.decoder_is_hardware,
+                    caps=event.caps,
+                    uses_dmabuf=event.uses_dmabuf,
+                    fallback_reason=event.fallback_reason,
+                    hardware_limit=event.hardware_limit,
+                    software_limit=event.software_limit,
+                    decision=event.decision,
                 )
             )
         elif isinstance(event, FirstFrameRenderedEvent):
@@ -158,7 +220,16 @@ class GstVideoRenderer(IVideoPlayer):
         uri = Path(media_item.filepath).absolute().as_uri()
         
         # Send play command
-        self._send_command(PlayCommand(uri=uri, x=x, y=y, w=w, h=h))
+        self._send_command(
+            PlayCommand(
+                uri=uri,
+                x=x,
+                y=y,
+                w=w,
+                h=h,
+                max_software_decode_resolution=self._max_software_decode_resolution,
+            )
+        )
         logger.info(f"Sent play command for: {media_item.filepath} at ({x},{y}) {w}x{h}")
 
     def stop(self) -> None:
@@ -176,7 +247,12 @@ class GstVideoRenderer(IVideoPlayer):
         """Resume paused video playback."""
         if self._current_media:
             uri = Path(self._current_media.filepath).absolute().as_uri()
-            self._send_command(PlayCommand(uri=uri))
+            self._send_command(
+                PlayCommand(
+                    uri=uri,
+                    max_software_decode_resolution=self._max_software_decode_resolution,
+                )
+            )
             logger.debug("Sent resume (play) command.")
 
     def set_volume(self, level: float) -> None:

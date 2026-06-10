@@ -7,7 +7,7 @@ to the GStreamer worker and receiving events back from it.
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Optional, Type, TypeVar
+from typing import Any, Dict, Type, TypeVar
 
 T = TypeVar("T", bound="IpcMessage")
 
@@ -36,6 +36,7 @@ class PlayCommand(IpcMessage):
     y: int = 0
     w: int = 0
     h: int = 0
+    max_software_decode_resolution: str | None = None
     type: str = field(default="play", init=False)
 
 @dataclass(frozen=True)
@@ -71,6 +72,7 @@ class EosEvent(IpcMessage):
 class ErrorEvent(IpcMessage):
     """Event indicating a GStreamer error occurred."""
     details: str
+    code: str | None = None
     type: str = field(default="error", init=False)
 
 @dataclass(frozen=True)
@@ -79,6 +81,22 @@ class WarningEvent(IpcMessage):
     warning_type: str
     decoder: str
     type: str = field(default="warning", init=False)
+
+@dataclass(frozen=True)
+class VideoDiagnosticsEvent(IpcMessage):
+    """Event describing the selected video pipeline, decoder, and caps."""
+    pipeline_variant: str
+    stage: str
+    sink: str | None = None
+    decoder: str | None = None
+    decoder_is_hardware: bool = False
+    caps: str | None = None
+    uses_dmabuf: bool = False
+    fallback_reason: str | None = None
+    hardware_limit: str | None = None
+    software_limit: str | None = None
+    decision: str | None = None
+    type: str = field(default="video_diagnostics", init=False)
 
 @dataclass(frozen=True)
 class CapsResultEvent(IpcMessage):
@@ -91,7 +109,7 @@ class FirstFrameRenderedEvent(IpcMessage):
     """Event indicating the first frame of the video has been rendered."""
     type: str = field(default="first_frame_rendered", init=False)
 
-def parse_ipc_message(json_str: str) -> Optional[IpcMessage]:
+def parse_ipc_message(json_str: str) -> IpcMessage | None:
     """
     Parse a JSON string into the appropriate IpcMessage subclass.
     
@@ -121,6 +139,8 @@ def parse_ipc_message(json_str: str) -> Optional[IpcMessage]:
             return ErrorEvent.from_dict(data)
         elif msg_type == "warning":
             return WarningEvent.from_dict(data)
+        elif msg_type == "video_diagnostics":
+            return VideoDiagnosticsEvent.from_dict(data)
         elif msg_type == "caps_result":
             return CapsResultEvent.from_dict(data)
         elif msg_type == "first_frame_rendered":
