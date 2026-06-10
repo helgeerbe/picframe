@@ -6,6 +6,7 @@
 - [What Is PictureFrame?](#what-is-pictureframe)
 - [History of PictureFrame](#history-of-pictureframe)
 - [Highlights of PictureFrame](#highlights-of-pictureframe)
+- [Quick Install](#quick-install)
 - [Documentation](#documentation)
 - [Acknowledgement](#acknowledgement)
 
@@ -47,6 +48,35 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
   - toggle clock visibility
   - retrieve image meta info (exif, IPTC)
   - reboot or shut down the host from Settings or Home Assistant
+
+## Quick Install
+
+For Raspberry Pi OS / Debian-style systems, download the installer from GitHub,
+make it executable, and run it with `sudo`:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/helgeerbe/picframe/main/docs/user/install_picframe.sh \
+  -o install_picframe.sh
+chmod +x install_picframe.sh
+sudo ./install_picframe.sh
+```
+
+To install from the next-generation development branch, change `main` to
+`v2-dev` in the URL:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/helgeerbe/picframe/v2-dev/docs/user/install_picframe.sh \
+  -o install_picframe.sh
+chmod +x install_picframe.sh
+sudo ./install_picframe.sh
+```
+
+The current helper script installs system packages, creates a Python virtual
+environment, installs Picframe, and runs `picframe init --force`. The
+next-generation installer tracked in issue #667 will add source/branch
+selection, locale provisioning, and optional systemd boot startup.
 
 ## Next-Gen CLI
 

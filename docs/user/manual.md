@@ -12,6 +12,48 @@ commands are `picframe init` and `picframe run`; legacy direct
 `picframe configuration.yaml` startup is not part of the next-generation public
 entry point.
 
+### Quick Install From GitHub
+
+On Raspberry Pi OS / Debian-style systems, download the installer script from
+GitHub, make it executable, and run it with `sudo`:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/helgeerbe/picframe/main/docs/user/install_picframe.sh \
+  -o install_picframe.sh
+chmod +x install_picframe.sh
+sudo ./install_picframe.sh
+```
+
+For next-generation testing from the development branch, use `v2-dev` instead
+of `main`:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/helgeerbe/picframe/v2-dev/docs/user/install_picframe.sh \
+  -o install_picframe.sh
+chmod +x install_picframe.sh
+sudo ./install_picframe.sh
+```
+
+The current helper script installs the required APT packages, configures basic
+hardware access groups and power-management sudoers rules, creates a virtual
+environment at `~/picframe_env`, installs Picframe, and runs:
+
+```bash
+~/picframe_env/bin/picframe init --force
+```
+
+After installation, start Picframe manually with:
+
+```bash
+~/picframe_env/bin/picframe run
+```
+
+The next-generation installer tracked in issue #667 will extend this flow with
+interactive source/branch selection, locale provisioning, complete Raspberry Pi
+OS Trixie Lite dependency setup, and optional systemd boot startup.
+
 ### Initialization (`picframe init`)
 
 When you run `picframe init`, the application bootstraps your environment (defaulting to `~/.picframe`).

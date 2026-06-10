@@ -2,6 +2,21 @@
 
 Documentation is split by audience.
 
+## Quick Install
+
+Download and run the current installer helper from GitHub:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/helgeerbe/picframe/main/docs/user/install_picframe.sh \
+  -o install_picframe.sh
+chmod +x install_picframe.sh
+sudo ./install_picframe.sh
+```
+
+Use the `v2-dev` branch in the URL when validating next-generation installer
+changes.
+
 ## User Docs
 
 - [User manual](user/manual.md)
