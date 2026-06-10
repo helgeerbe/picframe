@@ -40,6 +40,20 @@ FastAPI backend, and API docs are available at `/docs`.
 - [GStreamer hardware discovery notes](dev/architecture/video-gst-hw-discovery.md)
 - [Video hardware limits notes](dev/architecture/video-hw-limits.md)
 
+## Phase 2B Documentation Coverage
+
+The next-generation CLI and Web Control Plane documentation covers:
+
+- `picframe init` and `picframe run` usage in the README and user manual.
+- The `~/.picframe` runtime layout, including `config.db3`,
+  `media_cache.db3`, generated cache files, packaged renderer assets, and the
+  compiled SPA.
+- Web Control Plane access at `http://<picframe-host>:9000/`, Remote and
+  Settings view responsibilities, REST API docs at `/docs`, and live
+  synchronization over `/ws/state`.
+- Developer architecture updates, including the component diagram and
+  responsibility table in the architecture overview.
+
 The video hardware documents describe target architecture for ongoing
 GStreamer hardening. Treat them as design notes, not as a guarantee that every
 detail is already implemented.

@@ -153,7 +153,7 @@ Local documentation is split by audience:
 - [Documentation index](docs/README.md)
 - [User manual](docs/user/manual.md)
 - [Install helper script](docs/user/install_picframe.sh)
-- [Architecture overview](docs/dev/architecture/overview.md)
+- [Architecture overview and component diagram](docs/dev/architecture/overview.md)
 - [Frontend architecture notes](docs/dev/architecture/frontend.md)
 - [GStreamer hardware discovery notes](docs/dev/architecture/video-gst-hw-discovery.md)
 - [Video hardware limits notes](docs/dev/architecture/video-hw-limits.md)
