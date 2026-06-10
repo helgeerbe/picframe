@@ -97,6 +97,44 @@ Legacy `configuration.yaml` files are imported from the Settings UI after
 initialization; direct `picframe configuration.yaml` startup is no longer the
 public CLI path.
 
+## Web Control Plane
+
+When Picframe is running, open the local web UI from another device on the same
+network:
+
+```text
+http://<picframe-host>:9000/
+```
+
+The Vue SPA provides the **Remote** view for playback controls, current media
+details, filters, shuffle/timing controls, and delete actions. The **Settings**
+view edits runtime configuration stored in `~/.picframe/data/config.db3`,
+imports legacy `configuration.yaml` files, and exposes maintenance actions such
+as purging missing media rows and clearing generated cache files. REST API docs
+are available at `/docs`, and live state is synchronized over `/ws/state`.
+
+## Runtime Files
+
+Picframe keeps runtime state in the current user's home directory by default:
+
+```text
+~/.picframe/
+  data/
+    config.db3
+    media_cache.db3
+    cache/
+    fonts/
+    mat/
+    shaders/
+    no_pictures.jpg
+  html/
+```
+
+Copy photos and videos into `~/Pictures` or change `model.pic_dir` from
+Settings. On Raspberry Pi OS Lite, create `~/Pictures` before the first service
+start, or restart `picframe.service` once after creating it so the watcher can
+attach to the directory.
+
 ## Home Assistant / MQTT
 
 MQTT is optional in the next-generation runtime. When `mqtt.use_mqtt` is

@@ -23,6 +23,10 @@ sudo ./install_picframe.sh --branch v2-dev
 Add `--enable-service` to create and enable the optional `picframe.service`
 systemd boot service.
 
+When Picframe is running, open the Web Control Plane at
+`http://<picframe-host>:9000/`. The Remote and Settings views are served by the
+FastAPI backend, and API docs are available at `/docs`.
+
 ## User Docs
 
 - [User manual](user/manual.md)

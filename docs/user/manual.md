@@ -51,8 +51,19 @@ After installation, start Picframe manually with:
 ~/picframe_env/bin/picframe run
 ```
 
-The next-generation installer tracked in issue #667 will extend this flow with
-the full two-stage Python orchestrator and deeper idempotent state tracking.
+On Raspberry Pi OS Lite, create the default media and deleted-media folders
+before the first service start:
+
+```bash
+mkdir -p ~/Pictures ~/DeletedPictures
+```
+
+If Picframe already started before `~/Pictures` existed, create the directory
+and restart the service once so the media watcher can attach to it:
+
+```bash
+sudo systemctl restart picframe.service
+```
 
 Installer options:
 
@@ -108,6 +119,25 @@ sudo systemctl disable picframe.service
 
 When you run `picframe init`, the application bootstraps your environment (defaulting to `~/.picframe`).
 
+The default runtime directory layout is:
+
+```text
+~/.picframe/
+  data/
+    config.db3          # Persistent runtime configuration
+    media_cache.db3     # Rebuildable media metadata and playback statistics
+    cache/              # Generated image/video transition artifacts
+    fonts/              # Packaged renderer fonts
+    mat/                # Packaged matting textures and patches
+    shaders/            # Packaged pi3d shader files
+    no_pictures.jpg     # Fallback image shown when no media is indexed
+  html/                 # Compiled Vue SPA served by FastAPI
+```
+
+Original photos and videos are not copied into `~/.picframe`. By default,
+Picframe indexes `~/Pictures`; change `model.pic_dir` in Settings if your media
+library lives elsewhere.
+
 #### Interactive Prompts
 If the configuration database (`config.db3`) or media cache database (`media_cache.db3`) already exists, the CLI will interactively prompt you to either keep or delete them.
 
@@ -157,6 +187,33 @@ The `picframe run` command accepts several parameters to override default paths 
 *   `--html-dir`: Path to frontend HTML assets (default: `<dir>/html` or `PICFRAME_HTML_DIR` env var).
 
 *Note: The webserver port and HTML directory path are strictly managed via CLI arguments and environment variables. They are not editable via the frontend UI to prevent connection loss and synchronization issues.*
+
+### Web Control Plane
+
+When `picframe run` or `picframe.service` is active, open the web UI from a
+browser on the same local network:
+
+```text
+http://<picframe-host>:9000/
+```
+
+The Vue SPA is served by the FastAPI backend from `~/.picframe/html` by
+default. The main views are:
+
+*   **Remote:** playback controls, current media details, selected filters,
+    shuffle/timing controls, display controls, and current-media delete actions.
+*   **Settings:** runtime configuration stored in `config.db3`, media/library
+    paths, renderer options, MQTT, GPIO inputs, legacy YAML import, and
+    maintenance actions.
+
+Backend API documentation is available at:
+
+```text
+http://<picframe-host>:9000/docs
+```
+
+Live playback state, current media updates, command responses, and system
+errors are synchronized through the `/ws/state` WebSocket.
 
 #### Manual Remote Start Over SSH
 

@@ -9,6 +9,56 @@ has since been refined.
 ## 1. Executive Summary
 This document outlines the comprehensive architectural redesign of the `picframe` project. The goal is to transition from a tightly coupled, synchronous script to a modern, modular, and highly performant system. This modernization leverages **Clean Architecture (Hexagonal)** and a **Strict Event-Driven Architecture (EDA)** to support dynamic configuration via a FastAPI/Vue.js stack, robust state management, and hardware-accelerated video playback using GStreamer alongside `pi3d` for image transitions.
 
+### 1.1 Component Map
+
+This compact map gives a first-pass overview of the runtime components and
+their relationships. The detailed event flow and renderer state diagrams appear
+later in [System Diagrams](#3-system-diagrams).
+
+```mermaid
+flowchart LR
+    CLI[picframe CLI] --> Bootstrap[Environment Bootstrapper]
+    CLI --> Main[Composition Root]
+
+    Browser[Browser / Vue SPA] <--> API[FastAPI Web Control Plane]
+    API <--> Bus[Priority Event Bus]
+
+    Main --> Bus
+    Main --> Engine[Playback Engine]
+    Main --> Indexer[Media Indexer]
+    Main --> Monitor[Filesystem Monitor]
+    Main --> MQTT[MQTT / Home Assistant]
+    Main --> HAL[OS / HAL Adapters]
+
+    Bus <--> Engine
+    Bus <--> Indexer
+    Bus <--> MQTT
+    Bus <--> HAL
+
+    Engine --> Playlist[Playlist Manager]
+    Playlist --> MediaRepo[(media_cache.db3)]
+    Indexer --> MediaRepo
+    Indexer --> ConfigRepo[(config.db3)]
+
+    API --> ConfigRepo
+    API --> MediaRepo
+    Engine --> Pi3D[pi3d Image Renderer]
+    Engine --> Gst[GStreamer Video Worker]
+```
+
+| Component | Job | Main relationships |
+| --- | --- | --- |
+| `picframe` CLI | Runs `init` and `run`; selects runtime paths and port. | Starts the bootstrapper or composition root. |
+| Environment Bootstrapper | Creates `~/.picframe`, copies packaged assets and web UI, seeds SQLite defaults. | Writes `config.db3`, `media_cache.db3`, `data/`, and `html/`. |
+| Composition Root | Wires repositories, services, renderers, adapters, and the event bus. | Owns runtime construction in `main.py`. |
+| FastAPI Web Control Plane | Serves REST, `/ws/state`, OpenAPI docs, and the compiled Vue SPA. | Publishes commands and reads/writes repositories. |
+| Vue SPA | Provides Remote, Settings, and filter-oriented user workflows. | Talks to FastAPI through REST and WebSockets. |
+| Priority Event Bus | Thread-safe command, state, media, and system-event routing. | Connects background services with the playback main thread. |
+| Playback Engine | Owns playback state, timing, transitions, and media handoff. | Uses Playlist Manager, pi3d renderer, and GStreamer worker. |
+| Media Indexer and Monitor | Watches media directories and updates media metadata. | Publishes file events and writes `media_cache.db3`. |
+| Repositories | Persist runtime configuration and rebuildable media metadata. | Backed by `config.db3` and `media_cache.db3`. |
+| HAL and MQTT adapters | Integrate OS power/input/system actions and Home Assistant. | Use ports and event bus instead of direct core coupling. |
+
 ## 2. Architectural Concept & Reasoning
 
 The Picframe 2.0 architecture is built upon several advanced software design patterns to ensure strict testability, maintainability, and thread safety in a concurrent Python environment.
