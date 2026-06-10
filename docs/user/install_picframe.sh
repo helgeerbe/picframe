@@ -25,7 +25,8 @@ Options:
   --locale LOCALE              Picframe locale, for example en_US.UTF-8 or de_DE.UTF-8
   --enable-service             Create and enable a systemd service for boot startup
   --disable-service            Do not create a systemd service
-  --display-mode MODE          Service display mode: wayland-kiosk or existing-wayland
+  --display-mode MODE          Service display mode: wayland-kiosk, labwc-kiosk,
+                                or existing-wayland
                                 (default: wayland-kiosk)
   -y, --yes                    Use defaults without interactive prompts
   -h, --help                   Show this help
@@ -34,6 +35,7 @@ Examples:
   sudo ./install_picframe.sh
   sudo ./install_picframe.sh --branch v2-dev
   sudo ./install_picframe.sh --branch v2-dev --enable-service
+  sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
   sudo ./install_picframe.sh --source local --local-path /home/pi/Development/picframe
   sudo ./install_picframe.sh --source pypi
 EOF
@@ -112,16 +114,27 @@ configure_systemd_service() {
     local service_tmp
     local exec_start
     local cage_path=""
+    local labwc_path=""
 
-    if [ "$DISPLAY_MODE" = "wayland-kiosk" ]; then
-        cage_path=$(command -v cage || true)
-        if [ -z "$cage_path" ]; then
-            die "cage is required for --display-mode wayland-kiosk"
-        fi
-        exec_start="$cage_path -s -- $VENV_DIR/bin/picframe run"
-    else
-        exec_start="$VENV_DIR/bin/picframe run"
-    fi
+    case "$DISPLAY_MODE" in
+        wayland-kiosk)
+            cage_path=$(command -v cage || true)
+            if [ -z "$cage_path" ]; then
+                die "cage is required for --display-mode wayland-kiosk"
+            fi
+            exec_start="$cage_path -s -- $VENV_DIR/bin/picframe run"
+            ;;
+        labwc-kiosk)
+            labwc_path=$(command -v labwc || true)
+            if [ -z "$labwc_path" ]; then
+                die "labwc is required for --display-mode labwc-kiosk"
+            fi
+            exec_start="$labwc_path --session \"$VENV_DIR/bin/picframe run\""
+            ;;
+        existing-wayland)
+            exec_start="$VENV_DIR/bin/picframe run"
+            ;;
+    esac
 
     service_tmp=$(mktemp)
     cat > "$service_tmp" <<EOF
@@ -135,7 +148,7 @@ Type=simple
 User=$ACTUAL_USER
 Group=$ACTUAL_GROUP
 WorkingDirectory=$ACTUAL_HOME
-Environment=PICFRAME_BASE_DIR=$ACTUAL_HOME/.picframe
+Environment=PICFRAME_DIR=$ACTUAL_HOME/.picframe
 Environment=SDL_VIDEODRIVER=wayland
 Environment=XDG_RUNTIME_DIR=/run/picframe
 RuntimeDirectory=picframe
@@ -153,7 +166,7 @@ EOF
     systemctl daemon-reload
     systemctl enable picframe.service
 
-    if [ "$DISPLAY_MODE" = "wayland-kiosk" ]; then
+    if [ "$DISPLAY_MODE" = "wayland-kiosk" ] || [ "$DISPLAY_MODE" = "labwc-kiosk" ]; then
         systemctl enable --now seatd.service >/dev/null 2>&1 || true
     fi
 }
@@ -232,8 +245,8 @@ case "$ENABLE_SERVICE" in
 esac
 
 case "$DISPLAY_MODE" in
-    wayland-kiosk|existing-wayland) ;;
-    *) die "--display-mode must be one of: wayland-kiosk, existing-wayland" ;;
+    wayland-kiosk|labwc-kiosk|existing-wayland) ;;
+    *) die "--display-mode must be one of: wayland-kiosk, labwc-kiosk, existing-wayland" ;;
 esac
 
 # Ensure script is run as root
@@ -322,6 +335,8 @@ apt-get install -y \
     libsdl2-dev \
     libegl1-mesa-dev \
     libgles2-mesa-dev \
+    gir1.2-gst-plugins-base-1.0 \
+    gir1.2-gstreamer-1.0 \
     libheif1 \
     libheif-dev \
     libjpeg-dev \
@@ -336,6 +351,8 @@ apt-get install -y \
     i2c-tools \
     python3 \
     python3-dev \
+    python3-gi \
+    python3-gst-1.0 \
     python3-pip \
     python3-venv \
     seatd \
@@ -470,9 +487,19 @@ fi
 echo "[6/7] Setting up Python virtual environment and installing picframe..."
 VENV_DIR="$ACTUAL_HOME/picframe_env"
 
-# Create venv as the actual user
-sudo -u "$ACTUAL_USER" python3 -m venv "$VENV_DIR"
+# Create venv as the actual user. GObject Introspection bindings are provided
+# by Debian packages, so the venv must see system site packages.
+sudo -u "$ACTUAL_USER" python3 -m venv --system-site-packages "$VENV_DIR"
 sudo -u "$ACTUAL_USER" "$VENV_DIR/bin/python" -m pip install --upgrade pip setuptools wheel
+
+echo "  -> Verifying Python GObject/GStreamer bindings..."
+sudo -u "$ACTUAL_USER" "$VENV_DIR/bin/python" - <<'PY'
+import gi
+
+gi.require_version("Gst", "1.0")
+gi.require_version("GstPbutils", "1.0")
+from gi.repository import Gst, GstPbutils  # noqa: F401
+PY
 
 case "$INSTALL_SOURCE" in
     github)

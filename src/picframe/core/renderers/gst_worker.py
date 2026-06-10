@@ -146,11 +146,11 @@ try:
     from gi.repository import GLib, Gst, GstPbutils
     Gst.init(None)
     GST_AVAILABLE = True
-except ImportError:
+except ImportError as exc:
     Gst = Any
     GLib = Any
     GstPbutils = Any
-    logger.error("GStreamer not available. Worker cannot start.")
+    logger.error("GStreamer not available. Worker cannot start: %s", exc)
     GST_AVAILABLE = False
 
 from picframe.core.renderers.gst_utils import find_best_element  # noqa: E402

@@ -87,8 +87,13 @@ sudo ./install_picframe.sh --enable-service
 
 On Raspberry Pi OS Lite the default service display mode is `wayland-kiosk`,
 which starts Picframe inside the lightweight `cage` Wayland compositor instead
-of requiring a full desktop environment. The installer also installs and enables
-`seatd` when this mode is selected.
+of requiring a full desktop environment. If `labwc` is installed and behaves
+better on the target Pi, use `--display-mode labwc-kiosk` instead. The installer
+also enables `seatd` for kiosk compositor modes.
+
+```bash
+sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
+```
 
 Service commands:
 
@@ -163,11 +168,21 @@ systemd service:
 dbus-run-session -- cage -s -- bash -lc 'exec /home/pi/picframe_env/bin/picframe run --dir /home/pi/.picframe --port 9000'
 ```
 
+If `cage` logs EGL messages such as `eglQueryDeviceStringEXT` with
+`EGL_BAD_PARAMETER` but Picframe renders normally, the message is compositor
+startup noise rather than a Picframe playback failure. On Raspberry Pi systems
+where `labwc` is available, this equivalent launch is quieter:
+
+```bash
+dbus-run-session -- labwc --session 'bash -lc "exec /home/pi/picframe_env/bin/picframe run --dir /home/pi/.picframe --port 9000"'
+```
+
 For a development checkout using the repository virtual environment and a
 separate development base directory:
 
 ```bash
 dbus-run-session -- cage -s -- bash -lc 'cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000'
+dbus-run-session -- labwc --session 'bash -lc "cd /home/pi/Development/picframe && exec /home/pi/picframe_env/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000"'
 ```
 
 `--html-dir` can usually be omitted because it defaults to `<dir>/html`, which
@@ -450,8 +465,9 @@ sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb gstr
 sudo apt-get update
 sudo apt-get install -y \
   build-essential ca-certificates cage dbus-user-session git locales \
-  python3 python3-dev python3-pip python3-venv sudo \
-  libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev mesa-utils \
+  python3 python3-dev python3-gi python3-gst-1.0 python3-pip python3-venv sudo \
+  libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev \
+  gir1.2-gst-plugins-base-1.0 gir1.2-gstreamer-1.0 mesa-utils \
   libheif1 libheif-dev libjpeg-dev libopenjp2-7 libtiff6 zlib1g-dev \
   wlr-randr ddcutil brightnessctl i2c-tools seatd \
   gstreamer1.0-tools gstreamer1.0-libav \
@@ -460,6 +476,14 @@ sudo apt-get install -y \
   gstreamer1.0-gl
 ```
 *(Note: `gstreamer1.0-gl` supports GL presentation. Raspberry Pi V4L2 decoder elements come from the standard GStreamer plugin packages above, especially `gstreamer1.0-plugins-good` and `gstreamer1.0-plugins-bad`).*
+
+When using a Python virtual environment with Debian/Raspberry Pi OS
+GStreamer bindings, create it with system site packages so `import gi`,
+`Gst`, and `GstPbutils` are visible:
+
+```bash
+python3 -m venv --system-site-packages ~/picframe_env
+```
 
 **Note on Display Power Management:**
 `wlr-randr` is required for turning the display on and off under Wayland. It is not always installed by default on Raspberry Pi OS and must be explicitly installed.
