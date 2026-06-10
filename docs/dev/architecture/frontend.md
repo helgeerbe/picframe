@@ -113,16 +113,37 @@ A dedicated "Danger Zone" or Maintenance tab for system-level operations. All ac
 
 ## 6. API Integration Contract
 
-### 6.1 WebSockets (`/ws/state`)
-*   **Incoming (from Backend):** `{ "type": "MediaChangedEvent", "media": { "file_path": "...", "exif": {...}, "location": {"lat": 52.5, "lon": 13.4} } }`
-*   **Outgoing (from UI):** `{ "command": "NEXT" }`, `{ "command": "PAUSE" }`, `{ "command": "SET_BRIGHTNESS", "value": 0.8 }`
+### 6.1 OpenAPI / Swagger
+*   FastAPI publishes the REST contract at `/openapi.json` and Swagger UI at `/docs`.
+*   JSON endpoints declare explicit Pydantic request and response models.
+*   Expected error responses are documented with `APIErrorResponse` for `400`, `403`, `404`, `422`, and `500` where applicable.
+*   WebSockets are not represented as standard OpenAPI paths, so Picframe adds an `x-websocket-contracts` OpenAPI extension and component schemas for `/ws/state`.
 
-### 6.2 REST Endpoints
-*   `GET /api/config` -> Returns full configuration JSON.
-*   `PUT /api/config` -> Updates configuration.
-*   `POST /api/maintenance/purge-db` -> Triggers database rebuild.
-*   `POST /api/maintenance/clear-cache` -> Clears image cache.
-*   `POST /api/system/reboot` -> Reboots host OS.
+### 6.2 WebSockets (`/ws/state`)
+*   **Inbound commands from the UI:** `WebSocketCommandMessage` with command names such as `NEXT`, `PREV`, `PAUSE`, `PLAY`, `DISPLAY_ON`, `DISPLAY_OFF`, `DELETE`, `PURGE_FILES`, `STOP`, `REBOOT_HOST`, `SHUTDOWN_HOST`, `REQUEST_STATE`, and `SET_CONFIG`.
+*   **Brightness command:** `{ "command": "SET_BRIGHTNESS", "value": 0.8 }`.
+*   **Configuration command:** `{ "command": "SET_CONFIG", "payload": { ... } }` or root-level config keys alongside `"command": "SET_CONFIG"`.
+*   **Outbound media updates:** `MediaChangedEvent` with a `media` payload matching `MediaResponseDTO`.
+*   **Outbound state updates:** `StateEvent` with a state enum name and optional payload.
+*   **Outbound errors:** `SystemErrorEvent` with `message`, `component`, `sticky`, and optional `code`.
+*   On connection the backend subscribes to media/state/error events and requests current state. High-frequency state events are rate limited, while rapid `NEXT`, `PREV`, and `SET_BRIGHTNESS` commands are debounced.
+
+### 6.3 REST Endpoints
+*   `GET /health` - Returns API liveness status.
+*   `POST /api/system/reboot` - Queues a host reboot command.
+*   `POST /api/system/shutdown` - Queues a host shutdown command.
+*   `POST /api/maintenance/purge-db` - Queues database cleanup of missing media rows.
+*   `POST /api/maintenance/clear-cache` - Clears generated image and video-frame cache artifacts.
+*   `GET /api/filesystem/browse` - Lists safe filesystem entries for settings path pickers.
+*   `POST /api/filesystem/validate` - Validates a settings path and reports type/existence errors.
+*   `GET /api/config` - Returns the full nested configuration, or `{}` when no configuration repository is injected.
+*   `PUT /api/config` - Validates, persists, and broadcasts runtime configuration updates.
+*   `POST /api/config/import-yaml` - Imports and normalizes a legacy `configuration.yaml`.
+*   `GET /api/media/filter-options` - Returns distinct subdirectories, locations, tags, and sort columns.
+*   `POST /api/media/selection-count` - Returns selected and folder-scope media counts.
+*   `GET /api/hardware-inputs` - Returns validated GPIO button/PIR sensor configuration.
+*   `PUT /api/hardware-inputs` - Validates, persists, and broadcasts hardware input configuration.
+*   `GET /media` - Streams allowed image/video files or Picframe's placeholder image.
 
 ## 7. UI/UX Design Principles & Consistency
 

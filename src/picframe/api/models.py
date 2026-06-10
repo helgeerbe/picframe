@@ -1,10 +1,30 @@
 """Pydantic models for API payload validation."""
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
 from picframe.core.models.hardware_input import normalize_hardware_inputs_config
+
+
+class APIErrorResponse(BaseModel):
+    """Error response returned by HTTPException and validation handlers."""
+    detail: Any = Field(description="Human-readable error detail or validation error payload.")
+
+
+class HealthResponse(BaseModel):
+    """Liveness response for the web control plane."""
+    status: str = Field(description="Current health state.", examples=["ok"])
+
+
+class StatusResponse(BaseModel):
+    """Generic status response for command endpoints."""
+    status: str = Field(description="Result or queued command state.")
+
+
+class StatusMessageResponse(StatusResponse):
+    """Status response with an optional explanatory message."""
+    message: str | None = Field(default=None, description="Optional status detail.")
 
 
 class MediaResponseDTO(BaseModel):
@@ -35,6 +55,14 @@ class MediaSelectionCountResponse(BaseModel):
     total_count: int = 0
     scope: str = "pic_dir"
     scope_label: str = ""
+
+
+class MediaFilterOptionsResponse(BaseModel):
+    """Distinct values used to populate Remote media filter controls."""
+    subdirectories: list[str] = Field(default_factory=list)
+    locations: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    sort_columns: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class FilesystemEntryDTO(BaseModel):
@@ -223,6 +251,14 @@ class HardwareInputsConfig(BaseModel):
         return normalize_hardware_inputs_config(data)
 
 
+class HardwareInputsUpdateResponse(StatusMessageResponse):
+    """Result returned after updating hardware input configuration."""
+    hardware_inputs: dict[str, Any] | None = Field(
+        default=None,
+        description="Validated hardware input configuration that was persisted.",
+    )
+
+
 class AppConfig(BaseModel):
     viewer: ViewerConfig = Field(default_factory=ViewerConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
@@ -230,3 +266,57 @@ class AppConfig(BaseModel):
     http: HttpConfig = Field(default_factory=HttpConfig)
     peripherals: PeripheralsConfig = Field(default_factory=PeripheralsConfig)
     hardware_inputs: HardwareInputsConfig = Field(default_factory=HardwareInputsConfig)
+
+
+class EmptyConfigResponse(BaseModel):
+    """Empty configuration response used when no repository is injected."""
+
+
+class WebSocketCommandMessage(BaseModel):
+    """Inbound command message accepted by the /ws/state WebSocket."""
+    command: Literal[
+        "NEXT",
+        "PREV",
+        "PAUSE",
+        "PLAY",
+        "SET_BRIGHTNESS",
+        "DISPLAY_ON",
+        "DISPLAY_OFF",
+        "DELETE",
+        "PURGE_FILES",
+        "STOP",
+        "REBOOT_HOST",
+        "SHUTDOWN_HOST",
+        "REQUEST_STATE",
+        "SET_CONFIG",
+    ] = Field(description="Command name to publish to the Picframe event bus.")
+    value: float | None = Field(
+        default=None,
+        description="Brightness value for SET_BRIGHTNESS commands.",
+    )
+    payload: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional command payload, primarily used by SET_CONFIG.",
+    )
+
+
+class MediaChangedWebSocketMessage(BaseModel):
+    """Outbound WebSocket message sent when the current media item changes."""
+    type: Literal["MediaChangedEvent"] = "MediaChangedEvent"
+    media: MediaResponseDTO
+
+
+class StateWebSocketMessage(BaseModel):
+    """Outbound WebSocket message sent for playback and system state updates."""
+    type: Literal["StateEvent"] = "StateEvent"
+    state: str = Field(description="State enum name, such as PLAYING or PAUSED.")
+    payload: Any = Field(default=None, description="Optional state-specific payload.")
+
+
+class SystemErrorWebSocketMessage(BaseModel):
+    """Outbound WebSocket message sent for user-visible system errors."""
+    type: Literal["SystemErrorEvent"] = "SystemErrorEvent"
+    message: str
+    component: str
+    sticky: bool = False
+    code: str | None = None

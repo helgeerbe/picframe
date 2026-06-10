@@ -11,21 +11,42 @@ import logging
 from pathlib import Path
 from typing import Any, cast
 
-from fastapi import Body, FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    Body,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.openapi.utils import get_openapi
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from picframe.api.models import (
+    APIErrorResponse,
     AppConfig,
+    EmptyConfigResponse,
     FilesystemBrowseResponse,
     FilesystemEntryDTO,
     FilesystemValidateRequest,
     FilesystemValidateResponse,
     HardwareInputsConfig,
+    HardwareInputsUpdateResponse,
+    HealthResponse,
+    MediaChangedWebSocketMessage,
+    MediaFilterOptionsResponse,
     MediaResponseDTO,
     MediaSelectionCountRequest,
     MediaSelectionCountResponse,
+    StateWebSocketMessage,
+    StatusMessageResponse,
+    StatusResponse,
+    SystemErrorWebSocketMessage,
+    WebSocketCommandMessage,
 )
 from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
@@ -45,6 +66,43 @@ MEDIA_DTO_EXIF_KEYS = [
 ]
 
 FILESYSTEM_KIND_VALUES = {"any", "file", "directory"}
+OPENAPI_DESCRIPTION = """
+REST API for the Picframe web control plane.
+
+The live playback channel is the `/ws/state` WebSocket. It accepts command
+messages such as `{"command": "NEXT"}` and `{"command": "SET_BRIGHTNESS",
+"value": 0.8}`, and emits `MediaChangedEvent`, `StateEvent`, and
+`SystemErrorEvent` payloads. Their schemas are included in the OpenAPI
+components as documentation-only WebSocket models.
+"""
+OPENAPI_TAGS = [
+    {"name": "System", "description": "Health, host power, and maintenance actions."},
+    {"name": "Filesystem", "description": "Safe path browsing and validation for settings."},
+    {"name": "Configuration", "description": "Runtime Picframe configuration endpoints."},
+    {"name": "Media", "description": "Media selection helpers and media file serving."},
+    {"name": "Hardware Inputs", "description": "GPIO button and PIR sensor configuration."},
+]
+BAD_REQUEST_RESPONSE = {
+    400: {"model": APIErrorResponse, "description": "Invalid request for the endpoint."},
+}
+FORBIDDEN_RESPONSE = {
+    403: {"model": APIErrorResponse, "description": "Path or media access is not allowed."},
+}
+NOT_FOUND_RESPONSE = {
+    404: {"model": APIErrorResponse, "description": "Requested path or media was not found."},
+}
+VALIDATION_RESPONSE = {
+    422: {"model": APIErrorResponse, "description": "Request validation failed."},
+}
+SERVER_ERROR_RESPONSE = {
+    500: {"model": APIErrorResponse, "description": "Unexpected server-side processing error."},
+}
+WEBSOCKET_DOCUMENTATION_MODELS = (
+    WebSocketCommandMessage,
+    MediaChangedWebSocketMessage,
+    StateWebSocketMessage,
+    SystemErrorWebSocketMessage,
+)
 
 
 def _path_picker_root() -> Path:
@@ -341,6 +399,49 @@ def _normalize_legacy_yaml_config(yaml_data: dict[str, Any]) -> dict[str, Any]:
     return yaml_data
 
 
+def _install_openapi_documentation(app: FastAPI) -> None:
+    """Attach Picframe-specific OpenAPI extensions for WebSocket payloads."""
+
+    def custom_openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return cast(dict[str, Any], app.openapi_schema)
+
+        schema = get_openapi(
+            title=app.title,
+            version=app.version,
+            description=app.description,
+            routes=app.routes,
+            tags=OPENAPI_TAGS,
+        )
+        components = schema.setdefault("components", {}).setdefault("schemas", {})
+        for model in WEBSOCKET_DOCUMENTATION_MODELS:
+            model_schema = model.model_json_schema(ref_template="#/components/schemas/{model}")
+            for name, definition in model_schema.pop("$defs", {}).items():
+                components.setdefault(name, definition)
+            components[model.__name__] = model_schema
+
+        schema["x-websocket-contracts"] = {
+            "/ws/state": {
+                "description": (
+                    "Bidirectional state synchronization channel for playback events "
+                    "and remote-control commands."
+                ),
+                "incoming": [
+                    {"$ref": "#/components/schemas/WebSocketCommandMessage"},
+                ],
+                "outgoing": [
+                    {"$ref": "#/components/schemas/MediaChangedWebSocketMessage"},
+                    {"$ref": "#/components/schemas/StateWebSocketMessage"},
+                    {"$ref": "#/components/schemas/SystemErrorWebSocketMessage"},
+                ],
+            }
+        }
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi  # type: ignore[method-assign]
+
+
 def create_app(
     cors_allowed_origins: list[str],
     event_publisher: IEventPublisher | None = None,
@@ -369,9 +470,11 @@ def create_app(
     
     app = FastAPI(
         title="Picframe Web Control Plane",
-        description="API for controlling the Picframe digital picture frame.",
+        description=OPENAPI_DESCRIPTION,
         version="2.0.0",
+        openapi_tags=OPENAPI_TAGS,
     )
+    _install_openapi_documentation(app)
 
     # Configure CORS
     app.add_middleware(
@@ -382,7 +485,13 @@ def create_app(
         allow_headers=["*"],
     )
 
-    @app.get("/health")
+    @app.get(
+        "/health",
+        response_model=HealthResponse,
+        tags=["System"],
+        summary="Check API health",
+        description="Return a minimal liveness response for the web control plane.",
+    )
     async def health_check() -> dict[str, str]:
         """Basic health check endpoint."""
         return {"status": "ok"}
@@ -567,28 +676,56 @@ def create_app(
                 except ImportError:
                     pass
 
-    @app.post("/api/system/reboot")
+    @app.post(
+        "/api/system/reboot",
+        response_model=StatusResponse,
+        tags=["System"],
+        summary="Reboot the host",
+        description="Queue a host reboot command on the Picframe event bus.",
+    )
     async def api_reboot() -> dict[str, str]:
         """Trigger a full host-level OS reboot."""
         if event_publisher:
             event_publisher.publish(CommandEvent(command=Command.REBOOT_HOST))
         return {"status": "rebooting"}
 
-    @app.post("/api/system/shutdown")
+    @app.post(
+        "/api/system/shutdown",
+        response_model=StatusResponse,
+        tags=["System"],
+        summary="Shut down the host",
+        description="Queue a host shutdown command on the Picframe event bus.",
+    )
     async def api_shutdown() -> dict[str, str]:
         """Trigger a full host-level OS shutdown."""
         if event_publisher:
             event_publisher.publish(CommandEvent(command=Command.SHUTDOWN_HOST))
         return {"status": "shutting down"}
 
-    @app.post("/api/maintenance/purge-db")
+    @app.post(
+        "/api/maintenance/purge-db",
+        response_model=StatusResponse,
+        tags=["System"],
+        summary="Purge missing media rows",
+        description="Queue a maintenance command that purges database entries for missing files.",
+    )
     async def api_purge_db() -> dict[str, str]:
         """Trigger a database purge of missing files."""
         if event_publisher:
             event_publisher.publish(CommandEvent(command=Command.PURGE_FILES))
         return {"status": "purging database"}
 
-    @app.post("/api/maintenance/clear-cache")
+    @app.post(
+        "/api/maintenance/clear-cache",
+        response_model=StatusMessageResponse,
+        response_model_exclude_none=True,
+        tags=["System"],
+        summary="Clear generated media cache",
+        description=(
+            "Delete generated image and video-frame cache artifacts. Original media files "
+            "and media database rows are not removed."
+        ),
+    )
     async def api_clear_cache() -> dict[str, str]:
         """Clear generated image and video-frame cache artifacts."""
         if not image_processing_service:
@@ -599,11 +736,29 @@ def create_app(
         image_processing_service.clear_cache()
         return {"status": "cache cleared"}
 
-    @app.get("/api/filesystem/browse")
+    @app.get(
+        "/api/filesystem/browse",
+        response_model=FilesystemBrowseResponse,
+        tags=["Filesystem"],
+        summary="Browse filesystem paths",
+        description=(
+            "List safe filesystem entries under the Picframe user's home directory for "
+            "settings path pickers."
+        ),
+        responses={
+            **BAD_REQUEST_RESPONSE,
+            **FORBIDDEN_RESPONSE,
+            **NOT_FOUND_RESPONSE,
+            **VALIDATION_RESPONSE,
+        },
+    )
     async def api_filesystem_browse(
-        path: str = "~",
-        kind: str = "any",
-        extensions: str = "",
+        path: str = Query("~", description="Path to browse. Supports `~` and `${PICFRAME_DATA}`."),
+        kind: str = Query("any", description="Entry filter: `any`, `file`, or `directory`."),
+        extensions: str = Query(
+            "",
+            description="Comma-separated extension filter for file entries.",
+        ),
     ) -> dict[str, Any]:
         """Browse host filesystem paths safely under the Picframe user's home."""
         if kind not in FILESYSTEM_KIND_VALUES:
@@ -649,14 +804,33 @@ def create_app(
             shortcuts=_filesystem_shortcuts(resource_paths),
         ).model_dump()
 
-    @app.post("/api/filesystem/validate")
+    @app.post(
+        "/api/filesystem/validate",
+        response_model=FilesystemValidateResponse,
+        tags=["Filesystem"],
+        summary="Validate a filesystem path",
+        description=(
+            "Validate a settings path under the Picframe user's home directory and report "
+            "existence, file type, warnings, and validation errors."
+        ),
+        responses={**FORBIDDEN_RESPONSE, **VALIDATION_RESPONSE},
+    )
     async def api_filesystem_validate(
         payload: FilesystemValidateRequest,
     ) -> dict[str, Any]:
         """Validate a Settings path under the Picframe user's home directory."""
         return _validate_path_request(payload, resource_paths).model_dump()
 
-    @app.get("/api/config")
+    @app.get(
+        "/api/config",
+        response_model=EmptyConfigResponse | AppConfig,
+        tags=["Configuration"],
+        summary="Get current configuration",
+        description=(
+            "Return Picframe's nested runtime configuration. A bare `{}` response means "
+            "the application was created without a configuration repository."
+        ),
+    )
     async def api_get_config() -> dict[str, Any]:
         """Get the full application configuration."""
         if not config_repository:
@@ -681,7 +855,16 @@ def create_app(
         app_config = AppConfig(**nested_config)
         return app_config.model_dump()
 
-    @app.get("/api/media/filter-options")
+    @app.get(
+        "/api/media/filter-options",
+        response_model=MediaFilterOptionsResponse,
+        tags=["Media"],
+        summary="Get media filter options",
+        description=(
+            "Return distinct subdirectories, locations, tags, and sort columns for the "
+            "Remote media selection controls."
+        ),
+    )
     async def api_media_filter_options() -> dict[str, Any]:
         """Return distinct values for Remote media selection controls."""
         if not media_repository:
@@ -696,9 +879,22 @@ def create_app(
             pic_dir = str(config_repository.get_app_config("model.pic_dir", "~/Pictures"))
         return media_repository.get_filter_options(pic_dir)
 
-    @app.post("/api/media/selection-count")
+    @app.post(
+        "/api/media/selection-count",
+        response_model=MediaSelectionCountResponse,
+        tags=["Media"],
+        summary="Count selected media",
+        description=(
+            "Return selected and folder-scope media counts for the supplied Remote "
+            "media selection filters."
+        ),
+        responses={**VALIDATION_RESPONSE},
+    )
     async def api_media_selection_count(
-        payload: MediaSelectionCountRequest | None = Body(default=None),
+        payload: MediaSelectionCountRequest | None = Body(
+            default=None,
+            description="Optional media selection filters. Empty body uses default filters.",
+        ),
     ) -> dict[str, Any]:
         """Return selected and folder-scope media counts for Remote filters."""
         payload = payload or MediaSelectionCountRequest()
@@ -725,7 +921,13 @@ def create_app(
         counts = media_repository.count_media(criteria)
         return MediaSelectionCountResponse(**counts).model_dump()
 
-    @app.get("/api/hardware-inputs")
+    @app.get(
+        "/api/hardware-inputs",
+        response_model=HardwareInputsConfig,
+        tags=["Hardware Inputs"],
+        summary="Get hardware input configuration",
+        description="Return validated GPIO button and PIR sensor input configuration.",
+    )
     async def api_get_hardware_inputs() -> dict[str, Any]:
         """Get validated hardware input configuration."""
         if not config_repository:
@@ -742,7 +944,18 @@ def create_app(
         nested_config = temp_service.get_nested_config()
         return HardwareInputsConfig(**nested_config.get("hardware_inputs", {})).model_dump()
 
-    @app.put("/api/hardware-inputs")
+    @app.put(
+        "/api/hardware-inputs",
+        response_model=HardwareInputsUpdateResponse,
+        response_model_exclude_none=True,
+        tags=["Hardware Inputs"],
+        summary="Update hardware input configuration",
+        description=(
+            "Validate, persist, and broadcast GPIO button and PIR sensor input "
+            "configuration."
+        ),
+        responses={**VALIDATION_RESPONSE},
+    )
     async def api_put_hardware_inputs(payload: HardwareInputsConfig) -> dict[str, Any]:
         """Update validated hardware input configuration."""
         if not config_repository:
@@ -770,8 +983,22 @@ def create_app(
             "hardware_inputs": config_dict,
         }
 
-    @app.post("/api/config/import-yaml")
-    async def api_import_yaml(file: UploadFile = File(...)) -> dict[str, Any]:
+    @app.post(
+        "/api/config/import-yaml",
+        response_model=StatusMessageResponse,
+        response_model_exclude_none=True,
+        tags=["Configuration"],
+        summary="Import legacy YAML configuration",
+        description=(
+            "Parse a legacy `configuration.yaml`, normalize supported legacy keys, validate "
+            "it against the API config model, persist valid settings, and broadcast config "
+            "changes."
+        ),
+        responses={**BAD_REQUEST_RESPONSE, **VALIDATION_RESPONSE, **SERVER_ERROR_RESPONSE},
+    )
+    async def api_import_yaml(
+        file: UploadFile = File(..., description="Legacy Picframe configuration YAML file."),
+    ) -> dict[str, Any]:
         """Import legacy configuration.yaml file."""
         if not config_repository:
             return {"status": "error", "message": "Config repository not available"}
@@ -821,7 +1048,18 @@ def create_app(
             logger.error(f"Error importing YAML: {e}")
             raise HTTPException(status_code=500, detail=f"Error importing configuration: {e}")
 
-    @app.put("/api/config")
+    @app.put(
+        "/api/config",
+        response_model=StatusMessageResponse,
+        response_model_exclude_none=True,
+        tags=["Configuration"],
+        summary="Update current configuration",
+        description=(
+            "Validate and persist Picframe runtime configuration, then broadcast a "
+            "`SET_CONFIG` command so running services can react."
+        ),
+        responses={**VALIDATION_RESPONSE},
+    )
     async def api_put_config(payload: AppConfig = Body(...)) -> dict[str, str]:
         """Update the application configuration."""
         if not config_repository:
@@ -848,8 +1086,37 @@ def create_app(
             
         return {"status": "success"}
 
-    @app.get("/media")
-    async def serve_media(path: str) -> FileResponse:
+    @app.get(
+        "/media",
+        response_class=FileResponse,
+        tags=["Media"],
+        summary="Serve an allowed media file",
+        description=(
+            "Serve image and video files only when the requested path belongs to the "
+            "configured media directories or Picframe's default placeholder image."
+        ),
+        responses={
+            200: {
+                "description": "Media file stream.",
+                "content": {
+                    "image/jpeg": {},
+                    "image/png": {},
+                    "image/gif": {},
+                    "video/mp4": {},
+                    "video/quicktime": {},
+                    "video/x-matroska": {},
+                    "video/x-msvideo": {},
+                    "video/webm": {},
+                    "application/octet-stream": {},
+                },
+            },
+            **FORBIDDEN_RESPONSE,
+            **NOT_FOUND_RESPONSE,
+        },
+    )
+    async def serve_media(
+        path: str = Query(..., description="Absolute media path to stream."),
+    ) -> FileResponse:
         """Serve media files from the filesystem."""
         file_path = Path(path).resolve()
         
@@ -916,7 +1183,7 @@ def create_app(
             app.mount("/assets", StaticFiles(directory=assets_dir), name="assets")
 
         # Catch-all route for SPA
-        @app.get("/{full_path:path}")
+        @app.get("/{full_path:path}", include_in_schema=False)
         async def serve_spa(full_path: str) -> FileResponse:
             requested_file = html_dir_path / full_path
             if full_path and requested_file.is_file():

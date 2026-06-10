@@ -58,6 +58,92 @@ def test_health_check(client: ASGITestClient) -> None:
     assert response.json() == {"status": "ok"}
 
 
+def test_openapi_documents_rest_response_models(client: ASGITestClient) -> None:
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    paths = schema["paths"]
+
+    expected_refs = {
+        ("/health", "get"): "HealthResponse",
+        ("/api/system/reboot", "post"): "StatusResponse",
+        ("/api/system/shutdown", "post"): "StatusResponse",
+        ("/api/maintenance/purge-db", "post"): "StatusResponse",
+        ("/api/maintenance/clear-cache", "post"): "StatusMessageResponse",
+        ("/api/filesystem/browse", "get"): "FilesystemBrowseResponse",
+        ("/api/filesystem/validate", "post"): "FilesystemValidateResponse",
+        ("/api/media/filter-options", "get"): "MediaFilterOptionsResponse",
+        ("/api/media/selection-count", "post"): "MediaSelectionCountResponse",
+        ("/api/hardware-inputs", "get"): "HardwareInputsConfig",
+        ("/api/hardware-inputs", "put"): "HardwareInputsUpdateResponse",
+        ("/api/config/import-yaml", "post"): "StatusMessageResponse",
+        ("/api/config", "put"): "StatusMessageResponse",
+    }
+    for (path, method), model_name in expected_refs.items():
+        operation = paths[path][method]
+        assert operation["summary"]
+        response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+        assert response_schema["$ref"] == f"#/components/schemas/{model_name}"
+
+    config_response_schema = (
+        paths["/api/config"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
+    )
+    assert {"$ref": "#/components/schemas/AppConfig"} in config_response_schema["anyOf"]
+    assert {"$ref": "#/components/schemas/EmptyConfigResponse"} in config_response_schema["anyOf"]
+
+
+def test_openapi_documents_expected_error_responses(client: ASGITestClient) -> None:
+    schema = client.get("/openapi.json").json()
+    paths = schema["paths"]
+
+    browse_responses = paths["/api/filesystem/browse"]["get"]["responses"]
+    for status_code in ("400", "403", "404", "422"):
+        assert (
+            browse_responses[status_code]["content"]["application/json"]["schema"]["$ref"]
+            == "#/components/schemas/APIErrorResponse"
+        )
+
+    media_responses = paths["/media"]["get"]["responses"]
+    assert (
+        media_responses["403"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/APIErrorResponse"
+    )
+    assert (
+        media_responses["404"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/APIErrorResponse"
+    )
+
+    import_responses = paths["/api/config/import-yaml"]["post"]["responses"]
+    assert "500" in import_responses
+    assert (
+        import_responses["500"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/APIErrorResponse"
+    )
+
+
+def test_openapi_documents_websocket_contract(client: ASGITestClient) -> None:
+    schema = client.get("/openapi.json").json()
+
+    assert "/ws/state" not in schema["paths"]
+    assert "/ws/state" in schema["info"]["description"]
+    websocket_contract = schema["x-websocket-contracts"]["/ws/state"]
+    assert websocket_contract["incoming"] == [
+        {"$ref": "#/components/schemas/WebSocketCommandMessage"}
+    ]
+    assert websocket_contract["outgoing"] == [
+        {"$ref": "#/components/schemas/MediaChangedWebSocketMessage"},
+        {"$ref": "#/components/schemas/StateWebSocketMessage"},
+        {"$ref": "#/components/schemas/SystemErrorWebSocketMessage"},
+    ]
+
+    components = schema["components"]["schemas"]
+    assert "WebSocketCommandMessage" in components
+    assert "MediaChangedWebSocketMessage" in components
+    assert "StateWebSocketMessage" in components
+    assert "SystemErrorWebSocketMessage" in components
+
+
 def test_cors_headers(client: ASGITestClient) -> None:
     response = client.options(
         "/health",
