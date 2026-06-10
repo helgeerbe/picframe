@@ -427,7 +427,7 @@ The installation script now includes intelligent hardware probing to ensure GStr
 1.  **Architecture Detection:** The script detects if it's running on ARM (Raspberry Pi) or x86/x86_64.
 2.  **Virtual Machine Detection:** It checks if the environment is a Virtual Machine (using `systemd-detect-virt`).
 3.  **Dynamic Dependency Installation:**
-    *   **Raspberry Pi (ARM):** Installs `gstreamer1.0-gl` and `gstreamer1.0-v4l2` for native hardware acceleration.
+    *   **Raspberry Pi (ARM):** Installs `gstreamer1.0-gl` for GL presentation. V4L2 decoder elements are provided by the standard `gstreamer1.0-plugins-good` and `gstreamer1.0-plugins-bad` packages installed by the base dependency set.
     *   **Bare-Metal Linux (x86/x86_64):** Uses `lspci` to identify the GPU vendor (Intel, AMD, or NVIDIA) and installs the corresponding VA-API drivers (e.g., `intel-media-va-driver-non-free`, `mesa-va-drivers`, `vdpau-driver-all`) alongside `gstreamer1.0-vaapi` and `vainfo`.
     *   **Virtual Machines:** Installs generic `gstreamer1.0-vaapi` support, though hardware acceleration is often limited without GPU passthrough.
 
@@ -457,9 +457,9 @@ sudo apt-get install -y \
   gstreamer1.0-tools gstreamer1.0-libav \
   gstreamer1.0-plugins-base gstreamer1.0-plugins-good \
   gstreamer1.0-plugins-bad gstreamer1.0-plugins-ugly \
-  gstreamer1.0-gl gstreamer1.0-v4l2
+  gstreamer1.0-gl
 ```
-*(Note: `gstreamer1.0-gl` and `gstreamer1.0-v4l2` provide hardware acceleration support for the Raspberry Pi).*
+*(Note: `gstreamer1.0-gl` supports GL presentation. Raspberry Pi V4L2 decoder elements come from the standard GStreamer plugin packages above, especially `gstreamer1.0-plugins-good` and `gstreamer1.0-plugins-bad`).*
 
 **Note on Display Power Management:**
 `wlr-randr` is required for turning the display on and off under Wayland. It is not always installed by default on Raspberry Pi OS and must be explicitly installed.

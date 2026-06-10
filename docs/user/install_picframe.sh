@@ -395,8 +395,9 @@ HW_PACKAGES=""
 
 if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "armv7l" ]; then
     echo "  -> Detected ARM architecture (likely Raspberry Pi)."
-    # Raspberry Pi specific hardware decoding (V4L2)
-    HW_PACKAGES="gstreamer1.0-gl gstreamer1.0-v4l2"
+    # Raspberry Pi V4L2 decoder elements are provided by the base
+    # gstreamer1.0-plugins-good/bad packages installed above.
+    HW_PACKAGES="gstreamer1.0-gl"
 else
     echo "  -> Detected x86/x86_64 architecture."
     if [ "$IS_VM" = true ]; then
