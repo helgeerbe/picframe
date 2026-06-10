@@ -1267,8 +1267,7 @@ class GstWorker:
         if not caps:
             return
 
-        struct = caps.get_structure(0)
-        if not struct.get_name().startswith("video/"):
+        if not self._caps_structure_name(caps).startswith("video/"):
             return
 
         self._last_video_caps = caps.to_string()
@@ -1343,8 +1342,7 @@ class GstWorker:
             caps = pad.get_current_caps() or pad.query_caps()
             if not caps:
                 return
-            struct = caps.get_structure(0)
-            if not struct.get_name().startswith("video/"):
+            if not self._caps_structure_name(caps).startswith("video/"):
                 return
         except Exception:
             return
@@ -1388,8 +1386,7 @@ class GstWorker:
             caps = pad.query_caps()
             
         if caps:
-            struct = caps.get_structure(0)
-            name = struct.get_name()
+            name = self._caps_structure_name(caps)
             logger.debug("Decoded pad added with caps: %s", caps.to_string())
             if name.startswith("video/"):
                 sink_pad = sink_pad_element.get_static_pad("sink")
@@ -1422,6 +1419,34 @@ class GstWorker:
                 WarningEvent(warning_type="software_fallback", decoder=factory.get_name())
             )
         return 0
+
+    @staticmethod
+    def _caps_structure_name(caps: Any) -> str:
+        try:
+            struct = caps.get_structure(0)
+        except Exception:
+            struct = None
+
+        if struct is not None:
+            get_name = getattr(struct, "get_name", None)
+            if callable(get_name):
+                try:
+                    return str(get_name())
+                except Exception:
+                    pass
+
+            name = getattr(struct, "name", None)
+            if isinstance(name, str):
+                return name
+
+            text = str(struct).strip()
+            if text and not text.startswith("<"):
+                return text.split(",", 1)[0].strip()
+
+        try:
+            return str(caps.to_string()).split(",", 1)[0].strip()
+        except Exception:
+            return ""
 
     def _handle_pause(self) -> None:
         if self.pipeline:

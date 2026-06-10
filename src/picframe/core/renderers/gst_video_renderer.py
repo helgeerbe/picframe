@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections import deque
 from multiprocessing.connection import Client, Connection
 from pathlib import Path
 
@@ -37,6 +38,8 @@ from picframe.core.renderers.ipc_protocol import (
 )
 
 logger = logging.getLogger(__name__)
+_WORKER_SOCKET_TIMEOUT_SECONDS = 20.0
+_WORKER_SOCKET_POLL_SECONDS = 0.1
 
 class GstVideoRenderer(IVideoPlayer):
     """
@@ -58,6 +61,8 @@ class GstVideoRenderer(IVideoPlayer):
         self._conn: Connection | None = None
         self._running = False
         self._listener_thread: threading.Thread | None = None
+        self._worker_log_thread: threading.Thread | None = None
+        self._worker_log_tail: deque[str] = deque(maxlen=20)
         
         self._start_worker()
 
@@ -71,18 +76,31 @@ class GstVideoRenderer(IVideoPlayer):
             self._worker_process = subprocess.Popen(
                 [sys.executable, str(worker_script), "--socket", self._socket_path],
                 env=env,
-                stdout=sys.stdout,
-                stderr=sys.stderr
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                bufsize=1,
             )
+            self._start_worker_log_reader()
             
-            # Wait for socket to be created
-            retries = 50
-            while retries > 0 and not os.path.exists(self._socket_path):
-                time.sleep(0.1)
-                retries -= 1
+            # Wait for the worker to finish importing GStreamer and create the
+            # IPC socket. This can be slow on small Pis immediately after boot.
+            deadline = time.monotonic() + _WORKER_SOCKET_TIMEOUT_SECONDS
+            while time.monotonic() < deadline and not os.path.exists(self._socket_path):
+                return_code = self._worker_process.poll()
+                if return_code is not None:
+                    raise RuntimeError(
+                        f"GStreamer worker exited before creating IPC socket "
+                        f"(exit code {return_code}).{self._worker_log_summary()}"
+                    )
+                time.sleep(_WORKER_SOCKET_POLL_SECONDS)
                 
             if not os.path.exists(self._socket_path):
-                raise RuntimeError("Worker failed to create IPC socket.")
+                raise RuntimeError(
+                    "Worker failed to create IPC socket within "
+                    f"{_WORKER_SOCKET_TIMEOUT_SECONDS:.0f} seconds."
+                    f"{self._worker_log_summary()}"
+                )
                 
             self._conn = Client(self._socket_path, family='AF_UNIX')
             self._running = True
@@ -95,6 +113,30 @@ class GstVideoRenderer(IVideoPlayer):
         except Exception as e:
             logger.error(f"Failed to start GStreamer worker: {e}")
             self._cleanup()
+
+    def _start_worker_log_reader(self) -> None:
+        """Forward worker stdout/stderr into the main Picframe logs."""
+        if self._worker_process is None or self._worker_process.stdout is None:
+            return
+        self._worker_log_thread = threading.Thread(
+            target=self._log_worker_output,
+            args=(self._worker_process.stdout,),
+            daemon=True,
+        )
+        self._worker_log_thread.start()
+
+    def _log_worker_output(self, stream: object) -> None:
+        for raw_line in stream:
+            line = str(raw_line).rstrip()
+            if not line:
+                continue
+            self._worker_log_tail.append(line)
+            logger.info("GStreamer worker: %s", line)
+
+    def _worker_log_summary(self) -> str:
+        if not self._worker_log_tail:
+            return ""
+        return " Recent worker output: " + " | ".join(self._worker_log_tail)
 
     def _worker_environment(self) -> dict[str, str]:
         """Return the environment used for the GStreamer worker process."""

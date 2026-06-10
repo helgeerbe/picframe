@@ -35,6 +35,24 @@ class FakeCaps:
         return self._caps_string
 
 
+class FakeCapsWithStructure(FakeCaps):
+    def __init__(self, caps_string: str, structure) -> None:
+        super().__init__(caps_string)
+        self._structure = structure
+
+    def get_structure(self, index: int):
+        assert index == 0
+        return self._structure
+
+
+class FakeStringStructure:
+    def __init__(self, text: str) -> None:
+        self._text = text
+
+    def __str__(self) -> str:
+        return self._text
+
+
 def h264_facts(
     width: int,
     height: int,
@@ -94,6 +112,36 @@ def h265_main_facts(
 
 def best_element(*available: str):
     return lambda names: next((name for name in names if name in available), None)
+
+
+def test_caps_structure_name_supports_gi_structure_variants() -> None:
+    assert GstWorker._caps_structure_name(
+        FakeCapsWithStructure(
+            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
+            SimpleNamespace(get_name=lambda: "video/x-raw"),
+        )
+    ) == "video/x-raw"
+
+    assert GstWorker._caps_structure_name(
+        FakeCapsWithStructure(
+            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
+            SimpleNamespace(name="video/x-raw(memory:DMABuf)"),
+        )
+    ) == "video/x-raw(memory:DMABuf)"
+
+    assert GstWorker._caps_structure_name(
+        FakeCapsWithStructure(
+            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
+            FakeStringStructure("video/x-raw(memory:DMABuf), format=(string)DMA_DRM"),
+        )
+    ) == "video/x-raw(memory:DMABuf)"
+
+    assert GstWorker._caps_structure_name(
+        FakeCapsWithStructure(
+            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
+            FakeStringStructure("<StructureWrapper object>"),
+        )
+    ) == "video/x-raw(memory:DMABuf)"
 
 
 def test_raspberry_pi_model_family_detection() -> None:
