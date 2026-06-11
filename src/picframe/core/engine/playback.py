@@ -2,6 +2,7 @@
 Playback Engine for orchestrating media playback and rendering.
 """
 import logging
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -85,6 +86,8 @@ class PlaybackEngine:
         )
         self._texture_swap_time = float("inf")
         self._video_stop_time = float("inf")
+        self._video_stop_timer: threading.Timer | None = None
+        self._video_stop_lock = threading.Lock()
         self._video_suspend_generation = 0
         
         # Circuit breaker state
@@ -945,10 +948,17 @@ class PlaybackEngine:
 
     def _schedule_video_stop_after_eos(self) -> None:
         """Keep the EOS video window visible briefly while pi3d redraws behind it."""
-        if self._video_stop_time != float("inf"):
-            return
-        self._video_stop_time = time.time() + VIDEO_EOS_REDRAW_SECONDS
-        self._next_transition_time = float("inf")
+        with self._video_stop_lock:
+            if self._video_stop_time != float("inf"):
+                return
+            self._video_stop_time = time.time() + VIDEO_EOS_REDRAW_SECONDS
+            self._next_transition_time = float("inf")
+            self._video_stop_timer = threading.Timer(
+                VIDEO_EOS_REDRAW_SECONDS,
+                self._complete_video_stop_after_eos,
+            )
+            self._video_stop_timer.daemon = True
+            self._video_stop_timer.start()
         self._logger.info(
             "Scheduled video window teardown after %.2fs EOS redraw window.",
             VIDEO_EOS_REDRAW_SECONDS,
@@ -960,18 +970,28 @@ class PlaybackEngine:
         self._complete_video_stop_after_eos()
 
     def _complete_video_stop_after_eos(self) -> None:
-        if self._video_stop_time == float("inf"):
-            return
-        self._video_stop_time = float("inf")
+        with self._video_stop_lock:
+            if self._video_stop_time == float("inf"):
+                return
+            self._video_stop_time = float("inf")
+            timer = self._video_stop_timer
+            self._video_stop_timer = None
+            if timer is not None and timer is not threading.current_thread():
+                timer.cancel()
+            self._next_transition_time = 0.0
         if self._video_player:
             self._video_player.stop()
-        self._next_transition_time = 0.0
         self._logger.info("Video EOS redraw window completed; advancing playback.")
 
     def _cancel_pending_video_stop(self, *, stop_video: bool) -> None:
-        if self._video_stop_time == float("inf"):
-            return
-        self._video_stop_time = float("inf")
+        with self._video_stop_lock:
+            if self._video_stop_time == float("inf"):
+                return
+            self._video_stop_time = float("inf")
+            timer = self._video_stop_timer
+            self._video_stop_timer = None
+            if timer is not None:
+                timer.cancel()
         if stop_video and self._video_player:
             self._video_player.stop()
 

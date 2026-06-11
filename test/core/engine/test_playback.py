@@ -75,6 +75,21 @@ def config() -> dict[str, Any]:
     }
 
 
+class FakeTimer:
+    def __init__(self, interval: float, callback) -> None:
+        self.interval = interval
+        self.callback = callback
+        self.daemon = False
+        self.started = False
+        self.cancelled = False
+
+    def start(self) -> None:
+        self.started = True
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+
 def test_engine_initialization(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
@@ -1024,6 +1039,7 @@ def test_engine_playback_completed_before_first_frame_advances(
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, Any],
+    monkeypatch,
 ) -> None:
     mock_video_player = MagicMock()
     engine = PlaybackEngine(
@@ -1047,6 +1063,11 @@ def test_engine_playback_completed_before_first_frame_advances(
     engine._pending_last_img = MagicMock()
     engine._pending_last_frame_path = "/cache/video.2.frame"
     engine._video_first_frame_deadline = 10.0
+    timers: list[FakeTimer] = []
+    monkeypatch.setattr(
+        "picframe.core.engine.playback.threading.Timer",
+        lambda interval, callback: timers.append(FakeTimer(interval, callback)) or timers[-1],
+    )
 
     from picframe.core.events.dto import PlaybackCompletedEvent, RenderCommand
 
@@ -1056,6 +1077,9 @@ def test_engine_playback_completed_before_first_frame_advances(
     assert engine._state == State.PLAYING
     assert engine._next_transition_time == float("inf")
     assert engine._video_stop_time == 100.0 + VIDEO_EOS_REDRAW_SECONDS
+    assert timers[0].interval == VIDEO_EOS_REDRAW_SECONDS
+    assert timers[0].started is True
+    assert timers[0].daemon is True
     assert not hasattr(engine, "_pending_video_media")
     assert not hasattr(engine, "_pending_last_img")
     assert not hasattr(engine, "_pending_last_frame_path")
@@ -1073,6 +1097,7 @@ def test_engine_playback_completed_before_first_frame_advances(
     mock_video_player.stop.assert_called_once_with()
     assert engine._video_stop_time == float("inf")
     assert engine._next_transition_time == 0.0
+    assert timers[0].cancelled is True
 
 
 def test_engine_playback_completed_clears_unexecuted_video_swap_before_next_video(
@@ -1081,6 +1106,7 @@ def test_engine_playback_completed_clears_unexecuted_video_swap_before_next_vide
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, Any],
+    monkeypatch,
 ) -> None:
     """A delayed swap from the previous video must not run during next video prep."""
     mock_video_player = MagicMock()
@@ -1119,6 +1145,11 @@ def test_engine_playback_completed_clears_unexecuted_video_swap_before_next_vide
     engine._pending_swap_last_img = MagicMock()
     engine._pending_swap_last_frame_path = "/cache/previous.2.frame"
     engine._texture_swap_time = 0.0
+    timers: list[FakeTimer] = []
+    monkeypatch.setattr(
+        "picframe.core.engine.playback.threading.Timer",
+        lambda interval, callback: timers.append(FakeTimer(interval, callback)) or timers[-1],
+    )
 
     engine._handle_playback_completed(PlaybackCompletedEvent())
 
@@ -1147,6 +1178,38 @@ def test_engine_playback_completed_clears_unexecuted_video_swap_before_next_vide
     assert background_swaps == []
     assert engine._state == State.PREPARING_VIDEO
     assert engine._pending_video_media == next_video
+
+
+def test_engine_eos_timer_callback_stops_video_and_unblocks_transition(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+    monkeypatch,
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    timers: list[FakeTimer] = []
+    monkeypatch.setattr(
+        "picframe.core.engine.playback.threading.Timer",
+        lambda interval, callback: timers.append(FakeTimer(interval, callback)) or timers[-1],
+    )
+
+    engine._schedule_video_stop_after_eos()
+    timers[0].callback()
+
+    mock_video_player.stop.assert_called_once_with()
+    assert engine._video_stop_time == float("inf")
+    assert engine._video_stop_timer is None
+    assert engine._next_transition_time == 0.0
 
 
 def test_engine_run_loop_waits_for_delayed_video_stop_before_next_media(
