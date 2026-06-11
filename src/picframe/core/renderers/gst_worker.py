@@ -704,9 +704,11 @@ class GstWorker:
             w,
             h,
             fullscreen=fullscreen_video,
+            widget=widget,
         )
         window.show_all()
-        self._pump_gtk_events()
+        self._present_gtk_video_window(window, fullscreen=fullscreen_video)
+        self._log_gtk_window_diagnostics(window, widget, x, y, w, h, fullscreen_video)
         self._hide_gtk_cursor(window, widget)
 
         if not self._gtk_window_matches_geometry(
@@ -778,28 +780,16 @@ class GstWorker:
 
     def _configure_gtk_video_window(self, window: Any) -> None:
         window.set_decorated(False)
-        window.set_resizable(False)
         window.set_app_paintable(True)
         for method_name, value in (
             ("set_skip_taskbar_hint", True),
             ("set_skip_pager_hint", True),
-            ("set_accept_focus", False),
-            ("set_focus_on_map", False),
         ):
             method = getattr(window, method_name, None)
             if not callable(method):
                 continue
             try:
                 method(value)
-            except Exception:
-                pass
-
-        Gdk = self._gdk
-        type_hint = getattr(getattr(Gdk, "WindowTypeHint", None), "SPLASHSCREEN", None)
-        set_type_hint = getattr(window, "set_type_hint", None)
-        if type_hint is not None and callable(set_type_hint):
-            try:
-                set_type_hint(type_hint)
             except Exception:
                 pass
 
@@ -812,13 +802,76 @@ class GstWorker:
         h: int,
         *,
         fullscreen: bool,
+        widget: Any | None = None,
     ) -> None:
         if fullscreen:
+            if w > 0 and h > 0:
+                window.set_default_size(w, h)
+                if widget is not None:
+                    try:
+                        widget.set_size_request(w, h)
+                    except Exception:
+                        pass
             window.fullscreen()
             return
         window.set_default_size(w, h)
         window.resize(w, h)
         window.move(x, y)
+
+    def _present_gtk_video_window(self, window: Any, *, fullscreen: bool) -> None:
+        try:
+            set_opacity = getattr(window, "set_opacity", None)
+            if callable(set_opacity):
+                set_opacity(1.0)
+            if fullscreen:
+                window.fullscreen()
+            present = getattr(window, "present", None)
+            if callable(present):
+                present()
+        except Exception as exc:
+            logger.debug("Could not present GTK video window: %s", exc)
+        self._pump_gtk_events()
+
+    def _log_gtk_window_diagnostics(
+        self,
+        window: Any,
+        widget: Any,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        fullscreen: bool,
+    ) -> None:
+        try:
+            actual_w, actual_h = window.get_size()
+        except Exception:
+            actual_w, actual_h = None, None
+        try:
+            actual_x, actual_y = window.get_position()
+        except Exception:
+            actual_x, actual_y = None, None
+        try:
+            allocation = widget.get_allocation()
+            widget_w = int(getattr(allocation, "width"))
+            widget_h = int(getattr(allocation, "height"))
+        except Exception:
+            widget_w, widget_h = None, None
+
+        logger.info(
+            "GTK video window mode=%s requested=%s,%s %sx%s actual=%s,%s %sx%s "
+            "widget=%sx%s",
+            "fullscreen" if fullscreen else "custom",
+            x,
+            y,
+            w,
+            h,
+            actual_x,
+            actual_y,
+            actual_w,
+            actual_h,
+            widget_w,
+            widget_h,
+        )
 
     def _hide_gtk_cursor(self, window: Any, widget: Any) -> None:
         Gdk = self._gdk

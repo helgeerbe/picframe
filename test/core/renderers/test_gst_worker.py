@@ -556,9 +556,29 @@ def test_gtk_window_geometry_uses_fullscreen_for_fullscreen_path() -> None:
         fullscreen=True,
     )
 
+    window.set_default_size.assert_called_once_with(2560, 1440)
     window.fullscreen.assert_called_once_with()
     window.move.assert_not_called()
     window.resize.assert_not_called()
+
+
+def test_gtk_window_geometry_sets_widget_size_for_fullscreen_path() -> None:
+    window = MagicMock()
+    widget = MagicMock()
+
+    GstWorker._apply_gtk_window_geometry(
+        window,
+        0,
+        0,
+        2560,
+        1440,
+        fullscreen=True,
+        widget=widget,
+    )
+
+    window.set_default_size.assert_called_once_with(2560, 1440)
+    widget.set_size_request.assert_called_once_with(2560, 1440)
+    window.fullscreen.assert_called_once_with()
 
 
 def test_gtk_window_geometry_uses_move_resize_for_custom_path() -> None:
@@ -577,6 +597,48 @@ def test_gtk_window_geometry_uses_move_resize_for_custom_path() -> None:
     window.resize.assert_called_once_with(300, 400)
     window.move.assert_called_once_with(10, 20)
     window.fullscreen.assert_not_called()
+
+
+def test_configure_gtk_video_window_matches_poc_hints() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    window = MagicMock()
+
+    worker._configure_gtk_video_window(window)
+
+    window.set_decorated.assert_called_once_with(False)
+    window.set_app_paintable.assert_called_once_with(True)
+    window.set_skip_taskbar_hint.assert_called_once_with(True)
+    window.set_skip_pager_hint.assert_called_once_with(True)
+    window.set_resizable.assert_not_called()
+    window.set_accept_focus.assert_not_called()
+    window.set_focus_on_map.assert_not_called()
+    window.set_type_hint.assert_not_called()
+
+
+def test_present_gtk_video_window_sets_opacity_fullscreen_and_presents() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._pump_gtk_events = MagicMock()
+    window = MagicMock()
+
+    worker._present_gtk_video_window(window, fullscreen=True)
+
+    window.set_opacity.assert_called_once_with(1.0)
+    window.fullscreen.assert_called_once_with()
+    window.present.assert_called_once_with()
+    worker._pump_gtk_events.assert_called_once_with()
+
+
+def test_present_gtk_video_window_keeps_custom_geometry_unfullscreened() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._pump_gtk_events = MagicMock()
+    window = MagicMock()
+
+    worker._present_gtk_video_window(window, fullscreen=False)
+
+    window.set_opacity.assert_called_once_with(1.0)
+    window.fullscreen.assert_not_called()
+    window.present.assert_called_once_with()
+    worker._pump_gtk_events.assert_called_once_with()
 
 
 def test_gtk_window_matches_geometry_accepts_fullscreen_before_size_settles() -> None:
