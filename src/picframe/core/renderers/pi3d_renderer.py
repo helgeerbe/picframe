@@ -32,6 +32,7 @@ from picframe.core.repositories.interfaces import IConfigRepository
 
 PI3D_LABWC_IDENTIFIER = "picframe-pi3d"
 VIDEO_WINDOW_TITLE = "picframe-video"
+RESUME_REDRAW_FRAMES = 5
 
 
 @dataclass(order=True)
@@ -471,6 +472,7 @@ class Pi3dRenderer(IRenderer):
                 return
             elif command.image_path == "RESUME":
                 self._animation_controller.resume()
+                self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
                 return
 
             # Delegate to ImageRenderer

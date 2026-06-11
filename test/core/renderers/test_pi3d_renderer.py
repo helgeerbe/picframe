@@ -10,6 +10,7 @@ import pytest
 from picframe.core.events.dto import OverlayConfig, RenderCommand, RendererConfigUpdatedEvent
 from picframe.core.renderers.pi3d_renderer import (
     PI3D_LABWC_IDENTIFIER,
+    RESUME_REDRAW_FRAMES,
     VIDEO_WINDOW_TITLE,
     Pi3dRenderer,
 )
@@ -289,6 +290,22 @@ def test_renderer_execute_video(
     mock_image_renderer.execute.assert_called_once_with(command)
     # The state should not change to TRANSITIONING if execute returns False
     assert renderer._animation_controller._state == RenderState.STATIC
+
+
+def test_renderer_resume_forces_redraw_frames(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._animation_controller.suspend()
+
+    renderer.execute(RenderCommand(image_path="RESUME"))
+
+    assert renderer._animation_controller._state == RenderState.STATIC
+    assert renderer._animation_controller._frames_to_render == RESUME_REDRAW_FRAMES
+    mock_image_renderer.execute.assert_not_called()
 
 
 def test_renderer_config_event_updates_image_renderer(
