@@ -701,17 +701,9 @@ class GstWorker:
         self._configure_gtk_transparent_host(window)
         host = self._create_gtk_fixed_video_host(Gtk, window, widget, x, y, w, h)
         window.add(host)
-        _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
-        self._apply_gtk_window_geometry(
-            window,
-            0,
-            0,
-            host_w,
-            host_h,
-            fullscreen=True,
-        )
+        self._apply_gtk_host_window_geometry(window, x, y, w, h)
         window.show_all()
-        self._present_gtk_video_window(window, fullscreen=fullscreen_video or fixed_host)
+        self._present_gtk_video_window(window, fullscreen=fullscreen_video and not fixed_host)
         self._log_gtk_window_diagnostics(
             window,
             widget,
@@ -920,6 +912,24 @@ class GstWorker:
         _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
         return (0, 0, host_w, host_h)
 
+    def _apply_gtk_host_window_geometry(
+        self,
+        window: Any,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+    ) -> None:
+        host_x, host_y, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
+        self._apply_gtk_window_geometry(
+            window,
+            host_x,
+            host_y,
+            host_w,
+            host_h,
+            fullscreen=False,
+        )
+
     @staticmethod
     def _apply_gtk_window_geometry(
         window: Any,
@@ -1018,7 +1028,7 @@ class GstWorker:
         )
         if fixed_host:
             logger.info(
-                "GTK custom video uses fullscreen transparent host with fixed child placement."
+                "GTK video uses monitor-sized transparent host with fixed child placement."
             )
 
     def _hide_gtk_cursor(self, window: Any, widget: Any) -> None:

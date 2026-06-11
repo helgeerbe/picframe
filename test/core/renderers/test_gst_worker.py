@@ -620,6 +620,25 @@ def test_gtk_window_geometry_sets_widget_size_for_custom_path() -> None:
     window.fullscreen.assert_not_called()
 
 
+def test_gtk_host_window_geometry_uses_monitor_sized_normal_window(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    monkeypatch.setattr(
+        worker,
+        "_gtk_primary_monitor_geometry",
+        lambda: (0, 0, 2560, 1440),
+    )
+    window = MagicMock()
+
+    worker._apply_gtk_host_window_geometry(window, 0, 0, 0, 0)
+
+    window.set_default_size.assert_called_once_with(2560, 1440)
+    window.resize.assert_called_once_with(2560, 1440)
+    window.move.assert_called_once_with(0, 0)
+    window.fullscreen.assert_not_called()
+
+
 def test_configure_gtk_video_window_matches_poc_hints() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     window = MagicMock()
