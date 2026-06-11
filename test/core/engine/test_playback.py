@@ -691,7 +691,10 @@ def test_engine_trigger_next_media_video(
     media_item.duration = 10.0
 
     with patch("os.path.exists", return_value=True), \
-         patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames", return_value=(MagicMock(), MagicMock())):
+         patch(
+             "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+             return_value=(MagicMock(), MagicMock()),
+         ) as mock_get_frames:
         engine._trigger_next_media()
     
     # Verify state changed to PREPARING_VIDEO
@@ -702,6 +705,7 @@ def test_engine_trigger_next_media_video(
     call_args = mock_renderer.execute.call_args[0][0]
     assert isinstance(call_args, RenderCommand)
     assert call_args.image_path == "/path/to/video.1.frame"
+    assert mock_get_frames.call_args.kwargs["extract_missing"] is False
 
 
 def test_engine_trigger_next_media_video_uses_cache_dir(

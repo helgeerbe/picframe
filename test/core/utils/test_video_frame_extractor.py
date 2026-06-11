@@ -113,6 +113,28 @@ def test_cached_frame_path_uses_managed_cache_and_media_freshness(tmp_path: Path
     assert changed_path != first_path
 
 
+def test_get_first_and_last_frames_cache_only_does_not_extract_missing_frames(
+    tmp_path: Path,
+) -> None:
+    extractor = VideoFrameExtractor(
+        str(tmp_path / "missing.mp4"),
+        1920,
+        1080,
+        cache_dir=str(tmp_path / "cache"),
+    )
+
+    with patch.object(VideoFrameExtractor, "extract_and_save_frames") as mock_extract:
+        frames = extractor.get_first_and_last_frames(
+            10.0,
+            1920,
+            1080,
+            extract_missing=False,
+        )
+
+    assert frames is None
+    mock_extract.assert_not_called()
+
+
 @patch("picframe.core.utils.video_frame_extractor.Image.open")
 def test_extract_and_save_frames_writes_managed_cache_paths(
     mock_image_open: MagicMock,

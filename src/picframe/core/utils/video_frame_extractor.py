@@ -429,19 +429,27 @@ class VideoFrameExtractor:
         return False
 
     def get_first_and_last_frames(
-        self, duration: float, width: int, height: int, sar: str = "1:1"
+        self,
+        duration: float,
+        width: int,
+        height: int,
+        sar: str = "1:1",
+        *,
+        extract_missing: bool = True,
     ) -> tuple[Image.Image, Image.Image] | None:
         """
         Retrieve the first and last frames of the video as Pillow Image objects.
         
         This method will attempt to load cached frames from disk (.1.frame and .2.frame).
-        If they do not exist, it will extract them, save them to disk, and then return them.
+        If they do not exist and extract_missing is true, it will extract them, save
+        them to disk, and then return them.
 
         Args:
             duration: The total duration of the video in seconds.
             width: The width of the video in pixels.
             height: The height of the video in pixels.
             sar: The Sample Aspect Ratio string (default: "1:1").
+            extract_missing: Whether missing cached frames should be generated.
 
         Returns:
             A tuple containing the first and last frames as Pillow Image objects,
@@ -450,16 +458,16 @@ class VideoFrameExtractor:
         first_path = self.get_frame_path("first")
         last_path = self.get_frame_path("last")
 
-        # Ensure frames exist
-        self.extract_and_save_frames(
-            self.video_path,
-            duration,
-            width,
-            height,
-            sar,
-            fit_display=self.fit_display,
-            cache_dir=self.cache_dir,
-        )
+        if extract_missing:
+            self.extract_and_save_frames(
+                self.video_path,
+                duration,
+                width,
+                height,
+                sar,
+                fit_display=self.fit_display,
+                cache_dir=self.cache_dir,
+            )
 
         if os.path.exists(first_path) and os.path.exists(last_path):
             try:
