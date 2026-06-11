@@ -695,33 +695,21 @@ class GstWorker:
             pass
 
         fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
-        fixed_host = not fullscreen_video
+        fixed_host = True
         window = Gtk.Window(title="picframe-video")
         self._configure_gtk_video_window(window)
-        if fixed_host:
-            self._configure_gtk_transparent_host(window)
-            host = self._create_gtk_fixed_video_host(Gtk, window, widget, x, y, w, h)
-            window.add(host)
-            _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
-            self._apply_gtk_window_geometry(
-                window,
-                0,
-                0,
-                host_w,
-                host_h,
-                fullscreen=True,
-            )
-        else:
-            window.add(widget)
-            self._apply_gtk_window_geometry(
-                window,
-                x,
-                y,
-                w,
-                h,
-                fullscreen=fullscreen_video,
-                widget=widget,
-            )
+        self._configure_gtk_transparent_host(window)
+        host = self._create_gtk_fixed_video_host(Gtk, window, widget, x, y, w, h)
+        window.add(host)
+        _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
+        self._apply_gtk_window_geometry(
+            window,
+            0,
+            0,
+            host_w,
+            host_h,
+            fullscreen=True,
+        )
         window.show_all()
         self._present_gtk_video_window(window, fullscreen=fullscreen_video or fixed_host)
         self._log_gtk_window_diagnostics(
@@ -875,6 +863,12 @@ class GstWorker:
             host.set_app_paintable(True)
         except Exception:
             pass
+        widget_x, widget_y, widget_w, widget_h = self._gtk_video_widget_geometry(
+            x,
+            y,
+            w,
+            h,
+        )
         self._set_gtk_transparent_background(host)
         for target in (host, widget):
             try:
@@ -883,16 +877,16 @@ class GstWorker:
             except Exception:
                 pass
         try:
-            widget.set_size_request(w, h)
+            widget.set_size_request(widget_w, widget_h)
         except Exception:
             pass
         try:
-            host.put(widget, x, y)
+            host.put(widget, widget_x, widget_y)
         except Exception:
             logger.warning(
                 "Could not place GTK video widget at %s,%s; custom geometry may fail.",
-                x,
-                y,
+                widget_x,
+                widget_y,
             )
         try:
             _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
@@ -912,7 +906,19 @@ class GstWorker:
         monitor_geometry = self._gtk_primary_monitor_geometry()
         if monitor_geometry is not None:
             return monitor_geometry
-        return (0, 0, max(w, x + w), max(h, y + h))
+        return (0, 0, max(1, w, x + w), max(1, h, y + h))
+
+    def _gtk_video_widget_geometry(
+        self,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+    ) -> tuple[int, int, int, int]:
+        if w > 0 and h > 0:
+            return (x, y, w, h)
+        _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
+        return (0, 0, host_w, host_h)
 
     @staticmethod
     def _apply_gtk_window_geometry(
@@ -1069,13 +1075,16 @@ class GstWorker:
         if fixed_host:
             if widget is None:
                 return False
+            expected_x, expected_y, expected_w, expected_h = (
+                self._gtk_video_widget_geometry(x, y, w, h)
+            )
             try:
                 allocation = widget.get_allocation()
                 widget_w = int(getattr(allocation, "width"))
                 widget_h = int(getattr(allocation, "height"))
             except Exception:
                 return False
-            if widget_w != int(w) or widget_h != int(h):
+            if widget_w != expected_w or widget_h != expected_h:
                 return False
             try:
                 widget_pos = widget.translate_coordinates(window, 0, 0)
@@ -1083,7 +1092,7 @@ class GstWorker:
                 widget_pos = None
             if widget_pos is None:
                 return True
-            return int(widget_pos[0]) == int(x) and int(widget_pos[1]) == int(y)
+            return int(widget_pos[0]) == expected_x and int(widget_pos[1]) == expected_y
 
         if fullscreen:
             return True
