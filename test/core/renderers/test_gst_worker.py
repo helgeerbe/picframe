@@ -662,6 +662,42 @@ def test_present_gtk_video_window_keeps_custom_geometry_unfullscreened() -> None
     worker._pump_gtk_events.assert_called_once_with()
 
 
+def test_create_gtk_fixed_video_host_places_widget_in_fullscreen_host(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    monkeypatch.setattr(
+        worker,
+        "_gtk_primary_monitor_geometry",
+        lambda: (0, 0, 2560, 1440),
+    )
+    worker._set_gtk_transparent_background = MagicMock()
+
+    class FakeGtk:
+        Fixed = MagicMock(return_value=MagicMock())
+
+    window = MagicMock()
+    widget = MagicMock()
+
+    host = worker._create_gtk_fixed_video_host(
+        FakeGtk,
+        window,
+        widget,
+        100,
+        80,
+        1800,
+        1000,
+    )
+
+    FakeGtk.Fixed.assert_called_once_with()
+    host.set_app_paintable.assert_called_once_with(True)
+    worker._set_gtk_transparent_background.assert_called_once_with(host)
+    widget.set_size_request.assert_called_once_with(1800, 1000)
+    host.put.assert_called_once_with(widget, 100, 80)
+    window.set_default_size.assert_called_once_with(2560, 1440)
+    host.set_size_request.assert_called_once_with(2560, 1440)
+
+
 def test_gtk_window_matches_geometry_accepts_fullscreen_before_size_settles() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker._pump_gtk_events = MagicMock()
@@ -706,6 +742,40 @@ def test_gtk_window_matches_geometry_requires_exact_custom_geometry() -> None:
         300,
         400,
         fullscreen=False,
+    )
+
+
+def test_gtk_window_matches_geometry_accepts_fixed_host_child_geometry() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._pump_gtk_events = MagicMock()
+    window = MagicMock()
+    widget = MagicMock()
+    allocation = SimpleNamespace(width=300, height=400)
+    widget.get_allocation.return_value = allocation
+    widget.translate_coordinates.return_value = (10, 20)
+
+    assert worker._gtk_window_matches_geometry(
+        window,
+        10,
+        20,
+        300,
+        400,
+        fullscreen=False,
+        widget=widget,
+        fixed_host=True,
+    )
+
+    widget.translate_coordinates.return_value = (0, 0)
+
+    assert not worker._gtk_window_matches_geometry(
+        window,
+        10,
+        20,
+        300,
+        400,
+        fullscreen=False,
+        widget=widget,
+        fixed_host=True,
     )
 
 

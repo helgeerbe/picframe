@@ -186,6 +186,7 @@ class GstWorker:
         self._gdk: Any | None = None
         self._gtk_available: bool | None = None
         self._gtk_window: Any = None
+        self._gtk_host: Any = None
         self._gtk_sink_widget: Any = None
         self._gtk_video_sink: Any = None
         self._gtk_pump_source_id: int | None = None
@@ -694,21 +695,45 @@ class GstWorker:
             pass
 
         fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
+        fixed_host = not fullscreen_video
         window = Gtk.Window(title="picframe-video")
         self._configure_gtk_video_window(window)
-        window.add(widget)
-        self._apply_gtk_window_geometry(
+        if fixed_host:
+            self._configure_gtk_transparent_host(window)
+            host = self._create_gtk_fixed_video_host(Gtk, window, widget, x, y, w, h)
+            window.add(host)
+            _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
+            self._apply_gtk_window_geometry(
+                window,
+                0,
+                0,
+                host_w,
+                host_h,
+                fullscreen=True,
+            )
+        else:
+            window.add(widget)
+            self._apply_gtk_window_geometry(
+                window,
+                x,
+                y,
+                w,
+                h,
+                fullscreen=fullscreen_video,
+                widget=widget,
+            )
+        window.show_all()
+        self._present_gtk_video_window(window, fullscreen=fullscreen_video or fixed_host)
+        self._log_gtk_window_diagnostics(
             window,
+            widget,
             x,
             y,
             w,
             h,
-            fullscreen=fullscreen_video,
-            widget=widget,
+            fullscreen_video,
+            fixed_host=fixed_host,
         )
-        window.show_all()
-        self._present_gtk_video_window(window, fullscreen=fullscreen_video)
-        self._log_gtk_window_diagnostics(window, widget, x, y, w, h, fullscreen_video)
         self._hide_gtk_cursor(window, widget)
 
         if not self._gtk_window_matches_geometry(
@@ -718,6 +743,8 @@ class GstWorker:
             w,
             h,
             fullscreen=fullscreen_video,
+            widget=widget,
+            fixed_host=fixed_host,
         ):
             logger.warning(
                 "GTK video window geometry did not match requested "
@@ -735,6 +762,7 @@ class GstWorker:
             return None
 
         self._gtk_window = window
+        self._gtk_host = host if fixed_host else None
         self._gtk_sink_widget = widget
         self._gtk_video_sink = video_sink
         self._start_gtk_pump()
@@ -793,6 +821,99 @@ class GstWorker:
             except Exception:
                 pass
 
+    def _configure_gtk_transparent_host(self, window: Any) -> None:
+        Gdk = self._gdk
+        Gtk = self._gtk
+        if Gdk is None or Gtk is None:
+            return
+        try:
+            screen = window.get_screen()
+            visual = screen.get_rgba_visual() if screen is not None else None
+            if visual is not None:
+                window.set_visual(visual)
+            else:
+                logger.warning(
+                    "GTK RGBA visual unavailable; custom video host may not be transparent."
+                )
+        except Exception as exc:
+            logger.debug("Could not configure GTK RGBA visual: %s", exc)
+
+        self._set_gtk_transparent_background(window)
+
+    def _set_gtk_transparent_background(self, widget: Any) -> None:
+        Gdk = self._gdk
+        Gtk = self._gtk
+        if Gdk is None or Gtk is None:
+            return
+        try:
+            rgba = Gdk.RGBA()
+            rgba.red = 0.0
+            rgba.green = 0.0
+            rgba.blue = 0.0
+            rgba.alpha = 0.0
+            override_background_color = getattr(
+                widget, "override_background_color", None
+            )
+            state_normal = getattr(getattr(Gtk, "StateFlags", None), "NORMAL", 0)
+            if callable(override_background_color):
+                override_background_color(state_normal, rgba)
+        except Exception as exc:
+            logger.debug("Could not configure GTK transparent background: %s", exc)
+
+    def _create_gtk_fixed_video_host(
+        self,
+        Gtk: Any,
+        window: Any,
+        widget: Any,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+    ) -> Any:
+        host = Gtk.Fixed()
+        try:
+            host.set_app_paintable(True)
+        except Exception:
+            pass
+        self._set_gtk_transparent_background(host)
+        for target in (host, widget):
+            try:
+                target.set_hexpand(True)
+                target.set_vexpand(True)
+            except Exception:
+                pass
+        try:
+            widget.set_size_request(w, h)
+        except Exception:
+            pass
+        try:
+            host.put(widget, x, y)
+        except Exception:
+            logger.warning(
+                "Could not place GTK video widget at %s,%s; custom geometry may fail.",
+                x,
+                y,
+            )
+        try:
+            _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
+            window.set_default_size(host_w, host_h)
+            host.set_size_request(host_w, host_h)
+        except Exception:
+            pass
+        return host
+
+    def _gtk_video_host_geometry(
+        self,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+    ) -> tuple[int, int, int, int]:
+        monitor_geometry = self._gtk_primary_monitor_geometry()
+        if monitor_geometry is not None:
+            return monitor_geometry
+        return (0, 0, max(w, x + w), max(h, y + h))
+
     @staticmethod
     def _apply_gtk_window_geometry(
         window: Any,
@@ -846,6 +967,8 @@ class GstWorker:
         w: int,
         h: int,
         fullscreen: bool,
+        *,
+        fixed_host: bool = False,
     ) -> None:
         try:
             actual_w, actual_h = window.get_size()
@@ -861,10 +984,18 @@ class GstWorker:
             widget_h = int(getattr(allocation, "height"))
         except Exception:
             widget_w, widget_h = None, None
+        try:
+            widget_pos = widget.translate_coordinates(window, 0, 0)
+            if widget_pos is None:
+                widget_x, widget_y = None, None
+            else:
+                widget_x, widget_y = int(widget_pos[0]), int(widget_pos[1])
+        except Exception:
+            widget_x, widget_y = None, None
 
         logger.info(
             "GTK video window mode=%s requested=%s,%s %sx%s actual=%s,%s %sx%s "
-            "widget=%sx%s",
+            "widget=%sx%s widget_at=%s,%s",
             "fullscreen" if fullscreen else "custom",
             x,
             y,
@@ -876,7 +1007,13 @@ class GstWorker:
             actual_h,
             widget_w,
             widget_h,
+            widget_x,
+            widget_y,
         )
+        if fixed_host:
+            logger.info(
+                "GTK custom video uses fullscreen transparent host with fixed child placement."
+            )
 
     def _hide_gtk_cursor(self, window: Any, widget: Any) -> None:
         Gdk = self._gdk
@@ -925,8 +1062,29 @@ class GstWorker:
         h: int,
         *,
         fullscreen: bool = False,
+        widget: Any | None = None,
+        fixed_host: bool = False,
     ) -> bool:
         self._pump_gtk_events()
+        if fixed_host:
+            if widget is None:
+                return False
+            try:
+                allocation = widget.get_allocation()
+                widget_w = int(getattr(allocation, "width"))
+                widget_h = int(getattr(allocation, "height"))
+            except Exception:
+                return False
+            if widget_w != int(w) or widget_h != int(h):
+                return False
+            try:
+                widget_pos = widget.translate_coordinates(window, 0, 0)
+            except Exception:
+                widget_pos = None
+            if widget_pos is None:
+                return True
+            return int(widget_pos[0]) == int(x) and int(widget_pos[1]) == int(y)
+
         if fullscreen:
             return True
 
