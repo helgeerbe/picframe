@@ -45,6 +45,7 @@ PIPELINE_GTK_PLAYBIN = "gtk_playbin"
 PIPELINE_SKIPPED = "skipped"
 DEFAULT_SOFTWARE_DECODE_LIMIT = "1280x720"
 UNSUPPORTED_MEDIA_CODE = "unsupported_media"
+GTK_VIDEO_DIAGNOSTIC_PLAYBACK_OPACITY = 0.5
 
 
 @dataclass(frozen=True)
@@ -977,7 +978,12 @@ class GstWorker:
         try:
             set_opacity = getattr(window, "set_opacity", None)
             if callable(set_opacity):
-                set_opacity(1.0)
+                set_opacity(GTK_VIDEO_DIAGNOSTIC_PLAYBACK_OPACITY)
+                logger.info(
+                    "Set GTK video window playback opacity to %.2f for #686 "
+                    "transparency diagnosis.",
+                    GTK_VIDEO_DIAGNOSTIC_PLAYBACK_OPACITY,
+                )
             if fullscreen:
                 window.fullscreen()
             present = getattr(window, "present", None)
