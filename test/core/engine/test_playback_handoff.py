@@ -115,7 +115,6 @@ def test_video_handoff_sequence(
     # 5. Video playback completed
     with patch("os.path.exists", return_value=True):
         engine._handle_playback_completed(PlaybackCompletedEvent())
-        engine._handle_pending_video_reveal_stop()
 
         resume_call = mock_renderer.execute.call_args_list[-1][0][0]
         assert isinstance(resume_call, RenderCommand)

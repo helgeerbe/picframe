@@ -13,15 +13,12 @@ from picframe.core.events.dto import (
     Command,
     CommandEvent,
     PlaybackCompletedEvent,
-    RENDER_PRELOAD_VIDEO_REVEAL,
-    RENDER_PROMOTE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
     State,
     StateEvent,
     SystemErrorEvent,
-    TransitionCompletedEvent,
     VideoPlaybackWarningEvent,
 )
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
@@ -100,7 +97,7 @@ def test_engine_initialization(
     mock_event_subscriber.subscribe.assert_any_call(StateEvent, engine._handle_state_event)
 
 
-def test_engine_playback_completed_schedules_render_loop_reveal_stop(
+def test_engine_playback_completed_stops_video_and_advances_immediately(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
@@ -128,13 +125,6 @@ def test_engine_playback_completed_schedules_render_loop_reveal_stop(
     )
 
     engine._handle_playback_completed(PlaybackCompletedEvent())
-
-    assert mock_renderer.execute.call_args_list == []
-    assert mock_video_player.stop.call_args_list == []
-    assert engine._pending_video_reveal_stop_path == ""
-    assert engine._next_transition_time == float("inf")
-
-    engine._handle_pending_video_reveal_stop()
 
     assert mock_renderer.execute.call_args_list[-1].args[0].image_path == "RESUME"
     mock_video_player.stop.assert_called_once_with()
@@ -1152,54 +1142,6 @@ def test_engine_software_fallback_warning_extends_first_frame_deadline(
     assert engine._state == State.PREPARING_VIDEO
 
 
-def test_engine_transition_completed_preloads_last_frame_before_video_play(
-    mock_event_publisher: MagicMock,
-    mock_event_subscriber: MagicMock,
-    mock_playlist_manager: MagicMock,
-    mock_renderer: MagicMock,
-    config: dict[str, Any],
-) -> None:
-    mock_video_player = MagicMock()
-    engine = PlaybackEngine(
-        mock_event_publisher,
-        mock_event_subscriber,
-        mock_playlist_manager,
-        mock_renderer,
-        config,
-        video_player=mock_video_player,
-    )
-    media_item = MediaItem(
-        id=1,
-        filepath="/path/to/video.mp4",
-        media_type=MediaType.VIDEO,
-        filename="video.mp4",
-        directory_id=1,
-        file_size=1024,
-        last_modified=1234567890.0,
-        duration=10.0,
-    )
-    last_img = MagicMock()
-    engine._state = State.PREPARING_VIDEO
-    engine._pending_video_media = media_item
-    engine._pending_last_img = last_img
-    engine._pending_last_frame_path = "/cache/video.2.frame"
-    mock_renderer.get_display_rect.return_value = (0, 0, 1920, 1080)
-
-    order: list[str] = []
-    mock_renderer.execute.side_effect = lambda _command: order.append("preload")
-    mock_video_player.play.side_effect = lambda *_args: order.append("play")
-
-    engine._handle_transition_completed(TransitionCompletedEvent())
-
-    assert order == ["preload", "play"]
-    preload_cmd = mock_renderer.execute.call_args.args[0]
-    assert isinstance(preload_cmd, RenderCommand)
-    assert preload_cmd.image_path == "/cache/video.2.frame"
-    assert preload_cmd.image_obj == last_img
-    assert preload_cmd.render_action == RENDER_PRELOAD_VIDEO_REVEAL
-    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 1920, 1080)
-
-
 def test_engine_playback_completed_before_first_frame_advances(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
@@ -1235,22 +1177,14 @@ def test_engine_playback_completed_before_first_frame_advances(
     engine._handle_playback_completed(PlaybackCompletedEvent())
 
     assert engine._state == State.PLAYING
-    assert engine._next_transition_time == float("inf")
-    assert engine._pending_video_reveal_stop_path == ""
+    assert engine._next_transition_time == 0.0
     assert not hasattr(engine, "_pending_video_media")
     assert not hasattr(engine, "_pending_last_img")
     assert not hasattr(engine, "_pending_last_frame_path")
     assert not hasattr(engine, "_video_first_frame_deadline")
-
-    engine._handle_pending_video_reveal_stop()
-
-    promote_cmd = mock_renderer.execute.call_args_list[-2].args[0]
-    resume_cmd = mock_renderer.execute.call_args_list[-1].args[0]
-    assert isinstance(promote_cmd, RenderCommand)
-    assert promote_cmd.render_action == RENDER_PROMOTE_VIDEO_REVEAL
-    assert isinstance(resume_cmd, RenderCommand)
-    assert resume_cmd.image_path == "RESUME"
-    mock_renderer.render_frame.assert_called_once_with()
+    render_cmd = mock_renderer.execute.call_args[0][0]
+    assert isinstance(render_cmd, RenderCommand)
+    assert render_cmd.image_path == "RESUME"
     mock_video_player.stop.assert_called_once_with()
 
 
@@ -1286,7 +1220,6 @@ def test_engine_playback_completed_does_not_run_hidden_video_texture_swap(
     engine._active_video_media = previous_video
 
     engine._handle_playback_completed(PlaybackCompletedEvent())
-    engine._handle_pending_video_reveal_stop()
 
     background_swaps = [
         call_args.args[0]
@@ -1299,7 +1232,7 @@ def test_engine_playback_completed_does_not_run_hidden_video_texture_swap(
     mock_video_player.stop.assert_called_once_with()
 
 
-def test_engine_playback_completed_promotes_preloaded_last_frame(
+def test_engine_playback_completed_resumes_without_last_frame_refresh(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
@@ -1331,24 +1264,11 @@ def test_engine_playback_completed_promotes_preloaded_last_frame(
 
     engine._handle_playback_completed(PlaybackCompletedEvent())
 
-    assert engine._pending_video_reveal_stop_path == "/cache/video.2.frame"
-    assert engine._next_transition_time == float("inf")
-    mock_video_player.stop.assert_not_called()
-
-    engine._handle_pending_video_reveal_stop()
-
-    assert len(mock_renderer.execute.call_args_list) == 2
-    promote_cmd = mock_renderer.execute.call_args_list[-2].args[0]
+    assert len(mock_renderer.execute.call_args_list) == 1
     resume_cmd = mock_renderer.execute.call_args_list[-1].args[0]
-    assert isinstance(promote_cmd, RenderCommand)
-    assert promote_cmd.image_path == "/cache/video.2.frame"
-    assert promote_cmd.render_action == RENDER_PROMOTE_VIDEO_REVEAL
     assert isinstance(resume_cmd, RenderCommand)
     assert resume_cmd.image_path == "RESUME"
     assert not hasattr(engine, "_active_video_media")
-    assert not hasattr(engine, "_active_video_last_frame_path")
-    assert engine._pending_video_reveal_stop_path is None
-    mock_renderer.render_frame.assert_called_once_with()
     mock_video_player.stop.assert_called_once_with()
     assert engine._next_transition_time == 0.0
 

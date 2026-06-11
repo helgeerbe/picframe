@@ -7,13 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from picframe.core.events.dto import (
-    OverlayConfig,
-    RENDER_PRELOAD_VIDEO_REVEAL,
-    RENDER_PROMOTE_VIDEO_REVEAL,
-    RenderCommand,
-    RendererConfigUpdatedEvent,
-)
+from picframe.core.events.dto import OverlayConfig, RenderCommand, RendererConfigUpdatedEvent
 from picframe.core.renderers.pi3d_renderer import (
     PI3D_LABWC_IDENTIFIER,
     RESUME_REDRAW_FRAMES,
@@ -311,49 +305,7 @@ def test_renderer_resume_forces_redraw_frames(
 
     assert renderer._animation_controller._state == RenderState.STATIC
     assert renderer._animation_controller._frames_to_render == RESUME_REDRAW_FRAMES
-    mock_image_renderer.clear_video_reveal_texture.assert_called_once_with()
     mock_image_renderer.execute.assert_not_called()
-
-
-def test_renderer_preloads_video_reveal_texture(
-    config: RendererConfig,
-    mock_pi3d: MagicMock,
-    mock_image_renderer: MagicMock,
-) -> None:
-    renderer = Pi3dRenderer(config)
-    renderer.start()
-    mock_image_renderer.preload_video_reveal_texture.return_value = True
-
-    command = RenderCommand(
-        image_path="/cache/video.2.frame",
-        render_action=RENDER_PRELOAD_VIDEO_REVEAL,
-    )
-    renderer.execute(command)
-
-    mock_image_renderer.preload_video_reveal_texture.assert_called_once_with(command)
-    mock_image_renderer.execute.assert_not_called()
-    assert renderer._animation_controller._state == RenderState.STATIC
-
-
-def test_renderer_promotes_video_reveal_texture(
-    config: RendererConfig,
-    mock_pi3d: MagicMock,
-    mock_image_renderer: MagicMock,
-) -> None:
-    renderer = Pi3dRenderer(config)
-    renderer.start()
-    mock_image_renderer.promote_video_reveal_texture.return_value = True
-
-    renderer.execute(
-        RenderCommand(
-            image_path="/cache/video.2.frame",
-            render_action=RENDER_PROMOTE_VIDEO_REVEAL,
-        )
-    )
-
-    mock_image_renderer.promote_video_reveal_texture.assert_called_once_with()
-    mock_image_renderer.execute.assert_not_called()
-    assert renderer._animation_controller._frames_to_render == RESUME_REDRAW_FRAMES
 
 
 def test_renderer_config_event_updates_image_renderer(

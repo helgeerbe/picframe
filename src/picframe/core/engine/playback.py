@@ -11,8 +11,6 @@ from picframe.core.events.dto import (
     Command,
     CommandEvent,
     CurrentMediaChangedEvent,
-    RENDER_PRELOAD_VIDEO_REVEAL,
-    RENDER_PROMOTE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
@@ -88,7 +86,6 @@ class PlaybackEngine:
         )
         self._video_frame_load_lock = threading.Lock()
         self._video_frame_load_in_progress = False
-        self._pending_video_reveal_stop_path: str | None = None
         
         # Circuit breaker state
         self._consecutive_errors = 0
@@ -181,12 +178,6 @@ class PlaybackEngine:
         self._clear_pending_video_preparation()
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
-        if hasattr(self, '_active_video_last_img'):
-            delattr(self, '_active_video_last_img')
-        if hasattr(self, '_active_video_last_frame_path'):
-            delattr(self, '_active_video_last_frame_path')
-        self._pending_video_reveal_stop_path = None
-        self._pending_video_reveal_stop_path = None
         if self._video_player:
             self._video_player.stop()
         # We don't call renderer.stop() here because it might be called
@@ -222,7 +213,6 @@ class PlaybackEngine:
                     continue
 
                 self._handle_video_first_frame_timeout(current_time)
-                self._handle_pending_video_reveal_stop()
                 if (
                     self._state == State.PLAYING
                     and current_time >= self._next_transition_time
@@ -641,11 +631,6 @@ class PlaybackEngine:
         self._clear_pending_video_preparation()
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
-        if hasattr(self, '_active_video_last_img'):
-            delattr(self, '_active_video_last_img')
-        if hasattr(self, '_active_video_last_frame_path'):
-            delattr(self, '_active_video_last_frame_path')
-        self._pending_video_reveal_stop_path = None
             
         display_item = self._as_display_item(self._playlist_manager.get_next())
         if display_item:
@@ -762,7 +747,6 @@ class PlaybackEngine:
         if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
             self._logger.info("First frame transition completed, starting video playback.")
             if self._video_player:
-                self._preload_pending_video_reveal_frame()
                 x, y, w, h = self._video_display_rect()
                 self._video_player.play(self._pending_video_media, x, y, w, h)
                 self._video_first_frame_deadline = time.time() + self._video_first_frame_timeout
@@ -867,25 +851,8 @@ class PlaybackEngine:
             self._logger.info("GStreamer first frame rendered, fading out pi3d.")
             media_item = self._pending_video_media
             self._active_video_media = media_item
-            self._active_video_last_frame_path = getattr(self, '_pending_last_frame_path', None)
             self._change_state(State.PLAYING)
             self._clear_pending_video_preparation()
-
-    def _preload_pending_video_reveal_frame(self) -> None:
-        """Preload the cached last frame before the GTK video window covers pi3d."""
-        last_img = getattr(self, '_pending_last_img', None)
-        last_frame_path = getattr(self, '_pending_last_frame_path', None)
-        if last_img is None or not last_frame_path:
-            return
-
-        self._logger.debug("Preloading video reveal texture: %s", last_frame_path)
-        self._renderer.execute(
-            RenderCommand(
-                image_path=last_frame_path,
-                image_obj=last_img,
-                render_action=RENDER_PRELOAD_VIDEO_REVEAL,
-            )
-        )
 
     def _handle_playback_completed(self, event: Any) -> None:
         """Handle the completion of video playback."""
@@ -897,50 +864,20 @@ class PlaybackEngine:
 
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
-        if hasattr(self, '_active_video_last_img'):
-            delattr(self, '_active_video_last_img')
-        last_frame_path = getattr(self, '_active_video_last_frame_path', "") or ""
-        if hasattr(self, '_active_video_last_frame_path'):
-            delattr(self, '_active_video_last_frame_path')
 
-        self._pending_video_reveal_stop_path = last_frame_path
-        self._next_transition_time = float("inf")
-
-    def _handle_pending_video_reveal_stop(self) -> None:
-        last_frame_path = self._pending_video_reveal_stop_path
-        if last_frame_path is None:
-            return
-        self._pending_video_reveal_stop_path = None
-
-        # Promote the already-preloaded last frame and draw it before closing video.
-        self._renderer.execute(
-            RenderCommand(
-                image_path=last_frame_path,
-                render_action=RENDER_PROMOTE_VIDEO_REVEAL,
-            )
-        )
-
-        # Wake up the renderer from SUSPENDED state if needed.
+        # Wake up the renderer from SUSPENDED state
         self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
-        if not self._renderer.render_frame():
-            self._logger.info("Renderer requested exit during video reveal stop.")
-            self._is_running = False
 
         if self._video_player:
             self._video_player.stop()
 
         self._next_transition_time = 0.0
-        self._logger.debug("Rendered video reveal frame and stopped video window.")
 
     def _trigger_prev_media(self) -> None:
         """Fetch the previous media item and send a render command."""
         self._clear_pending_video_preparation()
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
-        if hasattr(self, '_active_video_last_img'):
-            delattr(self, '_active_video_last_img')
-        if hasattr(self, '_active_video_last_frame_path'):
-            delattr(self, '_active_video_last_frame_path')
             
         display_item = self._as_display_item(self._playlist_manager.get_previous())
         if display_item:
