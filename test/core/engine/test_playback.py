@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from picframe.core.engine.playback import PlaybackEngine
+from picframe.core.engine.playback import PlaybackEngine, VIDEO_EOS_REDRAW_SECONDS
 from picframe.core.events.dto import (
     Command,
     CommandEvent,
@@ -1050,10 +1050,12 @@ def test_engine_playback_completed_before_first_frame_advances(
 
     from picframe.core.events.dto import PlaybackCompletedEvent, RenderCommand
 
-    engine._handle_playback_completed(PlaybackCompletedEvent())
+    with patch("picframe.core.engine.playback.time.time", return_value=100.0):
+        engine._handle_playback_completed(PlaybackCompletedEvent())
 
     assert engine._state == State.PLAYING
-    assert engine._next_transition_time == 0.0
+    assert engine._next_transition_time == float("inf")
+    assert engine._video_stop_time == 100.0 + VIDEO_EOS_REDRAW_SECONDS
     assert not hasattr(engine, "_pending_video_media")
     assert not hasattr(engine, "_pending_last_img")
     assert not hasattr(engine, "_pending_last_frame_path")
@@ -1061,7 +1063,16 @@ def test_engine_playback_completed_before_first_frame_advances(
     render_cmd = mock_renderer.execute.call_args[0][0]
     assert isinstance(render_cmd, RenderCommand)
     assert render_cmd.image_path == "RESUME"
+    mock_video_player.stop.assert_not_called()
+
+    engine._handle_video_stop_after_eos(100.0 + VIDEO_EOS_REDRAW_SECONDS - 0.01)
+    mock_video_player.stop.assert_not_called()
+
+    engine._handle_video_stop_after_eos(100.0 + VIDEO_EOS_REDRAW_SECONDS)
+
     mock_video_player.stop.assert_called_once_with()
+    assert engine._video_stop_time == float("inf")
+    assert engine._next_transition_time == 0.0
 
 
 def test_engine_playback_completed_clears_unexecuted_video_swap_before_next_video(
@@ -1136,6 +1147,120 @@ def test_engine_playback_completed_clears_unexecuted_video_swap_before_next_vide
     assert background_swaps == []
     assert engine._state == State.PREPARING_VIDEO
     assert engine._pending_video_media == next_video
+
+
+def test_engine_run_loop_waits_for_delayed_video_stop_before_next_media(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._is_running = True
+    engine._renderer_started = True
+    engine._state = State.PLAYING
+    engine._video_stop_time = 100.0
+    engine._next_transition_time = float("inf")
+    engine._trigger_next_media = MagicMock()
+    mock_renderer.render_frame.side_effect = [False]
+
+    with patch("picframe.core.engine.playback.time.time", return_value=99.9):
+        engine._run_loop()
+
+    mock_video_player.stop.assert_not_called()
+    engine._trigger_next_media.assert_not_called()
+
+
+def test_engine_run_loop_advances_after_delayed_video_stop(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._is_running = True
+    engine._renderer_started = True
+    engine._state = State.PLAYING
+    engine._video_stop_time = 100.0
+    engine._next_transition_time = float("inf")
+    engine._trigger_next_media = MagicMock()
+    mock_renderer.render_frame.side_effect = [False]
+
+    with patch("picframe.core.engine.playback.time.time", return_value=100.0):
+        engine._run_loop()
+
+    mock_video_player.stop.assert_called_once_with()
+    assert engine._video_stop_time == float("inf")
+    assert engine._next_transition_time == 0.0
+    engine._trigger_next_media.assert_called_once_with()
+
+
+def test_engine_trigger_next_media_cancels_pending_video_stop(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    mock_playlist_manager.get_next.return_value = None
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._video_stop_time = 100.0
+
+    engine._trigger_next_media()
+
+    mock_video_player.stop.assert_called_once_with()
+    assert engine._video_stop_time == float("inf")
+
+
+def test_engine_stop_cancels_pending_video_stop(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._video_stop_time = 100.0
+
+    engine.stop()
+
+    mock_video_player.stop.assert_called_once_with()
+    assert engine._video_stop_time == float("inf")
+    assert engine._state == State.IDLE
 
 
 def test_engine_video_first_frame_handoff_scopes_last_frame_swap(

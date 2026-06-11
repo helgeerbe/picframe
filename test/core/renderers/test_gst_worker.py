@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 from picframe.core.renderers import gst_worker
 from picframe.core.renderers.gst_worker import (
+    GTK_EOS_WINDOW_OPACITY,
     PIPELINE_COMPATIBLE,
     PIPELINE_GTK_PLAYBIN,
     PIPELINE_HARDWARE_DIRECT,
@@ -901,6 +902,63 @@ def test_hide_gtk_cursor_tolerates_missing_cursor_api() -> None:
     worker._gdk = SimpleNamespace()
 
     worker._hide_gtk_cursor(MagicMock(), MagicMock())
+
+
+def test_on_eos_pauses_pipeline_applies_gtk_opacity_and_sends_event() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker.conn = MagicMock()
+    worker.conn.closed = False
+    worker.pipeline = MagicMock()
+    worker._gtk_window = MagicMock()
+    worker._pump_gtk_events = MagicMock()
+    worker._last_sample_diagnostics = MagicMock(
+        return_value=(1.25, 0.04, "video/x-raw(memory:DMABuf)")
+    )
+
+    worker._on_eos(MagicMock(), MagicMock())
+
+    worker.pipeline.set_state.assert_called_once_with(gst_worker.Gst.State.PAUSED)
+    worker._gtk_window.set_opacity.assert_called_once_with(GTK_EOS_WINDOW_OPACITY)
+    worker._pump_gtk_events.assert_called_once_with()
+    sent_event = json.loads(worker.conn.send.call_args[0][0])
+    assert sent_event["type"] == "eos"
+    assert sent_event["last_sample_pts_seconds"] == 1.25
+    assert sent_event["last_sample_duration_seconds"] == 0.04
+    assert sent_event["last_sample_caps"] == "video/x-raw(memory:DMABuf)"
+
+
+def test_on_eos_without_gtk_window_still_pauses_and_sends_event() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker.conn = MagicMock()
+    worker.conn.closed = False
+    worker.pipeline = MagicMock()
+    worker._gtk_window = None
+    worker._pump_gtk_events = MagicMock()
+    worker._last_sample_diagnostics = MagicMock(return_value=(None, None, None))
+
+    worker._on_eos(MagicMock(), MagicMock())
+
+    worker.pipeline.set_state.assert_called_once_with(gst_worker.Gst.State.PAUSED)
+    worker._pump_gtk_events.assert_not_called()
+    sent_event = json.loads(worker.conn.send.call_args[0][0])
+    assert sent_event["type"] == "eos"
+
+
+def test_handle_stop_still_tears_down_pipeline_and_gtk_window() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    pipeline = MagicMock()
+    bus = MagicMock()
+    worker.pipeline = pipeline
+    worker.bus = bus
+    worker._destroy_gtk_video_window = MagicMock()
+
+    worker._handle_stop()
+
+    pipeline.set_state.assert_called_once_with(gst_worker.Gst.State.NULL)
+    bus.remove_signal_watch.assert_called_once_with()
+    assert worker.pipeline is None
+    assert worker.bus is None
+    worker._destroy_gtk_video_window.assert_called_once_with()
 
 
 class FakePipeline:

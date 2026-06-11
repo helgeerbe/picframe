@@ -45,6 +45,7 @@ PIPELINE_GTK_PLAYBIN = "gtk_playbin"
 PIPELINE_SKIPPED = "skipped"
 DEFAULT_SOFTWARE_DECODE_LIMIT = "1280x720"
 UNSUPPORTED_MEDIA_CODE = "unsupported_media"
+GTK_EOS_WINDOW_OPACITY = 0.99
 
 
 @dataclass(frozen=True)
@@ -2175,8 +2176,30 @@ class GstWorker:
         )
         return pts_seconds, duration_seconds, caps_text
 
+    def _prepare_eos_handoff(self) -> None:
+        if self.pipeline is not None:
+            try:
+                self.pipeline.set_state(Gst.State.PAUSED)
+            except Exception as exc:
+                logger.debug("Could not pause pipeline for EOS handoff: %s", exc)
+
+        if self._gtk_window is None:
+            return
+        try:
+            set_opacity = getattr(self._gtk_window, "set_opacity", None)
+            if callable(set_opacity):
+                set_opacity(GTK_EOS_WINDOW_OPACITY)
+                logger.info(
+                    "Set GTK video window opacity to %.2f for EOS handoff.",
+                    GTK_EOS_WINDOW_OPACITY,
+                )
+        except Exception as exc:
+            logger.debug("Could not set GTK video window opacity for EOS: %s", exc)
+        self._pump_gtk_events()
+
     def _on_eos(self, bus: Any, msg: Any) -> None:
         pts_seconds, duration_seconds, caps_text = self._last_sample_diagnostics()
+        self._prepare_eos_handoff()
         self._send_event(
             EosEvent(
                 last_sample_pts_seconds=pts_seconds,

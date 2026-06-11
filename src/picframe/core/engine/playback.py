@@ -25,6 +25,9 @@ from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.renderer_assets import format_renderer_asset_issues
 
 
+VIDEO_EOS_REDRAW_SECONDS = 0.25
+
+
 class PlaybackEngine:
     """
     Core state machine for media playback.
@@ -81,6 +84,7 @@ class PlaybackEngine:
             config.get("video_software_fallback_first_frame_timeout", 8.0)
         )
         self._texture_swap_time = float("inf")
+        self._video_stop_time = float("inf")
         self._video_suspend_generation = 0
         
         # Circuit breaker state
@@ -173,6 +177,7 @@ class PlaybackEngine:
         self._is_running = False
         self._clear_pending_video_preparation()
         self._clear_pending_video_swap()
+        self._cancel_pending_video_stop(stop_video=True)
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
         # We don't call renderer.stop() here because it might be called
@@ -207,6 +212,7 @@ class PlaybackEngine:
                     continue
 
                 self._handle_video_first_frame_timeout(current_time)
+                self._handle_video_stop_after_eos(current_time)
                 if (
                     self._state == State.PLAYING
                     and current_time >= self._next_transition_time
@@ -627,6 +633,7 @@ class PlaybackEngine:
             self._renderer_retry_requested = True
             return
 
+        self._cancel_pending_video_stop(stop_video=True)
         self._clear_pending_video_preparation()
         self._clear_pending_video_swap()
         if hasattr(self, '_active_video_media'):
@@ -848,7 +855,7 @@ class PlaybackEngine:
 
     def _handle_playback_completed(self, event: Any) -> None:
         """Handle the completion of video playback."""
-        self._logger.info("Video playback completed, scheduling transition to next media.")
+        self._logger.info("Video playback completed, preparing pi3d reveal.")
         if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
             self._logger.warning("Video playback completed before first-frame handoff.")
             self._clear_pending_video_preparation()
@@ -860,18 +867,15 @@ class PlaybackEngine:
 
         # Wake up the renderer from SUSPENDED state
         self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
-        
-        # Explicitly stop the video player to destroy the GStreamer window.
-        # This reveals the pi3d window underneath, which is currently displaying the last frame.
+
         if self._video_player:
-            self._video_player.stop()
-            
-        # Instead of calling _trigger_next_media directly (which might be from a different thread),
-        # we set the transition time to 0 so the main loop picks it up immediately.
-        self._next_transition_time = 0.0
+            self._schedule_video_stop_after_eos()
+        else:
+            self._next_transition_time = 0.0
 
     def _trigger_prev_media(self) -> None:
         """Fetch the previous media item and send a render command."""
+        self._cancel_pending_video_stop(stop_video=True)
         self._clear_pending_video_preparation()
         self._clear_pending_video_swap()
         if hasattr(self, '_active_video_media'):
@@ -938,6 +942,38 @@ class PlaybackEngine:
         self._texture_swap_time = float('inf')
         if invalidate_suspend:
             self._video_suspend_generation += 1
+
+    def _schedule_video_stop_after_eos(self) -> None:
+        """Keep the EOS video window visible briefly while pi3d redraws behind it."""
+        if self._video_stop_time != float("inf"):
+            return
+        self._video_stop_time = time.time() + VIDEO_EOS_REDRAW_SECONDS
+        self._next_transition_time = float("inf")
+        self._logger.info(
+            "Scheduled video window teardown after %.2fs EOS redraw window.",
+            VIDEO_EOS_REDRAW_SECONDS,
+        )
+
+    def _handle_video_stop_after_eos(self, current_time: float) -> None:
+        if current_time < self._video_stop_time:
+            return
+        self._complete_video_stop_after_eos()
+
+    def _complete_video_stop_after_eos(self) -> None:
+        if self._video_stop_time == float("inf"):
+            return
+        self._video_stop_time = float("inf")
+        if self._video_player:
+            self._video_player.stop()
+        self._next_transition_time = 0.0
+        self._logger.info("Video EOS redraw window completed; advancing playback.")
+
+    def _cancel_pending_video_stop(self, *, stop_video: bool) -> None:
+        if self._video_stop_time == float("inf"):
+            return
+        self._video_stop_time = float("inf")
+        if stop_video and self._video_player:
+            self._video_player.stop()
 
     @staticmethod
     def _same_media_item(left: Any, right: Any) -> bool:
