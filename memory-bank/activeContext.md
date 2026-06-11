@@ -31,6 +31,7 @@ GTK-backed `gtkwaylandsink` path plus tail-decoded final-frame caching.
 - Recent video hardening treats failed `ffprobe`, invalid probe JSON, or no video stream as unplayable during indexing; stale video cache rows with incomplete metadata are revalidated and marked inactive if extraction fails. GStreamer worker startup now preflights discoverability before sink creation and avoids requesting fullscreen when a render rectangle is supplied.
 - Raspberry Pi 4/labwc video validation now shows GStreamer exposes `v4l2h264dec` and `v4l2slh265dec` when `GST_V4L2_ENABLE_PROBE=1` is set before worker startup. H.264 1080p and HEVC Main 8-bit 4K playback are validated with DMABuf; HEVC Main10/HDR MOV and MOV/QuickTime 60 fps remain guarded.
 - Raspberry Pi 4/labwc PoC validation showed GTK3 + `gtkwaylandsink` removes the video-to-pi3d EOS flicker without opacity tricks. Production now prefers that path when a borderless GTK window can exactly cover `viewer.display_x/y/w/h`, and falls back to `waylandsink` render rectangles otherwise.
+- The GTK video path should hide its own cursor. Fullscreen playback should use a fullscreen GTK window; custom non-fullscreen geometry should use labwc-kiosk because Cage is fullscreen-kiosk oriented.
 - Video transition caches now use the first decoded frame and a tail-decoded final EOS frame, with fixed duration-offset sampling only as the final fallback.
 
 ## Immediate Next Steps
@@ -49,6 +50,7 @@ GTK-backed `gtkwaylandsink` path plus tail-decoded final-frame caching.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.
 - Continue using GitHub Issues/project board as the authoritative task state.
+- Keep code-change workflow ticketed: create/use a GitHub issue before code changes, include the issue number in every commit message, and reference the implementing commit hash when closing the issue.
 
 ## Active Risks / Watch Items
 - Test reliability is environment-sensitive because display/media dependencies and Python version may differ from the target.

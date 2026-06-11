@@ -100,7 +100,10 @@ On Raspberry Pi OS Lite the default service display mode is `wayland-kiosk`,
 which starts Picframe inside the lightweight `cage` Wayland compositor instead
 of requiring a full desktop environment. The installer also installs `labwc`;
 if it behaves better on the target Pi, use `--display-mode labwc-kiosk`
-instead. The installer enables `seatd` for kiosk compositor modes.
+instead. The installer enables `seatd` for kiosk compositor modes. Cage is
+fullscreen-kiosk oriented; use `labwc-kiosk` for custom non-fullscreen
+`viewer.display_x`, `viewer.display_y`, `viewer.display_w`, and
+`viewer.display_h` layouts.
 
 ```bash
 sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
@@ -449,6 +452,13 @@ the configured pi3d display rectangle (`viewer.display_x`, `viewer.display_y`,
 same pixels as image rendering. If GTK, `gtkwaylandsink`, or exact window
 geometry is unavailable, Picframe falls back to the existing `waylandsink`
 render-rectangle path.
+
+When the display rectangle is effectively fullscreen, Picframe makes the GTK
+video window fullscreen as well; this is the preferred path for both Cage and
+labwc. For custom non-fullscreen geometry, the installer-provisioned
+`labwc-kiosk` mode uses a Picframe-owned labwc configuration under
+`~/.picframe/labwc` to suppress server-side decorations on the video window.
+Picframe also hides the mouse cursor on the GTK video surface during playback.
 
 Video transition frames are generated during indexing/cache work, not at EOS
 runtime. The first transition frame is the first decoded video frame. The final

@@ -59,10 +59,14 @@ rectangle (`viewer.display_x/y/w/h`).
 
 This path keeps video playback GPU-friendly: it does not add GStreamer `alpha`,
 `videoconvert`, or `videoscale` elements just for handoff. The GTK window is
-created and pumped inside the out-of-process GStreamer worker, and EOS still
-flows back through IPC to the playback engine. If GTK3, `gtkwaylandsink`, or
-geometry confirmation is unavailable, the worker falls back to the prior
-`waylandsink` render-rectangle path.
+created and pumped inside the out-of-process GStreamer worker, hides its own
+cursor, and EOS still flows back through IPC to the playback engine. If the
+rectangle is effectively fullscreen, the worker requests a fullscreen GTK
+window. Custom non-fullscreen rectangles are labwc-oriented because Cage is a
+fullscreen kiosk compositor; the installer provisions a Picframe-owned labwc
+config to disable server decorations for the GTK video window. If GTK3,
+`gtkwaylandsink`, or geometry confirmation is unavailable, the worker falls
+back to the prior `waylandsink` render-rectangle path.
 
 Transition-frame caching is also aligned with EOS handoff. The first cached
 frame is extracted from the first decoded video frame. The final cached frame

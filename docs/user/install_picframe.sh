@@ -115,6 +115,7 @@ configure_systemd_service() {
     local exec_start
     local cage_path=""
     local labwc_path=""
+    local labwc_config_dir=""
 
     case "$DISPLAY_MODE" in
         wayland-kiosk)
@@ -129,7 +130,9 @@ configure_systemd_service() {
             if [ -z "$labwc_path" ]; then
                 die "labwc is required for --display-mode labwc-kiosk"
             fi
-            exec_start="$labwc_path --session \"$VENV_DIR/bin/picframe run\""
+            labwc_config_dir="$ACTUAL_HOME/.picframe/labwc"
+            configure_labwc_kiosk_config "$labwc_config_dir"
+            exec_start="$labwc_path -C $labwc_config_dir --session \"$VENV_DIR/bin/picframe run\""
             ;;
         existing-wayland)
             exec_start="$VENV_DIR/bin/picframe run"
@@ -169,6 +172,28 @@ EOF
     if [ "$DISPLAY_MODE" = "wayland-kiosk" ] || [ "$DISPLAY_MODE" = "labwc-kiosk" ]; then
         systemctl enable --now seatd.service >/dev/null 2>&1 || true
     fi
+}
+
+configure_labwc_kiosk_config() {
+    local labwc_config_dir="$1"
+    local labwc_config_tmp
+
+    install -d -o "$ACTUAL_USER" -g "$ACTUAL_GROUP" -m 0755 "$labwc_config_dir"
+    labwc_config_tmp=$(mktemp)
+    cat > "$labwc_config_tmp" <<'EOF'
+<?xml version="1.0"?>
+<labwc_config>
+  <windowRules>
+    <windowRule title="picframe-video"
+                serverDecoration="no"
+                skipTaskbar="yes"
+                skipWindowSwitcher="yes"
+                fixedPosition="yes" />
+  </windowRules>
+</labwc_config>
+EOF
+    install -o "$ACTUAL_USER" -g "$ACTUAL_GROUP" -m 0644 "$labwc_config_tmp" "$labwc_config_dir/rc.xml"
+    rm -f "$labwc_config_tmp"
 }
 
 while [ "$#" -gt 0 ]; do

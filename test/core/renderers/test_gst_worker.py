@@ -499,7 +499,7 @@ def test_gtk_playbin_attempt_requires_wayland_hardware_and_valid_geometry(
         force_software_decoders=False,
         pipeline_variant=PIPELINE_HARDWARE_DIRECT,
     )
-    assert not worker._should_attempt_gtk_playbin(
+    assert worker._should_attempt_gtk_playbin(
         "waylandsink",
         0,
         0,
@@ -526,6 +526,101 @@ def test_gtk_playbin_attempt_requires_wayland_hardware_and_valid_geometry(
         force_software_decoders=True,
         pipeline_variant=PIPELINE_HARDWARE_DIRECT,
     )
+
+
+def test_gtk_geometry_is_fullscreen_for_origin_unset_or_monitor_size(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    monkeypatch.setattr(
+        worker,
+        "_gtk_primary_monitor_geometry",
+        lambda: (0, 0, 2560, 1440),
+    )
+
+    assert worker._gtk_geometry_is_fullscreen(0, 0, 0, 0)
+    assert worker._gtk_geometry_is_fullscreen(0, 0, 2560, 1440)
+    assert not worker._gtk_geometry_is_fullscreen(0, 0, 300, 400)
+    assert not worker._gtk_geometry_is_fullscreen(10, 0, 2560, 1440)
+
+
+def test_gtk_window_geometry_uses_fullscreen_for_fullscreen_path() -> None:
+    window = MagicMock()
+
+    GstWorker._apply_gtk_window_geometry(
+        window,
+        0,
+        0,
+        2560,
+        1440,
+        fullscreen=True,
+    )
+
+    window.fullscreen.assert_called_once_with()
+    window.move.assert_not_called()
+    window.resize.assert_not_called()
+
+
+def test_gtk_window_geometry_uses_move_resize_for_custom_path() -> None:
+    window = MagicMock()
+
+    GstWorker._apply_gtk_window_geometry(
+        window,
+        10,
+        20,
+        300,
+        400,
+        fullscreen=False,
+    )
+
+    window.set_default_size.assert_called_once_with(300, 400)
+    window.resize.assert_called_once_with(300, 400)
+    window.move.assert_called_once_with(10, 20)
+    window.fullscreen.assert_not_called()
+
+
+def test_hide_gtk_cursor_applies_blank_cursor_to_widget_and_window() -> None:
+    class FakeCursorType:
+        BLANK_CURSOR = "blank"
+
+    class FakeCursor:
+        @staticmethod
+        def new_for_display(display, cursor_type):
+            return ("cursor", display, cursor_type)
+
+    class FakeDisplay:
+        @staticmethod
+        def get_default():
+            return "default-display"
+
+    class FakeGdk:
+        Cursor = FakeCursor
+        CursorType = FakeCursorType
+        Display = FakeDisplay
+
+    widget_gdk_window = MagicMock()
+    window_gdk_window = MagicMock()
+    widget = MagicMock()
+    window = MagicMock()
+    widget.get_display.return_value = "widget-display"
+    widget.get_window.return_value = widget_gdk_window
+    window.get_window.return_value = window_gdk_window
+
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._gdk = FakeGdk
+
+    worker._hide_gtk_cursor(window, widget)
+
+    expected_cursor = ("cursor", "widget-display", "blank")
+    widget_gdk_window.set_cursor.assert_called_once_with(expected_cursor)
+    window_gdk_window.set_cursor.assert_called_once_with(expected_cursor)
+
+
+def test_hide_gtk_cursor_tolerates_missing_cursor_api() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._gdk = SimpleNamespace()
+
+    worker._hide_gtk_cursor(MagicMock(), MagicMock())
 
 
 class FakePipeline:

@@ -5,6 +5,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 ## Durable Decisions
 - Use the existing repository with long-lived modernization branch `v2-dev`.
 - Use GitHub Issues and the GitHub Project board as the authoritative task and progress source.
+- Every code change must have a GitHub ticket; every commit message for code changes must include the ticket number; closing a code-change ticket must reference the implementing commit hash.
 - Build Picframe 2.0 around Clean Architecture / Hexagonal boundaries.
 - Use a strict Event-Driven Architecture with immutable DTOs and a thread-safe PriorityQueue event bus.
 - Keep event publishing and subscription as separate interfaces.
@@ -24,6 +25,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Enforce a software decode ceiling with graceful skip/error events for unsupported video.
 - Use the First/Last Frame Sandwich pattern for seamless image/video handoff.
 - On Wayland, prefer GTK-backed `gtkwaylandsink` playback when a borderless GTK window can exactly match the configured pi3d display rectangle; otherwise fall back to the existing `waylandsink` render-rectangle path.
+- GTK-backed video playback hides the cursor on the video surface. Fullscreen rectangles use fullscreen GTK windows; custom non-fullscreen rectangles are labwc-oriented and rely on Picframe-owned labwc config to suppress server decorations.
 - Cache the final video transition frame by seeking near EOS and decoding a short tail window to the actual final decoded frame; keep fixed duration-offset sampling only as fallback.
 - Enable `GST_V4L2_ENABLE_PROBE=1` for the GStreamer worker on Raspberry Pi/Compute Module hardware so V4L2 hardware decoder elements are discoverable before Gst initializes.
 - Treat VLC as a diagnostic reference only: VLC's FFmpeg DRM/V4L2-request plus `wl_dmabuf` success does not relax Picframe's GStreamer guards until an equivalent GStreamer path is validated. HEVC Main 8-bit 60 fps support is path-specific: validated MKV may use hardware playbin, while MOV/QuickTime 60 fps remains guarded.

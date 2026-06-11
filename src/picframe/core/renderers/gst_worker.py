@@ -183,6 +183,7 @@ class GstWorker:
         self._current_decision: str | None = None
         self._hardware_model = self._read_hardware_model()
         self._gtk: Any | None = None
+        self._gdk: Any | None = None
         self._gtk_available: bool | None = None
         self._gtk_window: Any = None
         self._gtk_sink_widget: Any = None
@@ -595,7 +596,7 @@ class GstWorker:
             return False
         if pipeline_variant not in {PIPELINE_HARDWARE_DIRECT, PIPELINE_HARDWARE_PLAYBIN}:
             return False
-        if w <= 0 or h <= 0:
+        if (w <= 0 or h <= 0) and (x != 0 or y != 0):
             return False
         return find_best_element(["gtkwaylandsink"]) == "gtkwaylandsink"
 
@@ -606,7 +607,8 @@ class GstWorker:
             return self._gtk
         try:
             gi.require_version("Gtk", "3.0")
-            from gi.repository import Gtk
+            gi.require_version("Gdk", "3.0")
+            from gi.repository import Gdk, Gtk
 
             if hasattr(Gtk, "init_check"):
                 init_result = Gtk.init_check([])
@@ -624,6 +626,7 @@ class GstWorker:
             self._gtk_available = False
             return None
         self._gtk = Gtk
+        self._gdk = Gdk
         self._gtk_available = True
         return self._gtk
 
@@ -690,18 +693,30 @@ class GstWorker:
         except Exception:
             pass
 
+        fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
         window = Gtk.Window(title="picframe-video")
-        window.set_decorated(False)
-        window.set_resizable(False)
-        window.set_app_paintable(True)
+        self._configure_gtk_video_window(window)
         window.add(widget)
-        window.set_default_size(w, h)
-        window.resize(w, h)
-        window.move(x, y)
+        self._apply_gtk_window_geometry(
+            window,
+            x,
+            y,
+            w,
+            h,
+            fullscreen=fullscreen_video,
+        )
         window.show_all()
         self._pump_gtk_events()
+        self._hide_gtk_cursor(window, widget)
 
-        if not self._gtk_window_matches_geometry(window, x, y, w, h):
+        if not self._gtk_window_matches_geometry(
+            window,
+            x,
+            y,
+            w,
+            h,
+            fullscreen=fullscreen_video,
+        ):
             logger.warning(
                 "GTK video window geometry did not match requested "
                 "%s,%s %sx%s.",
@@ -724,6 +739,125 @@ class GstWorker:
         logger.info("GTK video window geometry confirmed at %s,%s %sx%s.", x, y, w, h)
         return playbin
 
+    def _gtk_geometry_is_fullscreen(self, x: int, y: int, w: int, h: int) -> bool:
+        if x != 0 or y != 0:
+            return False
+        if w <= 0 or h <= 0:
+            return True
+
+        monitor_geometry = self._gtk_primary_monitor_geometry()
+        if monitor_geometry is None:
+            return False
+        monitor_x, monitor_y, monitor_w, monitor_h = monitor_geometry
+        return monitor_x == 0 and monitor_y == 0 and monitor_w == w and monitor_h == h
+
+    def _gtk_primary_monitor_geometry(self) -> tuple[int, int, int, int] | None:
+        Gdk = self._gdk
+        if Gdk is None:
+            return None
+        try:
+            display = Gdk.Display.get_default()
+            if display is None:
+                return None
+            monitor = None
+            if hasattr(display, "get_primary_monitor"):
+                monitor = display.get_primary_monitor()
+            if monitor is None and hasattr(display, "get_monitor"):
+                monitor = display.get_monitor(0)
+            if monitor is None:
+                return None
+            geometry = monitor.get_geometry()
+            return (
+                int(getattr(geometry, "x", 0)),
+                int(getattr(geometry, "y", 0)),
+                int(getattr(geometry, "width")),
+                int(getattr(geometry, "height")),
+            )
+        except Exception:
+            return None
+
+    def _configure_gtk_video_window(self, window: Any) -> None:
+        window.set_decorated(False)
+        window.set_resizable(False)
+        window.set_app_paintable(True)
+        for method_name, value in (
+            ("set_skip_taskbar_hint", True),
+            ("set_skip_pager_hint", True),
+            ("set_accept_focus", False),
+            ("set_focus_on_map", False),
+        ):
+            method = getattr(window, method_name, None)
+            if not callable(method):
+                continue
+            try:
+                method(value)
+            except Exception:
+                pass
+
+        Gdk = self._gdk
+        type_hint = getattr(getattr(Gdk, "WindowTypeHint", None), "SPLASHSCREEN", None)
+        set_type_hint = getattr(window, "set_type_hint", None)
+        if type_hint is not None and callable(set_type_hint):
+            try:
+                set_type_hint(type_hint)
+            except Exception:
+                pass
+
+    @staticmethod
+    def _apply_gtk_window_geometry(
+        window: Any,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        *,
+        fullscreen: bool,
+    ) -> None:
+        if fullscreen:
+            window.fullscreen()
+            return
+        window.set_default_size(w, h)
+        window.resize(w, h)
+        window.move(x, y)
+
+    def _hide_gtk_cursor(self, window: Any, widget: Any) -> None:
+        Gdk = self._gdk
+        if Gdk is None:
+            return
+        try:
+            display = None
+            get_display = getattr(widget, "get_display", None)
+            if callable(get_display):
+                display = get_display()
+            if display is None:
+                display = Gdk.Display.get_default()
+
+            cursor_type = getattr(getattr(Gdk, "CursorType", None), "BLANK_CURSOR", None)
+            if cursor_type is None:
+                return
+
+            cursor = None
+            cursor_factory = getattr(Gdk, "Cursor", None)
+            new_for_display = getattr(cursor_factory, "new_for_display", None)
+            new_cursor = getattr(cursor_factory, "new", None)
+            if callable(new_for_display) and display is not None:
+                cursor = new_for_display(display, cursor_type)
+            elif callable(new_cursor):
+                cursor = new_cursor(cursor_type)
+            if cursor is None:
+                return
+
+            for target in (widget, window):
+                get_window = getattr(target, "get_window", None)
+                if not callable(get_window):
+                    continue
+                gdk_window = get_window()
+                set_cursor = getattr(gdk_window, "set_cursor", None)
+                if callable(set_cursor):
+                    set_cursor(cursor)
+        except Exception as exc:
+            logger.debug("Could not hide GTK video cursor: %s", exc)
+
     def _gtk_window_matches_geometry(
         self,
         window: Any,
@@ -731,14 +865,20 @@ class GstWorker:
         y: int,
         w: int,
         h: int,
+        *,
+        fullscreen: bool = False,
     ) -> bool:
         self._pump_gtk_events()
         try:
             actual_w, actual_h = window.get_size()
         except Exception:
             return False
+        if fullscreen and (w <= 0 or h <= 0):
+            return True
         if int(actual_w) != int(w) or int(actual_h) != int(h):
             return False
+        if fullscreen:
+            return True
 
         try:
             actual_x, actual_y = window.get_position()

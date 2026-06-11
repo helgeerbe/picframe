@@ -30,7 +30,7 @@
   - Start GStreamer after that transition.
   - Swap pi3d's hidden background to the last frame during video playback.
   - Transition out from the last frame when GStreamer reaches EOS.
-- On Wayland, prefer the GTK-backed `gtkwaylandsink` presentation path when its borderless window can exactly match the configured pi3d display rectangle. Fall back to the existing `waylandsink` render-rectangle path when GTK presentation or exact geometry is unavailable.
+- On Wayland, prefer the GTK-backed `gtkwaylandsink` presentation path when its window can exactly match the configured pi3d display rectangle. Fullscreen rectangles use fullscreen GTK windows; custom non-fullscreen rectangles are labwc-oriented and use Picframe-owned labwc config to suppress decorations. The GTK video surface hides the cursor during playback.
 - Only one renderer should actively own visible display output at a time.
 - Clear Image Cache removes generated cache artifacts such as video transition frames, but original media files and media database rows are handled by separate operations.
 
