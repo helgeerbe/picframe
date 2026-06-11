@@ -1234,7 +1234,7 @@ def test_engine_first_frame_rendered_promotes_preloaded_last_frame(
     assert promote_cmd.render_action == RENDER_PROMOTE_VIDEO_REVEAL
     assert engine._state == State.PLAYING
     assert engine._active_video_uses_reveal_sandwich is True
-    assert engine._video_reveal_park_pending is True
+    assert engine._video_reveal_park_pending is False
 
 
 def test_engine_parks_video_reveal_after_settle_frames(

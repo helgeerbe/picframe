@@ -903,7 +903,9 @@ class PlaybackEngine:
             self._active_video_uses_reveal_sandwich = reveal_promoted
             self._change_state(State.PLAYING)
             if reveal_promoted:
-                self._start_video_reveal_parking()
+                self._logger.info(
+                    "Video reveal promoted; pi3d parking disabled for #686 flicker diagnosis."
+                )
             self._clear_pending_video_preparation()
 
     def _preload_pending_video_reveal_frame(self) -> None:
@@ -928,7 +930,7 @@ class PlaybackEngine:
         if not last_frame_path:
             return False
 
-        self._logger.debug("Promoting video reveal texture: %s", last_frame_path)
+        self._logger.info("Promoting video reveal texture: %s", last_frame_path)
         self._renderer.execute(
             RenderCommand(
                 image_path=last_frame_path,
@@ -947,6 +949,8 @@ class PlaybackEngine:
             self._change_state(State.PLAYING)
 
         uses_reveal_sandwich = getattr(self, '_active_video_uses_reveal_sandwich', False)
+        if uses_reveal_sandwich:
+            self._logger.info("EOS on sandwich video; stopping video without renderer resume.")
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
         if hasattr(self, '_active_video_uses_reveal_sandwich'):
@@ -956,6 +960,7 @@ class PlaybackEngine:
             self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
 
         if self._video_player:
+            self._logger.info("Stopping video player after EOS.")
             self._video_player.stop()
 
         self._next_transition_time = 0.0

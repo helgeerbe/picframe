@@ -111,7 +111,7 @@ def test_video_handoff_sequence(
 
     assert engine._state == State.PLAYING  # type: ignore
     assert not hasattr(engine, "_pending_swap_media")
-    assert engine._video_reveal_park_pending is True
+    assert engine._video_reveal_park_pending is False
     
     # 5. Video playback completed
     mock_renderer.execute.reset_mock()
