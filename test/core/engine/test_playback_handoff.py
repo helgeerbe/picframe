@@ -66,8 +66,8 @@ def test_video_handoff_sequence(
     1. Image playing
     2. Next media is Video -> Send .1.frame to renderer, state PREPARING_VIDEO
     3. TransitionCompletedEvent -> Play video, still PREPARING_VIDEO
-    4. VideoFirstFrameRenderedEvent -> mark video PLAYING without hidden texture swaps
-    5. PlaybackCompletedEvent -> stop video and schedule immediate next media
+    4. VideoFirstFrameRenderedEvent -> promote cached last frame behind video
+    5. PlaybackCompletedEvent -> stop video and schedule immediate next media without renderer work
     """
     engine = PlaybackEngine(
         event_publisher=mock_event_publisher,
@@ -111,14 +111,14 @@ def test_video_handoff_sequence(
 
     assert engine._state == State.PLAYING  # type: ignore
     assert not hasattr(engine, "_pending_swap_media")
+    assert engine._video_reveal_park_pending is True
     
     # 5. Video playback completed
+    mock_renderer.execute.reset_mock()
     with patch("os.path.exists", return_value=True):
         engine._handle_playback_completed(PlaybackCompletedEvent())
 
-        resume_call = mock_renderer.execute.call_args_list[-1][0][0]
-        assert isinstance(resume_call, RenderCommand)
-        assert resume_call.image_path == "RESUME"
+        mock_renderer.execute.assert_not_called()
         mock_video_player.stop.assert_called_once_with()
         assert engine._next_transition_time == 0.0
     

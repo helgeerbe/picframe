@@ -28,6 +28,8 @@ class ImageRenderer:
         self._slide: Any | None = None
         self._sfg: Any | None = None
         self._sbg: Any | None = None
+        self._video_reveal_texture: Any | None = None
+        self._video_reveal_scale: tuple[float, float, float, float] | None = None
         
         self._alpha = 1.0
         self._delta_alpha = 1.0
@@ -114,17 +116,8 @@ class ImageRenderer:
         if ext in video_extensions:
             return False, 0.0, 0.0
 
-        try:
-            if command.layout == "portrait_pair":
-                im = self._load_portrait_pair(command)
-            elif getattr(command, "image_obj", None) is not None:
-                im = self._image_preparer.prepare_unmatted_image(command.image_obj)
-            else:
-                im = self._image_preparer.load_single_image(command.image_path)
-        except Exception as e:
-            self._logger.error(f"Failed to load image {command.image_path}: {e}")
-            from picframe.core.exceptions import MediaProcessingError
-            raise MediaProcessingError(f"Failed to load image {command.image_path}: {e}") from e
+        self.clear_video_reveal_texture()
+        im = self._load_command_image(command)
             
         try:
             new_sfg = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
@@ -140,10 +133,7 @@ class ImageRenderer:
                 
             self._slide.set_textures([self._sfg, self._sbg])
             
-            # Transfer front width/height factors to back
-            self._slide.unif[45:47] = self._slide.unif[42:44]
-            # Transfer front width/height offsets to back
-            self._slide.unif[51:53] = self._slide.unif[48:50]
+            self._copy_front_scale_to_back()
             
             xstep, ystep = self._apply_texture_scale()
                 
@@ -153,22 +143,92 @@ class ImageRenderer:
             self._logger.error(f"Failed to execute RenderCommand in ImageRenderer: {e}")
             return False, 0.0, 0.0
 
+    def preload_video_reveal_texture(self, command: RenderCommand) -> bool:
+        """Preload a video last-frame texture without changing active slide textures."""
+        if self._slide is None:
+            self._logger.warning("ImageRenderer not initialized properly")
+            return False
+
+        try:
+            im = self._load_command_image(command)
+            texture = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
+        except Exception as e:
+            self._logger.error(f"Failed to preload video reveal texture {command.image_path}: {e}")
+            return False
+
+        self._video_reveal_texture = texture
+        self._video_reveal_scale = self._texture_scale_values(texture)
+        return True
+
+    def promote_video_reveal_texture(self) -> bool:
+        """Make the preloaded video reveal texture the visible foreground texture."""
+        if self._slide is None or self._video_reveal_texture is None:
+            return False
+
+        reveal_texture = self._video_reveal_texture
+        reveal_scale = self._video_reveal_scale or self._texture_scale_values(reveal_texture)
+        previous_front = self._sfg
+
+        self._sfg = reveal_texture
+        if previous_front is not None:
+            self._sbg = previous_front
+            self._copy_front_scale_to_back()
+        elif self._sbg is None:
+            self._sbg = reveal_texture
+
+        self._slide.set_textures([self._sfg, self._sbg])
+        self._apply_front_scale_values(reveal_scale)
+        self.set_alpha(1.0)
+        self._video_reveal_texture = None
+        self._video_reveal_scale = None
+        return True
+
+    def clear_video_reveal_texture(self) -> None:
+        """Drop any preloaded video reveal texture that no longer applies."""
+        self._video_reveal_texture = None
+        self._video_reveal_scale = None
+
+    def _load_command_image(self, command: RenderCommand) -> Image.Image:
+        try:
+            if command.layout == "portrait_pair":
+                return self._load_portrait_pair(command)
+            if getattr(command, "image_obj", None) is not None:
+                return self._image_preparer.prepare_unmatted_image(command.image_obj)
+            return self._image_preparer.load_single_image(command.image_path)
+        except Exception as e:
+            self._logger.error(f"Failed to load image {command.image_path}: {e}")
+            from picframe.core.exceptions import MediaProcessingError
+            raise MediaProcessingError(f"Failed to load image {command.image_path}: {e}") from e
+
+    def _copy_front_scale_to_back(self) -> None:
+        if not self._slide:
+            return
+        self._slide.unif[45:47] = self._slide.unif[42:44]
+        self._slide.unif[51:53] = self._slide.unif[48:50]
+
+    def _texture_scale_values(self, texture: Any) -> tuple[float, float, float, float]:
+        wh_rat = (self._display.width * texture.iy) / (self._display.height * texture.ix)
+        if (wh_rat > 1.0 and self._fit) or (wh_rat <= 1.0 and not self._fit):
+            return wh_rat, 1.0, (wh_rat - 1.0) * 0.5, 0.0
+
+        wh_rat = 1.0 / wh_rat
+        return 1.0, wh_rat, 0.0, (wh_rat - 1.0) * 0.5
+
+    def _apply_front_scale_values(self, values: tuple[float, float, float, float]) -> None:
+        if not self._slide:
+            return
+        scale_x, scale_y, offset_x, offset_y = values
+        self._slide.unif[42] = scale_x
+        self._slide.unif[43] = scale_y
+        self._slide.unif[48] = offset_x
+        self._slide.unif[49] = offset_y
+
     def _apply_texture_scale(self) -> tuple[float, float]:
         """Apply fit/crop shader uniforms for the current front texture."""
         if not self._slide or not self._sfg:
             return 0.0, 0.0
 
-        wh_rat = (self._display.width * self._sfg.iy) / (self._display.height * self._sfg.ix)
-        if (wh_rat > 1.0 and self._fit) or (wh_rat <= 1.0 and not self._fit):
-            sz1, sz2, os1, os2 = 42, 43, 48, 49
-        else:
-            sz1, sz2, os1, os2 = 43, 42, 49, 48
-            wh_rat = 1.0 / wh_rat
-
-        self._slide.unif[sz1] = wh_rat
-        self._slide.unif[sz2] = 1.0
-        self._slide.unif[os1] = (wh_rat - 1.0) * 0.5
-        self._slide.unif[os2] = 0.0
+        self._apply_front_scale_values(self._texture_scale_values(self._sfg))
 
         if not self._kenburns:
             return 0.0, 0.0

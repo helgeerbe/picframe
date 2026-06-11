@@ -11,6 +11,11 @@ from enum import Enum, auto
 from typing import Any
 
 
+RENDER_PRELOAD_VIDEO_REVEAL = "PRELOAD_VIDEO_REVEAL"
+RENDER_PROMOTE_VIDEO_REVEAL = "PROMOTE_VIDEO_REVEAL"
+RENDER_PARK_VIDEO_REVEAL = "PARK_VIDEO_REVEAL"
+
+
 class Command(Enum):
     """Enumeration of all possible system commands."""
 
@@ -197,6 +202,7 @@ class RenderCommand(Event):
         layout: "single" or "portrait_pair".
         image_paths: Optional all image paths for multi-image layouts.
         image_objs: Optional preloaded image objects matching image_paths.
+        render_action: Optional internal renderer action for non-transition operations.
     """
 
     image_path: str
@@ -206,6 +212,7 @@ class RenderCommand(Event):
     layout: str = "single"
     image_paths: tuple[str, ...] | None = None
     image_objs: tuple[Any, ...] | None = None
+    render_action: str | None = None
 
     @property
     def priority(self) -> int:

@@ -2,6 +2,7 @@
 Unit tests for the PlaybackEngine.
 """
 import threading
+import time
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock, patch
@@ -13,12 +14,17 @@ from picframe.core.events.dto import (
     Command,
     CommandEvent,
     PlaybackCompletedEvent,
+    RENDER_PARK_VIDEO_REVEAL,
+    RENDER_PRELOAD_VIDEO_REVEAL,
+    RENDER_PROMOTE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
     State,
     StateEvent,
     SystemErrorEvent,
+    TransitionCompletedEvent,
+    VideoFirstFrameRenderedEvent,
     VideoPlaybackWarningEvent,
 )
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
@@ -95,6 +101,33 @@ def test_engine_initialization(
     # Verify it subscribed to commands
     mock_event_subscriber.subscribe.assert_any_call(CommandEvent, engine._handle_command)
     mock_event_subscriber.subscribe.assert_any_call(StateEvent, engine._handle_state_event)
+    mock_event_subscriber.subscribe.assert_any_call(PlaybackCompletedEvent, engine._enqueue_playback_event)
+    mock_event_subscriber.subscribe.assert_any_call(TransitionCompletedEvent, engine._enqueue_playback_event)
+    mock_event_subscriber.subscribe.assert_any_call(VideoFirstFrameRenderedEvent, engine._enqueue_playback_event)
+
+
+def test_engine_playback_event_queue_dispatches_on_render_loop(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    event = PlaybackCompletedEvent()
+    engine._handle_playback_completed = MagicMock()
+
+    engine._enqueue_playback_event(event)
+
+    engine._handle_playback_completed.assert_not_called()
+    engine._drain_playback_event_queue()
+    engine._handle_playback_completed.assert_called_once_with(event)
 
 
 def test_engine_playback_completed_stops_video_and_advances_immediately(
@@ -748,7 +781,7 @@ def test_engine_trigger_next_media_video(
     call_args = mock_renderer.execute.call_args[0][0]
     assert isinstance(call_args, RenderCommand)
     assert call_args.image_path == "/path/to/video.1.frame"
-    assert mock_get_frames.call_args.kwargs["extract_missing"] is False
+    assert mock_get_frames.call_args.kwargs["extract_missing"] is True
 
 
 def test_engine_trigger_next_media_video_uses_cache_dir(
@@ -1142,6 +1175,166 @@ def test_engine_software_fallback_warning_extends_first_frame_deadline(
     assert engine._state == State.PREPARING_VIDEO
 
 
+def test_engine_transition_completed_preloads_last_frame_before_video_play(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    last_img = MagicMock()
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = media_item
+    engine._pending_last_img = last_img
+    engine._pending_last_frame_path = "/cache/video.2.frame"
+    mock_renderer.get_display_rect.return_value = (0, 0, 1920, 1080)
+
+    order: list[str] = []
+    mock_renderer.execute.side_effect = lambda _command: order.append("preload")
+    mock_video_player.play.side_effect = lambda *_args: order.append("play")
+
+    engine._handle_transition_completed(TransitionCompletedEvent())
+
+    assert order == ["preload", "play"]
+    preload_cmd = mock_renderer.execute.call_args.args[0]
+    assert isinstance(preload_cmd, RenderCommand)
+    assert preload_cmd.image_path == "/cache/video.2.frame"
+    assert preload_cmd.image_obj == last_img
+    assert preload_cmd.render_action == RENDER_PRELOAD_VIDEO_REVEAL
+    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 1920, 1080)
+
+
+def test_engine_first_frame_rendered_promotes_preloaded_last_frame(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    video = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = video
+    engine._pending_last_frame_path = "/cache/video.2.frame"
+
+    engine._complete_video_first_frame_handoff()
+
+    promote_cmd = mock_renderer.execute.call_args.args[0]
+    assert isinstance(promote_cmd, RenderCommand)
+    assert promote_cmd.image_path == "/cache/video.2.frame"
+    assert promote_cmd.render_action == RENDER_PROMOTE_VIDEO_REVEAL
+    assert engine._state == State.PLAYING
+    assert engine._active_video_uses_reveal_sandwich is True
+    assert engine._video_reveal_park_pending is True
+
+
+def test_engine_parks_video_reveal_after_settle_frames(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    engine._state = State.PLAYING
+    engine._active_video_media = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+    engine._start_video_reveal_parking()
+
+    for _ in range(5):
+        engine._update_video_reveal_parking(time.time())
+
+    park_cmd = mock_renderer.execute.call_args.args[0]
+    assert isinstance(park_cmd, RenderCommand)
+    assert park_cmd.render_action == RENDER_PARK_VIDEO_REVEAL
+    assert engine._video_reveal_park_pending is False
+
+
+def test_engine_playback_completed_for_sandwich_video_does_not_resume_renderer(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._state = State.PLAYING
+    engine._video_reveal_park_pending = True
+    engine._active_video_uses_reveal_sandwich = True
+    engine._active_video_media = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+
+    engine._handle_playback_completed(PlaybackCompletedEvent())
+
+    mock_renderer.execute.assert_not_called()
+    mock_video_player.stop.assert_called_once_with()
+    assert engine._next_transition_time == 0.0
+    assert engine._video_reveal_park_pending is False
+    assert not hasattr(engine, "_active_video_media")
+    assert not hasattr(engine, "_active_video_uses_reveal_sandwich")
+
+
 def test_engine_playback_completed_before_first_frame_advances(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
@@ -1185,6 +1378,7 @@ def test_engine_playback_completed_before_first_frame_advances(
     render_cmd = mock_renderer.execute.call_args[0][0]
     assert isinstance(render_cmd, RenderCommand)
     assert render_cmd.image_path == "RESUME"
+    assert render_cmd.render_action is None
     mock_video_player.stop.assert_called_once_with()
 
 
@@ -1268,6 +1462,7 @@ def test_engine_playback_completed_resumes_without_last_frame_refresh(
     resume_cmd = mock_renderer.execute.call_args_list[-1].args[0]
     assert isinstance(resume_cmd, RenderCommand)
     assert resume_cmd.image_path == "RESUME"
+    assert resume_cmd.render_action is None
     assert not hasattr(engine, "_active_video_media")
     mock_video_player.stop.assert_called_once_with()
     assert engine._next_transition_time == 0.0

@@ -2,6 +2,7 @@
 Playback Engine for orchestrating media playback and rendering.
 """
 import logging
+import queue
 import threading
 import time
 from collections.abc import Callable
@@ -11,12 +12,19 @@ from picframe.core.events.dto import (
     Command,
     CommandEvent,
     CurrentMediaChangedEvent,
+    PlaybackCompletedEvent,
+    RENDER_PARK_VIDEO_REVEAL,
+    RENDER_PRELOAD_VIDEO_REVEAL,
+    RENDER_PROMOTE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
     State,
     StateEvent,
     SystemErrorEvent,
+    TransitionCompletedEvent,
+    VideoFirstFrameRenderedEvent,
+    VideoPlaybackWarningEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.exceptions import MediaProcessingError
@@ -27,6 +35,8 @@ from picframe.core.services.renderer_assets import format_renderer_asset_issues
 
 
 VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS = 0.5
+VIDEO_REVEAL_SETTLE_FRAMES = 5
+VIDEO_REVEAL_SETTLE_TIMEOUT_SECONDS = 0.5
 
 
 class PlaybackEngine:
@@ -86,6 +96,10 @@ class PlaybackEngine:
         )
         self._video_frame_load_lock = threading.Lock()
         self._video_frame_load_in_progress = False
+        self._playback_event_queue: queue.Queue[Any] = queue.Queue()
+        self._video_reveal_park_pending = False
+        self._video_reveal_park_frames = 0
+        self._video_reveal_park_started_at = 0.0
         
         # Circuit breaker state
         self._consecutive_errors = 0
@@ -95,18 +109,12 @@ class PlaybackEngine:
         self._event_subscriber.subscribe(CommandEvent, self._handle_command)
         self._event_subscriber.subscribe(StateEvent, self._handle_state_event)
         
-        # Subscribe to video playback completion
-        from picframe.core.events.dto import (
-            PlaybackCompletedEvent,
-            TransitionCompletedEvent,
-            VideoFirstFrameRenderedEvent,
-            VideoPlaybackWarningEvent,
-        )
-        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._handle_playback_completed)
-        self._event_subscriber.subscribe(TransitionCompletedEvent, self._handle_transition_completed)
-        self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._handle_video_first_frame_rendered)
-        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._handle_video_playback_warning)
-        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_renderer_config_event)
+        # Queue playback-critical events so renderer mutations happen on the render loop.
+        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(TransitionCompletedEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._enqueue_playback_event)
 
     def start(self) -> None:
         """Start the playback engine and render loop."""
@@ -176,6 +184,7 @@ class PlaybackEngine:
         self._logger.info("Stopping PlaybackEngine")
         self._is_running = False
         self._clear_pending_video_preparation()
+        self._cancel_video_reveal_parking()
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
         if self._video_player:
@@ -186,15 +195,41 @@ class PlaybackEngine:
         # run loop exits.
         self._change_state(State.IDLE)
 
+    def _enqueue_playback_event(self, event: Any) -> None:
+        """Queue playback-critical work for the render loop thread."""
+        self._logger.debug("Queued %s for playback render loop.", type(event).__name__)
+        self._playback_event_queue.put(event)
+
+    def _drain_playback_event_queue(self) -> None:
+        """Dispatch queued playback events on the render loop thread."""
+        while True:
+            try:
+                event = self._playback_event_queue.get_nowait()
+            except queue.Empty:
+                return
+
+            self._dispatch_playback_event(event)
+            self._playback_event_queue.task_done()
+
+    def _dispatch_playback_event(self, event: Any) -> None:
+        self._logger.debug("Dispatching %s on playback render loop.", type(event).__name__)
+        if isinstance(event, PlaybackCompletedEvent):
+            self._handle_playback_completed(event)
+        elif isinstance(event, TransitionCompletedEvent):
+            self._handle_transition_completed(event)
+        elif isinstance(event, VideoFirstFrameRenderedEvent):
+            self._handle_video_first_frame_rendered(event)
+        elif isinstance(event, VideoPlaybackWarningEvent):
+            self._handle_video_playback_warning(event)
+        elif isinstance(event, RendererConfigUpdatedEvent):
+            self._handle_renderer_config_event(event)
+
     def _run_loop(self) -> None:
         """The main synchronous render loop."""
         while self._is_running:
-            # 1. Process any pending events (non-blocking)
-            # In a real implementation, we might poll the bus here if it\'s not
-            # automatically dispatching to callbacks in this thread.
-            # For now, we assume callbacks are handled.
-            
             try:
+                self._drain_playback_event_queue()
+
                 # 2. Check if it\'s time for the next slide
                 current_time = time.time()
 
@@ -224,6 +259,7 @@ class PlaybackEngine:
                     self._logger.info("Renderer requested exit")
                     self._is_running = False
                     break
+                self._update_video_reveal_parking(current_time)
                     
                 # Reset error counter on successful loop iteration
                 self._consecutive_errors = 0
@@ -238,6 +274,45 @@ class PlaybackEngine:
             
         self._logger.info("Exiting render loop, stopping renderer")
         self._renderer.stop()
+
+    def _start_video_reveal_parking(self) -> None:
+        self._video_reveal_park_pending = True
+        self._video_reveal_park_frames = 0
+        self._video_reveal_park_started_at = time.time()
+        self._logger.debug(
+            "Started video reveal parking countdown: %d frames or %.2fs timeout.",
+            VIDEO_REVEAL_SETTLE_FRAMES,
+            VIDEO_REVEAL_SETTLE_TIMEOUT_SECONDS,
+        )
+
+    def _cancel_video_reveal_parking(self) -> None:
+        self._video_reveal_park_pending = False
+        self._video_reveal_park_frames = 0
+        self._video_reveal_park_started_at = 0.0
+
+    def _update_video_reveal_parking(self, current_time: float) -> None:
+        if not self._video_reveal_park_pending:
+            return
+        if self._state != State.PLAYING or not hasattr(self, '_active_video_media'):
+            self._cancel_video_reveal_parking()
+            return
+
+        self._video_reveal_park_frames += 1
+        elapsed = current_time - self._video_reveal_park_started_at
+        if self._video_reveal_park_frames >= VIDEO_REVEAL_SETTLE_FRAMES:
+            self._park_video_reveal("frames rendered")
+        elif elapsed >= VIDEO_REVEAL_SETTLE_TIMEOUT_SECONDS:
+            self._park_video_reveal("timeout")
+
+    def _park_video_reveal(self, reason: str) -> None:
+        self._logger.debug("Parking pi3d video reveal after %s.", reason)
+        self._renderer.execute(
+            RenderCommand(
+                image_path="PARK_VIDEO_REVEAL",
+                render_action=RENDER_PARK_VIDEO_REVEAL,
+            )
+        )
+        self._cancel_video_reveal_parking()
 
     def _handle_command(self, event: CommandEvent) -> None:
         """Handle incoming commands from the Event Bus."""
@@ -254,6 +329,7 @@ class PlaybackEngine:
         # If we are preparing a video, we need to handle interruptions gracefully
         if self._state == State.PREPARING_VIDEO and event.command in (Command.NEXT, Command.PREV, Command.STOP):
             self._logger.info(f"Interrupting video preparation with command: {event.command}")
+            self._cancel_video_reveal_parking()
             self._clear_pending_video_preparation()
             if self._video_player:
                 self._video_player.stop()
@@ -628,9 +704,12 @@ class PlaybackEngine:
             self._renderer_retry_requested = True
             return
 
+        self._cancel_video_reveal_parking()
         self._clear_pending_video_preparation()
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
+        if hasattr(self, '_active_video_uses_reveal_sandwich'):
+            delattr(self, '_active_video_uses_reveal_sandwich')
             
         display_item = self._as_display_item(self._playlist_manager.get_next())
         if display_item:
@@ -681,7 +760,7 @@ class PlaybackEngine:
                         first_frame_path = extractor.get_frame_path("first")
                         last_frame_path = extractor.get_frame_path("last")
                         self._logger.info(
-                            "Loading cached video transition frames for %s at %sx%s with %.2fs budget.",
+                            "Loading or generating video transition frames for %s at %sx%s with %.2fs budget.",
                             media_item.filepath,
                             display_w,
                             display_h,
@@ -747,6 +826,7 @@ class PlaybackEngine:
         if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
             self._logger.info("First frame transition completed, starting video playback.")
             if self._video_player:
+                self._preload_pending_video_reveal_frame()
                 x, y, w, h = self._video_display_rect()
                 self._video_player.play(self._pending_video_media, x, y, w, h)
                 self._video_first_frame_deadline = time.time() + self._video_first_frame_timeout
@@ -805,7 +885,7 @@ class PlaybackEngine:
                     duration,
                     display_w,
                     display_h,
-                    extract_missing=False,
+                    extract_missing=True,
                 )
             except Exception as exc:
                 result["error"] = exc
@@ -851,22 +931,61 @@ class PlaybackEngine:
             self._logger.info("GStreamer first frame rendered, fading out pi3d.")
             media_item = self._pending_video_media
             self._active_video_media = media_item
+            reveal_promoted = self._promote_pending_video_reveal_frame()
+            self._active_video_uses_reveal_sandwich = reveal_promoted
             self._change_state(State.PLAYING)
+            if reveal_promoted:
+                self._start_video_reveal_parking()
             self._clear_pending_video_preparation()
+
+    def _preload_pending_video_reveal_frame(self) -> None:
+        """Preload the cached last frame before the GTK video window covers pi3d."""
+        last_img = getattr(self, '_pending_last_img', None)
+        last_frame_path = getattr(self, '_pending_last_frame_path', None)
+        if last_img is None or not last_frame_path:
+            return
+
+        self._logger.debug("Preloading video reveal texture: %s", last_frame_path)
+        self._renderer.execute(
+            RenderCommand(
+                image_path=last_frame_path,
+                image_obj=last_img,
+                render_action=RENDER_PRELOAD_VIDEO_REVEAL,
+            )
+        )
+
+    def _promote_pending_video_reveal_frame(self) -> bool:
+        """Promote the preloaded last frame after GStreamer is visibly rendering."""
+        last_frame_path = getattr(self, '_pending_last_frame_path', "") or ""
+        if not last_frame_path:
+            return False
+
+        self._logger.debug("Promoting video reveal texture: %s", last_frame_path)
+        self._renderer.execute(
+            RenderCommand(
+                image_path=last_frame_path,
+                render_action=RENDER_PROMOTE_VIDEO_REVEAL,
+            )
+        )
+        return True
 
     def _handle_playback_completed(self, event: Any) -> None:
         """Handle the completion of video playback."""
         self._logger.info("Video playback completed, scheduling transition to next media.")
+        self._cancel_video_reveal_parking()
         if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
             self._logger.warning("Video playback completed before first-frame handoff.")
             self._clear_pending_video_preparation()
             self._change_state(State.PLAYING)
 
+        uses_reveal_sandwich = getattr(self, '_active_video_uses_reveal_sandwich', False)
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
+        if hasattr(self, '_active_video_uses_reveal_sandwich'):
+            delattr(self, '_active_video_uses_reveal_sandwich')
 
-        # Wake up the renderer from SUSPENDED state
-        self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
+        if not uses_reveal_sandwich:
+            self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
 
         if self._video_player:
             self._video_player.stop()
@@ -875,9 +994,12 @@ class PlaybackEngine:
 
     def _trigger_prev_media(self) -> None:
         """Fetch the previous media item and send a render command."""
+        self._cancel_video_reveal_parking()
         self._clear_pending_video_preparation()
         if hasattr(self, '_active_video_media'):
             delattr(self, '_active_video_media')
+        if hasattr(self, '_active_video_uses_reveal_sandwich'):
+            delattr(self, '_active_video_uses_reveal_sandwich')
             
         display_item = self._as_display_item(self._playlist_manager.get_previous())
         if display_item:

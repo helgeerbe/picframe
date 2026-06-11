@@ -15,6 +15,9 @@ import pi3d
 from picframe.core.events.dto import (
     CurrentMediaChangedEvent,
     OverlayConfig,
+    RENDER_PARK_VIDEO_REVEAL,
+    RENDER_PRELOAD_VIDEO_REVEAL,
+    RENDER_PROMOTE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
@@ -471,8 +474,25 @@ class Pi3dRenderer(IRenderer):
                 self._animation_controller.suspend()
                 return
             elif command.image_path == "RESUME":
+                self._image_renderer.clear_video_reveal_texture()
                 self._animation_controller.resume()
                 self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
+                return
+            elif command.render_action == RENDER_PRELOAD_VIDEO_REVEAL:
+                if self._image_renderer.preload_video_reveal_texture(command):
+                    self._logger.debug("Preloaded video reveal texture: %s", command.image_path)
+                return
+            elif command.render_action == RENDER_PROMOTE_VIDEO_REVEAL:
+                if self._image_renderer.promote_video_reveal_texture():
+                    self._animation_controller.resume()
+                    self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
+                    self._logger.debug("Promoted preloaded video reveal texture.")
+                else:
+                    self._logger.debug("No preloaded video reveal texture to promote.")
+                return
+            elif command.render_action == RENDER_PARK_VIDEO_REVEAL:
+                self._animation_controller.suspend()
+                self._logger.debug("Parked pi3d video reveal surface.")
                 return
 
             # Delegate to ImageRenderer
