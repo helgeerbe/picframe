@@ -28,6 +28,7 @@ from picframe.core.services.renderer_assets import format_renderer_asset_issues
 
 VIDEO_EOS_REDRAW_FRAMES = 6
 VIDEO_EOS_REDRAW_TIMEOUT_SECONDS = 0.5
+VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS = 0.5
 
 
 class PlaybackEngine:
@@ -89,6 +90,8 @@ class PlaybackEngine:
         self._video_stop_time = float("inf")
         self._video_stop_frames_remaining = 0
         self._video_stop_lock = threading.Lock()
+        self._video_frame_load_lock = threading.Lock()
+        self._video_frame_load_in_progress = False
         self._video_suspend_generation = 0
         
         # Circuit breaker state
@@ -691,16 +694,17 @@ class PlaybackEngine:
                         first_frame_path = extractor.get_frame_path("first")
                         last_frame_path = extractor.get_frame_path("last")
                         self._logger.info(
-                            "Loading cached video transition frames for %s at %sx%s.",
+                            "Loading cached video transition frames for %s at %sx%s with %.2fs budget.",
                             media_item.filepath,
                             display_w,
                             display_h,
+                            VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS,
                         )
-                        frames = extractor.get_first_and_last_frames(
+                        frames = self._load_video_transition_frames_with_deadline(
+                            extractor,
                             duration,
                             display_w,
                             display_h,
-                            extract_missing=False,
                         )
                         if frames:
                             first_img, last_img = frames
@@ -789,6 +793,57 @@ class PlaybackEngine:
             "Extended GStreamer first-frame deadline for software decoder fallback: %s",
             getattr(event, "decoder", "unknown"),
         )
+
+    def _load_video_transition_frames_with_deadline(
+        self,
+        extractor: Any,
+        duration: float,
+        display_w: int,
+        display_h: int,
+    ) -> Any | None:
+        """Load cached video transition frames without blocking playback indefinitely."""
+        with self._video_frame_load_lock:
+            if self._video_frame_load_in_progress:
+                self._logger.warning(
+                    "Skipping cached video transition frames; previous frame load is still running."
+                )
+                return None
+            self._video_frame_load_in_progress = True
+
+        result: dict[str, Any] = {}
+
+        def load_frames() -> None:
+            try:
+                result["frames"] = extractor.get_first_and_last_frames(
+                    duration,
+                    display_w,
+                    display_h,
+                    extract_missing=False,
+                )
+            except Exception as exc:
+                result["error"] = exc
+            finally:
+                with self._video_frame_load_lock:
+                    self._video_frame_load_in_progress = False
+
+        loader = threading.Thread(
+            target=load_frames,
+            name="picframe-video-frame-loader",
+            daemon=True,
+        )
+        loader.start()
+        loader.join(VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS)
+        if loader.is_alive():
+            self._logger.warning(
+                "Timed out loading cached video transition frames after %.2fs; playing video directly.",
+                VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS,
+            )
+            return None
+
+        error = result.get("error")
+        if error is not None:
+            raise error
+        return result.get("frames")
 
     def _handle_video_first_frame_timeout(self, current_time: float) -> None:
         """Avoid getting stuck if GStreamer does not report first-frame readiness."""
