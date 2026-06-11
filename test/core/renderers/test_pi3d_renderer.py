@@ -155,7 +155,7 @@ def test_renderer_sets_stable_sdl_window_identity(
 
 
 def test_renderer_labwc_config_xml_positions_pi3d_and_decorates_video() -> None:
-    xml = Pi3dRenderer._labwc_config_xml(100, 80, 1800, 1000)
+    xml = Pi3dRenderer._labwc_config_xml((100, 80, 1800, 1000))
 
     assert f'identifier="{PI3D_LABWC_IDENTIFIER}"' in xml
     assert f'title="{PI3D_LABWC_IDENTIFIER}"' in xml
@@ -163,6 +163,15 @@ def test_renderer_labwc_config_xml_positions_pi3d_and_decorates_video() -> None:
     assert '<action name="ResizeTo" width="1800" height="1000" />' in xml
     assert '<action name="MoveTo" x="100" y="80" />' in xml
     assert 'serverDecoration="no"' in xml
+
+
+def test_renderer_labwc_config_xml_omits_geometry_for_fullscreen_default() -> None:
+    xml = Pi3dRenderer._labwc_config_xml(None)
+
+    assert f'identifier="{PI3D_LABWC_IDENTIFIER}"' in xml
+    assert f'title="{VIDEO_WINDOW_TITLE}"' in xml
+    assert "ResizeTo" not in xml
+    assert "MoveTo" not in xml
 
 
 def test_renderer_writes_labwc_rules_and_reconfigures_labwc(
@@ -194,6 +203,36 @@ def test_renderer_writes_labwc_rules_and_reconfigures_labwc(
     assert '<action name="MoveTo" x="100" y="80" />' in rc_xml.read_text()
     kill.assert_called_once_with(1234, signal.SIGHUP)
     sleep.assert_called_once_with(0.05)
+
+
+def test_renderer_clears_labwc_geometry_rules_for_fullscreen_default(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = Pi3dRenderer(
+        RendererConfig(
+            display_x=0,
+            display_y=0,
+            display_w=None,
+            display_h=None,
+            font_file="/path/to/font.ttf",
+        )
+    )
+    kill = MagicMock()
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+    monkeypatch.setenv("PICFRAME_DIR", str(tmp_path))
+    monkeypatch.setattr(renderer, "_find_labwc_pid", lambda: 1234)
+    monkeypatch.setattr("picframe.core.renderers.pi3d_renderer.os.kill", kill)
+    monkeypatch.setattr("picframe.core.renderers.pi3d_renderer.time.sleep", MagicMock())
+
+    renderer._prepare_labwc_geometry_rules()
+
+    rc_xml = tmp_path / "labwc" / "rc.xml"
+    rc_xml_text = rc_xml.read_text()
+    assert f'identifier="{PI3D_LABWC_IDENTIFIER}"' in rc_xml_text
+    assert "MoveTo" not in rc_xml_text
+    assert "ResizeTo" not in rc_xml_text
+    kill.assert_called_once_with(1234, signal.SIGHUP)
 
 
 def test_renderer_execute_without_start(

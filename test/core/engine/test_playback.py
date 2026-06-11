@@ -865,6 +865,80 @@ def test_engine_video_handoff_uses_configured_custom_rect(
     )
 
 
+def test_engine_video_display_rect_uses_fullscreen_for_unset_geometry(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    config_repo = MagicMock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.display_x": 0,
+        "viewer.display_y": 0,
+        "viewer.display_w": None,
+        "viewer.display_h": None,
+    }.get(key, default)
+    mock_renderer.get_display_rect.return_value = (0, 0, 1800, 1000)
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    assert engine._video_display_rect() == (0, 0, 0, 0)
+    assert engine._video_frame_dimensions() == (1800, 1000)
+
+
+def test_engine_video_handoff_uses_fullscreen_for_unset_geometry(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    config_repo = MagicMock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.display_x": 0,
+        "viewer.display_y": 0,
+        "viewer.display_w": None,
+        "viewer.display_h": None,
+    }.get(key, default)
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+        video_player=mock_video_player,
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    mock_playlist_manager.get_next.return_value = media_item
+    mock_renderer.get_display_rect.return_value = (0, 0, 1800, 1000)
+
+    with patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+        return_value=None,
+    ):
+        engine._trigger_next_media()
+
+    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 0, 0)
+
+
 def test_engine_video_first_frame_timeout_completes_handoff(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,

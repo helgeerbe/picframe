@@ -269,8 +269,6 @@ class Pi3dRenderer(IRenderer):
         if "WAYLAND_DISPLAY" not in os.environ:
             return
         geometry = self._configured_labwc_geometry()
-        if geometry is None:
-            return
         labwc_pid = self._find_labwc_pid()
         if labwc_pid is None:
             self._logger.debug("No labwc ancestor found; skipping labwc geometry rules.")
@@ -281,7 +279,7 @@ class Pi3dRenderer(IRenderer):
             config_dir.mkdir(parents=True, exist_ok=True)
             config_path = config_dir / "rc.xml"
             config_path.write_text(
-                self._labwc_config_xml(*geometry),
+                self._labwc_config_xml(geometry),
                 encoding="utf-8",
             )
         except OSError as exc:
@@ -291,13 +289,18 @@ class Pi3dRenderer(IRenderer):
         try:
             os.kill(labwc_pid, signal.SIGHUP)
             time.sleep(0.05)
-            self._logger.info(
-                "Configured labwc geometry for pi3d at %s,%s %sx%s.",
-                geometry[0],
-                geometry[1],
-                geometry[2],
-                geometry[3],
-            )
+            if geometry is None:
+                self._logger.info(
+                    "Configured labwc fullscreen/default rules for pi3d."
+                )
+            else:
+                self._logger.info(
+                    "Configured labwc geometry for pi3d at %s,%s %sx%s.",
+                    geometry[0],
+                    geometry[1],
+                    geometry[2],
+                    geometry[3],
+                )
         except OSError as exc:
             self._logger.warning("Could not ask labwc to reload geometry rules: %s", exc)
 
@@ -368,7 +371,14 @@ class Pi3dRenderer(IRenderer):
         )
 
     @classmethod
-    def _labwc_config_xml(cls, x: int, y: int, w: int, h: int) -> str:
+    def _labwc_config_xml(
+        cls,
+        geometry: tuple[int, int, int, int] | None,
+    ) -> str:
+        x = y = w = h = None
+        if geometry is not None:
+            x, y, w, h = geometry
+
         pi3d_identifier_rule = cls._labwc_window_rule_xml(
             match_attribute="identifier",
             match_value=PI3D_LABWC_IDENTIFIER,

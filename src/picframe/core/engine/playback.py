@@ -350,8 +350,40 @@ class PlaybackEngine:
             self._logger.warning("Ignoring invalid configured display rectangle: %s", exc)
             return None
 
+    def _configured_display_is_fullscreen(self) -> bool:
+        if self._config_repository is None:
+            return False
+        try:
+            raw_w = self._config_repository.get_app_config("viewer.display_w")
+            raw_h = self._config_repository.get_app_config("viewer.display_h")
+            if raw_w not in (None, "") or raw_h not in (None, ""):
+                return False
+            x = int(self._config_repository.get_app_config("viewer.display_x", 0) or 0)
+            y = int(self._config_repository.get_app_config("viewer.display_y", 0) or 0)
+            return x == 0 and y == 0
+        except (TypeError, ValueError) as exc:
+            self._logger.warning("Ignoring invalid fullscreen display rectangle: %s", exc)
+            return False
+
+    def _video_frame_dimensions(self) -> tuple[int, int]:
+        _, _, renderer_w, renderer_h = self._renderer.get_display_rect()
+        configured_rect = self._configured_display_rect()
+        if configured_rect is not None:
+            return configured_rect[2], configured_rect[3]
+        return renderer_w, renderer_h
+
     def _video_display_rect(self) -> tuple[int, int, int, int]:
         renderer_rect = self._renderer.get_display_rect()
+        if self._configured_display_is_fullscreen():
+            fullscreen_rect = (0, 0, 0, 0)
+            if renderer_rect != fullscreen_rect:
+                self._logger.info(
+                    "Using fullscreen video display rect %s instead of renderer-reported %s.",
+                    fullscreen_rect,
+                    renderer_rect,
+                )
+            return fullscreen_rect
+
         configured_rect = self._configured_display_rect()
         if configured_rect is None:
             return renderer_rect
@@ -627,7 +659,7 @@ class PlaybackEngine:
                 duration = getattr(media_item, 'duration', 0.0)
                 if duration is None:
                     duration = 0.0
-                _, _, display_w, display_h = self._video_display_rect()
+                display_w, display_h = self._video_frame_dimensions()
                 
                 first_img = None
                 last_img = None
