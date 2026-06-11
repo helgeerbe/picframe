@@ -319,6 +319,10 @@ class PlaybackEngine:
         if config is None:
             return None
         return (
+            config.display_x,
+            config.display_y,
+            config.display_w,
+            config.display_h,
             config.shader_path,
             config.font_file,
             config.show_text_enabled,
@@ -326,6 +330,38 @@ class PlaybackEngine:
             config.mat_images,
             config.mat_resource_folder,
         )
+
+    def _configured_display_rect(self) -> tuple[int, int, int, int] | None:
+        if self._config_repository is None:
+            return None
+        try:
+            raw_w = self._config_repository.get_app_config("viewer.display_w")
+            raw_h = self._config_repository.get_app_config("viewer.display_h")
+            if raw_w in (None, "") or raw_h in (None, ""):
+                return None
+            w = int(raw_w)
+            h = int(raw_h)
+            if w <= 0 or h <= 0:
+                return None
+            x = int(self._config_repository.get_app_config("viewer.display_x", 0) or 0)
+            y = int(self._config_repository.get_app_config("viewer.display_y", 0) or 0)
+            return (x, y, w, h)
+        except (TypeError, ValueError) as exc:
+            self._logger.warning("Ignoring invalid configured display rectangle: %s", exc)
+            return None
+
+    def _video_display_rect(self) -> tuple[int, int, int, int]:
+        renderer_rect = self._renderer.get_display_rect()
+        configured_rect = self._configured_display_rect()
+        if configured_rect is None:
+            return renderer_rect
+        if configured_rect != renderer_rect:
+            self._logger.info(
+                "Using configured video display rect %s instead of renderer-reported %s.",
+                configured_rect,
+                renderer_rect,
+            )
+        return configured_rect
 
     def _refresh_model_timing(self) -> None:
         """Refresh playback timing values from live configuration."""
@@ -591,7 +627,7 @@ class PlaybackEngine:
                 duration = getattr(media_item, 'duration', 0.0)
                 if duration is None:
                     duration = 0.0
-                _, _, display_w, display_h = self._renderer.get_display_rect()
+                _, _, display_w, display_h = self._video_display_rect()
                 
                 first_img = None
                 last_img = None
@@ -638,7 +674,7 @@ class PlaybackEngine:
                         media_item.filepath,
                     )
                     self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
-                    x, y, w, h = self._renderer.get_display_rect()
+                    x, y, w, h = self._video_display_rect()
                     self._video_player.play(media_item, x, y, w, h)
                     self._next_transition_time = float('inf')
                     self._change_state(State.PLAYING)
@@ -667,7 +703,7 @@ class PlaybackEngine:
         if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
             self._logger.info("First frame transition completed, starting video playback.")
             if self._video_player:
-                x, y, w, h = self._renderer.get_display_rect()
+                x, y, w, h = self._video_display_rect()
                 self._video_player.play(self._pending_video_media, x, y, w, h)
                 self._video_first_frame_deadline = time.time() + self._video_first_frame_timeout
             # We don't change state to PLAYING yet. We wait for VideoFirstFrameRenderedEvent.
