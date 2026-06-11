@@ -4,7 +4,6 @@ from unittest.mock import MagicMock
 
 from picframe.core.renderers import gst_worker
 from picframe.core.renderers.gst_worker import (
-    GTK_EOS_WINDOW_OPACITY,
     PIPELINE_COMPATIBLE,
     PIPELINE_GTK_PLAYBIN,
     PIPELINE_HARDWARE_DIRECT,
@@ -904,7 +903,7 @@ def test_hide_gtk_cursor_tolerates_missing_cursor_api() -> None:
     worker._hide_gtk_cursor(MagicMock(), MagicMock())
 
 
-def test_on_eos_pauses_pipeline_applies_gtk_opacity_and_sends_event() -> None:
+def test_on_eos_sends_event_without_handoff_mutation() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker.conn = MagicMock()
     worker.conn.closed = False
@@ -917,9 +916,9 @@ def test_on_eos_pauses_pipeline_applies_gtk_opacity_and_sends_event() -> None:
 
     worker._on_eos(MagicMock(), MagicMock())
 
-    worker.pipeline.set_state.assert_called_once_with(gst_worker.Gst.State.PAUSED)
-    worker._gtk_window.set_opacity.assert_called_once_with(GTK_EOS_WINDOW_OPACITY)
-    worker._pump_gtk_events.assert_called_once_with()
+    worker.pipeline.set_state.assert_not_called()
+    worker._gtk_window.set_opacity.assert_not_called()
+    worker._pump_gtk_events.assert_not_called()
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "eos"
     assert sent_event["last_sample_pts_seconds"] == 1.25
@@ -927,7 +926,7 @@ def test_on_eos_pauses_pipeline_applies_gtk_opacity_and_sends_event() -> None:
     assert sent_event["last_sample_caps"] == "video/x-raw(memory:DMABuf)"
 
 
-def test_on_eos_without_gtk_window_still_pauses_and_sends_event() -> None:
+def test_on_eos_without_gtk_window_sends_event() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker.conn = MagicMock()
     worker.conn.closed = False
@@ -938,7 +937,7 @@ def test_on_eos_without_gtk_window_still_pauses_and_sends_event() -> None:
 
     worker._on_eos(MagicMock(), MagicMock())
 
-    worker.pipeline.set_state.assert_called_once_with(gst_worker.Gst.State.PAUSED)
+    worker.pipeline.set_state.assert_not_called()
     worker._pump_gtk_events.assert_not_called()
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "eos"

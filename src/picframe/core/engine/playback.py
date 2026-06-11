@@ -2,7 +2,6 @@
 Playback Engine for orchestrating media playback and rendering.
 """
 import logging
-import queue
 import threading
 import time
 from collections.abc import Callable
@@ -27,8 +26,6 @@ from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.renderer_assets import format_renderer_asset_issues
 
 
-VIDEO_EOS_REDRAW_FRAMES = 6
-VIDEO_EOS_REDRAW_TIMEOUT_SECONDS = 0.5
 VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS = 0.5
 
 
@@ -87,22 +84,16 @@ class PlaybackEngine:
         self._video_software_fallback_first_frame_timeout = float(
             config.get("video_software_fallback_first_frame_timeout", 8.0)
         )
-        self._texture_swap_time = float("inf")
-        self._video_stop_time = float("inf")
-        self._video_stop_frames_remaining = 0
-        self._video_stop_lock = threading.Lock()
         self._video_frame_load_lock = threading.Lock()
         self._video_frame_load_in_progress = False
-        self._playback_event_queue: queue.Queue[Any] = queue.Queue()
-        self._video_suspend_generation = 0
         
         # Circuit breaker state
         self._consecutive_errors = 0
         self._max_consecutive_errors = 5
         
         # Subscribe to commands
-        self._event_subscriber.subscribe(CommandEvent, self._enqueue_playback_event)
-        self._event_subscriber.subscribe(StateEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(CommandEvent, self._handle_command)
+        self._event_subscriber.subscribe(StateEvent, self._handle_state_event)
         
         # Subscribe to video playback completion
         from picframe.core.events.dto import (
@@ -111,11 +102,11 @@ class PlaybackEngine:
             VideoFirstFrameRenderedEvent,
             VideoPlaybackWarningEvent,
         )
-        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._enqueue_playback_event)
-        self._event_subscriber.subscribe(TransitionCompletedEvent, self._enqueue_playback_event)
-        self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._enqueue_playback_event)
-        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._enqueue_playback_event)
-        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._handle_playback_completed)
+        self._event_subscriber.subscribe(TransitionCompletedEvent, self._handle_transition_completed)
+        self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._handle_video_first_frame_rendered)
+        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._handle_video_playback_warning)
+        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_renderer_config_event)
 
     def start(self) -> None:
         """Start the playback engine and render loop."""
@@ -185,9 +176,10 @@ class PlaybackEngine:
         self._logger.info("Stopping PlaybackEngine")
         self._is_running = False
         self._clear_pending_video_preparation()
-        self._clear_pending_video_swap()
-        self._cancel_pending_video_stop(stop_video=True)
-        self._clear_active_video_state()
+        if hasattr(self, '_active_video_media'):
+            delattr(self, '_active_video_media')
+        if self._video_player:
+            self._video_player.stop()
         # We don't call renderer.stop() here because it might be called
         # from a signal handler which can cause issues with pi3d's
         # display destruction. The renderer will be stopped when the
@@ -205,7 +197,6 @@ class PlaybackEngine:
             try:
                 # 2. Check if it\'s time for the next slide
                 current_time = time.time()
-                self._drain_playback_events()
 
                 if not self._renderer_started:
                     if self._renderer_retry_requested and self._try_start_renderer():
@@ -222,23 +213,17 @@ class PlaybackEngine:
                     continue
 
                 self._handle_video_first_frame_timeout(current_time)
-                self._handle_video_stop_after_eos(current_time)
                 if (
                     self._state == State.PLAYING
                     and current_time >= self._next_transition_time
                 ):
                     self._trigger_next_media()
                     
-                # Check if it\'s time to swap the background texture
-                if current_time >= getattr(self, '_texture_swap_time', float('inf')) and getattr(self, '_pending_swap_media', None):
-                    self._execute_texture_swap()
-                    
                 # 3. Render the frame
                 if not self._renderer.render_frame():
                     self._logger.info("Renderer requested exit")
                     self._is_running = False
                     break
-                self._record_video_eos_redraw_frame()
                     
                 # Reset error counter on successful loop iteration
                 self._consecutive_errors = 0
@@ -253,51 +238,6 @@ class PlaybackEngine:
             
         self._logger.info("Exiting render loop, stopping renderer")
         self._renderer.stop()
-
-    def _enqueue_playback_event(self, event: Any) -> None:
-        """Queue event-bus work so playback state changes run on the render loop."""
-        self._playback_event_queue.put(event)
-        if event.__class__.__name__ == "PlaybackCompletedEvent":
-            self._logger.info("Queued PlaybackCompletedEvent for playback render loop.")
-
-    def _drain_playback_events(self) -> None:
-        """Dispatch queued event-bus work on the playback render loop thread."""
-        while True:
-            try:
-                event = self._playback_event_queue.get_nowait()
-            except queue.Empty:
-                return
-            try:
-                if event.__class__.__name__ == "PlaybackCompletedEvent":
-                    self._logger.info("Dispatching PlaybackCompletedEvent on playback render loop.")
-                self._dispatch_playback_event(event)
-            finally:
-                self._playback_event_queue.task_done()
-
-    def _dispatch_playback_event(self, event: Any) -> None:
-        from picframe.core.events.dto import (
-            PlaybackCompletedEvent,
-            TransitionCompletedEvent,
-            VideoFirstFrameRenderedEvent,
-            VideoPlaybackWarningEvent,
-        )
-
-        if isinstance(event, CommandEvent):
-            self._handle_command(event)
-        elif isinstance(event, StateEvent):
-            self._handle_state_event(event)
-        elif isinstance(event, PlaybackCompletedEvent):
-            self._handle_playback_completed(event)
-        elif isinstance(event, TransitionCompletedEvent):
-            self._handle_transition_completed(event)
-        elif isinstance(event, VideoFirstFrameRenderedEvent):
-            self._handle_video_first_frame_rendered(event)
-        elif isinstance(event, VideoPlaybackWarningEvent):
-            self._handle_video_playback_warning(event)
-        elif isinstance(event, RendererConfigUpdatedEvent):
-            self._handle_renderer_config_event(event)
-        else:
-            self._logger.debug("Ignoring unsupported playback event: %s", type(event).__name__)
 
     def _handle_command(self, event: CommandEvent) -> None:
         """Handle incoming commands from the Event Bus."""
@@ -315,7 +255,6 @@ class PlaybackEngine:
         if self._state == State.PREPARING_VIDEO and event.command in (Command.NEXT, Command.PREV, Command.STOP):
             self._logger.info(f"Interrupting video preparation with command: {event.command}")
             self._clear_pending_video_preparation()
-            self._clear_pending_video_swap()
             if self._video_player:
                 self._video_player.stop()
             self._change_state(State.IDLE)
@@ -689,10 +628,9 @@ class PlaybackEngine:
             self._renderer_retry_requested = True
             return
 
-        self._cancel_pending_video_stop(stop_video=True)
         self._clear_pending_video_preparation()
-        self._clear_pending_video_swap()
-        self._clear_active_video_state()
+        if hasattr(self, '_active_video_media'):
+            delattr(self, '_active_video_media')
             
         display_item = self._as_display_item(self._playlist_manager.get_next())
         if display_item:
@@ -908,97 +846,38 @@ class PlaybackEngine:
             self._complete_video_first_frame_handoff()
 
     def _complete_video_first_frame_handoff(self) -> None:
-        """Reveal video playback and prepare the last-frame sandwich swap."""
+        """Reveal video playback after GStreamer has presented its first frame."""
         if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
             self._logger.info("GStreamer first frame rendered, fading out pi3d.")
             media_item = self._pending_video_media
-            last_img = getattr(self, '_pending_last_img', None)
-            last_frame_path = getattr(self, '_pending_last_frame_path', None)
             self._active_video_media = media_item
-            self._active_video_last_img = last_img
-            self._active_video_last_frame_path = last_frame_path
             self._change_state(State.PLAYING)
-            
-            # Schedule the mid-playback texture swap on the main loop
-            self._pending_swap_media = media_item
-            self._pending_swap_last_img = last_img
-            self._pending_swap_last_frame_path = last_frame_path
-            self._texture_swap_time = time.time() + 1.0
-            self._video_suspend_generation += 1
             self._clear_pending_video_preparation()
-
-    def _execute_texture_swap(self) -> None:
-        """Execute the background texture swap on the main thread."""
-        import os
-
-        from picframe.core.events.dto import RenderCommand
-        
-        media_item = getattr(self, '_pending_swap_media', None)
-        active_media = getattr(self, '_active_video_media', None)
-
-        if not media_item:
-            self._clear_pending_video_swap()
-            return
-
-        if not self._same_media_item(media_item, active_media):
-            self._logger.debug(
-                "Ignoring stale video texture swap for %s; active video is %s.",
-                getattr(media_item, "filepath", None),
-                getattr(active_media, "filepath", None),
-            )
-            self._clear_pending_video_swap()
-            return
-
-        last_img = getattr(self, '_pending_swap_last_img', None)
-        last_frame_path = getattr(self, '_pending_swap_last_frame_path', None)
-        self._clear_pending_video_swap(invalidate_suspend=False)
-
-        if last_frame_path is None:
-            base, _ = os.path.splitext(media_item.filepath)
-            last_frame_path = base + ".2.frame"
-        
-        if last_img is not None:
-            self._logger.info(f"Swapping background texture to last frame: {last_frame_path}")
-            self._renderer.execute(RenderCommand(image_path=last_frame_path, background_only=True, image_obj=last_img))
-        else:
-            self._logger.warning(f"Last frame not found for swap: {last_frame_path}")
-            
-        # Suspend pi3d rendering to save CPU while video plays
-        # We need to give the renderer a chance to process the background_only command
-        # before suspending it, otherwise the texture swap is never drawn.
-        import threading
-        suspend_generation = self._video_suspend_generation
-        threading.Timer(
-            0.5,
-            lambda: self._suspend_renderer_if_video_active(suspend_generation),
-        ).start()
 
     def _handle_playback_completed(self, event: Any) -> None:
         """Handle the completion of video playback."""
-        self._logger.info("Video playback completed, preparing pi3d reveal.")
+        self._logger.info("Video playback completed, scheduling transition to next media.")
         if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
             self._logger.warning("Video playback completed before first-frame handoff.")
             self._clear_pending_video_preparation()
             self._change_state(State.PLAYING)
 
-        self._clear_pending_video_swap()
-        self._render_active_video_last_frame_for_reveal()
-        self._clear_active_video_state()
+        if hasattr(self, '_active_video_media'):
+            delattr(self, '_active_video_media')
 
         # Wake up the renderer from SUSPENDED state
         self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
 
         if self._video_player:
-            self._schedule_video_stop_after_eos()
-        else:
-            self._next_transition_time = 0.0
+            self._video_player.stop()
+
+        self._next_transition_time = 0.0
 
     def _trigger_prev_media(self) -> None:
         """Fetch the previous media item and send a render command."""
-        self._cancel_pending_video_stop(stop_video=True)
         self._clear_pending_video_preparation()
-        self._clear_pending_video_swap()
-        self._clear_active_video_state()
+        if hasattr(self, '_active_video_media'):
+            delattr(self, '_active_video_media')
             
         display_item = self._as_display_item(self._playlist_manager.get_previous())
         if display_item:
@@ -1048,127 +927,6 @@ class PlaybackEngine:
         ):
             if hasattr(self, attr):
                 delattr(self, attr)
-
-    def _clear_pending_video_swap(self, *, invalidate_suspend: bool = True) -> None:
-        """Clear delayed video last-frame swap state."""
-        for attr in (
-            '_pending_swap_media',
-            '_pending_swap_last_img',
-            '_pending_swap_last_frame_path',
-        ):
-            if hasattr(self, attr):
-                delattr(self, attr)
-        self._texture_swap_time = float('inf')
-        if invalidate_suspend:
-            self._video_suspend_generation += 1
-
-    def _clear_active_video_state(self) -> None:
-        for attr in (
-            '_active_video_media',
-            '_active_video_last_img',
-            '_active_video_last_frame_path',
-        ):
-            if hasattr(self, attr):
-                delattr(self, attr)
-
-    def _render_active_video_last_frame_for_reveal(self) -> None:
-        last_img = getattr(self, '_active_video_last_img', None)
-        last_frame_path = getattr(self, '_active_video_last_frame_path', None)
-        if last_img is None and last_frame_path is None:
-            return
-        if last_frame_path is None:
-            media_item = getattr(self, '_active_video_media', None)
-            if media_item is None:
-                return
-            import os
-            base, _ = os.path.splitext(media_item.filepath)
-            last_frame_path = base + ".2.frame"
-
-        self._logger.info("Refreshing pi3d reveal texture with video last frame: %s", last_frame_path)
-        self._renderer.execute(
-            RenderCommand(
-                image_path=last_frame_path,
-                background_only=True,
-                image_obj=last_img,
-            )
-        )
-
-    def _schedule_video_stop_after_eos(self) -> None:
-        """Keep the EOS video window visible until pi3d has rendered behind it."""
-        with self._video_stop_lock:
-            if self._video_stop_time != float("inf"):
-                return
-            self._video_stop_time = time.time() + VIDEO_EOS_REDRAW_TIMEOUT_SECONDS
-            self._video_stop_frames_remaining = VIDEO_EOS_REDRAW_FRAMES
-            self._next_transition_time = float("inf")
-        self._logger.info(
-            "Started video EOS render barrier: waiting for %s pi3d frames or %.2fs timeout.",
-            VIDEO_EOS_REDRAW_FRAMES,
-            VIDEO_EOS_REDRAW_TIMEOUT_SECONDS,
-        )
-
-    def _handle_video_stop_after_eos(self, current_time: float) -> None:
-        if current_time < self._video_stop_time:
-            return
-        self._complete_video_stop_after_eos("timeout")
-
-    def _record_video_eos_redraw_frame(self) -> None:
-        with self._video_stop_lock:
-            if self._video_stop_time == float("inf"):
-                return
-            if self._video_stop_frames_remaining > 0:
-                self._video_stop_frames_remaining -= 1
-            frames_remaining = self._video_stop_frames_remaining
-        if frames_remaining <= 0:
-            self._complete_video_stop_after_eos("frames rendered")
-
-    def _complete_video_stop_after_eos(self, reason: str = "frames rendered") -> None:
-        with self._video_stop_lock:
-            if self._video_stop_time == float("inf"):
-                return
-            self._video_stop_time = float("inf")
-            self._video_stop_frames_remaining = 0
-            self._next_transition_time = 0.0
-        if self._video_player:
-            self._video_player.stop()
-        self._logger.info(
-            "Video EOS render barrier completed by %s; advancing playback.",
-            reason,
-        )
-
-    def _cancel_pending_video_stop(self, *, stop_video: bool) -> None:
-        with self._video_stop_lock:
-            if self._video_stop_time == float("inf"):
-                return
-            self._video_stop_time = float("inf")
-            self._video_stop_frames_remaining = 0
-        self._logger.info("Video EOS render barrier cancelled.")
-        if stop_video and self._video_player:
-            self._video_player.stop()
-
-    @staticmethod
-    def _same_media_item(left: Any, right: Any) -> bool:
-        """Return True when two media item references describe the same file."""
-        if left is None or right is None:
-            return False
-        if left is right:
-            return True
-        left_id = getattr(left, "id", None)
-        right_id = getattr(right, "id", None)
-        if left_id is not None and right_id is not None and left_id == right_id:
-            return True
-        return getattr(left, "filepath", None) == getattr(right, "filepath", None)
-
-    def _suspend_renderer_if_video_active(self, generation: int) -> None:
-        """Suspend pi3d only if the video swap timer still belongs to the active video."""
-        if generation != self._video_suspend_generation:
-            return
-        if self._state != State.PLAYING or not hasattr(self, '_active_video_media'):
-            return
-
-        from picframe.core.events.dto import RenderCommand
-
-        self._renderer.execute(RenderCommand(image_path="SUSPEND", overlay=None))
 
     def _generate_text_string(self, media_item: Any) -> str:
         """Generate the text overlay string based on configuration and media metadata."""

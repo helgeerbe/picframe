@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from picframe.core.engine.playback import PlaybackEngine, VIDEO_EOS_REDRAW_FRAMES
+from picframe.core.engine.playback import PlaybackEngine
 from picframe.core.events.dto import (
     PlaybackCompletedEvent,
     RenderCommand,
@@ -65,9 +65,9 @@ def test_video_handoff_sequence(
     Test the full handoff sequence:
     1. Image playing
     2. Next media is Video -> Send .1.frame to renderer, state PREPARING_VIDEO
-    3. TransitionCompletedEvent -> Play video, state PLAYING_VIDEO
-    4. VideoFirstFrameRenderedEvent -> Swap texture to .2.frame
-    5. PlaybackCompletedEvent -> Next media is Image -> Send image to renderer, state PLAYING_IMAGE
+    3. TransitionCompletedEvent -> Play video, still PREPARING_VIDEO
+    4. VideoFirstFrameRenderedEvent -> mark video PLAYING without hidden texture swaps
+    5. PlaybackCompletedEvent -> stop video and schedule immediate next media
     """
     engine = PlaybackEngine(
         event_publisher=mock_event_publisher,
@@ -107,56 +107,20 @@ def test_video_handoff_sequence(
     mock_video_player.play.assert_called_once_with(engine._pending_video_media, 0, 0, 1920, 1080)
     
     # 4. Video first frame rendered (GStreamer is ready)
-    # We need to mock threading.Timer to execute immediately for the test
-    with patch("os.path.exists", return_value=True), \
-         patch("threading.Timer") as mock_timer:
-        
-        # Setup the mock timer to immediately call the function
-        mock_timer_instance = MagicMock()
-        mock_timer.return_value = mock_timer_instance
-        def start_timer() -> None:
-            # Call the function passed to Timer
-            mock_timer.call_args[0][1]()
-        mock_timer_instance.start.side_effect = start_timer
-        
-        # We need to set _pending_video_media again because it was deleted in the previous step
-        # Wait, it shouldn't be deleted in _handle_transition_completed. Let's check.
-        # Ah, it's deleted in _handle_video_first_frame_rendered.
-        # But we need it to be there for _handle_video_first_frame_rendered to work.
-        # Let's make sure it's still there.
-        engine._pending_video_media = MediaItem(id=2, filepath="/path/to/video.mp4", filename="video.mp4", directory_id=1, file_size=1000, last_modified=1000, media_type=MediaType.VIDEO)
-        
-        engine._handle_video_first_frame_rendered(VideoFirstFrameRenderedEvent())
-        
-        # Manually trigger the texture swap that would normally happen in the run loop
-        engine._execute_texture_swap()
-        
+    engine._handle_video_first_frame_rendered(VideoFirstFrameRenderedEvent())
+
     assert engine._state == State.PLAYING  # type: ignore
-    
-    # Verify renderer was sent the last frame for background loading
-    # The last call is SUSPEND, the one before is the RenderCommand for the swap
-    swap_call = mock_renderer.execute.call_args_list[-2][0][0]
-    assert isinstance(swap_call, RenderCommand)
-    assert swap_call.image_path == "/path/to/video.2.frame"
-    assert swap_call.background_only is True
+    assert not hasattr(engine, "_pending_swap_media")
     
     # 5. Video playback completed
     with patch("os.path.exists", return_value=True):
         engine._handle_playback_completed(PlaybackCompletedEvent())
 
-        reveal_call = mock_renderer.execute.call_args_list[-2][0][0]
         resume_call = mock_renderer.execute.call_args_list[-1][0][0]
-        assert isinstance(reveal_call, RenderCommand)
-        assert reveal_call.image_path == "/path/to/video.2.frame"
-        assert reveal_call.background_only is True
         assert isinstance(resume_call, RenderCommand)
         assert resume_call.image_path == "RESUME"
-        assert engine._next_transition_time == float("inf")
-        for _ in range(VIDEO_EOS_REDRAW_FRAMES):
-            engine._record_video_eos_redraw_frame()
-
-    # The EOS render barrier closes the video window, then the run loop advances.
-    assert engine._next_transition_time == 0.0
+        mock_video_player.stop.assert_called_once_with()
+        assert engine._next_transition_time == 0.0
     
     # Simulate the run loop picking it up
     with patch("os.path.exists", return_value=True):
