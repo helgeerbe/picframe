@@ -112,8 +112,76 @@ def test_engine_initialization(
     assert engine._time_delay == 10.0
     
     # Verify it subscribed to commands
-    mock_event_subscriber.subscribe.assert_any_call(CommandEvent, engine._handle_command)
-    mock_event_subscriber.subscribe.assert_any_call(StateEvent, engine._handle_state_event)
+    mock_event_subscriber.subscribe.assert_any_call(CommandEvent, engine._enqueue_playback_event)
+    mock_event_subscriber.subscribe.assert_any_call(StateEvent, engine._enqueue_playback_event)
+
+
+def test_engine_playback_completed_event_is_queued_until_render_loop_dispatch(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._state = State.PLAYING
+    engine._active_video_media = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+    engine._active_video_last_img = MagicMock()
+    engine._active_video_last_frame_path = "/cache/video.2.frame"
+
+    engine._enqueue_playback_event(PlaybackCompletedEvent())
+
+    mock_renderer.execute.assert_not_called()
+    mock_video_player.stop.assert_not_called()
+
+    with patch("picframe.core.engine.playback.time.time", return_value=100.0):
+        engine._drain_playback_events()
+
+    assert engine._playback_event_queue.empty()
+    assert engine._video_stop_time == 100.0 + VIDEO_EOS_REDRAW_TIMEOUT_SECONDS
+    assert engine._video_stop_frames_remaining == VIDEO_EOS_REDRAW_FRAMES
+    assert mock_renderer.execute.call_args_list[-1].args[0].image_path == "RESUME"
+    mock_video_player.stop.assert_not_called()
+
+
+def test_engine_command_event_is_queued_until_render_loop_dispatch(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    engine._state = State.PLAYING
+    engine._trigger_next_media = MagicMock()
+
+    engine._enqueue_playback_event(CommandEvent(command=Command.NEXT))
+
+    engine._trigger_next_media.assert_not_called()
+    engine._drain_playback_events()
+    engine._trigger_next_media.assert_called_once_with()
 
 
 def test_engine_start_stop(

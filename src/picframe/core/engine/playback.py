@@ -2,6 +2,7 @@
 Playback Engine for orchestrating media playback and rendering.
 """
 import logging
+import queue
 import threading
 import time
 from collections.abc import Callable
@@ -92,6 +93,7 @@ class PlaybackEngine:
         self._video_stop_lock = threading.Lock()
         self._video_frame_load_lock = threading.Lock()
         self._video_frame_load_in_progress = False
+        self._playback_event_queue: queue.Queue[Any] = queue.Queue()
         self._video_suspend_generation = 0
         
         # Circuit breaker state
@@ -99,8 +101,8 @@ class PlaybackEngine:
         self._max_consecutive_errors = 5
         
         # Subscribe to commands
-        self._event_subscriber.subscribe(CommandEvent, self._handle_command)
-        self._event_subscriber.subscribe(StateEvent, self._handle_state_event)
+        self._event_subscriber.subscribe(CommandEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(StateEvent, self._enqueue_playback_event)
         
         # Subscribe to video playback completion
         from picframe.core.events.dto import (
@@ -109,11 +111,11 @@ class PlaybackEngine:
             VideoFirstFrameRenderedEvent,
             VideoPlaybackWarningEvent,
         )
-        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._handle_playback_completed)
-        self._event_subscriber.subscribe(TransitionCompletedEvent, self._handle_transition_completed)
-        self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._handle_video_first_frame_rendered)
-        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._handle_video_playback_warning)
-        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_renderer_config_event)
+        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(TransitionCompletedEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._enqueue_playback_event)
+        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._enqueue_playback_event)
 
     def start(self) -> None:
         """Start the playback engine and render loop."""
@@ -203,6 +205,8 @@ class PlaybackEngine:
             try:
                 # 2. Check if it\'s time for the next slide
                 current_time = time.time()
+                self._drain_playback_events()
+
                 if not self._renderer_started:
                     if self._renderer_retry_requested and self._try_start_renderer():
                         self._prepare_playback_after_renderer_start()
@@ -249,6 +253,51 @@ class PlaybackEngine:
             
         self._logger.info("Exiting render loop, stopping renderer")
         self._renderer.stop()
+
+    def _enqueue_playback_event(self, event: Any) -> None:
+        """Queue event-bus work so playback state changes run on the render loop."""
+        self._playback_event_queue.put(event)
+        if event.__class__.__name__ == "PlaybackCompletedEvent":
+            self._logger.info("Queued PlaybackCompletedEvent for playback render loop.")
+
+    def _drain_playback_events(self) -> None:
+        """Dispatch queued event-bus work on the playback render loop thread."""
+        while True:
+            try:
+                event = self._playback_event_queue.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                if event.__class__.__name__ == "PlaybackCompletedEvent":
+                    self._logger.info("Dispatching PlaybackCompletedEvent on playback render loop.")
+                self._dispatch_playback_event(event)
+            finally:
+                self._playback_event_queue.task_done()
+
+    def _dispatch_playback_event(self, event: Any) -> None:
+        from picframe.core.events.dto import (
+            PlaybackCompletedEvent,
+            TransitionCompletedEvent,
+            VideoFirstFrameRenderedEvent,
+            VideoPlaybackWarningEvent,
+        )
+
+        if isinstance(event, CommandEvent):
+            self._handle_command(event)
+        elif isinstance(event, StateEvent):
+            self._handle_state_event(event)
+        elif isinstance(event, PlaybackCompletedEvent):
+            self._handle_playback_completed(event)
+        elif isinstance(event, TransitionCompletedEvent):
+            self._handle_transition_completed(event)
+        elif isinstance(event, VideoFirstFrameRenderedEvent):
+            self._handle_video_first_frame_rendered(event)
+        elif isinstance(event, VideoPlaybackWarningEvent):
+            self._handle_video_playback_warning(event)
+        elif isinstance(event, RendererConfigUpdatedEvent):
+            self._handle_renderer_config_event(event)
+        else:
+            self._logger.debug("Ignoring unsupported playback event: %s", type(event).__name__)
 
     def _handle_command(self, event: CommandEvent) -> None:
         """Handle incoming commands from the Event Bus."""
