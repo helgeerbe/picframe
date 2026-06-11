@@ -129,8 +129,6 @@ def test_video_handoff_sequence(
         engine._handle_video_first_frame_rendered(VideoFirstFrameRenderedEvent())
         
         # Manually trigger the texture swap that would normally happen in the run loop
-        engine._pending_last_img = MagicMock()
-        engine._pending_last_img.filepath = "/path/to/video.2.frame"
         engine._execute_texture_swap()
         
     assert engine._state == State.PLAYING  # type: ignore
@@ -161,4 +159,3 @@ def test_video_handoff_sequence(
     final_render_call = mock_renderer.execute.call_args[0][0]
     assert isinstance(final_render_call, RenderCommand)
     assert final_render_call.image_path == "/path/to/image2.jpg"
-

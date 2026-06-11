@@ -11,6 +11,8 @@ from picframe.core.engine.playback import PlaybackEngine
 from picframe.core.events.dto import (
     Command,
     CommandEvent,
+    PlaybackCompletedEvent,
+    RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
     State,
@@ -871,6 +873,160 @@ def test_engine_playback_completed_before_first_frame_advances(
     assert isinstance(render_cmd, RenderCommand)
     assert render_cmd.image_path == "RESUME"
     mock_video_player.stop.assert_called_once_with()
+
+
+def test_engine_playback_completed_clears_unexecuted_video_swap_before_next_video(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """A delayed swap from the previous video must not run during next video prep."""
+    mock_video_player = MagicMock()
+    mock_renderer.get_display_rect.return_value = (0, 0, 1920, 1080)
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    previous_video = MediaItem(
+        id=1,
+        filepath="/path/to/previous.mp4",
+        media_type=MediaType.VIDEO,
+        filename="previous.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    next_video = MediaItem(
+        id=2,
+        filepath="/path/to/next.mp4",
+        media_type=MediaType.VIDEO,
+        filename="next.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567891.0,
+        duration=10.0,
+    )
+    engine._state = State.PLAYING
+    engine._active_video_media = previous_video
+    engine._pending_swap_media = previous_video
+    engine._pending_swap_last_img = MagicMock()
+    engine._pending_swap_last_frame_path = "/cache/previous.2.frame"
+    engine._texture_swap_time = 0.0
+
+    engine._handle_playback_completed(PlaybackCompletedEvent())
+
+    assert not hasattr(engine, "_pending_swap_media")
+    assert not hasattr(engine, "_pending_swap_last_img")
+    assert not hasattr(engine, "_pending_swap_last_frame_path")
+    assert engine._texture_swap_time == float("inf")
+    assert not hasattr(engine, "_active_video_media")
+
+    mock_playlist_manager.get_next.return_value = next_video
+    mock_renderer.execute.reset_mock()
+    with patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+        return_value=(MagicMock(), MagicMock()),
+    ):
+        engine._trigger_next_media()
+
+    engine._execute_texture_swap()
+
+    background_swaps = [
+        call_args.args[0]
+        for call_args in mock_renderer.execute.call_args_list
+        if isinstance(call_args.args[0], RenderCommand)
+        and call_args.args[0].background_only
+    ]
+    assert background_swaps == []
+    assert engine._state == State.PREPARING_VIDEO
+    assert engine._pending_video_media == next_video
+
+
+def test_engine_video_first_frame_handoff_scopes_last_frame_swap(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    video = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+    last_img = MagicMock()
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = video
+    engine._pending_last_img = last_img
+    engine._pending_last_frame_path = "/cache/video.2.frame"
+    engine._video_first_frame_deadline = 10.0
+
+    engine._complete_video_first_frame_handoff()
+
+    assert engine._state == State.PLAYING
+    assert engine._active_video_media == video
+    assert engine._pending_swap_media == video
+    assert engine._pending_swap_last_img == last_img
+    assert engine._pending_swap_last_frame_path == "/cache/video.2.frame"
+    assert engine._texture_swap_time != float("inf")
+    assert not hasattr(engine, "_pending_video_media")
+    assert not hasattr(engine, "_pending_last_img")
+    assert not hasattr(engine, "_pending_last_frame_path")
+    assert not hasattr(engine, "_video_first_frame_deadline")
+
+
+def test_engine_stale_video_suspend_timer_is_ignored(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    video = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+    engine._state = State.PLAYING
+    engine._active_video_media = video
+    engine._video_suspend_generation = 2
+
+    engine._suspend_renderer_if_video_active(1)
+    mock_renderer.execute.assert_not_called()
+
+    engine._suspend_renderer_if_video_active(2)
+    render_cmd = mock_renderer.execute.call_args.args[0]
+    assert isinstance(render_cmd, RenderCommand)
+    assert render_cmd.image_path == "SUSPEND"
 
 
 def test_engine_circuit_breaker(
