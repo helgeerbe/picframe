@@ -696,13 +696,26 @@ class GstWorker:
             pass
 
         fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
-        fixed_host = True
+        fixed_host = not fullscreen_video
         window = Gtk.Window(title="picframe-video")
         self._configure_gtk_video_window(window)
-        self._configure_gtk_transparent_host(window)
-        host = self._create_gtk_fixed_video_host(Gtk, window, widget, x, y, w, h)
-        window.add(host)
-        self._apply_gtk_host_window_geometry(window, x, y, w, h)
+        host = None
+        if fixed_host:
+            self._configure_gtk_transparent_host(window)
+            host = self._create_gtk_fixed_video_host(Gtk, window, widget, x, y, w, h)
+            window.add(host)
+            self._apply_gtk_host_window_geometry(window, x, y, w, h)
+        else:
+            window.add(widget)
+            self._apply_gtk_window_geometry(
+                window,
+                x,
+                y,
+                w,
+                h,
+                fullscreen=True,
+                widget=widget,
+            )
         window.show_all()
         self._present_gtk_video_window(window, fullscreen=fullscreen_video and not fixed_host)
         self._log_gtk_window_diagnostics(
@@ -743,7 +756,7 @@ class GstWorker:
             return None
 
         self._gtk_window = window
-        self._gtk_host = host if fixed_host else None
+        self._gtk_host = host
         self._gtk_sink_widget = widget
         self._gtk_video_sink = video_sink
         self._start_gtk_pump()
