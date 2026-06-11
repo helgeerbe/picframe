@@ -10,6 +10,7 @@ and videos (the "First/Last Frame Sandwich" pattern).
 import logging
 import os
 import subprocess
+import tempfile
 import threading
 from hashlib import sha256
 from pathlib import Path
@@ -27,6 +28,8 @@ class VideoFrameExtractor:
     scaling and aspect ratio corrections, and caches the results as JPEG images
     to facilitate seamless transitions in the playback engine.
     """
+
+    TAIL_DECODE_WINDOWS_SECONDS = (2.0, 5.0, 10.0)
 
     def __init__(
         self,
@@ -186,6 +189,94 @@ class VideoFrameExtractor:
             self.logger.warning("Failed to retrieve video frame: %s", e)
             return None
 
+    def _get_final_decoded_frame_as_image(self, duration: float) -> Image.Image | None:
+        """Extract the actual final decoded frame by decoding a short tail window."""
+        for tail_window in self.TAIL_DECODE_WINDOWS_SECONDS:
+            if duration > 0 and duration < tail_window:
+                seek_time = 0.0
+            else:
+                seek_time = max(0.0, duration - tail_window)
+            image = self._decode_tail_last_frame(seek_time, tail_window)
+            if image is not None:
+                return image
+
+        self.logger.warning(
+            "Tail-decoded final frame extraction failed for %s; falling back to "
+            "duration-offset extraction.",
+            self.video_path,
+        )
+        return self._get_duration_offset_last_frame_as_image(duration)
+
+    def _decode_tail_last_frame(
+        self,
+        seek_time: float,
+        tail_window: float,
+    ) -> Image.Image | None:
+        """Seek near EOS, decode to the end, and return the final emitted frame."""
+        try:
+            with tempfile.TemporaryDirectory(prefix="picframe-video-tail-") as tmpdir:
+                output_pattern = str(Path(tmpdir) / "frame-%06d.jpg")
+                cmd = [
+                    "ffmpeg",
+                    "-v",
+                    "error",
+                    "-ss",
+                    f"{seek_time:.6f}",
+                    "-i",
+                    self.video_path,
+                    "-an",
+                    "-vsync",
+                    "0",
+                    "-q:v",
+                    "2",
+                    output_pattern,
+                ]
+                process = subprocess.run(cmd, capture_output=True, check=True)
+                frame_paths = sorted(Path(tmpdir).glob("frame-*.jpg"))
+                if not frame_paths:
+                    stderr = (
+                        process.stderr.decode(errors="replace")
+                        if isinstance(process.stderr, bytes)
+                        else process.stderr
+                    )
+                    self.logger.warning(
+                        "Tail decode produced no frames from %.3fs over %.3fs: %s",
+                        seek_time,
+                        tail_window,
+                        stderr or "no stderr",
+                    )
+                    return None
+
+                image = Image.open(frame_paths[-1])
+                image.load()
+                return image.copy()
+        except subprocess.CalledProcessError as e:
+            stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else e.stderr
+            self.logger.warning(
+                "Tail decode failed from %.3fs over %.3fs: %s",
+                seek_time,
+                tail_window,
+                stderr or e,
+            )
+            return None
+        except (OSError, ValueError) as e:
+            self.logger.warning(
+                "Tail decode failed from %.3fs over %.3fs: %s",
+                seek_time,
+                tail_window,
+                e,
+            )
+            return None
+
+    def _get_duration_offset_last_frame_as_image(self, duration: float) -> Image.Image | None:
+        """Legacy fallback: sample a frame near the end using fixed offsets."""
+        for offset in [0.1, 0.5, 1.0, 2.0]:
+            if duration > offset:
+                last_image = self._get_frame_as_image(duration - offset)
+                if last_image is not None:
+                    return last_image
+        return None
+
     def _apply_sample_aspect_ratio(self, image: Image.Image, sar: str) -> Image.Image:
         """
         Apply the Sample Aspect Ratio (SAR) to correct the image dimensions.
@@ -261,13 +352,7 @@ class VideoFrameExtractor:
         extractor = VideoFrameExtractor(video_path, width, height, fit_display=fit_display, cache_dir=cache_dir)
         
         first_image = extractor._get_frame_as_image(0)
-        
-        last_image = None
-        for offset in [0.1, 0.5, 1.0, 2.0]:
-            if duration > offset:
-                last_image = extractor._get_frame_as_image(duration - offset)
-                if last_image is not None:
-                    break
+        last_image = extractor._get_final_decoded_frame_as_image(duration)
                     
         if last_image is None and first_image is not None:
             last_image = first_image.copy()

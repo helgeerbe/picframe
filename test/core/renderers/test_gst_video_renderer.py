@@ -16,6 +16,7 @@ from picframe.core.renderers.ipc_protocol import (
     ErrorEvent,
     VideoDiagnosticsEvent,
     WarningEvent,
+    parse_ipc_message,
 )
 
 
@@ -260,6 +261,24 @@ def test_handle_eos_event(
     
     mock_publisher.publish.assert_called_once()
     assert isinstance(mock_publisher.publish.call_args[0][0], PlaybackCompletedEvent)
+
+
+def test_parse_eos_event_with_last_sample_diagnostics() -> None:
+    event = parse_ipc_message(
+        json.dumps(
+            {
+                "type": "eos",
+                "last_sample_pts_seconds": 27.92,
+                "last_sample_duration_seconds": 0.04,
+                "last_sample_caps": "video/x-raw(memory:DMABuf)",
+            }
+        )
+    )
+
+    assert isinstance(event, EosEvent)
+    assert event.last_sample_pts_seconds == 27.92
+    assert event.last_sample_duration_seconds == 0.04
+    assert event.last_sample_caps == "video/x-raw(memory:DMABuf)"
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")

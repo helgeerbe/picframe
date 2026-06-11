@@ -49,6 +49,27 @@ error such as "No playable video stream found" before any Wayland sink is
 created. When Picframe supplies an explicit render rectangle, the worker does
 not also request sink fullscreen; the rectangle is the positioning contract.
 
+### Current Handoff Strategy: GTK Wayland Presentation
+Raspberry Pi 4 / labwc PoC testing showed that a fully covering plain
+`waylandsink` surface can trigger a short pi3d redraw flicker when the video
+surface closes at EOS. Production playback therefore prefers a `playbin` +
+`gtkwaylandsink` path on Wayland when the worker can create a borderless GTK3
+window whose size and position exactly match Picframe's configured pi3d display
+rectangle (`viewer.display_x/y/w/h`).
+
+This path keeps video playback GPU-friendly: it does not add GStreamer `alpha`,
+`videoconvert`, or `videoscale` elements just for handoff. The GTK window is
+created and pumped inside the out-of-process GStreamer worker, and EOS still
+flows back through IPC to the playback engine. If GTK3, `gtkwaylandsink`, or
+geometry confirmation is unavailable, the worker falls back to the prior
+`waylandsink` render-rectangle path.
+
+Transition-frame caching is also aligned with EOS handoff. The first cached
+frame is extracted from the first decoded video frame. The final cached frame
+is extracted by seeking near the end and decoding a short tail window through
+EOS, with larger tail windows and the older fixed duration-offset sampler used
+only as fallbacks.
+
 ### Phase 1: Startup Capability Discovery (The Registry)
 During application initialization, the `GstVideoRenderer` spawns the `gst_worker.py` subprocess. The subprocess queries the `Gst.Registry`.
 1.  Iterate through all features in the registry.

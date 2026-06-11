@@ -76,6 +76,93 @@ Example:
 labwc -s "python3 poc_video_handoff_v2.py /path/to/image1.jpg /path/to/video.webm /path/to/image2.jpg"
 ```
 
+### EOS Redraw / Alpha Probe
+
+The v2 script can test whether keeping the video frame frozen at EOS and briefly
+making it translucent is enough to make the compositor redraw pi3d before the
+video window is destroyed.
+
+Fast baseline without conversion:
+
+```bash
+labwc -s "python3 poc_video_handoff_v2.py /path/to/image1.jpg /path/to/video.mp4 /path/to/image2.jpg --pipeline-mode direct --eos-redraw-seconds 0.25"
+```
+
+Alpha probe:
+
+```bash
+labwc -s "python3 poc_video_handoff_v2.py /path/to/image1.jpg /path/to/video.mp4 /path/to/image2.jpg --pipeline-mode alpha-probe --eos-alpha 0.99 --eos-redraw-seconds 0.25"
+```
+
+The `alpha-probe` mode keeps alpha at `1.0` while the video plays, then pauses at
+EOS, sets alpha to `0.99`, seeks close to the end to preroll one final
+transparent frame, forces a short pi3d redraw, and only then closes the video
+window. This mode is only a compositor-handoff experiment; it may be less smooth
+than the `direct` path because it inserts `videoconvert` and `alpha`.
+
+If the video-to-pi3d handoff no longer flickers but the last frame jumps slightly,
+use `--last-frame-offset` to make the PoC extract pi3d's handoff frame and seek
+GStreamer to the same timestamp near the end:
+
+```bash
+labwc -s "python3 poc_video_handoff_v2.py /path/to/image1.jpg /path/to/video.mp4 /path/to/image2.jpg --pipeline-mode alpha-probe --eos-alpha 0.99 --last-frame-offset 0.25"
+```
+
+To isolate whether the jump is caused by the EOS seek, try:
+
+```bash
+labwc -s "python3 poc_video_handoff_v2.py /path/to/image1.jpg /path/to/video.mp4 /path/to/image2.jpg --pipeline-mode alpha-probe --eos-alpha 0.0 --alpha-probe-seek-mode none"
+```
+
+If this removes the jump but also means the video surface does not become
+transparent, the alpha value is not reaching the compositor as window opacity.
+If `key-unit` jumps backwards, try `--alpha-probe-seek-mode accurate`; it can be
+slower, but it seeks closer to the requested handoff timestamp.
+
+Full-GPU opacity probe:
+
+```bash
+labwc -s "python3 poc_video_handoff_v2.py /path/to/image1.jpg /path/to/video.mp4 /path/to/image2.jpg --pipeline-mode gtk-gpu-opacity --eos-window-opacity 0.99 --eos-redraw-seconds 0.25 --require-gpu"
+```
+
+The `gtk-gpu-opacity` mode uses `playbin` with `gtkwaylandsink` hosted inside a
+fullscreen GTK3 window. It does not intentionally add `videoconvert`,
+`videoscale`, caps forcing, or GStreamer `alpha` during playback. At EOS it
+pauses the pipeline, optionally seeks near the handoff frame, changes GTK window
+opacity, redraws pi3d briefly, then closes the video window.
+
+If the handoff still jumps, compare with an accurate EOS seek:
+
+```bash
+labwc -s "python3 poc_video_handoff_v2.py /path/to/image1.jpg /path/to/video.mp4 /path/to/image2.jpg --pipeline-mode gtk-gpu-opacity --gpu-eos-seek-mode accurate --last-frame-offset 0.25 --eos-window-opacity 0.99 --eos-redraw-seconds 0.25 --require-gpu"
+```
+
+To test whether pi3d can use the exact same frame as the video sink, read the
+sink's actual last sample timestamp at EOS and rebuild the pi3d handoff texture
+from that PTS:
+
+```bash
+labwc -s "python3 poc_video_handoff_v2.py /path/to/image1.jpg /path/to/video.mp4 /path/to/image2.jpg --pipeline-mode gtk-gpu-opacity --last-frame-source gst-last-sample-pts --eos-window-opacity 1.0 --eos-redraw-seconds 0 --gpu-eos-seek-mode none --require-gpu"
+```
+
+This mode logs the sink `last-sample` PTS/DTS/duration/caps, uses a slow but
+accurate ffmpeg seek to extract that timestamp, draws the updated pi3d texture
+behind the video window, then closes the window. It is intended for validation,
+not as the final production implementation.
+
+For GPU validation, check the `GPU telemetry` log lines. A good Pi path should
+show a hardware-like decoder such as `v4l2...dec`, ideally `memory:DMABuf` sink
+caps, and no `videoconvert`, `videoscale`, or `alpha` elements.
+
+The script resolves the `blend_new` shader from `~/.picframe/data/shaders` first,
+then from installed Picframe package data, and finally from a local repository
+checkout. Override this with `--shader-path /path/to/blend_new` if needed.
+
+Before swapping pi3d to the video's last-frame texture, the script waits until
+GStreamer reports playback progress. This avoids showing the last frame if a
+slow pipeline has not made the video surface visible yet. Tune this with
+`--last-frame-swap-after` and `--last-frame-swap-timeout`.
+
 ## What to Expect
 
 1.  **Phase 1:** The script displays the first image fullscreen using `pi3d`.

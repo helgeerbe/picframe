@@ -5,10 +5,12 @@ from unittest.mock import MagicMock
 from picframe.core.renderers import gst_worker
 from picframe.core.renderers.gst_worker import (
     PIPELINE_COMPATIBLE,
+    PIPELINE_GTK_PLAYBIN,
     PIPELINE_HARDWARE_DIRECT,
     PIPELINE_HARDWARE_PLAYBIN,
     PIPELINE_SKIPPED,
     GstWorker,
+    PlaybackDecision,
     VideoStreamFacts,
 )
 
@@ -476,6 +478,146 @@ def test_hardware_playbin_pipeline_uses_video_only_wayland_sink(monkeypatch) -> 
     assert 'audio-sink="fakesink sync=false"' in description
     assert "force-sw-decoders=true" not in description
     assert "videoconvert" not in description
+
+
+def test_gtk_playbin_attempt_requires_wayland_hardware_and_valid_geometry(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    monkeypatch.setattr(
+        gst_worker,
+        "find_best_element",
+        lambda names: "gtkwaylandsink" if "gtkwaylandsink" in names else None,
+    )
+
+    assert worker._should_attempt_gtk_playbin(
+        "waylandsink",
+        0,
+        0,
+        2560,
+        1440,
+        force_software_decoders=False,
+        pipeline_variant=PIPELINE_HARDWARE_DIRECT,
+    )
+    assert not worker._should_attempt_gtk_playbin(
+        "waylandsink",
+        0,
+        0,
+        0,
+        1440,
+        force_software_decoders=False,
+        pipeline_variant=PIPELINE_HARDWARE_DIRECT,
+    )
+    assert not worker._should_attempt_gtk_playbin(
+        "glimagesink",
+        0,
+        0,
+        2560,
+        1440,
+        force_software_decoders=False,
+        pipeline_variant=PIPELINE_HARDWARE_DIRECT,
+    )
+    assert not worker._should_attempt_gtk_playbin(
+        "waylandsink",
+        0,
+        0,
+        2560,
+        1440,
+        force_software_decoders=True,
+        pipeline_variant=PIPELINE_HARDWARE_DIRECT,
+    )
+
+
+class FakePipeline:
+    def __init__(self) -> None:
+        self.properties = {}
+        self.bus = MagicMock()
+
+    def set_property(self, key: str, value) -> None:
+        self.properties[key] = value
+
+    def get_bus(self):
+        return self.bus
+
+    def set_state(self, state):
+        return gst_worker.Gst.StateChangeReturn.SUCCESS
+
+
+def test_start_pipeline_uses_gtk_playbin_when_geometry_is_valid(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    fake_pipeline = FakePipeline()
+    diagnostics = MagicMock()
+
+    monkeypatch.setattr(worker, "_select_sink_name", lambda: "waylandsink")
+    monkeypatch.setattr(
+        worker,
+        "_select_playback_decision",
+        lambda *args, **kwargs: PlaybackDecision(
+            pipeline_variant=PIPELINE_HARDWARE_DIRECT,
+            force_software_decoders=False,
+            decision="hardware_direct",
+        ),
+    )
+    monkeypatch.setattr(worker, "_should_attempt_gtk_playbin", lambda *args, **kwargs: True)
+    monkeypatch.setattr(worker, "_create_gtk_playbin_pipeline", lambda *args: fake_pipeline)
+    monkeypatch.setattr(worker, "_connect_pipeline_telemetry_hooks", lambda: None)
+    monkeypatch.setattr(worker, "_send_video_diagnostics", diagnostics)
+
+    worker._start_pipeline(
+        "file:///movie.mp4",
+        10,
+        20,
+        300,
+        400,
+        force_software_decoders=False,
+        stream_facts=h264_facts(1920, 1080),
+    )
+
+    assert worker.pipeline is fake_pipeline
+    assert worker._current_pipeline_variant == PIPELINE_GTK_PLAYBIN
+    assert worker._current_sink_name == "gtkwaylandsink"
+    assert fake_pipeline.properties["volume"] == 1.0
+    assert diagnostics.call_count >= 2
+
+
+def test_start_pipeline_falls_back_when_gtk_geometry_is_not_confirmed(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    fake_pipeline = FakePipeline()
+    parse_launch = MagicMock(return_value=fake_pipeline)
+
+    monkeypatch.setattr(worker, "_select_sink_name", lambda: "waylandsink")
+    monkeypatch.setattr(
+        worker,
+        "_select_playback_decision",
+        lambda *args, **kwargs: PlaybackDecision(
+            pipeline_variant=PIPELINE_HARDWARE_DIRECT,
+            force_software_decoders=False,
+            decision="hardware_direct",
+        ),
+    )
+    monkeypatch.setattr(worker, "_should_attempt_gtk_playbin", lambda *args, **kwargs: True)
+    monkeypatch.setattr(worker, "_create_gtk_playbin_pipeline", lambda *args: None)
+    monkeypatch.setattr(worker, "_connect_pipeline_telemetry_hooks", lambda: None)
+    monkeypatch.setattr(worker, "_send_video_diagnostics", lambda *args, **kwargs: None)
+    monkeypatch.setattr(gst_worker.Gst, "parse_launch", parse_launch)
+
+    worker._start_pipeline(
+        "file:///movie.mp4",
+        10,
+        20,
+        300,
+        400,
+        force_software_decoders=False,
+        stream_facts=h264_facts(1920, 1080),
+    )
+
+    assert worker.pipeline is fake_pipeline
+    assert worker._current_pipeline_variant == PIPELINE_HARDWARE_DIRECT
+    assert worker._current_sink_name == "waylandsink"
+    assert parse_launch.call_args.args[0].startswith('uridecodebin name=decoder uri="file:///movie.mp4"')
+    assert 'render-rectangle="<10, 20, 300, 400>"' in parse_launch.call_args.args[0]
 
 
 def test_select_pipeline_variant_uses_hardware_direct_for_wayland_hardware(

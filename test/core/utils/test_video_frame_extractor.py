@@ -37,10 +37,7 @@ def test_get_first_frame_as_image_not_found() -> None:
 
 @patch("picframe.core.utils.video_frame_extractor.Image.open")
 def test_extract_and_save_frames_success(mock_image_open: MagicMock, mock_subprocess_run: MagicMock, mock_image_fromarray: MagicMock) -> None:
-    mock_subprocess_run.side_effect = [
-        MagicMock(returncode=0, stdout=b"fake_jpeg_data_1"),
-        MagicMock(returncode=0, stdout=b"fake_jpeg_data_2")
-    ]
+    mock_subprocess_run.return_value = MagicMock(returncode=0, stdout=b"fake_jpeg_data_1")
     
     mock_img = Image.new("RGB", (1920, 1080), "black")
     mock_image_open.return_value = mock_img
@@ -48,10 +45,16 @@ def test_extract_and_save_frames_success(mock_image_open: MagicMock, mock_subpro
     with patch("picframe.core.utils.video_frame_extractor.os.path.exists", return_value=False):
         with patch("picframe.core.utils.video_frame_extractor._image_file_lock", create=True):
             with patch.object(Image.Image, "save") as mock_save:
-                result = VideoFrameExtractor.extract_and_save_frames("test.mp4", 10.0, 1920, 1080)
+                with patch.object(
+                    VideoFrameExtractor,
+                    "_get_final_decoded_frame_as_image",
+                    return_value=mock_img,
+                ) as mock_final_frame:
+                    result = VideoFrameExtractor.extract_and_save_frames("test.mp4", 10.0, 1920, 1080)
             
     assert result is True
-    assert mock_subprocess_run.call_count == 2
+    assert mock_subprocess_run.call_count == 1
+    mock_final_frame.assert_called_once_with(10.0)
     assert mock_save.call_count == 2
 
 def test_extract_and_save_frames_already_exists() -> None:
@@ -115,16 +118,18 @@ def test_extract_and_save_frames_writes_managed_cache_paths(
     video_path = tmp_path / "video.mp4"
     cache_dir = tmp_path / "cache"
     video_path.write_bytes(b"video")
-    mock_subprocess_run.side_effect = [
-        MagicMock(returncode=0, stdout=b"fake_jpeg_data_1"),
-        MagicMock(returncode=0, stdout=b"fake_jpeg_data_2"),
-    ]
+    mock_subprocess_run.return_value = MagicMock(returncode=0, stdout=b"fake_jpeg_data_1")
     mock_image_open.return_value = Image.new("RGB", (1920, 1080), "black")
 
     with patch.object(Image.Image, "save") as mock_save:
-        result = VideoFrameExtractor.extract_and_save_frames(
-            str(video_path), 10.0, 1920, 1080, cache_dir=str(cache_dir)
-        )
+        with patch.object(
+            VideoFrameExtractor,
+            "_get_final_decoded_frame_as_image",
+            return_value=Image.new("RGB", (1920, 1080), "black"),
+        ):
+            result = VideoFrameExtractor.extract_and_save_frames(
+                str(video_path), 10.0, 1920, 1080, cache_dir=str(cache_dir)
+            )
 
     saved_paths = [Path(call.args[0]) for call in mock_save.call_args_list]
     assert result is True
@@ -133,6 +138,76 @@ def test_extract_and_save_frames_writes_managed_cache_paths(
     assert all(path.parent == cache_dir for path in saved_paths)
     assert {path.suffix for path in saved_paths} == {".frame"}
     assert str(video_path.with_suffix(".1.frame")) not in {str(path) for path in saved_paths}
+
+
+def test_final_decoded_frame_uses_tail_decode_window(
+    mock_subprocess_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        output_pattern = Path(cmd[-1])
+        Image.new("RGB", (10, 10), "red").save(output_pattern.parent / "frame-000001.jpg")
+        Image.new("RGB", (10, 10), "blue").save(output_pattern.parent / "frame-000002.jpg")
+        return MagicMock(returncode=0, stderr=b"")
+
+    mock_subprocess_run.side_effect = fake_run
+    extractor = VideoFrameExtractor(str(video_path), 10, 10, fit_display=True)
+
+    image = extractor._get_final_decoded_frame_as_image(10.0)
+
+    assert image is not None
+    assert image.getpixel((0, 0)) == (0, 0, 254)
+    cmd = mock_subprocess_run.call_args.args[0]
+    assert cmd[cmd.index("-ss") + 1] == "8.000000"
+
+
+def test_final_decoded_frame_tries_fallback_tail_windows(
+    mock_subprocess_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    calls = 0
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        nonlocal calls
+        calls += 1
+        if calls == 2:
+            output_pattern = Path(cmd[-1])
+            Image.new("RGB", (10, 10), "green").save(output_pattern.parent / "frame-000001.jpg")
+        return MagicMock(returncode=0, stderr=b"")
+
+    mock_subprocess_run.side_effect = fake_run
+    extractor = VideoFrameExtractor(str(video_path), 10, 10, fit_display=True)
+
+    image = extractor._get_final_decoded_frame_as_image(10.0)
+
+    assert image is not None
+    assert image.getpixel((0, 0)) == (0, 128, 1)
+    seek_times = [
+        call.args[0][call.args[0].index("-ss") + 1]
+        for call in mock_subprocess_run.call_args_list
+    ]
+    assert seek_times == ["8.000000", "5.000000"]
+
+
+def test_final_decoded_frame_falls_back_to_duration_offsets() -> None:
+    extractor = VideoFrameExtractor("test.mp4", 10, 10, fit_display=True)
+    fallback_frame = Image.new("RGB", (10, 10), "purple")
+
+    with patch.object(extractor, "_decode_tail_last_frame", return_value=None):
+        with patch.object(
+            extractor,
+            "_get_frame_as_image",
+            side_effect=[None, fallback_frame],
+        ) as mock_get_frame:
+            image = extractor._get_final_decoded_frame_as_image(10.0)
+
+    assert image is fallback_frame
+    assert [call.args[0] for call in mock_get_frame.call_args_list] == [9.9, 9.5]
 
 def test_scale_frame_portrait() -> None:
     extractor = VideoFrameExtractor("test.mp4", 1920, 1080, fit_display=False)

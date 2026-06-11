@@ -25,11 +25,12 @@
 
 ## Video Handoff
 - The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:
-  - Extract/cache first and last video frames under the managed runtime cache directory.
+  - Extract/cache the first decoded video frame and a tail-decoded final EOS frame under the managed runtime cache directory.
   - Transition into the first frame with pi3d.
   - Start GStreamer after that transition.
   - Swap pi3d's hidden background to the last frame during video playback.
   - Transition out from the last frame when GStreamer reaches EOS.
+- On Wayland, prefer the GTK-backed `gtkwaylandsink` presentation path when its borderless window can exactly match the configured pi3d display rectangle. Fall back to the existing `waylandsink` render-rectangle path when GTK presentation or exact geometry is unavailable.
 - Only one renderer should actively own visible display output at a time.
 - Clear Image Cache removes generated cache artifacts such as video transition frames, but original media files and media database rows are handled by separate operations.
 

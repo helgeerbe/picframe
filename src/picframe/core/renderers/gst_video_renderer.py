@@ -177,6 +177,17 @@ class GstVideoRenderer(IVideoPlayer):
         """Translate IPC events into domain events."""
         if isinstance(event, EosEvent):
             logger.info("Received EOS from worker.")
+            if event.last_sample_pts_seconds is not None:
+                logger.info(
+                    "Worker EOS last sample: pts=%.6fs duration=%s caps=%s",
+                    event.last_sample_pts_seconds,
+                    (
+                        f"{event.last_sample_duration_seconds:.6f}s"
+                        if event.last_sample_duration_seconds is not None
+                        else "unknown"
+                    ),
+                    event.last_sample_caps or "unknown",
+                )
             self._publisher.publish(PlaybackCompletedEvent())
         elif isinstance(event, ErrorEvent):
             if event.code == "unsupported_media":

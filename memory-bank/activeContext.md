@@ -1,10 +1,10 @@
 # Active Context
 
 ## Current Focus
-The current implementation focus is next-gen control-plane parity cleanup plus
-GStreamer/video reliability hardening. Caps-driven hardware discovery remains
-an active architectural stream, but invalid/unplayable video filtering is now
-implemented at indexing time.
+The current implementation focus is next-gen GStreamer/video reliability
+hardening, especially Raspberry Pi Wayland handoff behavior. Caps-driven
+hardware discovery remains active, and production video playback now has a
+GTK-backed `gtkwaylandsink` path plus tail-decoded final-frame caching.
 
 ## Current Repo State
 - Branch: `v2-dev`, tracking `origin/v2-dev`.
@@ -30,6 +30,8 @@ implemented at indexing time.
 - Recent Settings UI redesign replaces the generic schema text-field renderer with domain-specific editors and safe path browsing/validation rooted at the Picframe user's home directory. Low-level runtime options remain editable in collapsed Advanced sections. Shader values are selected/stored as basenames without `.fs`/`.vs`, image attributes and media extensions use fixed supported lists, and geocoding `key_list` is edited as ordered location parts with fallback chips.
 - Recent video hardening treats failed `ffprobe`, invalid probe JSON, or no video stream as unplayable during indexing; stale video cache rows with incomplete metadata are revalidated and marked inactive if extraction fails. GStreamer worker startup now preflights discoverability before sink creation and avoids requesting fullscreen when a render rectangle is supplied.
 - Raspberry Pi 4/labwc video validation now shows GStreamer exposes `v4l2h264dec` and `v4l2slh265dec` when `GST_V4L2_ENABLE_PROBE=1` is set before worker startup. H.264 1080p and HEVC Main 8-bit 4K playback are validated with DMABuf; HEVC Main10/HDR MOV and MOV/QuickTime 60 fps remain guarded.
+- Raspberry Pi 4/labwc PoC validation showed GTK3 + `gtkwaylandsink` removes the video-to-pi3d EOS flicker without opacity tricks. Production now prefers that path when a borderless GTK window can exactly cover `viewer.display_x/y/w/h`, and falls back to `waylandsink` render rectangles otherwise.
+- Video transition caches now use the first decoded frame and a tail-decoded final EOS frame, with fixed duration-offset sampling only as the final fallback.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -41,6 +43,8 @@ implemented at indexing time.
 - Preserve the #635 hardware-input boundary: GPIO mappings live in `hardware_inputs`, keyboard/touch shortcuts stay in `peripherals`, only payload-free commands are allowed from hardware events, and PIR no-motion timers stay in `HardwareInputService`.
 - Preserve the Settings UI safety boundary: do not reintroduce raw JSON/text controls for domain settings when a constrained picker/chip/token/segmented control can express the same config safely.
 - Preserve Pi worker V4L2 probing and caps-driven GStreamer discovery while keeping unsupported-media skips as warnings/completions rather than generic system errors.
+- Preserve the GTK-backed Wayland handoff boundary: no production opacity or GStreamer alpha tricks; exact GTK geometry is required or the worker falls back.
+- Keep final-frame extraction at indexing/cache time using tail decoding, not at video EOS runtime.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

@@ -41,6 +41,7 @@ logger = logging.getLogger("gst_worker")
 PIPELINE_COMPATIBLE = "compatible"
 PIPELINE_HARDWARE_DIRECT = "hardware_direct"
 PIPELINE_HARDWARE_PLAYBIN = "hardware_playbin"
+PIPELINE_GTK_PLAYBIN = "gtk_playbin"
 PIPELINE_SKIPPED = "skipped"
 DEFAULT_SOFTWARE_DECODE_LIMIT = "1280x720"
 UNSUPPORTED_MEDIA_CODE = "unsupported_media"
@@ -181,6 +182,12 @@ class GstWorker:
         self._current_software_limit: str | None = None
         self._current_decision: str | None = None
         self._hardware_model = self._read_hardware_model()
+        self._gtk: Any | None = None
+        self._gtk_available: bool | None = None
+        self._gtk_window: Any = None
+        self._gtk_sink_widget: Any = None
+        self._gtk_video_sink: Any = None
+        self._gtk_pump_source_id: int | None = None
 
     @staticmethod
     def _read_hardware_model() -> str:
@@ -393,15 +400,14 @@ class GstWorker:
                     ),
                 )
 
-            self._reset_pipeline_telemetry(
-                pipeline_variant,
-                sink_name,
-                decision=decision.decision,
-                hardware_limit=decision.hardware_limit,
-                software_limit=decision.software_limit,
-            )
-
             if decision.skip_reason is not None:
+                self._reset_pipeline_telemetry(
+                    pipeline_variant,
+                    sink_name,
+                    decision=decision.decision,
+                    hardware_limit=decision.hardware_limit,
+                    software_limit=decision.software_limit,
+                )
                 if stream_facts is not None:
                     self._last_video_caps = stream_facts.caps_string
                 logger.warning("Skipping %s: %s", uri, decision.skip_reason)
@@ -429,21 +435,54 @@ class GstWorker:
                 decision.software_limit,
                 decision.fallback_reason,
             )
-            self._send_video_diagnostics(
-                stage="decision",
-                fallback_reason=fallback_reason,
-            )
-            pipeline_description = self._build_pipeline_description(
-                uri,
+            gtk_pipeline = None
+            if self._should_attempt_gtk_playbin(
+                sink_name,
                 x,
                 y,
                 w,
                 h,
                 force_software_decoders=force_software_decoders,
                 pipeline_variant=pipeline_variant,
-                sink_name=sink_name,
+            ):
+                gtk_pipeline = self._create_gtk_playbin_pipeline(uri, x, y, w, h)
+                if gtk_pipeline is not None:
+                    pipeline_variant = PIPELINE_GTK_PLAYBIN
+                    sink_name = "gtkwaylandsink"
+                    logger.info("Using GTK-backed gtkwaylandsink presentation path.")
+                else:
+                    logger.warning(
+                        "GTK-backed video presentation unavailable or geometry "
+                        "could not be confirmed; falling back to %s/%s.",
+                        decision.pipeline_variant,
+                        sink_name,
+                    )
+
+            self._reset_pipeline_telemetry(
+                pipeline_variant,
+                sink_name,
+                decision=decision.decision,
+                hardware_limit=decision.hardware_limit,
+                software_limit=decision.software_limit,
             )
-            self.pipeline = Gst.parse_launch(pipeline_description)
+            self._send_video_diagnostics(
+                stage="decision",
+                fallback_reason=fallback_reason,
+            )
+            if gtk_pipeline is not None:
+                self.pipeline = gtk_pipeline
+            else:
+                pipeline_description = self._build_pipeline_description(
+                    uri,
+                    x,
+                    y,
+                    w,
+                    h,
+                    force_software_decoders=force_software_decoders,
+                    pipeline_variant=pipeline_variant,
+                    sink_name=sink_name,
+                )
+                self.pipeline = Gst.parse_launch(pipeline_description)
             if force_software_decoders:
                 logger.info("Retrying %s with software decoders forced.", uri)
             self._connect_pipeline_telemetry_hooks()
@@ -538,6 +577,218 @@ class GstWorker:
             ["waylandsink", "glimagesink", "ximagesink", "autovideosink"]
         )
         return sink_name or "autovideosink"
+
+    def _should_attempt_gtk_playbin(
+        self,
+        sink_name: str,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        *,
+        force_software_decoders: bool,
+        pipeline_variant: str,
+    ) -> bool:
+        if force_software_decoders:
+            return False
+        if sink_name != "waylandsink":
+            return False
+        if pipeline_variant not in {PIPELINE_HARDWARE_DIRECT, PIPELINE_HARDWARE_PLAYBIN}:
+            return False
+        if w <= 0 or h <= 0:
+            return False
+        return find_best_element(["gtkwaylandsink"]) == "gtkwaylandsink"
+
+    def _ensure_gtk(self) -> Any | None:
+        if self._gtk_available is False:
+            return None
+        if self._gtk is not None:
+            return self._gtk
+        try:
+            gi.require_version("Gtk", "3.0")
+            from gi.repository import Gtk
+
+            if hasattr(Gtk, "init_check"):
+                init_result = Gtk.init_check([])
+                gtk_initialized = (
+                    bool(init_result[0])
+                    if isinstance(init_result, tuple)
+                    else bool(init_result)
+                )
+                if not gtk_initialized:
+                    raise RuntimeError("Gtk.init_check returned False")
+            else:
+                Gtk.init([])
+        except Exception as exc:
+            logger.warning("GTK3 unavailable for gtkwaylandsink presentation: %s", exc)
+            self._gtk_available = False
+            return None
+        self._gtk = Gtk
+        self._gtk_available = True
+        return self._gtk
+
+    @staticmethod
+    def _set_property_if_supported(element: Any, property_name: str, value: Any) -> None:
+        if element is None:
+            return
+        try:
+            if element.find_property(property_name) is None:
+                return
+        except Exception:
+            return
+        try:
+            element.set_property(property_name, value)
+        except Exception as exc:
+            logger.debug("Could not set %s on %s: %s", property_name, element, exc)
+
+    def _create_gtk_playbin_pipeline(
+        self,
+        uri: str,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+    ) -> Any | None:
+        Gtk = self._ensure_gtk()
+        if Gtk is None:
+            return None
+
+        playbin = Gst.ElementFactory.make("playbin", "player")
+        video_sink = Gst.ElementFactory.make("gtkwaylandsink", "sink")
+        audio_sink = Gst.ElementFactory.make("fakesink", "audiosink")
+        if playbin is None or video_sink is None or audio_sink is None:
+            logger.warning(
+                "Could not create playbin/gtkwaylandsink/fakesink elements."
+            )
+            return None
+
+        self._set_property_if_supported(audio_sink, "sync", False)
+        self._set_property_if_supported(video_sink, "show-preroll-frame", True)
+        self._set_property_if_supported(video_sink, "rotate-method", 8)
+
+        try:
+            playbin.set_property("uri", uri)
+            playbin.set_property("flags", 0x00000001)
+            playbin.set_property("video-sink", video_sink)
+            playbin.set_property("audio-sink", audio_sink)
+        except Exception as exc:
+            logger.warning("Could not configure GTK playbin pipeline: %s", exc)
+            return None
+
+        try:
+            widget = video_sink.get_property("widget")
+        except Exception as exc:
+            logger.warning("gtkwaylandsink did not provide a widget: %s", exc)
+            return None
+        if widget is None:
+            logger.warning("gtkwaylandsink did not provide a widget.")
+            return None
+
+        try:
+            widget.set_hexpand(True)
+            widget.set_vexpand(True)
+        except Exception:
+            pass
+
+        window = Gtk.Window(title="picframe-video")
+        window.set_decorated(False)
+        window.set_resizable(False)
+        window.set_app_paintable(True)
+        window.add(widget)
+        window.set_default_size(w, h)
+        window.resize(w, h)
+        window.move(x, y)
+        window.show_all()
+        self._pump_gtk_events()
+
+        if not self._gtk_window_matches_geometry(window, x, y, w, h):
+            logger.warning(
+                "GTK video window geometry did not match requested "
+                "%s,%s %sx%s.",
+                x,
+                y,
+                w,
+                h,
+            )
+            try:
+                window.destroy()
+            except Exception:
+                pass
+            self._pump_gtk_events()
+            return None
+
+        self._gtk_window = window
+        self._gtk_sink_widget = widget
+        self._gtk_video_sink = video_sink
+        self._start_gtk_pump()
+        logger.info("GTK video window geometry confirmed at %s,%s %sx%s.", x, y, w, h)
+        return playbin
+
+    def _gtk_window_matches_geometry(
+        self,
+        window: Any,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+    ) -> bool:
+        self._pump_gtk_events()
+        try:
+            actual_w, actual_h = window.get_size()
+        except Exception:
+            return False
+        if int(actual_w) != int(w) or int(actual_h) != int(h):
+            return False
+
+        try:
+            actual_x, actual_y = window.get_position()
+        except Exception:
+            return x == 0 and y == 0
+        return int(actual_x) == int(x) and int(actual_y) == int(y)
+
+    def _start_gtk_pump(self) -> None:
+        if self._gtk_pump_source_id is not None or not GST_AVAILABLE:
+            return
+        try:
+            self._gtk_pump_source_id = GLib.timeout_add(16, self._pump_gtk_events_tick)
+        except Exception:
+            self._gtk_pump_source_id = None
+
+    def _stop_gtk_pump(self) -> None:
+        if self._gtk_pump_source_id is None or not GST_AVAILABLE:
+            return
+        try:
+            GLib.source_remove(self._gtk_pump_source_id)
+        except Exception:
+            pass
+        self._gtk_pump_source_id = None
+
+    def _pump_gtk_events_tick(self) -> bool:
+        self._pump_gtk_events()
+        return self._gtk_window is not None
+
+    def _pump_gtk_events(self) -> None:
+        Gtk = self._gtk
+        if Gtk is None:
+            return
+        try:
+            while Gtk.events_pending():
+                Gtk.main_iteration_do(False)
+        except Exception:
+            pass
+
+    def _destroy_gtk_video_window(self) -> None:
+        self._stop_gtk_pump()
+        if self._gtk_window is not None:
+            try:
+                self._gtk_window.hide()
+                self._gtk_window.destroy()
+            except Exception as exc:
+                logger.debug("Could not destroy GTK video window: %s", exc)
+        self._gtk_window = None
+        self._gtk_sink_widget = None
+        self._gtk_video_sink = None
+        self._pump_gtk_events()
 
     def _build_sink_props(
         self,
@@ -1368,6 +1619,7 @@ class GstWorker:
         if self._current_pipeline_variant in {
             PIPELINE_HARDWARE_DIRECT,
             PIPELINE_HARDWARE_PLAYBIN,
+            PIPELINE_GTK_PLAYBIN,
         }:
             return
 
@@ -1459,6 +1711,7 @@ class GstWorker:
                 self.bus.remove_signal_watch()
             self.pipeline = None
             self.bus = None
+        self._destroy_gtk_video_window()
 
     def _handle_set_volume(self, level: float) -> None:
         self.volume = max(0.0, min(1.0, level))
@@ -1487,8 +1740,76 @@ class GstWorker:
             logger.error(f"Caps discovery failed for {uri}: {e}")
             self._send_event(CapsResultEvent(supported=False))
 
+    @staticmethod
+    def _valid_gst_time(value: Any) -> bool:
+        try:
+            int_value = int(value)
+        except (TypeError, ValueError, OverflowError):
+            return False
+        try:
+            none_value = int(Gst.CLOCK_TIME_NONE)
+        except Exception:
+            none_value = -1
+        return int_value >= 0 and int_value != none_value
+
+    @staticmethod
+    def _gst_time_seconds(value: Any) -> float | None:
+        if not GstWorker._valid_gst_time(value):
+            return None
+        return int(value) / Gst.SECOND
+
+    def _last_sample_diagnostics(self) -> tuple[float | None, float | None, str | None]:
+        sink = self._gtk_video_sink
+        if sink is None and self.pipeline is not None:
+            try:
+                sink = self.pipeline.get_by_name("sink")
+            except Exception:
+                sink = None
+        if sink is None:
+            return None, None, None
+
+        try:
+            if sink.find_property("last-sample") is None:
+                return None, None, None
+            sample = sink.get_property("last-sample")
+        except Exception:
+            return None, None, None
+        if sample is None:
+            return None, None, None
+
+        try:
+            buffer = sample.get_buffer()
+            caps = sample.get_caps()
+        except Exception:
+            return None, None, None
+        if buffer is None:
+            return None, None, None
+
+        pts_seconds = self._gst_time_seconds(getattr(buffer, "pts", None))
+        duration_seconds = self._gst_time_seconds(getattr(buffer, "duration", None))
+        caps_text = None
+        if caps is not None:
+            try:
+                caps_text = caps.to_string()
+            except Exception:
+                caps_text = None
+        logger.info(
+            "EOS last sample diagnostics: pts=%s duration=%s caps=%s",
+            pts_seconds,
+            duration_seconds,
+            caps_text,
+        )
+        return pts_seconds, duration_seconds, caps_text
+
     def _on_eos(self, bus: Any, msg: Any) -> None:
-        self._send_event(EosEvent())
+        pts_seconds, duration_seconds, caps_text = self._last_sample_diagnostics()
+        self._send_event(
+            EosEvent(
+                last_sample_pts_seconds=pts_seconds,
+                last_sample_duration_seconds=duration_seconds,
+                last_sample_caps=caps_text,
+            )
+        )
         # Do NOT call _handle_stop() here. We want the last frame to remain visible
         # until the main process explicitly sends a StopCommand after the pi3d transition.
 
@@ -1518,7 +1839,7 @@ class GstWorker:
     def _should_retry_with_compatible_pipeline(self, message: str, debug: str) -> bool:
         return (
             self._current_play_request is not None
-            and self._current_pipeline_variant == PIPELINE_HARDWARE_DIRECT
+            and self._current_pipeline_variant in {PIPELINE_HARDWARE_DIRECT, PIPELINE_GTK_PLAYBIN}
             and not self._compatible_pipeline_retry_attempted
             and self._is_negotiation_or_stream_error(message, debug)
         )
@@ -1532,7 +1853,7 @@ class GstWorker:
 
         self._compatible_pipeline_retry_attempted = True
         logger.warning(
-            "Hardware direct video path failed; retrying compatible pipeline. "
+            "Hardware presentation video path failed; retrying compatible pipeline. "
             "Message=%s Debug=%s",
             message,
             debug,

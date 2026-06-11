@@ -23,6 +23,8 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Prefer GStreamer registry/caps negotiation over hardcoded Raspberry Pi hardware tables.
 - Enforce a software decode ceiling with graceful skip/error events for unsupported video.
 - Use the First/Last Frame Sandwich pattern for seamless image/video handoff.
+- On Wayland, prefer GTK-backed `gtkwaylandsink` playback when a borderless GTK window can exactly match the configured pi3d display rectangle; otherwise fall back to the existing `waylandsink` render-rectangle path.
+- Cache the final video transition frame by seeking near EOS and decoding a short tail window to the actual final decoded frame; keep fixed duration-offset sampling only as fallback.
 - Enable `GST_V4L2_ENABLE_PROBE=1` for the GStreamer worker on Raspberry Pi/Compute Module hardware so V4L2 hardware decoder elements are discoverable before Gst initializes.
 - Treat VLC as a diagnostic reference only: VLC's FFmpeg DRM/V4L2-request plus `wl_dmabuf` success does not relax Picframe's GStreamer guards until an equivalent GStreamer path is validated. HEVC Main 8-bit 60 fps support is path-specific: validated MKV may use hardware playbin, while MOV/QuickTime 60 fps remains guarded.
 - Treat failed `ffprobe`, invalid video probe JSON, or absence of a video stream as unplayable at indexing time. Such videos are excluded from active playlists and stale cache rows are marked inactive; transition-frame cache failure is best-effort only and does not exclude an otherwise playable video.

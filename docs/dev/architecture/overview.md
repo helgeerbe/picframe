@@ -47,6 +47,7 @@ flowchart TB
     subgraph Render["Presentation"]
         Pi3D["pi3d Image / Overlay Renderer"]
         Gst["GStreamer Video Worker"]
+        GtkSink["GTK Wayland Video Window"]
     end
 
     subgraph Infra["Infrastructure / Persistence"]
@@ -93,6 +94,7 @@ flowchart TB
     Engine --> Playlist
     Engine -->|RenderCommand| Pi3D
     Engine -->|PlayCommand via IPC| Gst
+    Gst -->|gtkwaylandsink or fallback sink| GtkSink
 ```
 
 | Component | Primary tasks | Main relationships |
@@ -110,7 +112,8 @@ flowchart TB
 | HAL Adapters | Encapsulate display power, host power commands, and local input hardware. | Implement core ports and communicate through the event bus. |
 | MQTT Adapter | Publish Home Assistant discovery and bridge MQTT commands/state. | Uses the event bus and state tracker instead of direct playback calls. |
 | pi3d Renderer | Render images, transitions, mats, text overlays, and clock overlays. | Receives `RenderCommand` values from Playback Engine. |
-| GStreamer Video Worker | Build hardware/software video pipelines out of process and report diagnostics/EOS. | Controlled by `GstVideoRenderer` over IPC. |
+| GStreamer Video Worker | Build hardware/software video pipelines out of process, host Wayland video through GTK when exact geometry is available, and report diagnostics/EOS. | Controlled by `GstVideoRenderer` over IPC; falls back to direct `waylandsink` when GTK presentation is unavailable. |
+| GTK Wayland Video Window | Borderless `gtkwaylandsink` host that overlays the configured pi3d display rectangle during video playback. | Lives inside the GStreamer worker and is destroyed after the playback engine completes the EOS handoff. |
 
 ## 2. Architectural Concept & Reasoning
 
@@ -164,8 +167,9 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Robust Environment Detection & Configuration Injection:** To ensure stability across diverse execution environments (bare metal Raspberry Pi vs. generic Linux VMs), the `HALFactory` implements robust runtime detection. It safely probes hardware identifiers (e.g., `/proc/device-tree/model`) and definitive display server variables (e.g., `$XDG_SESSION_TYPE`, `$WAYLAND_DISPLAY`) using exception boundaries. Furthermore, the factory signature is designed to accept hardware configuration dictionaries, allowing it to dynamically instantiate and inject concrete adapters like the `RPiGPIOAdapter` when native hardware is detected. If native hardware or specific CLI tools (like `wlr-randr`) are missing, or if configuration is absent, it gracefully degrades to Mock adapters. This prevents initialization crashes, ensures proper resource management on bare metal, and allows seamless development and testing on VMs.
 *   **System Management & Error Handling:** The `SystemManager` service delegates critical OS commands (reboot, shutdown) to the injected `ISystemManager` adapter. For Linux environments, the `LinuxSystemManager` utilizes `subprocess` to execute exact-path `sudo -n` commands so missing sudoers permissions fail immediately instead of hanging on an interactive password prompt. To ensure system resilience and user visibility, these adapters must implement robust error handling. If a system command fails (e.g., due to missing `sudo` privileges), the adapter should catch the exception and publish a `SystemErrorEvent` to the Event Bus, allowing the UI to notify the user rather than failing silently.
 *   **GStreamer Hardware Decoding & VM Fallback:** The `GstVideoRenderer` leverages an out-of-process worker (`gst_worker.py`) communicating via IPC to dynamically construct pipelines. It automatically utilizes hardware decoding (VA-API, V4L2) when available. Crucially, it gracefully falls back to software decoding (`libav`) when running in environments lacking hardware acceleration, such as Ubuntu VMs with `virtio-gpu`. Video orientation is handled natively by `waylandsink`'s `rotate-method` property, avoiding the distortion issues associated with the `videoflip` element.
+*   **GTK-backed Wayland Video Handoff:** On Wayland, the worker prefers a `playbin` + `gtkwaylandsink` presentation path hosted in a borderless GTK3 window that exactly matches the pi3d display rectangle from `viewer.display_x/y/w/h`. Raspberry Pi 4/labwc PoC validation showed this avoids the compositor redraw flicker seen when closing a fully covering plain Wayland video surface. If GTK, `gtkwaylandsink`, or exact geometry confirmation fails, the worker preserves the existing `waylandsink` render-rectangle path as the fallback.
 *   **Advanced Media Validation (Caps Checking):** Before playback, the system validates media compatibility using the `GstPbutils.Discoverer` API to extract stream capabilities (caps). These caps are then rigorously intersected with the GStreamer registry's available decoders. This ensures that the system only attempts to play media for which it has a valid, working decoder (hardware or software), preventing pipeline failures and providing robust error handling for unsupported formats.
-*   **Unplayable Video Filtering:** Video indexing uses `ffprobe` as the first playability gate. Files that cannot be probed, return invalid probe data, or contain no video stream are excluded from active playlists, and any existing media-cache row for that path is marked inactive on the next file event or differential sync. Generated first/last transition frames remain best-effort and are not required for a valid video to stay indexed.
+*   **Unplayable Video Filtering:** Video indexing uses `ffprobe` as the first playability gate. Files that cannot be probed, return invalid probe data, or contain no video stream are excluded from active playlists, and any existing media-cache row for that path is marked inactive on the next file event or differential sync. Generated first/last transition frames remain best-effort and are not required for a valid video to stay indexed. The final transition frame is cached by seeking near the end and decoding a short tail window through EOS, with fixed duration-offset sampling kept only as a fallback.
 
 ### 2.11 CLI and Application Initialization
 *   **Concept:** The application provides a command-line interface (e.g., `picframe init` and `picframe run --port 9000`). The `init` command bootstraps the user environment in `~/.picframe/` (creating directories, copying default assets, and initializing SQLite databases). It interactively prompts users when existing databases are found, offering to keep or delete them, and supports a `--force` flag for automated environments.

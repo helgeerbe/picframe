@@ -442,6 +442,20 @@ page also records VLC comparison results from issue #680. VLC is only a
 diagnostic reference there; Picframe's next-generation runtime continues to use
 GStreamer.
 
+On Wayland, Picframe first tries to host video playback in a borderless GTK3
+window using `gtkwaylandsink`. The GTK window is sized and positioned to match
+the configured pi3d display rectangle (`viewer.display_x`, `viewer.display_y`,
+`viewer.display_w`, and `viewer.display_h`) so the video surface covers the
+same pixels as image rendering. If GTK, `gtkwaylandsink`, or exact window
+geometry is unavailable, Picframe falls back to the existing `waylandsink`
+render-rectangle path.
+
+Video transition frames are generated during indexing/cache work, not at EOS
+runtime. The first transition frame is the first decoded video frame. The final
+transition frame is taken by seeking near the end of the video and decoding a
+short tail window through EOS, which makes the cached last frame match the
+actual video handoff more closely than sampling a fixed duration offset.
+
 Hardware playback is selected only when the Raspberry Pi model is known to
 support the codec at the stream resolution/framerate and GStreamer exposes a
 matching V4L2 decoder. Unknown, unsupported, over-limit, or missing-decoder
@@ -524,7 +538,7 @@ sudo apt-get install -y \
   build-essential ca-certificates cage labwc dbus-user-session git locales \
   python3 python3-dev python3-gi python3-gst-1.0 python3-pip python3-venv sudo \
   libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev \
-  gir1.2-gst-plugins-base-1.0 gir1.2-gstreamer-1.0 mesa-utils \
+  gir1.2-gst-plugins-base-1.0 gir1.2-gstreamer-1.0 gir1.2-gtk-3.0 mesa-utils \
   libheif1 libheif-dev libjpeg-dev libopenjp2-7 libtiff6 zlib1g-dev \
   wlr-randr ddcutil brightnessctl i2c-tools seatd \
   gstreamer1.0-tools gstreamer1.0-libav \
@@ -533,6 +547,7 @@ sudo apt-get install -y \
   gstreamer1.0-gl
 ```
 *(Note: `gstreamer1.0-gl` supports GL presentation. Raspberry Pi V4L2 decoder elements come from the standard GStreamer plugin packages above, especially `gstreamer1.0-plugins-good` and `gstreamer1.0-plugins-bad`).*
+`gir1.2-gtk-3.0` is required for Picframe's GTK-backed Wayland video handoff.
 
 When using a Python virtual environment with Debian/Raspberry Pi OS
 GStreamer bindings, create it with system site packages so `import gi`,

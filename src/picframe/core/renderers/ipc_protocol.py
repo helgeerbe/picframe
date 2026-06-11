@@ -66,6 +66,9 @@ class CheckCapsCommand(IpcMessage):
 @dataclass(frozen=True)
 class EosEvent(IpcMessage):
     """Event indicating the End of Stream has been reached."""
+    last_sample_pts_seconds: float | None = None
+    last_sample_duration_seconds: float | None = None
+    last_sample_caps: str | None = None
     type: str = field(default="eos", init=False)
 
 @dataclass(frozen=True)
