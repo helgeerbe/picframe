@@ -869,16 +869,15 @@ class GstWorker:
         fullscreen: bool = False,
     ) -> bool:
         self._pump_gtk_events()
+        if fullscreen:
+            return True
+
         try:
             actual_w, actual_h = window.get_size()
         except Exception:
             return False
-        if fullscreen and (w <= 0 or h <= 0):
-            return True
         if int(actual_w) != int(w) or int(actual_h) != int(h):
             return False
-        if fullscreen:
-            return True
 
         try:
             actual_x, actual_y = window.get_position()

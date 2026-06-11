@@ -579,6 +579,53 @@ def test_gtk_window_geometry_uses_move_resize_for_custom_path() -> None:
     window.fullscreen.assert_not_called()
 
 
+def test_gtk_window_matches_geometry_accepts_fullscreen_before_size_settles() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._pump_gtk_events = MagicMock()
+    window = MagicMock()
+    window.get_size.return_value = (640, 480)
+
+    assert worker._gtk_window_matches_geometry(
+        window,
+        0,
+        0,
+        2560,
+        1440,
+        fullscreen=True,
+    )
+    worker._pump_gtk_events.assert_called_once_with()
+    window.get_size.assert_not_called()
+    window.get_position.assert_not_called()
+
+
+def test_gtk_window_matches_geometry_requires_exact_custom_geometry() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._pump_gtk_events = MagicMock()
+    window = MagicMock()
+    window.get_size.return_value = (300, 400)
+    window.get_position.return_value = (10, 20)
+
+    assert worker._gtk_window_matches_geometry(
+        window,
+        10,
+        20,
+        300,
+        400,
+        fullscreen=False,
+    )
+
+    window.get_position.return_value = (11, 20)
+
+    assert not worker._gtk_window_matches_geometry(
+        window,
+        10,
+        20,
+        300,
+        400,
+        fullscreen=False,
+    )
+
+
 def test_hide_gtk_cursor_applies_blank_cursor_to_widget_and_window() -> None:
     class FakeCursorType:
         BLANK_CURSOR = "blank"
