@@ -1,4 +1,5 @@
 import os
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -7,7 +8,10 @@ import pytest
 from PIL import Image
 from typing import Any, Generator
 
-from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
+from picframe.core.utils.video_frame_extractor import (
+    VideoFrameExtractor,
+    _FrameExtractionTimeout,
+)
 
 @pytest.fixture
 def mock_subprocess_run() -> Generator[MagicMock, None, None]:
@@ -162,6 +166,9 @@ def test_final_decoded_frame_uses_tail_decode_window(
     assert image.getpixel((0, 0)) == (0, 0, 254)
     cmd = mock_subprocess_run.call_args.args[0]
     assert cmd[cmd.index("-ss") + 1] == "8.000000"
+    assert mock_subprocess_run.call_args.kwargs["timeout"] == (
+        VideoFrameExtractor.FFMPEG_FRAME_TIMEOUT_SECONDS
+    )
 
 
 def test_final_decoded_frame_tries_fallback_tail_windows(
@@ -208,6 +215,33 @@ def test_final_decoded_frame_falls_back_to_duration_offsets() -> None:
 
     assert image is fallback_frame
     assert [call.args[0] for call in mock_get_frame.call_args_list] == [9.9, 9.5]
+
+
+def test_extract_and_save_frames_returns_false_on_first_frame_timeout(
+    mock_subprocess_run: MagicMock,
+) -> None:
+    mock_subprocess_run.side_effect = subprocess.TimeoutExpired(
+        cmd=["ffmpeg"],
+        timeout=VideoFrameExtractor.FFMPEG_FRAME_TIMEOUT_SECONDS,
+    )
+
+    with patch("picframe.core.utils.video_frame_extractor.os.path.exists", return_value=False):
+        result = VideoFrameExtractor.extract_and_save_frames("test.mp4", 10.0, 1920, 1080)
+
+    assert result is False
+
+
+def test_final_decoded_frame_aborts_on_tail_decode_timeout(
+    mock_subprocess_run: MagicMock,
+) -> None:
+    mock_subprocess_run.side_effect = subprocess.TimeoutExpired(
+        cmd=["ffmpeg"],
+        timeout=VideoFrameExtractor.FFMPEG_FRAME_TIMEOUT_SECONDS,
+    )
+    extractor = VideoFrameExtractor("test.mp4", 10, 10, fit_display=True)
+
+    with pytest.raises(_FrameExtractionTimeout):
+        extractor._get_final_decoded_frame_as_image(10.0)
 
 def test_scale_frame_portrait() -> None:
     extractor = VideoFrameExtractor("test.mp4", 1920, 1080, fit_display=False)

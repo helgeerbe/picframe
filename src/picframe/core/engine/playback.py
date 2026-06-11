@@ -688,6 +688,12 @@ class PlaybackEngine:
                         )
                         first_frame_path = extractor.get_frame_path("first")
                         last_frame_path = extractor.get_frame_path("last")
+                        self._logger.info(
+                            "Preparing video transition frames for %s at %sx%s.",
+                            media_item.filepath,
+                            display_w,
+                            display_h,
+                        )
                         frames = extractor.get_first_and_last_frames(duration, display_w, display_h)
                         if frames:
                             first_img, last_img = frames

@@ -20,6 +20,11 @@ from PIL import Image
 
 _image_file_lock = threading.Lock()
 
+
+class _FrameExtractionTimeout(Exception):
+    """Internal signal that ffmpeg frame extraction exceeded the playback budget."""
+
+
 class VideoFrameExtractor:
     """
     A utility class to extract, process, and cache the first and last frames of a video.
@@ -30,6 +35,7 @@ class VideoFrameExtractor:
     """
 
     TAIL_DECODE_WINDOWS_SECONDS = (2.0, 5.0, 10.0)
+    FFMPEG_FRAME_TIMEOUT_SECONDS = 8.0
 
     def __init__(
         self,
@@ -176,11 +182,24 @@ class VideoFrameExtractor:
                 "-vcodec", "mjpeg",
                 "-"
             ]
-            process = subprocess.run(cmd, capture_output=True, check=True)
+            process = subprocess.run(
+                cmd,
+                capture_output=True,
+                check=True,
+                timeout=self.FFMPEG_FRAME_TIMEOUT_SECONDS,
+            )
             import io
             image = Image.open(io.BytesIO(process.stdout))
             image.load()
             return image
+        except subprocess.TimeoutExpired as e:
+            self.logger.warning(
+                "Timed out retrieving video frame at %.3fs after %.1fs: %s",
+                seek_time,
+                self.FFMPEG_FRAME_TIMEOUT_SECONDS,
+                e,
+            )
+            raise _FrameExtractionTimeout() from e
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else e.stderr
             self.logger.warning("Failed to retrieve video frame: %s", stderr or e)
@@ -196,7 +215,15 @@ class VideoFrameExtractor:
                 seek_time = 0.0
             else:
                 seek_time = max(0.0, duration - tail_window)
-            image = self._decode_tail_last_frame(seek_time, tail_window)
+            try:
+                image = self._decode_tail_last_frame(seek_time, tail_window)
+            except _FrameExtractionTimeout:
+                self.logger.warning(
+                    "Tail-decoded final frame extraction timed out for %s; "
+                    "falling back to direct playback without cached final frame.",
+                    self.video_path,
+                )
+                raise
             if image is not None:
                 return image
 
@@ -205,7 +232,14 @@ class VideoFrameExtractor:
             "duration-offset extraction.",
             self.video_path,
         )
-        return self._get_duration_offset_last_frame_as_image(duration)
+        try:
+            return self._get_duration_offset_last_frame_as_image(duration)
+        except _FrameExtractionTimeout:
+            self.logger.warning(
+                "Duration-offset final frame extraction timed out for %s.",
+                self.video_path,
+            )
+            return None
 
     def _decode_tail_last_frame(
         self,
@@ -231,7 +265,12 @@ class VideoFrameExtractor:
                     "2",
                     output_pattern,
                 ]
-                process = subprocess.run(cmd, capture_output=True, check=True)
+                process = subprocess.run(
+                    cmd,
+                    capture_output=True,
+                    check=True,
+                    timeout=self.FFMPEG_FRAME_TIMEOUT_SECONDS,
+                )
                 frame_paths = sorted(Path(tmpdir).glob("frame-*.jpg"))
                 if not frame_paths:
                     stderr = (
@@ -250,6 +289,15 @@ class VideoFrameExtractor:
                 image = Image.open(frame_paths[-1])
                 image.load()
                 return image.copy()
+        except subprocess.TimeoutExpired as e:
+            self.logger.warning(
+                "Tail decode timed out from %.3fs over %.3fs after %.1fs: %s",
+                seek_time,
+                tail_window,
+                self.FFMPEG_FRAME_TIMEOUT_SECONDS,
+                e,
+            )
+            raise _FrameExtractionTimeout() from e
         except subprocess.CalledProcessError as e:
             stderr = e.stderr.decode(errors="replace") if isinstance(e.stderr, bytes) else e.stderr
             self.logger.warning(
@@ -351,8 +399,15 @@ class VideoFrameExtractor:
         # Create a temporary instance just to use the extraction methods
         extractor = VideoFrameExtractor(video_path, width, height, fit_display=fit_display, cache_dir=cache_dir)
         
-        first_image = extractor._get_frame_as_image(0)
-        last_image = extractor._get_final_decoded_frame_as_image(duration)
+        try:
+            first_image = extractor._get_frame_as_image(0)
+            last_image = extractor._get_final_decoded_frame_as_image(duration)
+        except _FrameExtractionTimeout:
+            logger.warning(
+                "Timed out extracting transition frames for %s; video will play directly.",
+                video_path,
+            )
+            return False
                     
         if last_image is None and first_image is not None:
             last_image = first_image.copy()
