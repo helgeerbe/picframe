@@ -662,9 +662,7 @@ def test_present_gtk_video_window_sets_opacity_fullscreen_and_presents() -> None
 
     worker._present_gtk_video_window(window, fullscreen=True)
 
-    window.set_opacity.assert_called_once_with(
-        gst_worker.GTK_VIDEO_DIAGNOSTIC_PLAYBACK_OPACITY
-    )
+    window.set_opacity.assert_called_once_with(1.0)
     window.fullscreen.assert_called_once_with()
     window.present.assert_called_once_with()
     worker._pump_gtk_events.assert_called_once_with()
@@ -677,9 +675,7 @@ def test_present_gtk_video_window_keeps_custom_geometry_unfullscreened() -> None
 
     worker._present_gtk_video_window(window, fullscreen=False)
 
-    window.set_opacity.assert_called_once_with(
-        gst_worker.GTK_VIDEO_DIAGNOSTIC_PLAYBACK_OPACITY
-    )
+    window.set_opacity.assert_called_once_with(1.0)
     window.fullscreen.assert_not_called()
     window.present.assert_called_once_with()
     worker._pump_gtk_events.assert_called_once_with()
