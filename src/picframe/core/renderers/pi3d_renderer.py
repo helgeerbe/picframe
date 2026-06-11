@@ -343,6 +343,14 @@ class Pi3dRenderer(IRenderer):
 
     def get_display_rect(self) -> tuple[int, int, int, int]:
         """Get the actual (x, y, width, height) of the rendering display."""
+        if self._display_w and self._display_h:
+            return (
+                int(self._display_x),
+                int(self._display_y),
+                int(self._display_w),
+                int(self._display_h),
+            )
+
         if self._display is None:
             return (self._display_x, self._display_y, self._display_w or 0, self._display_h or 0)
         

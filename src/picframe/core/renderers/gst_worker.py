@@ -814,6 +814,11 @@ class GstWorker:
                         pass
             window.fullscreen()
             return
+        if widget is not None:
+            try:
+                widget.set_size_request(w, h)
+            except Exception:
+                pass
         window.set_default_size(w, h)
         window.resize(w, h)
         window.move(x, y)

@@ -599,6 +599,27 @@ def test_gtk_window_geometry_uses_move_resize_for_custom_path() -> None:
     window.fullscreen.assert_not_called()
 
 
+def test_gtk_window_geometry_sets_widget_size_for_custom_path() -> None:
+    window = MagicMock()
+    widget = MagicMock()
+
+    GstWorker._apply_gtk_window_geometry(
+        window,
+        10,
+        20,
+        300,
+        400,
+        fullscreen=False,
+        widget=widget,
+    )
+
+    widget.set_size_request.assert_called_once_with(300, 400)
+    window.set_default_size.assert_called_once_with(300, 400)
+    window.resize.assert_called_once_with(300, 400)
+    window.move.assert_called_once_with(10, 20)
+    window.fullscreen.assert_not_called()
+
+
 def test_configure_gtk_video_window_matches_poc_hints() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     window = MagicMock()

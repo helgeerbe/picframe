@@ -103,6 +103,32 @@ def test_renderer_start_stop(
     assert renderer._display is None
 
 
+def test_renderer_get_display_rect_prefers_configured_geometry(
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    """Configured pi3d geometry is the contract for matching video overlays."""
+    config = RendererConfig(
+        display_x=100,
+        display_y=80,
+        display_w=1800,
+        display_h=1000,
+        font_file="/path/to/font.ttf",
+    )
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+
+    assert renderer._display is not None
+    renderer._display.left = 0
+    renderer._display.top = 80
+    renderer._display.width = 1920
+    renderer._display.height = 1080
+
+    assert renderer.get_display_rect() == (100, 80, 1800, 1000)
+
+
 def test_renderer_execute_without_start(
     config: RendererConfig,
     mock_image_renderer: MagicMock
