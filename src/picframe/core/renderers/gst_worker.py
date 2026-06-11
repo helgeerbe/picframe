@@ -46,6 +46,7 @@ PIPELINE_SKIPPED = "skipped"
 DEFAULT_SOFTWARE_DECODE_LIMIT = "1280x720"
 UNSUPPORTED_MEDIA_CODE = "unsupported_media"
 GTK_EOS_WINDOW_OPACITY = 0.99
+GTK_EOS_SURFACE_NUDGE_PIXELS = 1
 
 
 @dataclass(frozen=True)
@@ -190,6 +191,8 @@ class GstWorker:
         self._gtk_host: Any = None
         self._gtk_sink_widget: Any = None
         self._gtk_video_sink: Any = None
+        self._gtk_video_rect: tuple[int, int, int, int] | None = None
+        self._gtk_video_fullscreen = False
         self._gtk_pump_source_id: int | None = None
 
     @staticmethod
@@ -759,6 +762,8 @@ class GstWorker:
         self._gtk_host = host
         self._gtk_sink_widget = widget
         self._gtk_video_sink = video_sink
+        self._gtk_video_rect = (x, y, w, h)
+        self._gtk_video_fullscreen = fullscreen_video
         self._start_gtk_pump()
         logger.info("GTK video window geometry confirmed at %s,%s %sx%s.", x, y, w, h)
         return playbin
@@ -1174,8 +1179,11 @@ class GstWorker:
             except Exception as exc:
                 logger.debug("Could not destroy GTK video window: %s", exc)
         self._gtk_window = None
+        self._gtk_host = None
         self._gtk_sink_widget = None
         self._gtk_video_sink = None
+        self._gtk_video_rect = None
+        self._gtk_video_fullscreen = False
         self._pump_gtk_events()
 
     def _build_sink_props(
@@ -2208,7 +2216,88 @@ class GstWorker:
                 )
         except Exception as exc:
             logger.debug("Could not set GTK video window opacity for EOS: %s", exc)
+        self._nudge_gtk_video_surface_for_eos()
         self._pump_gtk_events()
+
+    def _gtk_eos_nudge_rect(self) -> tuple[int, int, int, int] | None:
+        rect = self._gtk_video_rect
+        if rect is not None:
+            x, y, w, h = rect
+        else:
+            x, y, w, h = 0, 0, 0, 0
+
+        if w <= 0 or h <= 0:
+            monitor_geometry = self._gtk_primary_monitor_geometry()
+            if monitor_geometry is not None:
+                x, y, w, h = monitor_geometry
+
+        if (w <= 0 or h <= 0) and self._gtk_window is not None:
+            try:
+                w, h = self._gtk_window.get_size()
+            except Exception:
+                pass
+            try:
+                x, y = self._gtk_window.get_position()
+            except Exception:
+                pass
+
+        try:
+            x = int(x)
+            y = int(y)
+            w = int(w)
+            h = int(h)
+        except (TypeError, ValueError):
+            return None
+        if w <= 0 or h <= GTK_EOS_SURFACE_NUDGE_PIXELS:
+            return None
+        return (x, y, w, h - GTK_EOS_SURFACE_NUDGE_PIXELS)
+
+    def _nudge_gtk_video_surface_for_eos(self) -> None:
+        if self._gtk_window is None:
+            return
+        nudge_rect = self._gtk_eos_nudge_rect()
+        if nudge_rect is None:
+            return
+        x, y, w, nudged_h = nudge_rect
+
+        try:
+            if self._gtk_sink_widget is not None:
+                set_size_request = getattr(self._gtk_sink_widget, "set_size_request", None)
+                if callable(set_size_request):
+                    set_size_request(w, nudged_h)
+                queue_resize = getattr(self._gtk_sink_widget, "queue_resize", None)
+                if callable(queue_resize):
+                    queue_resize()
+
+            if self._gtk_host is not None:
+                queue_resize = getattr(self._gtk_host, "queue_resize", None)
+                if callable(queue_resize):
+                    queue_resize()
+                logger.info(
+                    "Nudged GTK video widget height to %s for EOS compositor redraw.",
+                    nudged_h,
+                )
+                return
+
+            if self._gtk_video_fullscreen:
+                unfullscreen = getattr(self._gtk_window, "unfullscreen", None)
+                if callable(unfullscreen):
+                    unfullscreen()
+            set_default_size = getattr(self._gtk_window, "set_default_size", None)
+            if callable(set_default_size):
+                set_default_size(w, nudged_h)
+            resize = getattr(self._gtk_window, "resize", None)
+            if callable(resize):
+                resize(w, nudged_h)
+            move = getattr(self._gtk_window, "move", None)
+            if callable(move):
+                move(x, y)
+            logger.info(
+                "Nudged GTK video window height to %s for EOS compositor redraw.",
+                nudged_h,
+            )
+        except Exception as exc:
+            logger.debug("Could not nudge GTK video window for EOS: %s", exc)
 
     def _on_eos(self, bus: Any, msg: Any) -> None:
         pts_seconds, duration_seconds, caps_text = self._last_sample_diagnostics()

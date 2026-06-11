@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 from picframe.core.renderers import gst_worker
 from picframe.core.renderers.gst_worker import (
     GTK_EOS_WINDOW_OPACITY,
+    GTK_EOS_SURFACE_NUDGE_PIXELS,
     PIPELINE_COMPATIBLE,
     PIPELINE_GTK_PLAYBIN,
     PIPELINE_HARDWARE_DIRECT,
@@ -910,6 +911,9 @@ def test_on_eos_pauses_pipeline_applies_gtk_opacity_and_sends_event() -> None:
     worker.conn.closed = False
     worker.pipeline = MagicMock()
     worker._gtk_window = MagicMock()
+    worker._gtk_sink_widget = MagicMock()
+    worker._gtk_video_rect = (0, 0, 1920, 1080)
+    worker._gtk_video_fullscreen = True
     worker._pump_gtk_events = MagicMock()
     worker._last_sample_diagnostics = MagicMock(
         return_value=(1.25, 0.04, "video/x-raw(memory:DMABuf)")
@@ -919,6 +923,15 @@ def test_on_eos_pauses_pipeline_applies_gtk_opacity_and_sends_event() -> None:
 
     worker.pipeline.set_state.assert_called_once_with(gst_worker.Gst.State.PAUSED)
     worker._gtk_window.set_opacity.assert_called_once_with(GTK_EOS_WINDOW_OPACITY)
+    worker._gtk_window.unfullscreen.assert_called_once_with()
+    worker._gtk_window.resize.assert_called_once_with(
+        1920,
+        1080 - GTK_EOS_SURFACE_NUDGE_PIXELS,
+    )
+    worker._gtk_sink_widget.set_size_request.assert_called_once_with(
+        1920,
+        1080 - GTK_EOS_SURFACE_NUDGE_PIXELS,
+    )
     worker._pump_gtk_events.assert_called_once_with()
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "eos"
@@ -942,6 +955,53 @@ def test_on_eos_without_gtk_window_still_pauses_and_sends_event() -> None:
     worker._pump_gtk_events.assert_not_called()
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "eos"
+
+
+def test_eos_nudge_uses_fixed_host_widget_for_custom_geometry() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._gtk_window = MagicMock()
+    worker._gtk_host = MagicMock()
+    worker._gtk_sink_widget = MagicMock()
+    worker._gtk_video_rect = (100, 80, 1800, 1000)
+    worker._gtk_video_fullscreen = False
+
+    worker._nudge_gtk_video_surface_for_eos()
+
+    worker._gtk_sink_widget.set_size_request.assert_called_once_with(
+        1800,
+        1000 - GTK_EOS_SURFACE_NUDGE_PIXELS,
+    )
+    worker._gtk_sink_widget.queue_resize.assert_called_once_with()
+    worker._gtk_host.queue_resize.assert_called_once_with()
+    worker._gtk_window.unfullscreen.assert_not_called()
+    worker._gtk_window.resize.assert_not_called()
+    worker._gtk_window.move.assert_not_called()
+
+
+def test_eos_nudge_uses_monitor_size_for_fullscreen_unset_geometry(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._gtk_window = MagicMock()
+    worker._gtk_sink_widget = MagicMock()
+    worker._gtk_video_rect = (0, 0, 0, 0)
+    worker._gtk_video_fullscreen = True
+    monkeypatch.setattr(
+        worker,
+        "_gtk_primary_monitor_geometry",
+        lambda: (0, 0, 2560, 1440),
+    )
+
+    worker._nudge_gtk_video_surface_for_eos()
+
+    worker._gtk_sink_widget.set_size_request.assert_called_once_with(
+        2560,
+        1440 - GTK_EOS_SURFACE_NUDGE_PIXELS,
+    )
+    worker._gtk_window.unfullscreen.assert_called_once_with()
+    worker._gtk_window.resize.assert_called_once_with(
+        2560,
+        1440 - GTK_EOS_SURFACE_NUDGE_PIXELS,
+    )
+    worker._gtk_window.move.assert_called_once_with(0, 0)
 
 
 def test_handle_stop_still_tears_down_pipeline_and_gtk_window() -> None:
