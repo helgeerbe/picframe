@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from picframe.core.engine.playback import PlaybackEngine
+from picframe.core.engine.playback import PlaybackEngine, VIDEO_EOS_REDRAW_FRAMES
 from picframe.core.events.dto import (
     PlaybackCompletedEvent,
     RenderCommand,
@@ -141,9 +141,7 @@ def test_video_handoff_sequence(
     assert swap_call.background_only is True
     
     # 5. Video playback completed
-    with patch("os.path.exists", return_value=True), patch("threading.Timer") as mock_timer:
-        mock_timer_instance = MagicMock()
-        mock_timer.return_value = mock_timer_instance
+    with patch("os.path.exists", return_value=True):
         engine._handle_playback_completed(PlaybackCompletedEvent())
 
         reveal_call = mock_renderer.execute.call_args_list[-2][0][0]
@@ -154,9 +152,10 @@ def test_video_handoff_sequence(
         assert isinstance(resume_call, RenderCommand)
         assert resume_call.image_path == "RESUME"
         assert engine._next_transition_time == float("inf")
-        mock_timer.call_args[0][1]()
+        for _ in range(VIDEO_EOS_REDRAW_FRAMES):
+            engine._record_video_eos_redraw_frame()
 
-    # The EOS teardown timer closes the video window, then the run loop advances.
+    # The EOS render barrier closes the video window, then the run loop advances.
     assert engine._next_transition_time == 0.0
     
     # Simulate the run loop picking it up
