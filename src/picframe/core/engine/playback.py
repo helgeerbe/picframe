@@ -181,8 +181,7 @@ class PlaybackEngine:
         self._clear_pending_video_preparation()
         self._clear_pending_video_swap()
         self._cancel_pending_video_stop(stop_video=True)
-        if hasattr(self, '_active_video_media'):
-            delattr(self, '_active_video_media')
+        self._clear_active_video_state()
         # We don't call renderer.stop() here because it might be called
         # from a signal handler which can cause issues with pi3d's
         # display destruction. The renderer will be stopped when the
@@ -639,8 +638,7 @@ class PlaybackEngine:
         self._cancel_pending_video_stop(stop_video=True)
         self._clear_pending_video_preparation()
         self._clear_pending_video_swap()
-        if hasattr(self, '_active_video_media'):
-            delattr(self, '_active_video_media')
+        self._clear_active_video_state()
             
         display_item = self._as_display_item(self._playlist_manager.get_next())
         if display_item:
@@ -800,6 +798,8 @@ class PlaybackEngine:
             last_img = getattr(self, '_pending_last_img', None)
             last_frame_path = getattr(self, '_pending_last_frame_path', None)
             self._active_video_media = media_item
+            self._active_video_last_img = last_img
+            self._active_video_last_frame_path = last_frame_path
             self._change_state(State.PLAYING)
             
             # Schedule the mid-playback texture swap on the main loop
@@ -865,8 +865,8 @@ class PlaybackEngine:
             self._change_state(State.PLAYING)
 
         self._clear_pending_video_swap()
-        if hasattr(self, '_active_video_media'):
-            delattr(self, '_active_video_media')
+        self._render_active_video_last_frame_for_reveal()
+        self._clear_active_video_state()
 
         # Wake up the renderer from SUSPENDED state
         self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
@@ -881,8 +881,7 @@ class PlaybackEngine:
         self._cancel_pending_video_stop(stop_video=True)
         self._clear_pending_video_preparation()
         self._clear_pending_video_swap()
-        if hasattr(self, '_active_video_media'):
-            delattr(self, '_active_video_media')
+        self._clear_active_video_state()
             
         display_item = self._as_display_item(self._playlist_manager.get_previous())
         if display_item:
@@ -945,6 +944,37 @@ class PlaybackEngine:
         self._texture_swap_time = float('inf')
         if invalidate_suspend:
             self._video_suspend_generation += 1
+
+    def _clear_active_video_state(self) -> None:
+        for attr in (
+            '_active_video_media',
+            '_active_video_last_img',
+            '_active_video_last_frame_path',
+        ):
+            if hasattr(self, attr):
+                delattr(self, attr)
+
+    def _render_active_video_last_frame_for_reveal(self) -> None:
+        last_img = getattr(self, '_active_video_last_img', None)
+        last_frame_path = getattr(self, '_active_video_last_frame_path', None)
+        if last_img is None and last_frame_path is None:
+            return
+        if last_frame_path is None:
+            media_item = getattr(self, '_active_video_media', None)
+            if media_item is None:
+                return
+            import os
+            base, _ = os.path.splitext(media_item.filepath)
+            last_frame_path = base + ".2.frame"
+
+        self._logger.info("Refreshing pi3d reveal texture with video last frame: %s", last_frame_path)
+        self._renderer.execute(
+            RenderCommand(
+                image_path=last_frame_path,
+                background_only=True,
+                image_obj=last_img,
+            )
+        )
 
     def _schedule_video_stop_after_eos(self) -> None:
         """Keep the EOS video window visible briefly while pi3d redraws behind it."""

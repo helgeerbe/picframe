@@ -141,11 +141,22 @@ def test_video_handoff_sequence(
     assert swap_call.background_only is True
     
     # 5. Video playback completed
-    with patch("os.path.exists", return_value=True):
+    with patch("os.path.exists", return_value=True), patch("threading.Timer") as mock_timer:
+        mock_timer_instance = MagicMock()
+        mock_timer.return_value = mock_timer_instance
         engine._handle_playback_completed(PlaybackCompletedEvent())
-        
-    # _handle_playback_completed sets _next_transition_time to 0.0
-    # It doesn't immediately trigger the next media, the run loop does that.
+
+        reveal_call = mock_renderer.execute.call_args_list[-2][0][0]
+        resume_call = mock_renderer.execute.call_args_list[-1][0][0]
+        assert isinstance(reveal_call, RenderCommand)
+        assert reveal_call.image_path == "/path/to/video.2.frame"
+        assert reveal_call.background_only is True
+        assert isinstance(resume_call, RenderCommand)
+        assert resume_call.image_path == "RESUME"
+        assert engine._next_transition_time == float("inf")
+        mock_timer.call_args[0][1]()
+
+    # The EOS teardown timer closes the video window, then the run loop advances.
     assert engine._next_transition_time == 0.0
     
     # Simulate the run loop picking it up

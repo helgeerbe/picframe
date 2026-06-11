@@ -1180,6 +1180,58 @@ def test_engine_playback_completed_clears_unexecuted_video_swap_before_next_vide
     assert engine._pending_video_media == next_video
 
 
+def test_engine_playback_completed_refreshes_pi3d_last_frame_before_resume(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+    monkeypatch,
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    last_img = MagicMock()
+    engine._state = State.PLAYING
+    engine._active_video_media = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+    engine._active_video_last_img = last_img
+    engine._active_video_last_frame_path = "/cache/video.2.frame"
+    timers: list[FakeTimer] = []
+    monkeypatch.setattr(
+        "picframe.core.engine.playback.threading.Timer",
+        lambda interval, callback: timers.append(FakeTimer(interval, callback)) or timers[-1],
+    )
+
+    engine._handle_playback_completed(PlaybackCompletedEvent())
+
+    reveal_cmd = mock_renderer.execute.call_args_list[-2].args[0]
+    resume_cmd = mock_renderer.execute.call_args_list[-1].args[0]
+    assert isinstance(reveal_cmd, RenderCommand)
+    assert reveal_cmd.image_path == "/cache/video.2.frame"
+    assert reveal_cmd.background_only is True
+    assert reveal_cmd.image_obj == last_img
+    assert isinstance(resume_cmd, RenderCommand)
+    assert resume_cmd.image_path == "RESUME"
+    assert not hasattr(engine, "_active_video_media")
+    assert not hasattr(engine, "_active_video_last_img")
+    assert not hasattr(engine, "_active_video_last_frame_path")
+    assert timers[0].started is True
+
+
 def test_engine_eos_timer_callback_stops_video_and_unblocks_transition(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
@@ -1360,6 +1412,8 @@ def test_engine_video_first_frame_handoff_scopes_last_frame_swap(
 
     assert engine._state == State.PLAYING
     assert engine._active_video_media == video
+    assert engine._active_video_last_img == last_img
+    assert engine._active_video_last_frame_path == "/cache/video.2.frame"
     assert engine._pending_swap_media == video
     assert engine._pending_swap_last_img == last_img
     assert engine._pending_swap_last_frame_path == "/cache/video.2.frame"
