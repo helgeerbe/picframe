@@ -116,6 +116,7 @@ class Pi3dRenderer(IRenderer):
         # State
         self._display: Any | None = None
         self._image_renderer: ImageRenderer | None = None
+        self._video_reveal_parked = False
         
         # Text Overlay State
         self._overlay_config = OverlayConfig(
@@ -474,6 +475,7 @@ class Pi3dRenderer(IRenderer):
                 self._animation_controller.suspend()
                 return
             elif command.image_path == "RESUME":
+                self._video_reveal_parked = False
                 self._image_renderer.clear_video_reveal_texture()
                 self._animation_controller.resume()
                 self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
@@ -483,6 +485,7 @@ class Pi3dRenderer(IRenderer):
                     self._logger.debug("Preloaded video reveal texture: %s", command.image_path)
                 return
             elif command.render_action == RENDER_PROMOTE_VIDEO_REVEAL:
+                self._video_reveal_parked = False
                 if self._image_renderer.promote_video_reveal_texture():
                     self._animation_controller.resume()
                     self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
@@ -491,13 +494,14 @@ class Pi3dRenderer(IRenderer):
                     self._logger.debug("No preloaded video reveal texture to promote.")
                 return
             elif command.render_action == RENDER_PARK_VIDEO_REVEAL:
-                self._animation_controller.suspend()
-                self._logger.debug("Parked pi3d video reveal surface.")
+                self._video_reveal_parked = True
+                self._logger.debug("Parked pi3d video reveal surface without hard suspend.")
                 return
 
             # Delegate to ImageRenderer
             success, kb_xstep, kb_ystep = self._image_renderer.execute(command)
             if success:
+                self._video_reveal_parked = False
                 if getattr(command, "background_only", False):
                     self._logger.debug("Loaded image into background buffer only.")
                     self._animation_controller.force_redraw(2)
@@ -562,6 +566,10 @@ class Pi3dRenderer(IRenderer):
                 self._local_queue.task_done()
         except queue.Empty:
             pass
+
+        if self._video_reveal_parked:
+            time.sleep(0.05)
+            return True
 
         # Sleep optimization for SUSPENDED state
         if anim_state.render_state == RenderState.SUSPENDED:

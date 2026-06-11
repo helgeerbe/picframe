@@ -2,7 +2,6 @@
 Playback Engine for orchestrating media playback and rendering.
 """
 import logging
-import queue
 import threading
 import time
 from collections.abc import Callable
@@ -96,7 +95,6 @@ class PlaybackEngine:
         )
         self._video_frame_load_lock = threading.Lock()
         self._video_frame_load_in_progress = False
-        self._playback_event_queue: queue.Queue[Any] = queue.Queue()
         self._video_reveal_park_pending = False
         self._video_reveal_park_frames = 0
         self._video_reveal_park_started_at = 0.0
@@ -109,12 +107,13 @@ class PlaybackEngine:
         self._event_subscriber.subscribe(CommandEvent, self._handle_command)
         self._event_subscriber.subscribe(StateEvent, self._handle_state_event)
         
-        # Queue playback-critical events so renderer mutations happen on the render loop.
-        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._enqueue_playback_event)
-        self._event_subscriber.subscribe(TransitionCompletedEvent, self._enqueue_playback_event)
-        self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._enqueue_playback_event)
-        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._enqueue_playback_event)
-        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._enqueue_playback_event)
+        # Playback events are handled directly by the EventBus worker, matching the
+        # stable baseline behavior.
+        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._handle_playback_completed)
+        self._event_subscriber.subscribe(TransitionCompletedEvent, self._handle_transition_completed)
+        self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._handle_video_first_frame_rendered)
+        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._handle_video_playback_warning)
+        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_renderer_config_event)
 
     def start(self) -> None:
         """Start the playback engine and render loop."""
@@ -195,41 +194,10 @@ class PlaybackEngine:
         # run loop exits.
         self._change_state(State.IDLE)
 
-    def _enqueue_playback_event(self, event: Any) -> None:
-        """Queue playback-critical work for the render loop thread."""
-        self._logger.debug("Queued %s for playback render loop.", type(event).__name__)
-        self._playback_event_queue.put(event)
-
-    def _drain_playback_event_queue(self) -> None:
-        """Dispatch queued playback events on the render loop thread."""
-        while True:
-            try:
-                event = self._playback_event_queue.get_nowait()
-            except queue.Empty:
-                return
-
-            self._dispatch_playback_event(event)
-            self._playback_event_queue.task_done()
-
-    def _dispatch_playback_event(self, event: Any) -> None:
-        self._logger.debug("Dispatching %s on playback render loop.", type(event).__name__)
-        if isinstance(event, PlaybackCompletedEvent):
-            self._handle_playback_completed(event)
-        elif isinstance(event, TransitionCompletedEvent):
-            self._handle_transition_completed(event)
-        elif isinstance(event, VideoFirstFrameRenderedEvent):
-            self._handle_video_first_frame_rendered(event)
-        elif isinstance(event, VideoPlaybackWarningEvent):
-            self._handle_video_playback_warning(event)
-        elif isinstance(event, RendererConfigUpdatedEvent):
-            self._handle_renderer_config_event(event)
-
     def _run_loop(self) -> None:
         """The main synchronous render loop."""
         while self._is_running:
             try:
-                self._drain_playback_event_queue()
-
                 # 2. Check if it\'s time for the next slide
                 current_time = time.time()
 

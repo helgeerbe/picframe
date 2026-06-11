@@ -101,33 +101,9 @@ def test_engine_initialization(
     # Verify it subscribed to commands
     mock_event_subscriber.subscribe.assert_any_call(CommandEvent, engine._handle_command)
     mock_event_subscriber.subscribe.assert_any_call(StateEvent, engine._handle_state_event)
-    mock_event_subscriber.subscribe.assert_any_call(PlaybackCompletedEvent, engine._enqueue_playback_event)
-    mock_event_subscriber.subscribe.assert_any_call(TransitionCompletedEvent, engine._enqueue_playback_event)
-    mock_event_subscriber.subscribe.assert_any_call(VideoFirstFrameRenderedEvent, engine._enqueue_playback_event)
-
-
-def test_engine_playback_event_queue_dispatches_on_render_loop(
-    mock_event_publisher: MagicMock,
-    mock_event_subscriber: MagicMock,
-    mock_playlist_manager: MagicMock,
-    mock_renderer: MagicMock,
-    config: dict[str, Any],
-) -> None:
-    engine = PlaybackEngine(
-        mock_event_publisher,
-        mock_event_subscriber,
-        mock_playlist_manager,
-        mock_renderer,
-        config,
-    )
-    event = PlaybackCompletedEvent()
-    engine._handle_playback_completed = MagicMock()
-
-    engine._enqueue_playback_event(event)
-
-    engine._handle_playback_completed.assert_not_called()
-    engine._drain_playback_event_queue()
-    engine._handle_playback_completed.assert_called_once_with(event)
+    mock_event_subscriber.subscribe.assert_any_call(PlaybackCompletedEvent, engine._handle_playback_completed)
+    mock_event_subscriber.subscribe.assert_any_call(TransitionCompletedEvent, engine._handle_transition_completed)
+    mock_event_subscriber.subscribe.assert_any_call(VideoFirstFrameRenderedEvent, engine._handle_video_first_frame_rendered)
 
 
 def test_engine_playback_completed_stops_video_and_advances_immediately(

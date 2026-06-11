@@ -372,8 +372,29 @@ def test_renderer_parks_video_reveal_surface(
         )
     )
 
-    assert renderer._animation_controller._state == RenderState.SUSPENDED
+    assert renderer._video_reveal_parked is True
+    assert renderer._animation_controller._state == RenderState.STATIC
     mock_image_renderer.execute.assert_not_called()
+
+
+@patch("time.sleep")
+def test_renderer_render_frame_video_reveal_parked(
+    mock_sleep: MagicMock,
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._video_reveal_parked = True
+
+    result = renderer.render_frame()
+
+    assert result is True
+    mock_sleep.assert_called_once_with(0.05)
+    mock_image_renderer.draw.assert_not_called()
 
 
 def test_renderer_config_event_updates_image_renderer(
