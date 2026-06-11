@@ -103,7 +103,9 @@ if it behaves better on the target Pi, use `--display-mode labwc-kiosk`
 instead. The installer enables `seatd` for kiosk compositor modes. Cage is
 fullscreen-kiosk oriented; use `labwc-kiosk` for custom non-fullscreen
 `viewer.display_x`, `viewer.display_y`, `viewer.display_w`, and
-`viewer.display_h` layouts.
+`viewer.display_h` layouts. In `labwc-kiosk` mode Picframe writes its own
+labwc rules so the pi3d window and the GTK video window use the same configured
+display rectangle.
 
 ```bash
 sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
@@ -457,7 +459,11 @@ When the display rectangle is effectively fullscreen, Picframe makes the GTK
 video window fullscreen as well; this is the preferred path for both Cage and
 labwc. For custom non-fullscreen geometry, the installer-provisioned
 `labwc-kiosk` mode uses a Picframe-owned labwc configuration under
-`~/.picframe/labwc` to suppress server-side decorations on the video window.
+`~/.picframe/labwc` to suppress server-side decorations and to place the pi3d
+window with the configured `viewer.display_x`, `viewer.display_y`,
+`viewer.display_w`, and `viewer.display_h` rectangle. Picframe rewrites this
+labwc configuration when the renderer starts so the compositor sees the current
+runtime configuration before the pi3d window is mapped.
 Picframe also hides the mouse cursor on the GTK video surface during playback.
 
 Video transition frames are generated during indexing/cache work, not at EOS

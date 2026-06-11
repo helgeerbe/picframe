@@ -4,8 +4,10 @@ Pi3d implementation of the IRenderer interface.
 import logging
 import os
 import queue
+import signal
 import time
 from dataclasses import dataclass, field, replace
+from pathlib import Path
 from typing import Any
 
 import pi3d
@@ -27,6 +29,9 @@ from picframe.core.renderers.components.image_renderer import ImageRenderer
 from picframe.core.renderers.components.text_renderer import TextRenderer
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.repositories.interfaces import IConfigRepository
+
+PI3D_LABWC_IDENTIFIER = "picframe-pi3d"
+VIDEO_WINDOW_TITLE = "picframe-video"
 
 
 @dataclass(order=True)
@@ -250,9 +255,156 @@ class Pi3dRenderer(IRenderer):
                     self._animation_controller.force_redraw(2)
                     self._animation_controller.update_text_config(True, True)
 
+    def _prepare_wayland_window_identity(self) -> None:
+        """Give the SDL/pi3d Wayland window a stable app-id for labwc rules."""
+        for key in (
+            "SDL_VIDEO_WAYLAND_WMCLASS",
+            "SDL_VIDEO_X11_WMCLASS",
+            "SDL_APP_ID",
+        ):
+            os.environ[key] = PI3D_LABWC_IDENTIFIER
+
+    def _prepare_labwc_geometry_rules(self) -> None:
+        """Write Picframe's labwc rules so pi3d follows configured geometry."""
+        if "WAYLAND_DISPLAY" not in os.environ:
+            return
+        geometry = self._configured_labwc_geometry()
+        if geometry is None:
+            return
+        labwc_pid = self._find_labwc_pid()
+        if labwc_pid is None:
+            self._logger.debug("No labwc ancestor found; skipping labwc geometry rules.")
+            return
+
+        config_dir = self._labwc_config_dir()
+        try:
+            config_dir.mkdir(parents=True, exist_ok=True)
+            config_path = config_dir / "rc.xml"
+            config_path.write_text(
+                self._labwc_config_xml(*geometry),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            self._logger.warning("Could not write labwc geometry rules: %s", exc)
+            return
+
+        try:
+            os.kill(labwc_pid, signal.SIGHUP)
+            time.sleep(0.05)
+            self._logger.info(
+                "Configured labwc geometry for pi3d at %s,%s %sx%s.",
+                geometry[0],
+                geometry[1],
+                geometry[2],
+                geometry[3],
+            )
+        except OSError as exc:
+            self._logger.warning("Could not ask labwc to reload geometry rules: %s", exc)
+
+    def _configured_labwc_geometry(self) -> tuple[int, int, int, int] | None:
+        if self._display_w is None or self._display_h is None:
+            return None
+        try:
+            x = int(self._display_x)
+            y = int(self._display_y)
+            w = int(self._display_w)
+            h = int(self._display_h)
+        except (TypeError, ValueError):
+            return None
+        if w <= 0 or h <= 0:
+            return None
+        return (x, y, w, h)
+
+    def _labwc_config_dir(self) -> Path:
+        base_dir = Path(os.environ.get("PICFRAME_DIR", "~/.picframe")).expanduser()
+        return base_dir / "labwc"
+
+    def _find_labwc_pid(self) -> int | None:
+        pid = os.getpid()
+        seen: set[int] = set()
+        while pid > 1 and pid not in seen:
+            seen.add(pid)
+            try:
+                comm = Path(f"/proc/{pid}/comm").read_text(encoding="utf-8").strip()
+                if comm == "labwc":
+                    return pid
+                status = Path(f"/proc/{pid}/status").read_text(encoding="utf-8")
+            except OSError:
+                return None
+
+            parent_pid = None
+            for line in status.splitlines():
+                if line.startswith("PPid:"):
+                    parent_pid = int(line.split()[1])
+                    break
+            if parent_pid is None or parent_pid == pid:
+                return None
+            pid = parent_pid
+        return None
+
+    @staticmethod
+    def _labwc_window_rule_xml(
+        *,
+        match_attribute: str,
+        match_value: str,
+        x: int | None = None,
+        y: int | None = None,
+        w: int | None = None,
+        h: int | None = None,
+    ) -> str:
+        actions = ""
+        if x is not None and y is not None and w is not None and h is not None:
+            actions = (
+                f'\n      <action name="ResizeTo" width="{w}" height="{h}" />'
+                f'\n      <action name="MoveTo" x="{x}" y="{y}" />'
+                "\n    "
+            )
+        return (
+            f'    <windowRule {match_attribute}="{match_value}"\n'
+            '                serverDecoration="no"\n'
+            '                skipTaskbar="yes"\n'
+            '                skipWindowSwitcher="yes"\n'
+            f'                fixedPosition="yes">{actions}</windowRule>'
+        )
+
+    @classmethod
+    def _labwc_config_xml(cls, x: int, y: int, w: int, h: int) -> str:
+        pi3d_identifier_rule = cls._labwc_window_rule_xml(
+            match_attribute="identifier",
+            match_value=PI3D_LABWC_IDENTIFIER,
+            x=x,
+            y=y,
+            w=w,
+            h=h,
+        )
+        pi3d_title_rule = cls._labwc_window_rule_xml(
+            match_attribute="title",
+            match_value=PI3D_LABWC_IDENTIFIER,
+            x=x,
+            y=y,
+            w=w,
+            h=h,
+        )
+        video_rule = cls._labwc_window_rule_xml(
+            match_attribute="title",
+            match_value=VIDEO_WINDOW_TITLE,
+        )
+        return (
+            "<?xml version=\"1.0\"?>\n"
+            "<labwc_config>\n"
+            "  <windowRules>\n"
+            f"{pi3d_identifier_rule}\n"
+            f"{pi3d_title_rule}\n"
+            f"{video_rule}\n"
+            "  </windowRules>\n"
+            "</labwc_config>\n"
+        )
+
     def start(self) -> None:
         """Initialize the pi3d display and sprite."""
         self._logger.info("Starting Pi3dRenderer")
+        self._prepare_wayland_window_identity()
+        self._prepare_labwc_geometry_rules()
         self._logger.debug("Calling pi3d.Display.create...")
         try:
             self._display = pi3d.Display.create(

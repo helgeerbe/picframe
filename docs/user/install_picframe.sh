@@ -153,6 +153,9 @@ Group=$ACTUAL_GROUP
 WorkingDirectory=$ACTUAL_HOME
 Environment=PICFRAME_DIR=$ACTUAL_HOME/.picframe
 Environment=SDL_VIDEODRIVER=wayland
+Environment=SDL_VIDEO_WAYLAND_WMCLASS=picframe-pi3d
+Environment=SDL_VIDEO_X11_WMCLASS=picframe-pi3d
+Environment=SDL_APP_ID=picframe-pi3d
 Environment=XDG_RUNTIME_DIR=/run/picframe
 RuntimeDirectory=picframe
 RuntimeDirectoryMode=0700
@@ -184,6 +187,16 @@ configure_labwc_kiosk_config() {
 <?xml version="1.0"?>
 <labwc_config>
   <windowRules>
+    <windowRule identifier="picframe-pi3d"
+                serverDecoration="no"
+                skipTaskbar="yes"
+                skipWindowSwitcher="yes"
+                fixedPosition="yes" />
+    <windowRule title="picframe-pi3d"
+                serverDecoration="no"
+                skipTaskbar="yes"
+                skipWindowSwitcher="yes"
+                fixedPosition="yes" />
     <windowRule title="picframe-video"
                 serverDecoration="no"
                 skipTaskbar="yes"

@@ -1,12 +1,18 @@
 """Unit tests for the Pi3dRenderer."""
+import os
 import queue
+import signal
 from typing import Any, Generator
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from picframe.core.events.dto import OverlayConfig, RenderCommand, RendererConfigUpdatedEvent
-from picframe.core.renderers.pi3d_renderer import Pi3dRenderer
+from picframe.core.renderers.pi3d_renderer import (
+    PI3D_LABWC_IDENTIFIER,
+    VIDEO_WINDOW_TITLE,
+    Pi3dRenderer,
+)
 from picframe.core.renderers.animation_controller import RenderState
 
 
@@ -127,6 +133,67 @@ def test_renderer_get_display_rect_prefers_configured_geometry(
     renderer._display.height = 1080
 
     assert renderer.get_display_rect() == (100, 80, 1800, 1000)
+
+
+def test_renderer_sets_stable_sdl_window_identity(
+    config: RendererConfig,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    for key in (
+        "SDL_VIDEO_WAYLAND_WMCLASS",
+        "SDL_VIDEO_X11_WMCLASS",
+        "SDL_APP_ID",
+    ):
+        monkeypatch.delenv(key, raising=False)
+
+    renderer._prepare_wayland_window_identity()
+
+    assert os.environ["SDL_VIDEO_WAYLAND_WMCLASS"] == PI3D_LABWC_IDENTIFIER
+    assert os.environ["SDL_VIDEO_X11_WMCLASS"] == PI3D_LABWC_IDENTIFIER
+    assert os.environ["SDL_APP_ID"] == PI3D_LABWC_IDENTIFIER
+
+
+def test_renderer_labwc_config_xml_positions_pi3d_and_decorates_video() -> None:
+    xml = Pi3dRenderer._labwc_config_xml(100, 80, 1800, 1000)
+
+    assert f'identifier="{PI3D_LABWC_IDENTIFIER}"' in xml
+    assert f'title="{PI3D_LABWC_IDENTIFIER}"' in xml
+    assert f'title="{VIDEO_WINDOW_TITLE}"' in xml
+    assert '<action name="ResizeTo" width="1800" height="1000" />' in xml
+    assert '<action name="MoveTo" x="100" y="80" />' in xml
+    assert 'serverDecoration="no"' in xml
+
+
+def test_renderer_writes_labwc_rules_and_reconfigures_labwc(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = Pi3dRenderer(
+        RendererConfig(
+            display_x=100,
+            display_y=80,
+            display_w=1800,
+            display_h=1000,
+            font_file="/path/to/font.ttf",
+        )
+    )
+    kill = MagicMock()
+    sleep = MagicMock()
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+    monkeypatch.setenv("PICFRAME_DIR", str(tmp_path))
+    monkeypatch.setattr(renderer, "_find_labwc_pid", lambda: 1234)
+    monkeypatch.setattr("picframe.core.renderers.pi3d_renderer.os.kill", kill)
+    monkeypatch.setattr("picframe.core.renderers.pi3d_renderer.time.sleep", sleep)
+
+    renderer._prepare_labwc_geometry_rules()
+
+    rc_xml = tmp_path / "labwc" / "rc.xml"
+    assert rc_xml.exists()
+    assert f'identifier="{PI3D_LABWC_IDENTIFIER}"' in rc_xml.read_text()
+    assert '<action name="MoveTo" x="100" y="80" />' in rc_xml.read_text()
+    kill.assert_called_once_with(1234, signal.SIGHUP)
+    sleep.assert_called_once_with(0.05)
 
 
 def test_renderer_execute_without_start(
