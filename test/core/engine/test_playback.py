@@ -313,6 +313,30 @@ def test_engine_restarts_renderer_after_display_geometry_config_update(
     assert engine._renderer_retry_requested is True
 
 
+def test_engine_does_not_restart_renderer_for_clock_toggle(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        renderer_config=RendererConfig(show_clock=True),
+    )
+    engine._renderer_started = True
+
+    engine._handle_renderer_config_event(
+        RendererConfigUpdatedEvent(config=RendererConfig(show_clock=False))
+    )
+
+    assert engine._renderer_retry_requested is False
+
+
 def test_engine_purge_does_not_rebuild_playlist_while_renderer_blocked(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,

@@ -361,6 +361,7 @@ class PlaybackEngine:
 
     @staticmethod
     def _renderer_asset_signature(config: RendererConfig | None) -> tuple[Any, ...] | None:
+        """Return config fields that require rebuilding the pi3d display/window."""
         if config is None:
             return None
         return (
@@ -370,8 +371,6 @@ class PlaybackEngine:
             config.display_h,
             config.shader_path,
             config.font_file,
-            config.show_text_enabled,
-            config.show_clock,
             config.mat_images,
             config.mat_resource_folder,
         )
