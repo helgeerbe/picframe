@@ -1,10 +1,10 @@
 # Active Context
 
 ## Current Focus
-The current implementation focus is next-gen GStreamer/video reliability
-hardening, especially Raspberry Pi Wayland handoff behavior. Caps-driven
-hardware discovery remains active, and production video playback now has a
-GTK-backed `gtkwaylandsink` path plus tail-decoded final-frame caching.
+Ticket #687 is implementing Settings coverage and live component reloads while
+preserving the broader next-gen GStreamer/video reliability stream. Settings
+Apply should reload or reconnect individual runtime components where possible
+instead of restarting `picframe.service`.
 
 ## Current Repo State
 - Branch: `v2-dev`, tracking `origin/v2-dev`.
@@ -27,7 +27,11 @@ GTK-backed `gtkwaylandsink` path plus tail-decoded final-frame caching.
 - Ticket #678 replaces legacy controller-based MQTT with a next-gen Home Assistant MQTT infrastructure adapter and removes unreachable legacy runtime modules/tests. MQTT exposes playback/display/config state, targeted current-media delete, reboot, and shutdown; purge and clear-cache remain UI/REST only.
 - Ticket #637 hardening confirms the FastAPI/Vue static asset path is implemented and keeps WebSocket media DTO location enrichment behind injected repository ports rather than hardcoded cache DB paths.
 - Ticket #635 adds first-class GPIO hardware input configuration: the Settings UI edits `hardware_inputs`, backend/core validation rejects invalid mappings, and `HardwareInputService` applies changes at runtime through the HAL adapter. PIR no-motion delay is handled in core and cancels on renewed motion.
-- Recent Settings UI redesign replaces the generic schema text-field renderer with domain-specific editors and safe path browsing/validation rooted at the Picframe user's home directory. Low-level runtime options remain editable in collapsed Advanced sections. Shader values are selected/stored as basenames without `.fs`/`.vs`, image attributes and media extensions use fixed supported lists, and geocoding `key_list` is edited as ordered location parts with fallback chips.
+- Recent Settings UI redesign replaces the generic schema text-field renderer with domain-specific editors and safe path browsing/validation rooted at the Picframe user's home directory. Low-level runtime options remain editable in collapsed Advanced sections only when runtime support exists. Shader values are selected/stored as basenames without `.fs`/`.vs`, media extensions use fixed supported lists, and geocoding `key_list` is edited as ordered location parts with fallback chips.
+- Ticket #687 decisions: Settings display geometry is Fullscreen/Custom, `model.locale` uses installed host locales from `locale -a` and drives reverse-geocoding language, Remote location filtering is search-first with selected chips, large tag lists switch to search, current media/map can be enlarged frontend-only, and Settings avoids duplicate live workflow rows owned by Remote.
+- Ticket #687 live reload boundary: renderer config updates restart only pi3d when needed; MQTT reconnects live; media monitor reloads `pic_dir`, link-following, and media extensions; display power retargets `viewer.display_hdmi`; GStreamer accepts live video setting updates for future play commands; full service restart remains manual troubleshooting only.
+- Ticket #687 Settings policy: visible controls must have runtime/startup behavior and tests. `model.log_level` and `model.log_file` are visible again because runtime logging applies level/file changes live and feeds the protected Logs tab. Compatibility-only keys stay importable but hidden from live Settings: `viewer.display_power`, old menu fields, `model.update_interval`, HTTP SSL fields, legacy `http.auth`/`username`/`password`, and legacy `peripherals.*`. `model.image_attr` is hidden by design because next-gen MQTT publishes the complete normalized current-media attribute payload.
+- Ticket #687 access/logging decision: Basic Auth is stored as plaintext JSON under `${PICFRAME_DATA}/basic_auth.json` with three UI scopes: none, Settings/Logs/admin actions, or complete website. Settings/admin scope leaves Remote/Filters public through the allowlisted workflow-config API; complete-website scope also protects the SPA, static assets, media APIs, workflow API, and live web sockets. After authentication, Settings receives the saved plaintext password for inspection/editing; deleting `basic_auth.json` is the recovery path and disables password protection. Successful HTTP Basic Auth sets an HttpOnly `picframe_auth` cookie so protected WebSocket handshakes can authenticate reliably. REST bearer tokens and MQTT bearer-token payloads are deferred; MQTT security remains broker credentials plus optional TLS.
 - Recent video hardening treats failed `ffprobe`, invalid probe JSON, or no video stream as unplayable during indexing; stale video cache rows with incomplete metadata are revalidated and marked inactive if extraction fails. GStreamer worker startup now preflights discoverability before sink creation and avoids requesting fullscreen when a render rectangle is supplied.
 - Raspberry Pi 4/labwc video validation now shows GStreamer exposes `v4l2h264dec` and `v4l2slh265dec` when `GST_V4L2_ENABLE_PROBE=1` is set before worker startup. H.264 1080p and HEVC Main 8-bit 4K playback are validated with DMABuf; HEVC Main10/HDR MOV and MOV/QuickTime 60 fps remain guarded.
 - Raspberry Pi 4/labwc PoC validation showed GTK3 + `gtkwaylandsink` removes the video-to-pi3d EOS flicker without opacity tricks. Production now prefers that path when a borderless GTK window can exactly cover `viewer.display_x/y/w/h`, and falls back to `waylandsink` render rectangles otherwise.
@@ -41,8 +45,10 @@ GTK-backed `gtkwaylandsink` path plus tail-decoded final-frame caching.
 - Preserve the #666 shuffle boundary: shuffle mode is config/playback ordering only, uses no new media DB fields, and applies after display slots are built so portrait pairs stay together.
 - Preserve the #678 cleanup boundary: MQTT/Home Assistant is supported through the next-gen adapter, while legacy HTTP query control, old pi3d menu/touch UI, and VLC runtime are not carried forward.
 - Preserve the #637 control-plane boundary: `main.py` chooses DB paths and injects repositories; FastAPI/WebSocket must not detect or open cache DB files directly.
-- Preserve the #635 hardware-input boundary: GPIO mappings live in `hardware_inputs`, keyboard/touch shortcuts stay in `peripherals`, only payload-free commands are allowed from hardware events, and PIR no-motion timers stay in `HardwareInputService`.
+- Preserve the #635 hardware-input boundary: GPIO mappings live in `hardware_inputs`, keyboard/touch shortcuts may remain compatibility config under `peripherals` but are not live Settings controls, only payload-free commands are allowed from hardware events, and PIR no-motion timers stay in `HardwareInputService`.
 - Preserve the Settings UI safety boundary: do not reintroduce raw JSON/text controls for domain settings when a constrained picker/chip/token/segmented control can express the same config safely.
+- Preserve the #687 Apply boundary: do not add an automatic `systemctl restart picframe.service` path for Settings Apply, and do not add a new passwordless sudo rule for service restart as part of this ticket.
+- Preserve the #687 access boundary: Basic Auth supports explicit none, Settings/Logs/admin, and complete-website scopes. Do not add bearer-token REST or MQTT authentication in this ticket.
 - Preserve Pi worker V4L2 probing and caps-driven GStreamer discovery while keeping unsupported-media skips as warnings/completions rather than generic system errors.
 - Preserve the GTK-backed Wayland handoff boundary: no production opacity or GStreamer alpha tricks; exact GTK geometry is required or the worker falls back.
 - Keep final-frame extraction at indexing/cache time using tail decoding, not at video EOS runtime.

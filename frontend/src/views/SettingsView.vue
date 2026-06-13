@@ -1,19 +1,16 @@
 <script setup lang="ts">
 import { computed, onErrorCaptured, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useConfigStore, useSystemStore } from '../stores/config'
+import { useConfigStore, useSystemStore, type AuthScope } from '../stores/config'
 import { useI18n } from 'vue-i18n'
 import configSchema from '../configSchema.json'
 import HardwareInputsEditor from '../components/HardwareInputsEditor.vue'
 import AdvancedDisclosure from '../components/settings/AdvancedDisclosure.vue'
 import ColorField from '../components/settings/ColorField.vue'
 import FieldRow from '../components/settings/FieldRow.vue'
-import FilterExpressionEditor from '../components/settings/FilterExpressionEditor.vue'
 import FixedChoiceListEditor from '../components/settings/FixedChoiceListEditor.vue'
 import GeocodeKeyListEditor from '../components/settings/GeocodeKeyListEditor.vue'
-import KeyboardShortcutCapture from '../components/settings/KeyboardShortcutCapture.vue'
 import NumberField from '../components/settings/NumberField.vue'
-import OrderedChipEditor from '../components/settings/OrderedChipEditor.vue'
 import PathPicker from '../components/settings/PathPicker.vue'
 import PasswordField from '../components/settings/PasswordField.vue'
 import SegmentedControl from '../components/settings/SegmentedControl.vue'
@@ -36,10 +33,17 @@ const { t } = useI18n()
 const configStore = useConfigStore()
 const systemStore = useSystemStore()
 
-const { config, isLoading: isConfigLoading, error: configError, filterOptions } = storeToRefs(configStore)
+const { config, isLoading: isConfigLoading, error: configError, filterOptions, locales, authConfig } = storeToRefs(configStore)
 const { error: systemError } = storeToRefs(systemStore)
 
 const localConfig = ref<Record<string, any>>({})
+const localAuthConfig = ref({
+  enabled: false,
+  username: 'admin',
+  scope: 'none' as AuthScope,
+  password_set: false,
+  password: ''
+})
 const activeTab = ref('viewer')
 const showConfirmModal = ref(false)
 const confirmAction = ref<(() => Promise<void>) | null>(null)
@@ -52,17 +56,7 @@ const tabs = [
   { id: 'model', labelKey: 'config.model._title' },
   { id: 'mqtt', labelKey: 'config.mqtt._title' },
   { id: 'http', labelKey: 'config.http._title' },
-  { id: 'peripherals', labelKey: 'config.peripherals._title' },
   { id: 'hardware_inputs', labelKey: 'config.hardware_inputs._title' }
-]
-
-const textOverlayOptions = [
-  { value: 'title', label: t('remote.overlays.textTitle') },
-  { value: 'caption', label: t('remote.overlays.textCaption') },
-  { value: 'name', label: t('remote.overlays.textName') },
-  { value: 'date', label: t('remote.overlays.textDate') },
-  { value: 'folder', label: t('remote.overlays.textFolder') },
-  { value: 'location', label: t('remote.overlays.textLocation') }
 ]
 
 const matStyleOptions = [
@@ -108,26 +102,17 @@ const geocodeKeyChoices = [
   'country_code'
 ].map(value => ({ value }))
 
-const imageAttributeChoices = [
-  'PICFRAME GPS',
-  'PICFRAME LOCATION',
-  'EXIF FNumber',
-  'EXIF ExposureTime',
-  'EXIF ISOSpeedRatings',
-  'EXIF FocalLength',
-  'EXIF DateTimeOriginal',
-  'Image Model',
-  'Image Make',
-  'IPTC Caption/Abstract',
-  'IPTC Object Name',
-  'IPTC Keywords'
-].map(value => ({ value }))
-
 const imageExtensionChoices = ['.jpg', '.jpeg', '.png', '.heic', '.heif'].map(value => ({ value }))
 const videoExtensionChoices = ['.mp4', '.mkv', '.flv', '.mov', '.avi', '.webm', '.hevc'].map(value => ({ value }))
 const imageFileExtensions = imageExtensionChoices.map(choice => choice.value)
 const fontExtensions = ['.ttf', '.otf']
 const certificateExtensions = ['.pem', '.crt', '.cer', '.key']
+const logLevelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+const authScopeOptions = computed(() => [
+  { value: 'none', label: t('settings.auth.scopeNone') },
+  { value: 'settings', label: t('settings.auth.scopeSettings') },
+  { value: 'site', label: t('settings.auth.scopeSite') }
+])
 
 onErrorCaptured((err, _instance, info) => {
   console.error('SettingsView Error:', err, info)
@@ -137,6 +122,8 @@ onErrorCaptured((err, _instance, info) => {
 
 onMounted(async () => {
   await configStore.fetchConfig()
+  await configStore.fetchAuthConfig()
+  await configStore.fetchLocales()
   await configStore.fetchFilterOptions()
 })
 
@@ -145,9 +132,40 @@ watch(() => config.value, (newConfig) => {
   localConfig.value = initializeConfig(newConfig)
 }, { immediate: true, deep: true })
 
+watch(() => authConfig.value, (newAuthConfig) => {
+  const scope = normalizeAuthScope(newAuthConfig.scope, newAuthConfig.enabled)
+  localAuthConfig.value = {
+    enabled: scope !== 'none',
+    username: newAuthConfig.username || 'admin',
+    scope,
+    password_set: Boolean(newAuthConfig.password_set),
+    password: newAuthConfig.password || ''
+  }
+}, { immediate: true, deep: true })
+
 const sortColumns = computed(() => filterOptions.value.sort_columns || [])
-const locationOptions = computed(() => filterOptions.value.locations || [])
-const tagOptions = computed(() => filterOptions.value.tags || [])
+const localeOptions = computed(() => {
+  const savedLocale = localConfig.value.model?.locale
+  const installedLocales = locales.value || []
+  if (savedLocale && !installedLocales.includes(savedLocale)) {
+    return [savedLocale, ...installedLocales]
+  }
+  return installedLocales
+})
+
+const displayMode = computed({
+  get: () => {
+    const viewer = localConfig.value.viewer || {}
+    const widthUnset = viewer.display_w === null || viewer.display_w === ''
+    const heightUnset = viewer.display_h === null || viewer.display_h === ''
+    const x = Number(viewer.display_x || 0)
+    const y = Number(viewer.display_y || 0)
+    return widthUnset && heightUnset && x === 0 && y === 0 ? 'fullscreen' : 'custom'
+  },
+  set: (mode: string | number | boolean | null) => {
+    setDisplayMode(String(mode || 'fullscreen'))
+  }
+})
 
 function initializeConfig(newConfig: Record<string, any>) {
   const getFallbackValue = (type: string) => {
@@ -189,18 +207,25 @@ function sectionHelp(section: string, key: string) {
   return t(`config.${section}.${key}`, '')
 }
 
-function nestedHelp(section: string, key: string, subKey: string) {
-  return t(`config.${section}.${key}.${subKey}`, '')
-}
-
 function formatLabel(key: string | undefined | null) {
   if (!key) return ''
   return String(key).split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' ')
 }
 
+function normalizeAuthScope(value: unknown, enabled?: boolean): AuthScope {
+  if (value === 'none' || value === 'settings' || value === 'site') {
+    return value
+  }
+  return enabled ? 'settings' : 'none'
+}
+
 async function saveConfig() {
   try {
     await configStore.saveConfig(localConfig.value)
+    await configStore.saveAuthConfig({
+      ...localAuthConfig.value,
+      enabled: localAuthConfig.value.scope !== 'none'
+    })
     showSuccess(t('settings.saved'))
   } catch (e) {
     // Store exposes the error.
@@ -305,6 +330,69 @@ function matTypesArray() {
 function setMatTypesArray(values: string[]) {
   localConfig.value.viewer.mat_type = values.length ? values.join(' ') : null
 }
+
+function setDisplayMode(mode: string) {
+  if (!localConfig.value.viewer) return
+  if (mode === 'fullscreen') {
+    localConfig.value.viewer.display_x = 0
+    localConfig.value.viewer.display_y = 0
+    localConfig.value.viewer.display_w = null
+    localConfig.value.viewer.display_h = null
+    return
+  }
+  if (localConfig.value.viewer.display_w === null || localConfig.value.viewer.display_w === '') {
+    localConfig.value.viewer.display_w = '800'
+  }
+  if (localConfig.value.viewer.display_h === null || localConfig.value.viewer.display_h === '') {
+    localConfig.value.viewer.display_h = '480'
+  }
+}
+
+function setViewerInteger(
+  key: string,
+  event: Event,
+  options: { min?: number, nullable?: boolean } = {}
+) {
+  if (!localConfig.value.viewer) return
+  const rawValue = (event.target as HTMLInputElement).value
+  if (options.nullable && rawValue === '') {
+    localConfig.value.viewer[key] = null
+    return
+  }
+  const numericValue = Number(rawValue)
+  if (!Number.isFinite(numericValue)) return
+  const rounded = Math.round(numericValue)
+  const nextValue = options.min === undefined ? rounded : Math.max(options.min, rounded)
+  localConfig.value.viewer[key] = options.nullable ? String(nextValue) : nextValue
+}
+
+function backgroundHex() {
+  const value = localConfig.value.viewer?.background
+  const channels = Array.isArray(value) ? value : [0, 0, 0]
+  const hex = channels.slice(0, 3).map((channel: unknown) => {
+    let numeric = Number(channel)
+    if (!Number.isFinite(numeric)) numeric = 0
+    if (numeric >= 0 && numeric <= 1) numeric *= 255
+    return Math.round(Math.max(0, Math.min(255, numeric))).toString(16).padStart(2, '0')
+  })
+  return `#${hex.join('')}`
+}
+
+function setBackgroundColor(event: Event) {
+  if (!localConfig.value.viewer) return
+  const value = (event.target as HTMLInputElement).value
+  const match = /^#([0-9a-fA-F]{2})([0-9a-fA-F]{2})([0-9a-fA-F]{2})$/.exec(value)
+  if (!match) return
+  const alpha = Array.isArray(localConfig.value.viewer.background)
+    ? Number(localConfig.value.viewer.background[3] ?? 1)
+    : 1
+  localConfig.value.viewer.background = [
+    parseInt(match[1], 16) / 255,
+    parseInt(match[2], 16) / 255,
+    parseInt(match[3], 16) / 255,
+    Number.isFinite(alpha) ? alpha : 1
+  ]
+}
 </script>
 
 <template>
@@ -392,16 +480,53 @@ function setMatTypesArray(values: string[]) {
                   <option value="bump">bump</option>
                 </select>
               </FieldRow>
+              <FieldRow :label="formatLabel('fps')" :help="sectionHelp('viewer', 'fps')">
+                <NumberField v-model="localConfig.viewer.fps" :min="1" :max="120" :step="1" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('background')" :help="sectionHelp('viewer', 'background')">
+                <div class="flex items-center gap-3">
+                  <input
+                    type="color"
+                    :value="backgroundHex()"
+                    class="h-10 w-14 rounded border border-gray-300 bg-white p-1 dark:border-gray-600 dark:bg-gray-700"
+                    @input="setBackgroundColor"
+                  >
+                  <span class="text-sm font-mono text-gray-600 dark:text-gray-300">{{ backgroundHex() }}</span>
+                </div>
+              </FieldRow>
             </div>
 
             <section class="space-y-5">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.domain.display') }}</h3>
+              <FieldRow :label="t('settings.displayMode')" :help="sectionHelp('viewer', 'display_w')">
+                <SegmentedControl v-model="displayMode" :options="[{ value: 'fullscreen', label: t('settings.fullscreen') }, { value: 'custom', label: t('settings.custom') }]" />
+              </FieldRow>
+              <div v-if="displayMode === 'custom'" class="grid grid-cols-1 gap-4 rounded-lg border border-gray-200 p-4 dark:border-gray-700 sm:grid-cols-2">
+                <label class="space-y-1.5">
+                  <span class="block text-sm font-semibold text-gray-900 dark:text-white">{{ formatLabel('display_x') }}</span>
+                  <input :value="localConfig.viewer.display_x" type="number" step="1" class="block w-full min-w-0 rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white" @input="setViewerInteger('display_x', $event)">
+                  <span v-if="sectionHelp('viewer', 'display_x')" class="block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{{ sectionHelp('viewer', 'display_x') }}</span>
+                </label>
+                <label class="space-y-1.5">
+                  <span class="block text-sm font-semibold text-gray-900 dark:text-white">{{ formatLabel('display_y') }}</span>
+                  <input :value="localConfig.viewer.display_y" type="number" step="1" class="block w-full min-w-0 rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white" @input="setViewerInteger('display_y', $event)">
+                  <span v-if="sectionHelp('viewer', 'display_y')" class="block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{{ sectionHelp('viewer', 'display_y') }}</span>
+                </label>
+                <label class="space-y-1.5">
+                  <span class="block text-sm font-semibold text-gray-900 dark:text-white">{{ formatLabel('display_w') }}</span>
+                  <input :value="localConfig.viewer.display_w ?? ''" type="number" min="1" step="1" class="block w-full min-w-0 rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white" @input="setViewerInteger('display_w', $event, { min: 1, nullable: true })">
+                  <span v-if="sectionHelp('viewer', 'display_w')" class="block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{{ sectionHelp('viewer', 'display_w') }}</span>
+                </label>
+                <label class="space-y-1.5">
+                  <span class="block text-sm font-semibold text-gray-900 dark:text-white">{{ formatLabel('display_h') }}</span>
+                  <input :value="localConfig.viewer.display_h ?? ''" type="number" min="1" step="1" class="block w-full min-w-0 rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white" @input="setViewerInteger('display_h', $event, { min: 1, nullable: true })">
+                  <span v-if="sectionHelp('viewer', 'display_h')" class="block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{{ sectionHelp('viewer', 'display_h') }}</span>
+                </label>
+              </div>
+            </section>
+
+            <section class="space-y-5">
               <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.domain.textAndClock') }}</h3>
-              <FieldRow :label="formatLabel('show_text_enabled')" :help="sectionHelp('viewer', 'show_text_enabled')">
-                <ToggleSwitch v-model="localConfig.viewer.show_text_enabled" />
-              </FieldRow>
-              <FieldRow :label="formatLabel('text_overlay_format')" :help="sectionHelp('viewer', 'text_overlay_format')">
-                <OrderedChipEditor v-model="localConfig.viewer.text_overlay_format" :options="textOverlayOptions" />
-              </FieldRow>
               <FieldRow :label="formatLabel('text_justify')" :help="sectionHelp('viewer', 'text_justify')">
                 <SegmentedControl v-model="localConfig.viewer.text_justify" :options="[{ value: 'L', label: 'Left' }, { value: 'C', label: 'Center' }, { value: 'R', label: 'Right' }]" />
               </FieldRow>
@@ -416,8 +541,23 @@ function setMatTypesArray(values: string[]) {
                   <option :value="localConfig.viewer.show_text_fm">Custom: {{ localConfig.viewer.show_text_fm }}</option>
                 </select>
               </FieldRow>
-              <FieldRow :label="formatLabel('show_clock')" :help="sectionHelp('viewer', 'show_clock')">
-                <ToggleSwitch v-model="localConfig.viewer.show_clock" />
+              <FieldRow :label="formatLabel('show_text_tm')" :help="sectionHelp('viewer', 'show_text_tm')">
+                <NumberField v-model="localConfig.viewer.show_text_tm" :min="0" :step="1" unit="s" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('text_opacity')" :help="sectionHelp('viewer', 'text_opacity')">
+                <NumberField v-model="localConfig.viewer.text_opacity" :min="0" :max="1" :step="0.05" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('text_bkg_hgt')" :help="sectionHelp('viewer', 'text_bkg_hgt')">
+                <NumberField v-model="localConfig.viewer.text_bkg_hgt" :min="0" :max="1" :step="0.05" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('text_x_margin')" :help="sectionHelp('viewer', 'text_x_margin')">
+                <NumberField v-model="localConfig.viewer.text_x_margin" :step="1" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('text_y_margin')" :help="sectionHelp('viewer', 'text_y_margin')">
+                <NumberField v-model="localConfig.viewer.text_y_margin" :step="1" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('clock_format')" :help="sectionHelp('viewer', 'clock_format')">
+                <input v-model="localConfig.viewer.clock_format" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
               </FieldRow>
               <FieldRow :label="formatLabel('clock_top_bottom')" :help="sectionHelp('viewer', 'clock_top_bottom')">
                 <SegmentedControl v-model="localConfig.viewer.clock_top_bottom" :options="[{ value: 'T', label: 'Top' }, { value: 'B', label: 'Bottom' }]" />
@@ -427,6 +567,15 @@ function setMatTypesArray(values: string[]) {
               </FieldRow>
               <FieldRow :label="formatLabel('clock_text_sz')" :help="sectionHelp('viewer', 'clock_text_sz')">
                 <NumberField v-model="localConfig.viewer.clock_text_sz" :min="8" :step="1" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('clock_opacity')" :help="sectionHelp('viewer', 'clock_opacity')">
+                <NumberField v-model="localConfig.viewer.clock_opacity" :min="0" :max="1" :step="0.05" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('clock_wdt_offset_pct')" :help="sectionHelp('viewer', 'clock_wdt_offset_pct')">
+                <NumberField v-model="localConfig.viewer.clock_wdt_offset_pct" :step="0.5" unit="%" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('clock_hgt_offset_pct')" :help="sectionHelp('viewer', 'clock_hgt_offset_pct')">
+                <NumberField v-model="localConfig.viewer.clock_hgt_offset_pct" :step="0.5" unit="%" />
               </FieldRow>
             </section>
 
@@ -451,6 +600,12 @@ function setMatTypesArray(values: string[]) {
               <FieldRow :label="formatLabel('inner_mat_color')" :help="sectionHelp('viewer', 'inner_mat_color')">
                 <ColorField v-model="localConfig.viewer.inner_mat_color" />
               </FieldRow>
+              <FieldRow :label="formatLabel('outer_mat_use_texture')" :help="sectionHelp('viewer', 'outer_mat_use_texture')">
+                <ToggleSwitch v-model="localConfig.viewer.outer_mat_use_texture" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('inner_mat_use_texture')" :help="sectionHelp('viewer', 'inner_mat_use_texture')">
+                <ToggleSwitch v-model="localConfig.viewer.inner_mat_use_texture" />
+              </FieldRow>
               <FieldRow :label="formatLabel('outer_mat_border')" :help="sectionHelp('viewer', 'outer_mat_border')">
                 <NumberField v-model="localConfig.viewer.outer_mat_border" :min="0" :step="1" />
               </FieldRow>
@@ -466,6 +621,18 @@ function setMatTypesArray(values: string[]) {
               <FieldRow :label="formatLabel('shader')" :help="sectionHelp('viewer', 'shader')">
                 <ShaderPicker v-model="localConfig.viewer.shader" />
               </FieldRow>
+              <FieldRow :label="formatLabel('blur_amount')" :help="sectionHelp('viewer', 'blur_amount')">
+                <NumberField v-model="localConfig.viewer.blur_amount" :min="0" :step="1" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('blur_zoom')" :help="sectionHelp('viewer', 'blur_zoom')">
+                <NumberField v-model="localConfig.viewer.blur_zoom" :min="0" :step="0.05" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('blur_edges')" :help="sectionHelp('viewer', 'blur_edges')">
+                <ToggleSwitch v-model="localConfig.viewer.blur_edges" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('edge_alpha')" :help="sectionHelp('viewer', 'edge_alpha')">
+                <NumberField v-model="localConfig.viewer.edge_alpha" :min="0" :max="1" :step="0.05" />
+              </FieldRow>
               <FieldRow :label="formatLabel('mat_resource_folder')" :help="sectionHelp('viewer', 'mat_resource_folder')">
                 <PathPicker v-model="localConfig.viewer.mat_resource_folder" kind="directory" />
               </FieldRow>
@@ -480,8 +647,14 @@ function setMatTypesArray(values: string[]) {
               <FieldRow :label="formatLabel('display_hdmi')" :help="sectionHelp('viewer', 'display_hdmi')">
                 <input v-model="localConfig.viewer.display_hdmi" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
               </FieldRow>
-              <FieldRow :label="formatLabel('fps')" :help="sectionHelp('viewer', 'fps')">
-                <NumberField v-model="localConfig.viewer.fps" :min="1" :max="120" :step="1" />
+              <FieldRow :label="formatLabel('use_glx')" :help="sectionHelp('viewer', 'use_glx')">
+                <ToggleSwitch v-model="localConfig.viewer.use_glx" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('use_sdl2')" :help="sectionHelp('viewer', 'use_sdl2')">
+                <ToggleSwitch v-model="localConfig.viewer.use_sdl2" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('geo_suppress_list')" :help="sectionHelp('viewer', 'geo_suppress_list')">
+                <TokenListEditor v-model="localConfig.viewer.geo_suppress_list" placeholder="County" />
               </FieldRow>
             </AdvancedDisclosure>
           </section>
@@ -504,33 +677,29 @@ function setMatTypesArray(values: string[]) {
               <FieldRow :label="formatLabel('portrait_pairs')" :help="sectionHelp('model', 'portrait_pairs')">
                 <ToggleSwitch v-model="localConfig.model.portrait_pairs" />
               </FieldRow>
+              <FieldRow :label="formatLabel('locale')" :help="sectionHelp('model', 'locale')">
+                <select v-model="localConfig.model.locale" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                  <option v-for="locale in localeOptions" :key="locale" :value="locale">{{ locale }}</option>
+                </select>
+              </FieldRow>
             </div>
 
             <section class="space-y-5">
               <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.domain.playlist') }}</h3>
-              <FieldRow :label="formatLabel('date_from')" :help="sectionHelp('model', 'date_from')">
-                <input v-model="localConfig.model.date_from" type="date" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+              <FieldRow :label="formatLabel('time_delay')" :help="sectionHelp('model', 'time_delay')">
+                <NumberField v-model="localConfig.model.time_delay" :min="1" :step="1" unit="s" />
               </FieldRow>
-              <FieldRow :label="formatLabel('date_to')" :help="sectionHelp('model', 'date_to')">
-                <input v-model="localConfig.model.date_to" type="date" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+              <FieldRow :label="formatLabel('fade_time')" :help="sectionHelp('model', 'fade_time')">
+                <NumberField v-model="localConfig.model.fade_time" :min="0" :step="0.5" unit="s" />
               </FieldRow>
-              <FieldRow :label="formatLabel('shuffle')" :help="sectionHelp('model', 'shuffle')">
-                <ToggleSwitch v-model="localConfig.model.shuffle" />
+              <FieldRow :label="formatLabel('recent_n')" :help="sectionHelp('model', 'recent_n')">
+                <NumberField v-model="localConfig.model.recent_n" :min="0" :step="1" />
               </FieldRow>
-              <FieldRow :label="formatLabel('shuffle_mode')" :help="sectionHelp('model', 'shuffle_mode')">
-                <select v-model="localConfig.model.shuffle_mode" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                  <option value="standard">{{ t('remote.controls.shuffleModeStandard') }}</option>
-                  <option value="fewer_repeats">{{ t('remote.controls.shuffleModeFewerRepeats') }}</option>
-                </select>
+              <FieldRow :label="formatLabel('reshuffle_num')" :help="sectionHelp('model', 'reshuffle_num')">
+                <NumberField v-model="localConfig.model.reshuffle_num" :min="1" :step="1" />
               </FieldRow>
               <FieldRow :label="formatLabel('sort_cols')" :help="sectionHelp('model', 'sort_cols')">
                 <SortRulesEditor v-model="localConfig.model.sort_cols" :columns="sortColumns" />
-              </FieldRow>
-              <FieldRow :label="formatLabel('location_filter')" :help="sectionHelp('model', 'location_filter')">
-                <FilterExpressionEditor v-model="localConfig.model.location_filter" :options="locationOptions" placeholder="Berlin OR Hamburg" />
-              </FieldRow>
-              <FieldRow :label="formatLabel('tags_filter')" :help="sectionHelp('model', 'tags_filter')">
-                <FilterExpressionEditor v-model="localConfig.model.tags_filter" :options="tagOptions" placeholder="family AND holiday" />
               </FieldRow>
             </section>
 
@@ -541,9 +710,6 @@ function setMatTypesArray(values: string[]) {
               </FieldRow>
               <FieldRow :label="formatLabel('geo_key')" :help="sectionHelp('model', 'geo_key')">
                 <input v-model="localConfig.model.geo_key" type="email" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-              </FieldRow>
-              <FieldRow :label="formatLabel('geo_suppress_list')" :help="sectionHelp('model', 'geo_suppress_list')">
-                <TokenListEditor v-model="localConfig.model.geo_suppress_list" placeholder="County" />
               </FieldRow>
               <FieldRow :label="t('settings.geocoding.locationFormat')" :help="sectionHelp('model', 'key_list')">
                 <GeocodeKeyListEditor v-model="localConfig.model.key_list" :choices="geocodeKeyChoices" />
@@ -557,20 +723,13 @@ function setMatTypesArray(values: string[]) {
               <FieldRow :label="formatLabel('video_extensions')" :help="sectionHelp('model', 'video_extensions')">
                 <FixedChoiceListEditor v-model="localConfig.model.video_extensions" :choices="videoExtensionChoices" />
               </FieldRow>
-              <FieldRow :label="formatLabel('image_attr')" :help="sectionHelp('model', 'image_attr')">
-                <FixedChoiceListEditor v-model="localConfig.model.image_attr" :choices="imageAttributeChoices" />
+              <FieldRow :label="formatLabel('log_level')" :help="sectionHelp('model', 'log_level')">
+                <select v-model="localConfig.model.log_level" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                  <option v-for="level in logLevelOptions" :key="level" :value="level">{{ level }}</option>
+                </select>
               </FieldRow>
               <FieldRow :label="formatLabel('log_file')" :help="sectionHelp('model', 'log_file')">
                 <PathPicker v-model="localConfig.model.log_file" kind="file" allow-missing />
-              </FieldRow>
-              <FieldRow :label="formatLabel('log_level')" :help="sectionHelp('model', 'log_level')">
-                <select v-model="localConfig.model.log_level" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                  <option value="DEBUG">DEBUG</option>
-                  <option value="INFO">INFO</option>
-                  <option value="WARNING">WARNING</option>
-                  <option value="ERROR">ERROR</option>
-                  <option value="CRITICAL">CRITICAL</option>
-                </select>
               </FieldRow>
             </AdvancedDisclosure>
           </section>
@@ -607,24 +766,36 @@ function setMatTypesArray(values: string[]) {
 
           <section v-else-if="activeTab === 'http' && localConfig.http" class="space-y-5 p-6 sm:p-8">
             <h2 class="border-b border-gray-100 pb-4 text-2xl font-bold text-gray-900 dark:border-gray-700 dark:text-white">{{ t('config.http._title') }}</h2>
-            <FieldRow :label="formatLabel('auth')" :help="sectionHelp('http', 'auth')">
-              <ToggleSwitch v-model="localConfig.http.auth" />
-            </FieldRow>
-            <FieldRow :label="formatLabel('username')" :help="sectionHelp('http', 'username')">
-              <input v-model="localConfig.http.username" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-            </FieldRow>
-            <FieldRow :label="formatLabel('password')" :help="sectionHelp('http', 'password')">
-              <PasswordField v-model="localConfig.http.password" />
-            </FieldRow>
-            <FieldRow :label="formatLabel('use_ssl')" :help="sectionHelp('http', 'use_ssl')">
-              <ToggleSwitch v-model="localConfig.http.use_ssl" />
-            </FieldRow>
-            <FieldRow :label="formatLabel('keyfile')" :help="sectionHelp('http', 'keyfile')">
-              <PathPicker v-model="localConfig.http.keyfile" kind="file" :extensions="certificateExtensions" allow-missing />
-            </FieldRow>
-            <FieldRow :label="formatLabel('certfile')" :help="sectionHelp('http', 'certfile')">
-              <PathPicker v-model="localConfig.http.certfile" kind="file" :extensions="certificateExtensions" allow-missing />
-            </FieldRow>
+            <section class="space-y-5">
+              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.auth.title') }}</h3>
+              <FieldRow :label="t('settings.auth.scope')" :help="t('settings.auth.scopeHelp')">
+                <div class="space-y-2" role="radiogroup" :aria-label="t('settings.auth.scope')">
+                  <label
+                    v-for="option in authScopeOptions"
+                    :key="option.value"
+                    class="flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-2 text-sm transition-colors"
+                    :class="localAuthConfig.scope === option.value ? 'border-indigo-500 bg-indigo-50 text-indigo-900 dark:border-indigo-400 dark:bg-indigo-500/10 dark:text-indigo-100' : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-300 dark:hover:bg-gray-700'"
+                  >
+                    <input
+                      v-model="localAuthConfig.scope"
+                      type="radio"
+                      name="auth-scope"
+                      :value="option.value"
+                      class="h-4 w-4 border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700"
+                    >
+                    <span class="font-medium">{{ option.label }}</span>
+                  </label>
+                </div>
+              </FieldRow>
+              <template v-if="localAuthConfig.scope !== 'none'">
+                <FieldRow :label="t('settings.auth.username')" :help="t('settings.auth.usernameHelp')">
+                  <input v-model="localAuthConfig.username" type="text" autocomplete="username" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                </FieldRow>
+                <FieldRow :label="t('settings.auth.password')" :help="localAuthConfig.password_set ? t('settings.auth.passwordPreserveHelp') : t('settings.auth.passwordHelp')">
+                  <PasswordField v-model="localAuthConfig.password" />
+                </FieldRow>
+              </template>
+            </section>
             <FieldRow :label="formatLabel('cors_allowed_origins')" :help="sectionHelp('http', 'cors_allowed_origins')">
               <TokenListEditor v-model="localConfig.http.cors_allowed_origins" placeholder="http://localhost:5173" />
             </FieldRow>
@@ -637,35 +808,6 @@ function setMatTypesArray(values: string[]) {
               </FieldRow>
               <FieldRow :label="formatLabel('command_debounce_ms')" :help="sectionHelp('http', 'command_debounce_ms')">
                 <NumberField v-model="localConfig.http.command_debounce_ms" :min="0" :step="10" />
-              </FieldRow>
-            </AdvancedDisclosure>
-          </section>
-
-          <section v-else-if="activeTab === 'peripherals' && localConfig.peripherals" class="space-y-5 p-6 sm:p-8">
-            <h2 class="border-b border-gray-100 pb-4 text-2xl font-bold text-gray-900 dark:border-gray-700 dark:text-white">{{ t('config.peripherals._title') }}</h2>
-            <FieldRow :label="formatLabel('enable')" :help="sectionHelp('peripherals', 'enable')">
-              <ToggleSwitch v-model="localConfig.peripherals.enable" />
-            </FieldRow>
-            <FieldRow :label="formatLabel('input_type')" :help="sectionHelp('peripherals', 'input_type')">
-              <select v-model="localConfig.peripherals.input_type" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                <option :value="null">None</option>
-                <option value="keyboard">Keyboard</option>
-                <option value="touch">Touch</option>
-                <option value="mouse">Mouse</option>
-              </select>
-            </FieldRow>
-            <div class="space-y-5 rounded-lg border border-gray-200 p-4 dark:border-gray-700">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ formatLabel('buttons') }}</h3>
-              <FieldRow v-for="(_value, key) in localConfig.peripherals.buttons" :key="key" :label="formatLabel(String(key))" :help="nestedHelp('peripherals', 'buttons', String(key))">
-                <KeyboardShortcutCapture v-model="localConfig.peripherals.buttons[key]" />
-              </FieldRow>
-            </div>
-            <AdvancedDisclosure :title="t('settings.domain.advanced')" :description="t('settings.domain.advancedDescription')">
-              <FieldRow :label="formatLabel('label')" :help="sectionHelp('peripherals', 'label')">
-                <input v-model="localConfig.peripherals.label" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-              </FieldRow>
-              <FieldRow :label="formatLabel('shortcut')" :help="sectionHelp('peripherals', 'shortcut')">
-                <KeyboardShortcutCapture v-model="localConfig.peripherals.shortcut" />
               </FieldRow>
             </AdvancedDisclosure>
           </section>

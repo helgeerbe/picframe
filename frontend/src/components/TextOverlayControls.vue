@@ -23,7 +23,7 @@ const showLocation = ref(false)
 onMounted(async () => {
   if (!configStore.config || Object.keys(configStore.config).length === 0) {
     try {
-      await configStore.fetchConfig()
+      await configStore.fetchWorkflowConfig()
     } catch (e) {
       console.error("Failed to fetch config for overlays", e)
     }

@@ -37,6 +37,7 @@ class PlayCommand(IpcMessage):
     w: int = 0
     h: int = 0
     max_software_decode_resolution: str | None = None
+    fit_display: bool = False
     type: str = field(default="play", init=False)
 
 @dataclass(frozen=True)

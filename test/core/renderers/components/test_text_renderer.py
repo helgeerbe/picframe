@@ -73,3 +73,29 @@ def test_text_renderer_draws_pair_text_blocks(text_renderer):
 
     left_draw.assert_called_once()
     right_draw.assert_called_once()
+
+
+def test_text_renderer_applies_overlay_style(mock_display, mock_shader):
+    with patch('picframe.core.renderers.components.text_renderer.pi3d.FixedString') as mock_fixed_string:
+        mock_fixed_string.return_value.sprite = MagicMock()
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Styled",
+                show_text_sz=54,
+                text_justify="R",
+                text_opacity=0.5,
+                text_bkg_hgt=0.2,
+                text_x_margin=30,
+                text_y_margin=12,
+            )
+        )
+
+    kwargs = mock_fixed_string.call_args.kwargs
+    assert kwargs["font_size"] == 54
+    assert kwargs["justify"] == "R"
+    assert kwargs["color"][3] == 127
+    assert kwargs["background_color"] is not None
+    expected_margin = max(30, (int(mock_display.height * 0.2) - 54) // 2)
+    assert kwargs["width"] == mock_display.width - (expected_margin * 2)

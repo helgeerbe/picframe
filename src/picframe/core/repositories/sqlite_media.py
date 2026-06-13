@@ -500,15 +500,12 @@ class SQLiteMediaRepository(IMediaRepository):
         """Return distinct values for Remote filter controls."""
         cursor = self._conn.execute(
             """
-            SELECT m.filepath, COALESCE(l.address, m.location) as location, m.tags
+            SELECT m.filepath, m.tags
             FROM media m
-            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
-                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
             WHERE m.is_deleted = 0
             """
         )
         subdirectories: set[str] = set()
-        locations: set[str] = set()
         tags: set[str] = set()
         root = Path(pic_dir).expanduser() if pic_dir else None
 
@@ -519,9 +516,6 @@ class SQLiteMediaRepository(IMediaRepository):
                 subdirectory = self._relative_subdirectory(parent, root)
                 if subdirectory:
                     subdirectories.add(subdirectory)
-            location = row["location"]
-            if location:
-                locations.add(str(location))
             for tag in str(row["tags"] or "").split(","):
                 tag = tag.strip()
                 if tag:
@@ -529,10 +523,46 @@ class SQLiteMediaRepository(IMediaRepository):
 
         return {
             "subdirectories": sorted(subdirectories, key=str.casefold),
-            "locations": sorted(locations, key=str.casefold),
+            "locations": [],
             "tags": sorted(tags, key=str.casefold),
             "sort_columns": SORT_COLUMNS_FOR_UI,
         }
+
+    def search_location_options(
+        self,
+        query: str = "",
+        limit: int = 25,
+    ) -> list[dict[str, Any]]:
+        """Return capped distinct location values with active-media counts."""
+        query = (query or "").strip().lower()
+        limit = max(1, min(int(limit or 25), 100))
+        params: list[Any] = []
+        where = "location IS NOT NULL AND TRIM(location) != ''"
+        if query:
+            where += " AND LOWER(location) LIKE ? ESCAPE '\\'"
+            params.append(f"%{_FilterParser._escape_like(query)}%")
+        params.append(limit)
+        cursor = self._conn.execute(
+            f"""
+            SELECT location AS value, COUNT(*) AS count
+            FROM (
+                SELECT COALESCE(l.address, m.location) AS location
+                FROM media m
+                LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
+                    AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+                WHERE m.is_deleted = 0
+            )
+            WHERE {where}
+            GROUP BY location
+            ORDER BY count DESC, LOWER(location) ASC
+            LIMIT ?
+            """,
+            params,
+        )
+        return [
+            {"value": str(row["value"]), "count": int(row["count"])}
+            for row in cursor.fetchall()
+        ]
 
     def _build_media_where(
         self,

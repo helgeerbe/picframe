@@ -63,10 +63,16 @@ class ClockRenderer:
         
         if now_str != self._current_time_str or self._clock_block is None:
             self._current_time_str = now_str
-            
-            font_size = 48
-            margin = 20
-            opacity = int(255 * 0.8 * self._brightness)
+
+            font_size = max(8, int(self._config.clock_text_sz))
+            x_margin = int(self._display.width * max(0.0, self._config.clock_wdt_offset_pct) / 100)
+            y_margin = int(self._display.height * max(0.0, self._config.clock_hgt_offset_pct) / 100)
+            opacity = int(
+                255 * max(0.0, min(1.0, self._config.clock_opacity)) * self._brightness
+            )
+            justify = str(self._config.clock_justify or "R").upper()
+            if justify not in {"L", "C", "R"}:
+                justify = "R"
             
             try:
                 self._clock_block = pi3d.FixedString(
@@ -75,14 +81,16 @@ class ClockRenderer:
                     font_size=font_size,
                     shadow_radius=3,
                     shader=self._shader,
-                    justify="R",
-                    width=self._display.width - (margin * 2),
+                    justify=justify,
+                    width=max(font_size * 4, self._display.width - (x_margin * 2)),
                     color=(255, 255, 255, opacity)
                 )
-                
-                # Position at top right
+
                 x = 0
-                y = (self._display.height // 2) - (self._clock_block.sprite.height // 2) - margin
+                if str(self._config.clock_top_bottom or "T").upper() == "B":
+                    y = - (self._display.height // 2) + (self._clock_block.sprite.height // 2) + y_margin
+                else:
+                    y = (self._display.height // 2) - (self._clock_block.sprite.height // 2) - y_margin
                 self._clock_block.sprite.position(x, y, 0.1)
             except Exception as e:
                 self._logger.error(f"Failed to create clock FixedString: {e}")

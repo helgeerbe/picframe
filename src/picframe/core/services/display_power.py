@@ -9,9 +9,10 @@ Hardware Abstraction Layer (HAL) adapter.
 import logging
 from typing import Any
 
-from picframe.core.events.dto import Command, CommandEvent
+from picframe.core.events.dto import Command, CommandEvent, State, StateEvent
 from picframe.core.events.interfaces import IEventSubscriber
 from picframe.core.ports import IDisplayPower
+from picframe.core.repositories.interfaces import IConfigRepository
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +23,10 @@ class DisplayPowerManager:
     """
 
     def __init__(
-        self, event_bus: IEventSubscriber, display_power_adapter: IDisplayPower
+        self,
+        event_bus: IEventSubscriber,
+        display_power_adapter: IDisplayPower,
+        config_repository: IConfigRepository | None = None,
     ) -> None:
         """
         Initialize the DisplayPowerManager.
@@ -33,12 +37,14 @@ class DisplayPowerManager:
         """
         self._event_bus = event_bus
         self._adapter = display_power_adapter
+        self._config_repository = config_repository
         self._subscribe()
         logger.info("DisplayPowerManager initialized.")
 
     def _subscribe(self) -> None:
         """Subscribe to relevant events on the Event Bus."""
         self._event_bus.subscribe(CommandEvent, self._handle_command_event)
+        self._event_bus.subscribe(StateEvent, self._handle_state_event)
 
     def _handle_command_event(self, event: Any) -> None:
         """
@@ -69,3 +75,19 @@ class DisplayPowerManager:
                     self._adapter.set_brightness(brightness)
                 except ValueError:
                     logger.error(f"DisplayPowerManager: Invalid brightness payload: {event.payload}")
+
+    def _handle_state_event(self, event: Any) -> None:
+        """Retarget display-power commands after live viewer config changes."""
+        if not isinstance(event, StateEvent):
+            return
+        if event.state != State.CONFIG_CHANGED or self._config_repository is None:
+            return
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        updated_sections = payload.get("updated_sections", [])
+        if "viewer" not in updated_sections:
+            return
+
+        display_output = str(
+            self._config_repository.get_app_config("viewer.display_hdmi", "HDMI-A-1")
+        )
+        self._adapter.set_display_output(display_output)

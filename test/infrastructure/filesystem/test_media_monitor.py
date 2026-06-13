@@ -238,3 +238,31 @@ def test_set_directories_restarts_running_monitor(
     assert second_observer.scheduled[0][1:] == ("/second", True)
     assert second_observer.start_count == 1
     assert service.directories == ["/second"]
+
+
+@patch("picframe.infrastructure.filesystem.media_monitor.Observer")
+@patch("picframe.infrastructure.filesystem.media_monitor.os.path.exists")
+@patch("picframe.infrastructure.filesystem.media_monitor.os.path.ismount")
+def test_configure_restarts_running_monitor_and_updates_settings(
+    mock_ismount: MagicMock,
+    mock_exists: MagicMock,
+    mock_observer_class: MagicMock,
+) -> None:
+    first_observer = FakeObserver()
+    second_observer = FakeObserver()
+    mock_exists.return_value = True
+    mock_ismount.return_value = False
+    mock_observer_class.side_effect = [first_observer, second_observer]
+    service = WatchdogMediaMonitor(Mock(), ["/first"], {".jpg"})
+
+    service.start()
+    service.configure(["/second"], {".PNG", ".MP4"}, follow_links=True)
+
+    assert first_observer.stop_count == 1
+    assert first_observer.join_count == 1
+    assert second_observer.scheduled[0][1:] == ("/second", True)
+    assert second_observer.start_count == 1
+    assert service.directories == ["/second"]
+    assert service.allowed_extensions == {".png", ".mp4"}
+    assert service.handler.allowed_extensions == {".png", ".mp4"}
+    assert service.follow_links is True

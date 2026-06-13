@@ -129,9 +129,21 @@ class OverlayConfig:
     """
     show_clock: bool = False
     clock_format: str = "%H:%M"
+    clock_justify: str = "R"
+    clock_text_sz: int = 120
+    clock_opacity: float = 1.0
+    clock_top_bottom: str = "T"
+    clock_wdt_offset_pct: float = 3.0
+    clock_hgt_offset_pct: float = 3.0
     show_text: bool = False
     text_string: str = ""
     text_strings: tuple[str, ...] = field(default_factory=tuple)
+    text_justify: str = "L"
+    show_text_sz: int = 40
+    text_bkg_hgt: float = 0.25
+    text_opacity: float = 1.0
+    text_x_margin: int = 100
+    text_y_margin: int = 0
 
 
 @dataclass(frozen=True)
@@ -151,8 +163,22 @@ class RendererConfig:
     kenburns: bool = False
     show_clock: bool = False
     clock_format: str = "%H:%M"
+    clock_justify: str = "R"
+    clock_text_sz: int = 120
+    clock_opacity: float = 1.0
+    clock_top_bottom: str = "T"
+    clock_wdt_offset_pct: float = 3.0
+    clock_hgt_offset_pct: float = 3.0
     show_text_enabled: bool = False
     text_overlay_format: str = "%b %d, %Y"
+    show_text_fm: str = "%b %d, %Y"
+    text_justify: str = "L"
+    show_text_sz: int = 40
+    text_bkg_hgt: float = 0.25
+    text_opacity: float = 1.0
+    text_x_margin: int = 100
+    text_y_margin: int = 0
+    geo_suppress_list: list[str] = field(default_factory=list)
     
     # Animation settings
     time_fade: float = 2.0
@@ -164,8 +190,12 @@ class RendererConfig:
     
     # Image Renderer settings
     blend_type: str = "blend"
+    blur_amount: int = 12
+    blur_zoom: float = 1.0
+    blur_edges: bool = False
     edge_alpha: float = 0.5
     fit: bool = False
+    video_fit_display: bool = False
     video_extensions: list[str] = field(default_factory=lambda: [".mp4", ".mov", ".avi", ".mkv"])
     mat_images: float | bool | str = 0.01
     mat_type: str | None = None

@@ -127,6 +127,10 @@ def test_extract_passes_cache_dir_and_fit_mode(
 
     strategy.extract("/path/to/video.mp4", 1)
 
+    mock_config_repo.get_app_config_bool.assert_called_with(
+        "viewer.video_fit_display",
+        False,
+    )
     mock_extract.assert_called_once_with(
         "/path/to/video.mp4",
         10.0,

@@ -313,6 +313,32 @@ def test_engine_restarts_renderer_after_display_geometry_config_update(
     assert engine._renderer_retry_requested is True
 
 
+def test_engine_restarts_renderer_after_display_backend_config_update(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        renderer_config=RendererConfig(use_sdl2=True, use_glx=False),
+    )
+    engine._renderer_started = True
+
+    engine._handle_renderer_config_event(
+        RendererConfigUpdatedEvent(
+            config=RendererConfig(use_sdl2=False, use_glx=True)
+        )
+    )
+
+    assert engine._renderer_retry_requested is True
+
+
 def test_engine_does_not_restart_renderer_for_clock_toggle(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
@@ -335,6 +361,38 @@ def test_engine_does_not_restart_renderer_for_clock_toggle(
     )
 
     assert engine._renderer_retry_requested is False
+
+
+def test_engine_refreshes_video_decode_ceiling_on_viewer_config_change(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_config_repo = MagicMock()
+    mock_config_repo.get_app_config.return_value = "1920x1080"
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=mock_config_repo,
+        video_player=mock_video_player,
+    )
+
+    engine._handle_state_event(
+        StateEvent(
+            state=State.CONFIG_CHANGED,
+            payload={"updated_sections": ["viewer"]},
+        )
+    )
+
+    mock_video_player.set_max_software_decode_resolution.assert_called_once_with(
+        "1920x1080"
+    )
 
 
 def test_engine_purge_does_not_rebuild_playlist_while_renderer_blocked(
@@ -876,7 +934,9 @@ def test_engine_trigger_next_media_video_plays_directly_without_frames(
     render_cmd = mock_renderer.execute.call_args[0][0]
     assert isinstance(render_cmd, RenderCommand)
     assert render_cmd.image_path == "RESUME"
-    mock_video_player.play.assert_called_once_with(media_item, 10, 20, 1920, 1080)
+    mock_video_player.play.assert_called_once_with(
+        media_item, 10, 20, 1920, 1080, False
+    )
     assert engine._state == State.PLAYING
     assert engine._next_transition_time == float("inf")
 
@@ -937,7 +997,9 @@ def test_engine_trigger_next_media_video_plays_directly_when_cached_frame_load_t
     render_cmd = mock_renderer.execute.call_args[0][0]
     assert isinstance(render_cmd, RenderCommand)
     assert render_cmd.image_path == "RESUME"
-    mock_video_player.play.assert_called_once_with(media_item, 10, 20, 1920, 1080)
+    mock_video_player.play.assert_called_once_with(
+        media_item, 10, 20, 1920, 1080, False
+    )
     assert engine._state == State.PLAYING
     assert engine._next_transition_time == float("inf")
 
@@ -956,6 +1018,7 @@ def test_engine_video_display_rect_prefers_configured_custom_rect(
         "viewer.display_w": "1800",
         "viewer.display_h": "1000",
     }.get(key, default)
+    config_repo.get_app_config_bool.return_value = False
     mock_renderer.get_display_rect.return_value = (0, 80, 1800, 1000)
     engine = PlaybackEngine(
         mock_event_publisher,
@@ -984,6 +1047,7 @@ def test_engine_video_handoff_uses_configured_custom_rect(
         "viewer.display_w": "1800",
         "viewer.display_h": "1000",
     }.get(key, default)
+    config_repo.get_app_config_bool.return_value = False
     engine = PlaybackEngine(
         mock_event_publisher,
         mock_event_subscriber,
@@ -1018,6 +1082,7 @@ def test_engine_video_handoff_uses_configured_custom_rect(
         80,
         1800,
         1000,
+        False,
     )
 
 
@@ -1035,6 +1100,7 @@ def test_engine_video_display_rect_uses_fullscreen_for_unset_geometry(
         "viewer.display_w": None,
         "viewer.display_h": None,
     }.get(key, default)
+    config_repo.get_app_config_bool.return_value = False
     mock_renderer.get_display_rect.return_value = (0, 0, 1800, 1000)
     engine = PlaybackEngine(
         mock_event_publisher,
@@ -1064,6 +1130,7 @@ def test_engine_video_handoff_uses_fullscreen_for_unset_geometry(
         "viewer.display_w": None,
         "viewer.display_h": None,
     }.get(key, default)
+    config_repo.get_app_config_bool.return_value = False
     engine = PlaybackEngine(
         mock_event_publisher,
         mock_event_subscriber,
@@ -1092,7 +1159,7 @@ def test_engine_video_handoff_uses_fullscreen_for_unset_geometry(
     ):
         engine._trigger_next_media()
 
-    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 0, 0)
+    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 0, 0, False)
 
 
 def test_engine_video_first_frame_timeout_completes_handoff(
@@ -1220,7 +1287,9 @@ def test_engine_transition_completed_preloads_last_frame_before_video_play(
     assert preload_cmd.image_path == "/cache/video.2.frame"
     assert preload_cmd.image_obj == last_img
     assert preload_cmd.render_action == RENDER_PRELOAD_VIDEO_REVEAL
-    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 1920, 1080)
+    mock_video_player.play.assert_called_once_with(
+        media_item, 0, 0, 1920, 1080, False
+    )
 
 
 def test_engine_first_frame_rendered_promotes_preloaded_last_frame(

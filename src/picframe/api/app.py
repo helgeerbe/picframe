@@ -8,6 +8,7 @@ and sets up the necessary dependencies for the web control plane.
 import asyncio
 import json
 import logging
+import subprocess
 from pathlib import Path
 from typing import Any, cast
 
@@ -17,6 +18,8 @@ from fastapi import (
     File,
     HTTPException,
     Query,
+    Request,
+    Response,
     UploadFile,
     WebSocket,
     WebSocketDisconnect,
@@ -29,6 +32,8 @@ from fastapi.staticfiles import StaticFiles
 from picframe.api.models import (
     APIErrorResponse,
     AppConfig,
+    BasicAuthConfigRequest,
+    BasicAuthConfigResponse,
     EmptyConfigResponse,
     FilesystemBrowseResponse,
     FilesystemEntryDTO,
@@ -37,8 +42,12 @@ from picframe.api.models import (
     HardwareInputsConfig,
     HardwareInputsUpdateResponse,
     HealthResponse,
+    LocaleOptionsResponse,
+    LogEventMessage,
+    LogSnapshotMessage,
     MediaChangedWebSocketMessage,
     MediaFilterOptionsResponse,
+    MediaLocationOptionsResponse,
     MediaResponseDTO,
     MediaSelectionCountRequest,
     MediaSelectionCountResponse,
@@ -52,6 +61,8 @@ from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedE
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.models.playlist import PlaylistCriteria
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
+from picframe.core.services.basic_auth import AUTH_COOKIE_NAME, BasicAuthStore
+from picframe.core.services.logging_service import LogEvent, LogEventBuffer
 from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourcePaths
 
 logger = logging.getLogger(__name__)
@@ -72,11 +83,13 @@ REST API for the Picframe web control plane.
 The live playback channel is the `/ws/state` WebSocket. It accepts command
 messages such as `{"command": "NEXT"}` and `{"command": "SET_BRIGHTNESS",
 "value": 0.8}`, and emits `MediaChangedEvent`, `StateEvent`, and
-`SystemErrorEvent` payloads. Their schemas are included in the OpenAPI
-components as documentation-only WebSocket models.
+`SystemErrorEvent` payloads. The protected `/ws/logs` channel emits live
+`LogSnapshot` and `LogEvent` payloads for the Logs UI. Their schemas are
+included in the OpenAPI components as documentation-only WebSocket models.
 """
 OPENAPI_TAGS = [
     {"name": "System", "description": "Health, host power, and maintenance actions."},
+    {"name": "Auth", "description": "Basic Auth access protection configuration."},
     {"name": "Filesystem", "description": "Safe path browsing and validation for settings."},
     {"name": "Configuration", "description": "Runtime Picframe configuration endpoints."},
     {"name": "Media", "description": "Media selection helpers and media file serving."},
@@ -102,7 +115,91 @@ WEBSOCKET_DOCUMENTATION_MODELS = (
     MediaChangedWebSocketMessage,
     StateWebSocketMessage,
     SystemErrorWebSocketMessage,
+    LogEventMessage,
+    LogSnapshotMessage,
 )
+AUTH_PROTECTED_API_PREFIXES = (
+    "/api/config",
+    "/api/filesystem",
+    "/api/hardware-inputs",
+    "/api/maintenance",
+    "/api/auth/config",
+)
+AUTH_PROTECTED_EXACT_PATHS = {
+    "/api/system/reboot",
+    "/api/system/shutdown",
+}
+PUBLIC_WORKFLOW_KEYS = {
+    "model": {
+        "shuffle",
+        "shuffle_mode",
+        "subdirectory",
+        "date_from",
+        "date_to",
+        "location_filter",
+        "tags_filter",
+        "time_delay",
+        "fade_time",
+    },
+    "viewer": {
+        "show_clock",
+        "show_text_enabled",
+        "text_overlay_format",
+    },
+}
+
+
+def _requires_basic_auth(path: str, method: str, scope: str) -> bool:
+    if method.upper() == "OPTIONS":
+        return False
+    if scope == "none":
+        return False
+    if scope == "site":
+        return True
+    if path in AUTH_PROTECTED_EXACT_PATHS:
+        return True
+    if path == "/settings" or path.startswith("/settings/"):
+        return True
+    if path == "/logs" or path.startswith("/logs/"):
+        return True
+    return any(path == prefix or path.startswith(f"{prefix}/") for prefix in AUTH_PROTECTED_API_PREFIXES)
+
+
+def _basic_auth_challenge() -> Response:
+    return Response(
+        status_code=401,
+        headers={"WWW-Authenticate": 'Basic realm="Picframe Settings"'},
+    )
+
+
+def _filter_public_workflow_config(payload: dict[str, Any]) -> dict[str, dict[str, Any]]:
+    filtered: dict[str, dict[str, Any]] = {}
+    for section, values in payload.items():
+        if section not in PUBLIC_WORKFLOW_KEYS:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Config section '{section}' is not available from public workflow controls",
+            )
+        if not isinstance(values, dict):
+            raise HTTPException(status_code=400, detail=f"Config section '{section}' must be an object")
+        allowed = PUBLIC_WORKFLOW_KEYS[section]
+        rejected = sorted(set(values) - allowed)
+        if rejected:
+            raise HTTPException(
+                status_code=403,
+                detail=f"Config keys are not available from public workflow controls: {', '.join(rejected)}",
+            )
+        filtered[section] = {key: values[key] for key in values if key in allowed}
+    return filtered
+
+
+def _workflow_config_from_app_config(config: AppConfig) -> dict[str, dict[str, Any]]:
+    model_dump = config.model.model_dump()
+    viewer_dump = config.viewer.model_dump()
+    return {
+        "model": {key: model_dump[key] for key in PUBLIC_WORKFLOW_KEYS["model"]},
+        "viewer": {key: viewer_dump[key] for key in PUBLIC_WORKFLOW_KEYS["viewer"]},
+    }
 
 
 def _path_picker_root() -> Path:
@@ -434,7 +531,15 @@ def _install_openapi_documentation(app: FastAPI) -> None:
                     {"$ref": "#/components/schemas/StateWebSocketMessage"},
                     {"$ref": "#/components/schemas/SystemErrorWebSocketMessage"},
                 ],
-            }
+            },
+            "/ws/logs": {
+                "description": "Basic Auth protected live logging channel for the Logs UI.",
+                "incoming": [],
+                "outgoing": [
+                    {"$ref": "#/components/schemas/LogSnapshotMessage"},
+                    {"$ref": "#/components/schemas/LogEventMessage"},
+                ],
+            },
         }
         app.openapi_schema = schema
         return schema
@@ -451,6 +556,8 @@ def create_app(
     image_processing_service: Any | None = None,
     html_dir: str = "~/.picframe/html",
     resource_paths: ResourcePaths | None = None,
+    log_event_buffer: LogEventBuffer | None = None,
+    auth_store: BasicAuthStore | None = None,
 ) -> FastAPI:
     """
     Create and configure the FastAPI application instance.
@@ -467,6 +574,8 @@ def create_app(
     resource_paths = resource_paths or ResourcePaths.from_base_dir(
         _path_picker_root() / ".picframe"
     )
+    auth_store = auth_store or BasicAuthStore(resource_paths)
+    log_event_buffer = log_event_buffer or LogEventBuffer()
     
     app = FastAPI(
         title="Picframe Web Control Plane",
@@ -475,6 +584,8 @@ def create_app(
         openapi_tags=OPENAPI_TAGS,
     )
     _install_openapi_documentation(app)
+    app.state.auth_store = auth_store
+    app.state.log_event_buffer = log_event_buffer
 
     # Configure CORS
     app.add_middleware(
@@ -484,6 +595,32 @@ def create_app(
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.middleware("http")
+    async def settings_basic_auth_middleware(
+        request: Request,
+        call_next: Any,
+    ) -> Response:
+        auth_settings = auth_store.load()
+        if _requires_basic_auth(request.url.path, request.method, auth_settings.scope):
+            if not auth_store.verify_request_credentials(
+                request.headers.get("authorization"),
+                request.cookies.get(AUTH_COOKIE_NAME),
+            ):
+                return _basic_auth_challenge()
+            response = await call_next(request)
+            response.set_cookie(
+                AUTH_COOKIE_NAME,
+                auth_store.session_token(),
+                httponly=True,
+                samesite="lax",
+                secure=request.url.scheme == "https",
+            )
+            return response
+        response = await call_next(request)
+        if auth_settings.scope == "none":
+            response.delete_cookie(AUTH_COOKIE_NAME)
+        return response
 
     @app.get(
         "/health",
@@ -496,9 +633,110 @@ def create_app(
         """Basic health check endpoint."""
         return {"status": "ok"}
 
+    @app.get(
+        "/api/auth/config",
+        response_model=BasicAuthConfigResponse,
+        response_model_exclude_none=True,
+        tags=["Auth"],
+        summary="Get Basic Auth settings",
+        description=(
+            "Return Basic Auth status. When protection is enabled, the protected "
+            "Settings UI also receives the stored plaintext password for editing."
+        ),
+    )
+    async def api_get_auth_config() -> dict[str, Any]:
+        return auth_store.public_config(include_password=True)
+
+    @app.put(
+        "/api/auth/config",
+        response_model=BasicAuthConfigResponse,
+        response_model_exclude_none=True,
+        tags=["Auth"],
+        summary="Update Basic Auth settings",
+        description=(
+            "Persist Basic Auth settings in the Picframe data directory. "
+            "An empty password keeps the existing password if one has already been set."
+        ),
+        responses={**BAD_REQUEST_RESPONSE},
+    )
+    async def api_put_auth_config(payload: BasicAuthConfigRequest) -> dict[str, Any]:
+        try:
+            settings = auth_store.update(
+                scope=payload.scope,
+                enabled=payload.enabled,
+                username=payload.username,
+                password=payload.password,
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return auth_store.public_config(include_password=True)
+
+    @app.websocket("/ws/logs")
+    async def websocket_logs(websocket: WebSocket) -> None:
+        """WebSocket endpoint for live log streaming."""
+        if not auth_store.verify_request_credentials(
+            websocket.headers.get("authorization"),
+            websocket.cookies.get(AUTH_COOKIE_NAME),
+        ):
+            await websocket.close(code=1008)
+            return
+        await websocket.accept()
+        send_queue: asyncio.Queue[str] = asyncio.Queue()
+        loop = asyncio.get_running_loop()
+
+        def event_to_message(event: LogEvent) -> str:
+            payload = event.to_dict()
+            payload["type"] = "LogEvent"
+            return json.dumps(payload)
+
+        def handle_log_event(event: LogEvent) -> None:
+            loop.call_soon_threadsafe(send_queue.put_nowait, event_to_message(event))
+
+        snapshot_events = []
+        for event in log_event_buffer.snapshot():
+            payload = event.to_dict()
+            payload["type"] = "LogEvent"
+            snapshot_events.append(payload)
+        await websocket.send_text(json.dumps({"type": "LogSnapshot", "events": snapshot_events}))
+        log_event_buffer.subscribe(handle_log_event)
+
+        async def receive_messages() -> None:
+            try:
+                while True:
+                    await websocket.receive_text()
+            except WebSocketDisconnect:
+                pass
+
+        async def send_messages() -> None:
+            try:
+                while True:
+                    await websocket.send_text(await send_queue.get())
+            except WebSocketDisconnect:
+                pass
+
+        try:
+            receive_task = asyncio.create_task(receive_messages())
+            send_task = asyncio.create_task(send_messages())
+            done, pending = await asyncio.wait(
+                {receive_task, send_task},
+                return_when=asyncio.FIRST_COMPLETED,
+            )
+            for task in pending:
+                task.cancel()
+            for task in done:
+                task.result()
+        finally:
+            log_event_buffer.unsubscribe(handle_log_event)
+
     @app.websocket("/ws/state")
     async def websocket_state(websocket: WebSocket) -> None:
         """WebSocket endpoint for state synchronization."""
+        if auth_store.load().scope == "site" and not auth_store.verify_request_credentials(
+            websocket.headers.get("authorization"),
+            websocket.cookies.get(AUTH_COOKIE_NAME),
+        ):
+            await websocket.close(code=1008)
+            return
         await websocket.accept()
         
         # Queue for sending messages to the websocket from the event bus
@@ -638,6 +876,25 @@ def create_app(
                                     }
                                 
                                 if config_payload:
+                                    if auth_store.load().scope == "settings":
+                                        try:
+                                            config_payload = _filter_public_workflow_config(
+                                                config_payload
+                                            )
+                                        except HTTPException as exc:
+                                            await websocket.send_text(
+                                                json.dumps(
+                                                    {
+                                                        "type": "StateEvent",
+                                                        "state": "ERROR",
+                                                        "payload": {
+                                                            "reason": "unauthorized_config",
+                                                            "message": exc.detail,
+                                                        },
+                                                    }
+                                                )
+                                            )
+                                            continue
                                     event_publisher.publish(
                                         CommandEvent(
                                             command=Command.SET_CONFIG, payload=config_payload
@@ -735,6 +992,36 @@ def create_app(
             }
         image_processing_service.clear_cache()
         return {"status": "cache cleared"}
+
+    @app.get(
+        "/api/system/locales",
+        response_model=LocaleOptionsResponse,
+        tags=["System"],
+        summary="List installed locales",
+        description="Return locales installed on the host for Settings locale selection.",
+    )
+    async def api_system_locales() -> dict[str, list[str]]:
+        """Return installed host locales discovered with `locale -a`."""
+        try:
+            result = subprocess.run(
+                ["locale", "-a"],
+                check=True,
+                capture_output=True,
+                text=True,
+                timeout=5.0,
+            )
+            locales = sorted(
+                {
+                    line.strip()
+                    for line in result.stdout.splitlines()
+                    if line.strip()
+                },
+                key=str.casefold,
+            )
+        except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+            logger.warning("Unable to list installed locales: %s", exc)
+            locales = ["C", "C.utf8", "POSIX"]
+        return {"locales": locales}
 
     @app.get(
         "/api/filesystem/browse",
@@ -856,6 +1143,67 @@ def create_app(
         return app_config.model_dump()
 
     @app.get(
+        "/api/workflow-config",
+        tags=["Configuration"],
+        summary="Get public Remote workflow configuration",
+        description=(
+            "Return only the playback workflow settings needed by Remote and Filters. "
+            "This endpoint stays public in Settings-only auth mode and is protected in "
+            "complete-site auth mode."
+        ),
+    )
+    async def api_get_workflow_config() -> dict[str, Any]:
+        """Get public workflow config used by Remote and Filters."""
+        if not config_repository:
+            return _workflow_config_from_app_config(AppConfig())
+
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None: pass
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None: pass
+            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+
+        from picframe.core.services.config_service import ConfigService
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+        nested_config = temp_service.get_nested_config()
+        app_config = AppConfig(**nested_config)
+        return _workflow_config_from_app_config(app_config)
+
+    @app.put(
+        "/api/workflow-config",
+        response_model=StatusMessageResponse,
+        response_model_exclude_none=True,
+        tags=["Configuration"],
+        summary="Update public Remote workflow configuration",
+        description=(
+            "Persist only the allowlisted workflow settings used by Remote and Filters. "
+            "Full configuration writes remain protected in Settings-only auth mode."
+        ),
+        responses={**BAD_REQUEST_RESPONSE, **FORBIDDEN_RESPONSE},
+    )
+    async def api_put_workflow_config(
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, str]:
+        """Update public Remote/Filters workflow config."""
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+        config_dict = _filter_public_workflow_config(payload)
+
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None: pass
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None: pass
+            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+
+        from picframe.core.services.config_service import ConfigService
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+        temp_service.update_nested_config(config_dict)
+
+        if event_publisher:
+            event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=config_dict))
+        return {"status": "success"}
+
+    @app.get(
         "/api/media/filter-options",
         response_model=MediaFilterOptionsResponse,
         tags=["Media"],
@@ -878,6 +1226,31 @@ def create_app(
         if config_repository:
             pic_dir = str(config_repository.get_app_config("model.pic_dir", "~/Pictures"))
         return media_repository.get_filter_options(pic_dir)
+
+    @app.get(
+        "/api/media/location-options",
+        response_model=MediaLocationOptionsResponse,
+        tags=["Media"],
+        summary="Search media locations",
+        description=(
+            "Return a capped list of distinct location values and counts for the "
+            "Remote location picker."
+        ),
+    )
+    async def api_media_location_options(
+        q: str = Query("", description="Case-insensitive location search text."),
+        limit: int = Query(
+            25,
+            ge=1,
+            le=100,
+            description="Maximum number of locations to return.",
+        ),
+    ) -> dict[str, Any]:
+        """Return searchable media location options without loading every location."""
+        if not media_repository:
+            return {"locations": []}
+        locations = media_repository.search_location_options(q, limit)
+        return MediaLocationOptionsResponse(locations=locations).model_dump()
 
     @app.post(
         "/api/media/selection-count",

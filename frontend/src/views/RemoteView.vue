@@ -4,6 +4,7 @@ import { storeToRefs } from 'pinia'
 import { usePlayerStore } from '../stores/player'
 import type { MediaItem } from '../stores/player'
 import { useConfigStore } from '../stores/config'
+import type { LocationOption } from '../stores/config'
 import { useI18n } from 'vue-i18n'
 import {
   mdiCalendarClock,
@@ -36,7 +37,9 @@ import {
   ClockIcon,
   CheckIcon,
   XMarkIcon,
-  ChevronDownIcon
+  ChevronDownIcon,
+  ArrowsPointingOutIcon,
+  MagnifyingGlassIcon
 } from '@heroicons/vue/24/outline'
 import {
   PlayIcon as PlayIconSolid,
@@ -78,7 +81,14 @@ const isShuffleModeMenuOpen = ref(false)
 const shuffleModeMenuRef = ref<HTMLElement | null>(null)
 const selectedPairIndex = ref(0)
 const showPairDeleteDialog = ref(false)
+const expandedPanel = ref<'media' | 'map' | null>(null)
+const locationSearch = ref('')
+const locationSearchResults = ref<LocationOption[]>([])
+const isLocationSearchLoading = ref(false)
+const tagSearch = ref('')
 let selectionCountTimer: number | undefined
+let locationSearchTimer: number | undefined
+const TAG_SEARCH_THRESHOLD = 100
 
 const shuffleModes = [
   { value: 'standard', labelKey: 'remote.controls.shuffleModeStandard' },
@@ -105,6 +115,10 @@ const handleDocumentClick = (event: MouseEvent) => {
 
 const handleDocumentKeydown = (event: KeyboardEvent) => {
   if (event.key === 'Escape') {
+    if (expandedPanel.value) {
+      expandedPanel.value = null
+      return
+    }
     closeShuffleModeMenu()
   }
 }
@@ -114,7 +128,7 @@ onMounted(() => {
   if (!isConnected.value) {
     playerStore.connect()
   }
-  void configStore.fetchConfig()
+  void configStore.fetchWorkflowConfig()
   void configStore.fetchFilterOptions()
   document.addEventListener('click', handleDocumentClick)
   document.addEventListener('keydown', handleDocumentKeydown)
@@ -187,6 +201,9 @@ onBeforeUnmount(() => {
   if (selectionCountTimer !== undefined) {
     window.clearTimeout(selectionCountTimer)
   }
+  if (locationSearchTimer !== undefined) {
+    window.clearTimeout(locationSearchTimer)
+  }
   document.removeEventListener('click', handleDocumentClick)
   document.removeEventListener('keydown', handleDocumentKeydown)
 })
@@ -241,7 +258,7 @@ const toggleShuffle = async () => {
   closeShuffleModeMenu()
   isSavingShuffle.value = true
   try {
-    await configStore.savePartialConfig({
+    await configStore.saveWorkflowConfig({
       model: {
         shuffle: !isShuffleEnabled.value
       }
@@ -265,7 +282,7 @@ const setShuffleMode = async (mode: ShuffleMode) => {
   if (mode === shuffleMode.value) return
   isSavingShuffle.value = true
   try {
-    await configStore.savePartialConfig({
+    await configStore.saveWorkflowConfig({
       model: {
         shuffle_mode: mode
       }
@@ -319,15 +336,11 @@ const deletePair = (target: 'left' | 'right' | 'both') => {
   showPairDeleteDialog.value = false
 }
 
-const cloneConfig = () => JSON.parse(JSON.stringify(appConfig.value || {}))
-
 const applyMediaSelection = async () => {
   isApplyingSelection.value = true
   selectionMessage.value = ''
   try {
-    const nextConfig = cloneConfig()
-    nextConfig.model = {
-      ...(nextConfig.model || {}),
+    const nextModelConfig = {
       subdirectory: mediaSelection.subdirectory,
       date_from: mediaSelection.date_from,
       date_to: mediaSelection.date_to,
@@ -336,7 +349,9 @@ const applyMediaSelection = async () => {
       time_delay: Number(mediaSelection.time_delay),
       fade_time: Number(mediaSelection.fade_time)
     }
-    await configStore.saveConfig(nextConfig)
+    await configStore.saveWorkflowConfig({
+      model: nextModelConfig
+    })
     await configStore.fetchFilterOptions()
     await refreshSelectionCount()
     playerStore.sendCommand('REQUEST_STATE')
@@ -488,6 +503,16 @@ const toggleFilterTerm = (expression: string, term: string, joiner: FilterJoiner
   return serializeFilterParts(nextParts)
 }
 
+const removeSimpleFilterTerm = (expression: string, term: string) => {
+  const parsed = parseSimpleFilterExpression(expression)
+  if (!parsed.simple) return expression
+  const nextParts = parsed.parts.filter((part) => part.term !== term)
+  if (nextParts.length) {
+    nextParts[0].joiner = null
+  }
+  return serializeFilterParts(nextParts)
+}
+
 const setLocationFilter = (location: string, event?: MouseEvent) => {
   const value = quoteFilterTerm(location)
   const joiner = event?.shiftKey ? 'AND' : 'OR'
@@ -499,6 +524,65 @@ const setTagFilter = (tag: string, event?: MouseEvent) => {
   const joiner = event?.shiftKey ? 'AND' : 'OR'
   mediaSelection.tags_filter = toggleFilterTerm(mediaSelection.tags_filter, value, joiner)
 }
+
+const selectedLocationTerms = computed(() => {
+  const parsed = parseSimpleFilterExpression(mediaSelection.location_filter)
+  return parsed.simple ? parsed.parts.map((part) => part.term) : []
+})
+
+const selectedTagTerms = computed(() => {
+  const parsed = parseSimpleFilterExpression(mediaSelection.tags_filter)
+  return parsed.simple ? parsed.parts.map((part) => part.term) : []
+})
+
+const useTagSearch = computed(() => filterOptions.value.tags.length > TAG_SEARCH_THRESHOLD)
+
+const visibleTagOptions = computed(() => {
+  const tags = filterOptions.value.tags || []
+  if (!useTagSearch.value) return tags
+  const query = tagSearch.value.trim().toLowerCase()
+  if (query.length < 2) return []
+  return tags.filter((tag) => tag.toLowerCase().includes(query)).slice(0, 25)
+})
+
+const selectedMediaLocation = computed(() => {
+  return selectedMediaItem.value?.location
+})
+
+const openExpandedPanel = (panel: 'media' | 'map') => {
+  if (panel === 'map' && !selectedMediaLocation.value) return
+  expandedPanel.value = panel
+}
+
+const closeExpandedPanel = () => {
+  expandedPanel.value = null
+}
+
+const updateLocationSearch = async () => {
+  const query = locationSearch.value.trim()
+  if (query.length < 2) {
+    locationSearchResults.value = []
+    return
+  }
+  isLocationSearchLoading.value = true
+  try {
+    locationSearchResults.value = await configStore.searchLocationOptions(query, 25)
+  } catch (error) {
+    console.error(error)
+    locationSearchResults.value = []
+  } finally {
+    isLocationSearchLoading.value = false
+  }
+}
+
+watch(locationSearch, () => {
+  if (locationSearchTimer !== undefined) {
+    window.clearTimeout(locationSearchTimer)
+  }
+  locationSearchTimer = window.setTimeout(() => {
+    void updateLocationSearch()
+  }, 250)
+})
 
 const formatCount = (value: number) => Number(value || 0).toLocaleString()
 
@@ -779,6 +863,16 @@ const metadataFields = computed(() => {
               <PhotoIcon class="w-24 h-24 mb-4 opacity-20" />
               <p class="text-sm font-medium uppercase tracking-wide opacity-60">{{ t('remote.noMedia') }}</p>
             </div>
+            <button
+              v-if="selectedMediaItem?.file_path"
+              type="button"
+              class="absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/75 focus:outline-none focus:ring-2 focus:ring-white/80"
+              :aria-label="t('remote.expand')"
+              :title="t('remote.expand')"
+              @click="openExpandedPanel('media')"
+            >
+              <ArrowsPointingOutIcon class="h-5 w-5" />
+            </button>
             
             <!-- Adaptive Cinematic Gradient Overlay -->
             <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-40 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
@@ -985,6 +1079,8 @@ const metadataFields = computed(() => {
           :latitude="selectedMediaItem?.location?.lat"
           :longitude="selectedMediaItem?.location?.lon"
           :location-name="selectedMediaItem?.exif?.location_name"
+          show-expand
+          @expand="openExpandedPanel('map')"
         />
       </div>
 
@@ -1060,72 +1156,123 @@ const metadataFields = computed(() => {
             </div>
 
             <div class="space-y-4">
-              <label class="space-y-2 block">
-                <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  <MapPinIcon class="w-4 h-4" />
-                  {{ t('remote.mediaSelection.location') }}
-                  <HelperText :text="filterHelpText" mode="dialog" />
-                </span>
-                <input
-                  v-model="mediaSelection.location_filter"
-                  list="location-filter-options"
-                  class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-                >
-                <datalist id="location-filter-options">
-                  <option v-for="location in filterOptions.locations" :key="location" :value="location" />
-                </datalist>
-              </label>
-              <div v-if="filterOptions.locations.length" class="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1 custom-scrollbar">
-                <button
-                  v-for="location in filterOptions.locations"
-                  :key="location"
-                  type="button"
-                  :aria-pressed="filterContainsTerm(mediaSelection.location_filter, quoteFilterTerm(location))"
-                  :title="t('remote.mediaSelection.chipTitle')"
-                  @click="setLocationFilter(location, $event)"
-                  :class="[
-                    'px-2.5 py-1 rounded-full text-xs font-semibold transition-colors border',
-                    filterContainsTerm(mediaSelection.location_filter, quoteFilterTerm(location))
-                      ? 'bg-sky-600 text-white border-sky-600'
-                      : 'bg-white dark:bg-gray-900/50 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-sky-400'
-                  ]"
-                >
-                  {{ location }}
-                </button>
+              <div class="space-y-3">
+                <label class="space-y-2 block">
+                  <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    <MapPinIcon class="w-4 h-4" />
+                    {{ t('remote.mediaSelection.location') }}
+                    <HelperText :text="filterHelpText" mode="dialog" />
+                  </span>
+                  <textarea
+                    v-model="mediaSelection.location_filter"
+                    rows="2"
+                    class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                  ></textarea>
+                </label>
+                <div v-if="selectedLocationTerms.length" class="flex flex-wrap gap-2">
+                  <button
+                    v-for="location in selectedLocationTerms"
+                    :key="location"
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-sky-600 bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                    :title="t('remote.mediaSelection.removeLocation')"
+                    @click="mediaSelection.location_filter = removeSimpleFilterTerm(mediaSelection.location_filter, location)"
+                  >
+                    {{ location }}
+                    <XMarkIcon class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <label class="relative block">
+                  <MagnifyingGlassIcon class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    v-model="locationSearch"
+                    type="search"
+                    :placeholder="t('remote.mediaSelection.searchLocations')"
+                    class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-sky-500/50 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-100"
+                  >
+                </label>
+                <div class="min-h-8">
+                  <p v-if="locationSearch.trim().length > 0 && locationSearch.trim().length < 2" class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('remote.mediaSelection.searchMore') }}
+                  </p>
+                  <p v-else-if="isLocationSearchLoading" class="text-xs text-gray-500 dark:text-gray-400">
+                    {{ t('remote.mediaSelection.searching') }}
+                  </p>
+                  <div v-else-if="locationSearchResults.length" class="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1 custom-scrollbar">
+                    <button
+                      v-for="location in locationSearchResults"
+                      :key="location.value"
+                      type="button"
+                      :aria-pressed="filterContainsTerm(mediaSelection.location_filter, quoteFilterTerm(location.value))"
+                      :title="t('remote.mediaSelection.chipTitle')"
+                      @click="setLocationFilter(location.value, $event)"
+                      :class="[
+                        'px-2.5 py-1 rounded-full text-xs font-semibold transition-colors border',
+                        filterContainsTerm(mediaSelection.location_filter, quoteFilterTerm(location.value))
+                          ? 'bg-sky-600 text-white border-sky-600'
+                          : 'bg-white dark:bg-gray-900/50 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-sky-400'
+                      ]"
+                    >
+                      {{ location.value }}
+                      <span class="ml-1 opacity-70">{{ formatCount(location.count) }}</span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
-              <label class="space-y-2 block">
-                <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  <TagIcon class="w-4 h-4" />
-                  {{ t('remote.mediaSelection.tags') }}
-                  <HelperText :text="filterHelpText" mode="dialog" />
-                </span>
-                <input
-                  v-model="mediaSelection.tags_filter"
-                  list="tag-filter-options"
-                  class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-                >
-                <datalist id="tag-filter-options">
-                  <option v-for="tag in filterOptions.tags" :key="tag" :value="tag" />
-                </datalist>
-              </label>
-              <div v-if="filterOptions.tags.length" class="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1 custom-scrollbar">
-                <button
-                  v-for="tag in filterOptions.tags"
-                  :key="tag"
-                  type="button"
-                  :aria-pressed="filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))"
-                  :title="t('remote.mediaSelection.chipTitle')"
-                  @click="setTagFilter(tag, $event)"
-                  :class="[
-                    'px-2.5 py-1 rounded-full text-xs font-semibold transition-colors border',
-                    filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))
-                      ? 'bg-sky-600 text-white border-sky-600'
-                      : 'bg-white dark:bg-gray-900/50 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-sky-400'
-                  ]"
-                >
-                  {{ tag }}
-                </button>
+              <div class="space-y-3">
+                <label class="space-y-2 block">
+                  <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                    <TagIcon class="w-4 h-4" />
+                    {{ t('remote.mediaSelection.tags') }}
+                    <HelperText :text="filterHelpText" mode="dialog" />
+                  </span>
+                  <textarea
+                    v-model="mediaSelection.tags_filter"
+                    rows="2"
+                    class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                  ></textarea>
+                </label>
+                <div v-if="selectedTagTerms.length" class="flex flex-wrap gap-2">
+                  <button
+                    v-for="tag in selectedTagTerms"
+                    :key="tag"
+                    type="button"
+                    class="inline-flex items-center gap-1 rounded-full border border-sky-600 bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
+                    :title="t('remote.mediaSelection.removeTag')"
+                    @click="mediaSelection.tags_filter = removeSimpleFilterTerm(mediaSelection.tags_filter, tag)"
+                  >
+                    {{ tag }}
+                    <XMarkIcon class="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <label v-if="useTagSearch" class="relative block">
+                  <MagnifyingGlassIcon class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <input
+                    v-model="tagSearch"
+                    type="search"
+                    :placeholder="t('remote.mediaSelection.searchTags')"
+                    class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-sky-500/50 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-100"
+                  >
+                </label>
+                <div v-if="visibleTagOptions.length" class="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1 custom-scrollbar">
+                  <button
+                    v-for="tag in visibleTagOptions"
+                    :key="tag"
+                    type="button"
+                    :aria-pressed="filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))"
+                    :title="t('remote.mediaSelection.chipTitle')"
+                    @click="setTagFilter(tag, $event)"
+                    :class="[
+                      'px-2.5 py-1 rounded-full text-xs font-semibold transition-colors border',
+                      filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))
+                        ? 'bg-sky-600 text-white border-sky-600'
+                        : 'bg-white dark:bg-gray-900/50 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-sky-400'
+                    ]"
+                  >
+                    {{ tag }}
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1227,6 +1374,58 @@ const metadataFields = computed(() => {
           </div>
         </div>
 
+      </div>
+    </div>
+
+    <div
+      v-if="expandedPanel"
+      class="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/90 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      :aria-label="expandedPanel === 'map' ? t('remote.location') : t('remote.controls.currentMedia')"
+      @click.self="closeExpandedPanel"
+    >
+      <button
+        type="button"
+        class="fixed right-5 top-5 z-[10000] inline-flex h-12 min-w-12 items-center justify-center gap-2 rounded-full border-2 border-white bg-red-600 px-4 text-white shadow-2xl ring-4 ring-black/30 transition-colors hover:bg-red-500 focus:outline-none focus:ring-4 focus:ring-red-300"
+        :aria-label="t('common.close')"
+        :title="t('common.close')"
+        @click.stop="closeExpandedPanel"
+      >
+        <XMarkIcon class="h-6 w-6" />
+        <span class="pr-1 text-sm font-bold">{{ t('common.close') }}</span>
+      </button>
+
+      <div v-if="expandedPanel === 'media'" class="h-full w-full">
+        <div v-if="isPortraitPair" class="grid h-full w-full grid-cols-1 gap-3 md:grid-cols-2">
+          <figure
+            v-for="(item, index) in currentMediaItems.slice(0, 2)"
+            :key="item.id ?? item.file_path"
+            class="relative flex min-h-0 items-center justify-center overflow-hidden rounded-xl bg-black/50"
+          >
+            <img :src="item.file_path" :alt="pairSideLabel(index)" class="max-h-full max-w-full object-contain" />
+            <figcaption class="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-sm font-semibold text-white backdrop-blur-sm">
+              {{ pairSideLabel(index) }}
+            </figcaption>
+          </figure>
+        </div>
+        <div v-else class="flex h-full w-full items-center justify-center">
+          <img
+            v-if="selectedMediaItem?.file_path"
+            :src="selectedMediaItem.file_path"
+            :alt="displayFileName"
+            class="max-h-full max-w-full object-contain"
+          />
+        </div>
+      </div>
+
+      <div v-else-if="expandedPanel === 'map'" class="h-full w-full overflow-hidden rounded-xl bg-white dark:bg-gray-800">
+        <MapComponent
+          :latitude="selectedMediaItem?.location?.lat"
+          :longitude="selectedMediaItem?.location?.lon"
+          :location-name="selectedMediaItem?.exif?.location_name"
+          expanded
+        />
       </div>
     </div>
 

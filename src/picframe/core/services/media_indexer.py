@@ -187,24 +187,56 @@ class MediaIndexerService:
 
         if event.command == Command.SET_CONFIG:
             payload = event.payload or {}
-            if "model" in payload and "pic_dir" in payload["model"]:
-                new_pic_dir = payload["model"]["pic_dir"]
-                logger.info(f"Configuration changed: pic_dir updated to {new_pic_dir}")
-                
-                # 1. Update media monitor directories
-                # We need to stop it, update directories, and restart it
-                self.media_monitor_service.stop()
-                
-                # Expand user path if necessary
-                expanded_dir = os.path.expanduser(new_pic_dir)
-                self.media_monitor_service.set_directories([expanded_dir])
-                
-                # 2. Trigger a differential sync to index new files
+            model_payload = payload.get("model")
+            if not isinstance(model_payload, dict):
+                return
+
+            reload_keys = {
+                "pic_dir",
+                "follow_links",
+                "image_extensions",
+                "video_extensions",
+            }
+            if reload_keys.isdisjoint(model_payload):
+                return
+
+            new_pic_dir = self.config_repository.get_app_config(
+                "model.pic_dir",
+                model_payload.get("pic_dir", "~/Pictures"),
+            )
+            image_extensions = self.config_repository.get_app_config(
+                "model.image_extensions",
+                [".jpg", ".jpeg", ".png", ".heic", ".heif"],
+            )
+            video_extensions = self.config_repository.get_app_config(
+                "model.video_extensions",
+                [".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"],
+            )
+            follow_links = self.config_repository.get_app_config_bool(
+                "model.follow_links",
+                bool(model_payload.get("follow_links", False)),
+            )
+            allowed_extensions = {
+                str(extension).lower()
+                for extension in [*image_extensions, *video_extensions]
+                if str(extension).strip()
+            }
+            expanded_dir = os.path.expanduser(str(new_pic_dir))
+
+            logger.info(
+                "Reloading media monitor for model config changes: %s",
+                sorted(reload_keys.intersection(model_payload)),
+            )
+            self.media_monitor_service.configure(
+                directories=[expanded_dir],
+                allowed_extensions=allowed_extensions,
+                follow_links=follow_links,
+            )
+
+            sync_keys = {"pic_dir", "image_extensions", "video_extensions"}
+            if not sync_keys.isdisjoint(model_payload):
                 self.media_monitor_service.perform_differential_sync()
-                
-                # 3. Restart the monitor
-                self.media_monitor_service.start()
-                
+
                 logger.info(
                     "Media directory sync complete; purge remains an explicit "
                     "maintenance action."

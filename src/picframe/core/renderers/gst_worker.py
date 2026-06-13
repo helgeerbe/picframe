@@ -167,7 +167,7 @@ class GstWorker:
         self.volume: float = 1.0
         self.running = True
         self.loop: Any = GLib.MainLoop() if GST_AVAILABLE else None
-        self._current_play_request: tuple[str, int, int, int, int] | None = None
+        self._current_play_request: tuple[str, int, int, int, int, bool] | None = None
         self._current_stream_facts: VideoStreamFacts | None = None
         self._current_max_software_decode_resolution: str | None = None
         self._software_decode_retry_attempted = False
@@ -301,6 +301,7 @@ class GstWorker:
                 cmd.w,
                 cmd.h,
                 cmd.max_software_decode_resolution,
+                cmd.fit_display,
             )
         elif isinstance(cmd, PauseCommand):
             self._handle_pause()
@@ -319,6 +320,7 @@ class GstWorker:
         w: int,
         h: int,
         max_software_decode_resolution: str | None = None,
+        fit_display: bool = False,
     ) -> None:
         try:
             stream_facts, reason = self._discover_video_stream_facts(uri)
@@ -328,7 +330,7 @@ class GstWorker:
                 self._send_event(ErrorEvent(details=details, code=UNSUPPORTED_MEDIA_CODE))
                 return
 
-            self._current_play_request = (uri, x, y, w, h)
+            self._current_play_request = (uri, x, y, w, h, fit_display)
             self._current_stream_facts = stream_facts
             self._current_max_software_decode_resolution = max_software_decode_resolution
             self._software_decode_retry_attempted = False
@@ -342,6 +344,7 @@ class GstWorker:
                 force_software_decoders=False,
                 max_software_decode_resolution=max_software_decode_resolution,
                 stream_facts=stream_facts,
+                fit_display=fit_display,
             )
         except Exception as e:
             logger.error(f"Exception during playback setup: {e}")
@@ -361,6 +364,7 @@ class GstWorker:
         fallback_reason: str | None = None,
         max_software_decode_resolution: str | None = None,
         stream_facts: VideoStreamFacts | None = None,
+        fit_display: bool = False,
     ) -> None:
         self._handle_stop()
 
@@ -401,6 +405,13 @@ class GstWorker:
                         self._software_decode_limit(max_software_decode_resolution)
                     ),
                 )
+
+            if (
+                fit_display
+                and pipeline_variant in {PIPELINE_HARDWARE_DIRECT, PIPELINE_HARDWARE_PLAYBIN}
+            ):
+                pipeline_variant = PIPELINE_COMPATIBLE
+                fallback_reason = fallback_reason or "video_fit_display"
 
             if decision.skip_reason is not None:
                 self._reset_pipeline_telemetry(
@@ -483,6 +494,7 @@ class GstWorker:
                     force_software_decoders=force_software_decoders,
                     pipeline_variant=pipeline_variant,
                     sink_name=sink_name,
+                    fit_display=fit_display,
                 )
                 self.pipeline = Gst.parse_launch(pipeline_description)
             if force_software_decoders:
@@ -536,6 +548,7 @@ class GstWorker:
         force_software_decoders: bool,
         pipeline_variant: str = PIPELINE_COMPATIBLE,
         sink_name: str | None = None,
+        fit_display: bool = False,
     ) -> str:
         force_sw = " force-sw-decoders=true" if force_software_decoders else ""
         sink_name = sink_name or self._select_sink_name()
@@ -563,13 +576,18 @@ class GstWorker:
                 f"{sink_name} name=sink {sink_props_str}"
             )
 
+        add_borders = "false" if fit_display else "true"
+        caps = "video/x-raw,format=RGBA"
+        if w > 0 and h > 0:
+            caps = f"video/x-raw,width={w},height={h},format=RGBA"
+
         return (
             f'uridecodebin name=decoder uri="{uri}"{force_sw} '
             "decoder. ! "
             "videoconvert ! "
-            "videoscale add-borders=false ! "
+            f"videoscale add-borders={add_borders} ! "
             "videoconvert ! "
-            "video/x-raw,format=RGBA ! "
+            f"{caps} ! "
             "alpha alpha=0.99 ! "
             f"{sink_name} name=sink {sink_props_str}"
         )
@@ -2246,7 +2264,11 @@ class GstWorker:
             message,
             debug,
         )
-        uri, x, y, w, h = request
+        if len(request) == 6:
+            uri, x, y, w, h, fit_display = request
+        else:
+            uri, x, y, w, h = request
+            fit_display = False
         self._start_pipeline(
             uri,
             x,
@@ -2258,6 +2280,7 @@ class GstWorker:
             fallback_reason="hardware_direct_failed",
             max_software_decode_resolution=self._current_max_software_decode_resolution,
             stream_facts=self._current_stream_facts,
+            fit_display=fit_display,
         )
 
     def _should_retry_with_software_decode(self, message: str, debug: str) -> bool:
@@ -2293,7 +2316,11 @@ class GstWorker:
                     decoder="force-sw-decoders",
                 )
             )
-        uri, x, y, w, h = request
+        if len(request) == 6:
+            uri, x, y, w, h, fit_display = request
+        else:
+            uri, x, y, w, h = request
+            fit_display = False
         self._start_pipeline(
             uri,
             x,
@@ -2304,6 +2331,7 @@ class GstWorker:
             fallback_reason="software_fallback",
             max_software_decode_resolution=self._current_max_software_decode_resolution,
             stream_facts=self._current_stream_facts,
+            fit_display=fit_display,
         )
 
     def _on_async_done(self, bus: Any, msg: Any) -> None:

@@ -12,7 +12,15 @@ class IVideoPlayer(Protocol):
     Protocol defining the contract for a Video Player service.
     """
 
-    def play(self, media_item: MediaItem, x: int = 0, y: int = 0, w: int = 0, h: int = 0) -> None:
+    def play(
+        self,
+        media_item: MediaItem,
+        x: int = 0,
+        y: int = 0,
+        w: int = 0,
+        h: int = 0,
+        fit_display: bool = False,
+    ) -> None:
         """Start playing the specified video media item within the given screen rectangle."""
         ...
 
@@ -35,6 +43,10 @@ class IVideoPlayer(Protocol):
         Args:
             level: Volume level between 0.0 and 1.0.
         """
+        ...
+
+    def set_max_software_decode_resolution(self, value: str) -> None:
+        """Update the software decode ceiling used for future video playback."""
         ...
 
 

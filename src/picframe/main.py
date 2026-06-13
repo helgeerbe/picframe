@@ -25,6 +25,7 @@ from picframe.core.services.bootstrapper import EnvironmentBootstrapper
 from picframe.core.services.config_service import ConfigService
 from picframe.core.services.hardware_input import HardwareInputService
 from picframe.core.services.image_processing import ImageProcessingService
+from picframe.core.services.logging_service import PicframeLoggingService
 from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.renderer_assets import validate_renderer_assets
 from picframe.core.services.resource_paths import (
@@ -66,6 +67,7 @@ def run_picframe(
 
     # 2. Initialize Event Bus
     event_bus = PriorityQueueEventBus()
+    logging_service = PicframeLoggingService(_config_repo, event_bus, resource_paths)
 
     # 3. Initialize Config Service (Needed for HAL)
     config_service = ConfigService(_config_repo, event_bus, event_bus, resource_paths)
@@ -85,7 +87,11 @@ def run_picframe(
     # 5. Initialize Services
     playlist_manager = PlaylistManager(media_repo, _config_repo, event_bus, resource_paths)
     from picframe.core.services.display_power import DisplayPowerManager
-    display_power_manager = DisplayPowerManager(event_bus, hal_adapters.display_power)
+    display_power_manager = DisplayPowerManager(
+        event_bus,
+        hal_adapters.display_power,
+        config_repository=_config_repo,
+    )
     from picframe.core.services.system_manager import SystemManager
     system_manager = SystemManager(event_bus, hal_adapters.system_manager)
     hardware_input_service = HardwareInputService(
@@ -195,6 +201,7 @@ def run_picframe(
         image_processing_service=image_processing_service,
         html_dir=html_dir or str(resource_paths.html_dir),
         resource_paths=resource_paths,
+        log_event_buffer=logging_service.buffer,
     )
     web_server = WebServer(app, port=port)
 
@@ -214,6 +221,7 @@ def run_picframe(
         web_server.stop()
         mqtt_adapter.stop()
         hardware_input_service.stop()
+        logging_service.stop()
         engine.stop()
         media_indexer_service.stop()
         event_bus.stop()
@@ -224,6 +232,7 @@ def run_picframe(
         _ = hardware_input_service
         _ = config_service
         _ = state_tracker
+        _ = logging_service
         sys.exit(0)
 
     signal.signal(signal.SIGINT, signal_handler)

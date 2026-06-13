@@ -65,3 +65,30 @@ def test_clock_renderer_draw_no_update_if_time_same(clock_renderer):
             clock_renderer.draw()
             # It should still draw, but not recreate the sprite
             mock_draw.assert_called_once()
+
+
+def test_clock_renderer_applies_overlay_style(mock_display, mock_shader):
+    with patch('picframe.core.renderers.components.clock_renderer.pi3d.FixedString') as mock_fixed_string:
+        mock_fixed_string.return_value.sprite = MagicMock()
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_justify="L",
+                clock_text_sz=72,
+                clock_opacity=0.5,
+                clock_top_bottom="B",
+                clock_wdt_offset_pct=5,
+                clock_hgt_offset_pct=10,
+            )
+        )
+        with patch('picframe.core.renderers.components.clock_renderer.datetime') as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "12:00"
+            renderer.draw()
+
+    kwargs = mock_fixed_string.call_args.kwargs
+    assert kwargs["font_size"] == 72
+    assert kwargs["justify"] == "L"
+    assert kwargs["color"][3] == 127
+    assert kwargs["width"] == mock_display.width - (int(mock_display.width * 0.05) * 2)

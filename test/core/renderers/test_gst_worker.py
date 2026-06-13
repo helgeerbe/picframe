@@ -379,6 +379,8 @@ def test_pipeline_description_forces_software_decoders_and_uses_fullscreen_wayla
     assert "fullscreen=true" in description
     assert "render-rectangle" not in description
     assert "rotate-method=8" in description
+    assert "videoscale add-borders=true" in description
+    assert "video/x-raw,width=2560,height=1440,format=RGBA" in description
 
 
 def test_pipeline_description_uses_rectangle_for_offset_wayland_video(monkeypatch) -> None:
@@ -401,6 +403,31 @@ def test_pipeline_description_uses_rectangle_for_offset_wayland_video(monkeypatc
     assert "force-sw-decoders=true" not in description
     assert 'render-rectangle="<10, 20, 300, 400>"' in description
     assert "fullscreen=true" not in description
+    assert "videoscale add-borders=true" in description
+    assert "video/x-raw,width=300,height=400,format=RGBA" in description
+
+
+def test_pipeline_description_disables_borders_when_video_fit_display_is_enabled(
+    monkeypatch,
+) -> None:
+    monkeypatch.setattr(
+        gst_worker,
+        "find_best_element",
+        lambda names: "waylandsink" if "waylandsink" in names else None,
+    )
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+
+    description = worker._build_pipeline_description(
+        "file:///movie.mov",
+        10,
+        20,
+        300,
+        400,
+        force_software_decoders=False,
+        fit_display=True,
+    )
+
+    assert "videoscale add-borders=false" in description
 
 
 def test_hardware_direct_pipeline_preserves_direct_wayland_path(monkeypatch) -> None:
@@ -1668,6 +1695,7 @@ def test_not_negotiated_error_retries_once_with_software_decoders() -> None:
         fallback_reason="software_fallback",
         max_software_decode_resolution=None,
         stream_facts=None,
+        fit_display=False,
     )
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "warning"
@@ -1704,6 +1732,7 @@ def test_hardware_direct_error_retries_compatible_pipeline_first() -> None:
         fallback_reason="hardware_direct_failed",
         max_software_decode_resolution=None,
         stream_facts=None,
+        fit_display=False,
     )
 
 

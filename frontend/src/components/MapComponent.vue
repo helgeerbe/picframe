@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
-import { MapPinIcon } from '@heroicons/vue/24/outline'
+import { computed, nextTick, ref, watch } from 'vue'
+import { ArrowsPointingOutIcon, MapPinIcon } from '@heroicons/vue/24/outline'
 import 'leaflet/dist/leaflet.css'
 import { LMap, LTileLayer, LMarker } from '@vue-leaflet/vue-leaflet'
 import L from 'leaflet'
@@ -21,6 +21,12 @@ const props = defineProps<{
   latitude?: number | null
   longitude?: number | null
   locationName?: string | null
+  expanded?: boolean
+  showExpand?: boolean
+}>()
+
+const emit = defineEmits<{
+  expand: []
 }>()
 
 const { t } = useI18n()
@@ -42,10 +48,28 @@ const mapCenter = computed(() => {
 })
 
 const zoom = ref(13)
+const map = ref<any | null>(null)
+
+const containerClass = computed(() => {
+  return props.expanded
+    ? 'h-full rounded-none border-0 shadow-none'
+    : 'h-[350px] rounded-3xl border border-gray-200/50 shadow-xl dark:border-gray-700/50'
+})
+
+function invalidateMapSize() {
+  nextTick(() => {
+    window.setTimeout(() => {
+      map.value?.leafletObject?.invalidateSize?.()
+    }, 80)
+  })
+}
+
+watch(() => props.expanded, invalidateMapSize)
+watch(mapCenter, invalidateMapSize)
 </script>
 
 <template>
-  <div v-if="hasLocation" class="bg-white dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden flex flex-col h-[350px]">
+  <div v-if="hasLocation" :class="['bg-white dark:bg-gray-800/90 backdrop-blur-xl overflow-hidden flex flex-col', containerClass]">
     <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between z-10 bg-white dark:bg-gray-800/90">
       <div class="flex items-center space-x-3 overflow-hidden">
         <div class="p-2 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg flex-shrink-0">
@@ -55,6 +79,16 @@ const zoom = ref(13)
           {{ locationName || formatCoordinates(props.latitude, props.longitude) || t('remote.location') }}
         </h3>
       </div>
+      <button
+        v-if="showExpand"
+        type="button"
+        class="ml-3 inline-flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-900 focus:outline-none focus:ring-2 focus:ring-emerald-500/50 dark:text-gray-400 dark:hover:bg-gray-700 dark:hover:text-white"
+        :aria-label="t('remote.expand')"
+        :title="t('remote.expand')"
+        @click="emit('expand')"
+      >
+        <ArrowsPointingOutIcon class="h-5 w-5" />
+      </button>
     </div>
     
     <div class="flex-grow w-full relative z-0">

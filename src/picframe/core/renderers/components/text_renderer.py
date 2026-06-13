@@ -40,17 +40,27 @@ class TextRenderer:
             self._logger.debug(f"Rebuilding text overlay: {text_strings}")
             self._current_text = config.text_string
             self._current_texts = text_strings
-            
-            # Default styling (can be expanded via OverlayConfig later)
-            font_size = 32
-            margin = 20
-            opacity = int(255 * 0.8 * brightness)
+
+            font_size = max(8, int(config.show_text_sz))
+            margin = max(0, int(config.text_x_margin))
+            y_margin = int(config.text_y_margin)
+            opacity = int(255 * max(0.0, min(1.0, config.text_opacity)) * brightness)
+            justify = str(config.text_justify or "L").upper()
+            if justify not in {"L", "C", "R"}:
+                justify = "L"
+            background_color = None
+            if config.text_bkg_hgt > 0:
+                background_color = (0, 0, 0, int(255 * 0.45 * brightness))
+                band_height = int(self._display.height * min(max(config.text_bkg_hgt, 0.0), 1.0))
+                margin = max(margin, max(5, (band_height - font_size) // 2))
+
             pair_mode = len(text_strings) == 2
             width = (
                 self._display.width // 2 - (margin * 2)
                 if pair_mode
                 else self._display.width - (margin * 2)
             )
+            width = max(font_size * 4, width)
 
             self._text_blocks = []
             
@@ -64,15 +74,17 @@ class TextRenderer:
                     font_size=font_size,
                     shadow_radius=3,
                     shader=self._shader,
-                    justify="C",
+                    justify=justify,
                     width=width,
-                    color=(255, 255, 255, opacity)
+                    margin=5.0,
+                    color=(255, 255, 255, opacity),
+                    background_color=background_color,
                 )
 
                 x = 0
                 if pair_mode:
                     x = -self._display.width // 4 if index == 0 else self._display.width // 4
-                y = - (self._display.height // 2) + (text_block.sprite.height // 2) + margin
+                y = - (self._display.height // 2) + (text_block.sprite.height // 2) + y_margin
                 text_block.sprite.position(x, y, 0.1)
                 text_block.sprite.set_alpha(0.0)
                 self._text_blocks.append(text_block)

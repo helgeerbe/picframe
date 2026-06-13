@@ -118,6 +118,24 @@ def test_single_image_matting_calls_mat_image() -> None:
     assert str(created_kwargs["resource_folder"]).endswith("mat-test")
 
 
+def test_blur_edges_returns_display_sized_composite() -> None:
+    preparer = ImagePreparer(
+        (200, 100),
+        {
+            "mat_images": "off",
+            "blur_edges": True,
+            "blur_amount": 4,
+            "blur_zoom": 1.1,
+        },
+        pair_composer,
+        matter_factory=FakeMatter,
+    )
+
+    result = preparer.prepare_single_image(Image.new("RGB", (50, 100), "red"))
+
+    assert result.size == (200, 100)
+
+
 def test_portrait_pair_matting_passes_both_images() -> None:
     matter = FakeMatter(Image.new("RGB", (30, 30), "green"))
     preparer = ImagePreparer(

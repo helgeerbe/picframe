@@ -48,6 +48,7 @@ class GeocodingWorker:
         """Initialize or re-initialize the GeoReverse instance based on config."""
         load_geoloc = self._config_repo.get_app_config_bool("model.load_geoloc", False)
         geo_key = str(self._config_repo.get_app_config("model.geo_key", "this_needs_to@be_changed"))
+        locale_value = str(self._config_repo.get_app_config("model.locale", "en_US.utf8"))
         key_list = self._config_repo.get_app_config("model.key_list", [
             ['tourism', 'amenity', 'isolated_dwelling'],
             ['suburb', 'village'],
@@ -57,9 +58,21 @@ class GeocodingWorker:
         ])
         
         if load_geoloc and geo_key != "this_needs_to@be_changed":
-            self._geo_reverse = GeoReverse(load_geoloc=True, geo_key=geo_key, key_list=key_list)  # type: ignore[no-untyped-call]
+            self._geo_reverse = GeoReverse(  # type: ignore[no-untyped-call]
+                load_geoloc=True,
+                geo_key=geo_key,
+                key_list=key_list,
+                language=self._language_from_locale(locale_value),
+            )
         else:
             self._geo_reverse = None
+
+    @staticmethod
+    def _language_from_locale(locale_value: str) -> str:
+        language = (locale_value or "").split(".", 1)[0].split("_", 1)[0].strip()
+        if not language or language.upper() in {"C", "POSIX"}:
+            return "en"
+        return language
 
     def start(self) -> None:
         """Start the background worker thread."""

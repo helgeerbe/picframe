@@ -13,6 +13,21 @@ export interface FilterOptions {
   sort_columns: Array<{ key: string, label: string }>
 }
 
+export interface LocationOption {
+  value: string
+  count: number
+}
+
+export type AuthScope = 'none' | 'settings' | 'site'
+
+export interface BasicAuthConfig {
+  enabled: boolean
+  username: string
+  scope: AuthScope
+  password_set: boolean
+  password?: string
+}
+
 export interface MediaSelectionCount {
   selected_count: number
   total_count: number
@@ -60,6 +75,24 @@ function mergeConfig(base: Record<string, any>, patch: Record<string, any>): Rec
   return merged
 }
 
+function normalizeAuthScope(value: unknown, enabled?: boolean): AuthScope {
+  if (value === 'none' || value === 'settings' || value === 'site') {
+    return value
+  }
+  return enabled ? 'settings' : 'none'
+}
+
+function normalizeAuthConfig(payload: any): BasicAuthConfig {
+  const scope = normalizeAuthScope(payload?.scope, Boolean(payload?.enabled))
+  return {
+    enabled: scope !== 'none',
+    username: payload?.username || 'admin',
+    scope,
+    password_set: Boolean(payload?.password_set),
+    password: typeof payload?.password === 'string' ? payload.password : ''
+  }
+}
+
 export const useConfigStore = defineStore('config', () => {
   const config = ref<Record<string, any>>({})
   const filterOptions = ref<FilterOptions>({
@@ -78,6 +111,14 @@ export const useConfigStore = defineStore('config', () => {
   const isSelectionCountLoading = ref(false)
   const error = ref<string | null>(null)
   const selectionCountError = ref<string | null>(null)
+  const locales = ref<string[]>([])
+  const authConfig = ref<BasicAuthConfig>({
+    enabled: false,
+    username: 'admin',
+    scope: 'none',
+    password_set: false,
+    password: ''
+  })
 
   async function fetchConfig() {
     isLoading.value = true
@@ -123,6 +164,60 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
+  async function fetchWorkflowConfig() {
+    isLoading.value = true
+    error.value = null
+    try {
+      const response = await api.get('/workflow-config')
+      config.value = mergeConfig(config.value, response.data)
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch workflow configuration'
+      console.error(e)
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function saveWorkflowConfig(partialConfig: Record<string, any>) {
+    isLoading.value = true
+    error.value = null
+    try {
+      await api.put('/workflow-config', partialConfig)
+      config.value = mergeConfig(config.value, partialConfig)
+    } catch (e: any) {
+      error.value = e.message || 'Failed to save workflow configuration'
+      console.error(e)
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function fetchAuthConfig() {
+    try {
+      const response = await api.get('/auth/config')
+      authConfig.value = normalizeAuthConfig(response.data)
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch authentication settings'
+      console.error(e)
+    }
+  }
+
+  async function saveAuthConfig(nextAuthConfig: BasicAuthConfig) {
+    try {
+      const response = await api.put('/auth/config', {
+        scope: nextAuthConfig.scope,
+        username: nextAuthConfig.username,
+        password: nextAuthConfig.password || ''
+      })
+      authConfig.value = normalizeAuthConfig(response.data)
+    } catch (e: any) {
+      error.value = e?.response?.data?.detail || e.message || 'Failed to save authentication settings'
+      console.error(e)
+      throw e
+    }
+  }
+
   async function fetchFilterOptions() {
     try {
       const response = await api.get('/media/filter-options')
@@ -145,6 +240,23 @@ export const useConfigStore = defineStore('config', () => {
     } finally {
       isSelectionCountLoading.value = false
     }
+  }
+
+  async function fetchLocales() {
+    try {
+      const response = await api.get('/system/locales')
+      locales.value = response.data.locales || []
+    } catch (e: any) {
+      error.value = e.message || 'Failed to fetch installed locales'
+      console.error(e)
+    }
+  }
+
+  async function searchLocationOptions(query: string, limit = 25): Promise<LocationOption[]> {
+    const response = await api.get('/media/location-options', {
+      params: { q: query, limit }
+    })
+    return response.data.locations || []
   }
 
   async function browseFilesystem(params: {
@@ -177,6 +289,8 @@ export const useConfigStore = defineStore('config', () => {
     config,
     filterOptions,
     selectionCount,
+    locales,
+    authConfig,
     isLoading,
     isSelectionCountLoading,
     error,
@@ -184,10 +298,16 @@ export const useConfigStore = defineStore('config', () => {
     fetchConfig,
     fetchFilterOptions,
     fetchSelectionCount,
+    fetchWorkflowConfig,
+    fetchLocales,
+    fetchAuthConfig,
+    searchLocationOptions,
     browseFilesystem,
     validateFilesystemPath,
     saveConfig,
-    savePartialConfig
+    savePartialConfig,
+    saveWorkflowConfig,
+    saveAuthConfig
   }
 })
 

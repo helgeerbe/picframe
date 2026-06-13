@@ -32,6 +32,7 @@ from picframe.core.renderers.components.image_renderer import ImageRenderer
 from picframe.core.renderers.components.text_renderer import TextRenderer
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.repositories.interfaces import IConfigRepository
+from picframe.core.services.overlay_text import apply_geo_suppress_list
 
 PI3D_LABWC_IDENTIFIER = "picframe-pi3d"
 VIDEO_WINDOW_TITLE = "picframe-video"
@@ -119,12 +120,7 @@ class Pi3dRenderer(IRenderer):
         self._video_reveal_parked = False
         
         # Text Overlay State
-        self._overlay_config = OverlayConfig(
-            show_clock=config.show_clock,
-            clock_format=config.clock_format,
-            show_text=config.show_text_enabled,
-            text_string=""
-        )
+        self._overlay_config = self._build_overlay_config(text_string="")
         self._text_renderer: TextRenderer | None = None
         self._clock_renderer: ClockRenderer | None = None
         
@@ -153,7 +149,7 @@ class Pi3dRenderer(IRenderer):
             return ""
             
         show_text_config = self._config.text_overlay_format.lower()
-        show_text_fm = "%b %d, %Y" # Default, could be added to RendererConfig if needed
+        show_text_fm = self._config.show_text_fm
             
         parts = []
         if "title" in show_text_config and getattr(media_item, "title", None):
@@ -172,7 +168,12 @@ class Pi3dRenderer(IRenderer):
         if "folder" in show_text_config and getattr(media_item, "filepath", None):
             parts.append(os.path.basename(os.path.dirname(media_item.filepath)))
         if "location" in show_text_config and getattr(media_item, "location", None):
-            parts.append(media_item.location)
+            location = apply_geo_suppress_list(
+                media_item.location,
+                self._config.geo_suppress_list,
+            )
+            if location:
+                parts.append(location)
             
         return " - ".join(parts)
 
@@ -219,10 +220,7 @@ class Pi3dRenderer(IRenderer):
             new_text_strings = self._generate_text_strings(self._current_media)
             new_text_string = new_text_strings[0] if new_text_strings else ""
             
-        self._overlay_config = OverlayConfig(
-            show_clock=self._config.show_clock,
-            clock_format=self._config.clock_format,
-            show_text=self._config.show_text_enabled,
+        self._overlay_config = self._build_overlay_config(
             text_string=new_text_string,
             text_strings=new_text_strings if len(new_text_strings) == 2 else (),
         )
@@ -250,8 +248,7 @@ class Pi3dRenderer(IRenderer):
                     new_text_string != self._overlay_config.text_string
                     or new_text_strings != self._overlay_config.text_strings
                 ):
-                    self._overlay_config = replace(
-                        self._overlay_config,
+                    self._overlay_config = self._build_overlay_config(
                         text_string=new_text_string,
                         text_strings=new_text_strings if len(new_text_strings) == 2 else (),
                     )
@@ -268,6 +265,32 @@ class Pi3dRenderer(IRenderer):
             "SDL_APP_ID",
         ):
             os.environ[key] = PI3D_LABWC_IDENTIFIER
+
+    def _build_overlay_config(
+        self,
+        *,
+        text_string: str = "",
+        text_strings: tuple[str, ...] = (),
+    ) -> OverlayConfig:
+        return OverlayConfig(
+            show_clock=self._config.show_clock,
+            clock_format=self._config.clock_format,
+            clock_justify=self._config.clock_justify,
+            clock_text_sz=self._config.clock_text_sz,
+            clock_opacity=self._config.clock_opacity,
+            clock_top_bottom=self._config.clock_top_bottom,
+            clock_wdt_offset_pct=self._config.clock_wdt_offset_pct,
+            clock_hgt_offset_pct=self._config.clock_hgt_offset_pct,
+            show_text=self._config.show_text_enabled,
+            text_string=text_string,
+            text_strings=text_strings,
+            text_justify=self._config.text_justify,
+            show_text_sz=self._config.show_text_sz,
+            text_bkg_hgt=self._config.text_bkg_hgt,
+            text_opacity=self._config.text_opacity,
+            text_x_margin=self._config.text_x_margin,
+            text_y_margin=self._config.text_y_margin,
+        )
 
     def _prepare_labwc_geometry_rules(self) -> None:
         """Write Picframe's labwc rules so pi3d follows configured geometry."""

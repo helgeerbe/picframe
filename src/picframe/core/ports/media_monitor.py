@@ -33,3 +33,12 @@ class IMediaMonitor(Protocol):
     def set_directories(self, directories: list[str]) -> None:
         """Replace the monitored media directories."""
         ...
+
+    def configure(
+        self,
+        directories: list[str],
+        allowed_extensions: set[str],
+        follow_links: bool,
+    ) -> None:
+        """Replace monitor settings, restarting observers when needed."""
+        ...

@@ -104,7 +104,14 @@ def test_video_handoff_sequence(
     engine._handle_transition_completed(TransitionCompletedEvent())
     
     assert engine._state == State.PREPARING_VIDEO
-    mock_video_player.play.assert_called_once_with(engine._pending_video_media, 0, 0, 1920, 1080)
+    mock_video_player.play.assert_called_once_with(
+        engine._pending_video_media,
+        0,
+        0,
+        1920,
+        1080,
+        False,
+    )
     
     # 4. Video first frame rendered (GStreamer is ready)
     engine._handle_video_first_frame_rendered(VideoFirstFrameRenderedEvent())

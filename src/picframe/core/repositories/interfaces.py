@@ -235,6 +235,23 @@ class IMediaRepository(Protocol):
         """
         ...
 
+    def search_location_options(
+        self,
+        query: str = "",
+        limit: int = 25,
+    ) -> list[dict[str, Any]]:
+        """
+        Return a capped list of distinct location options matching a search query.
+
+        Args:
+            query: Case-insensitive substring to match against resolved locations.
+            limit: Maximum number of location rows to return.
+
+        Returns:
+            A list of dictionaries with `value` and `count` keys.
+        """
+        ...
+
     def purge_missing_files(self) -> int:
         """
         Scan the database and remove entries for files that no longer exist on disk.

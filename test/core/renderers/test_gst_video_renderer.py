@@ -159,6 +159,49 @@ def test_play_video(
     assert play_dict["type"] == "play"
     assert "file:///path/to/video.mp4" in play_dict["uri"]
     assert play_dict["max_software_decode_resolution"] == "1280x720"
+    assert play_dict["fit_display"] is False
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_play_video_sends_fit_display(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    media_item: MediaItem,
+) -> None:
+    mock_conn = MagicMock()
+    mock_client.return_value = mock_conn
+
+    renderer = GstVideoRenderer(mock_publisher)
+    renderer.play(media_item, fit_display=True)
+
+    play_json = mock_conn.send.call_args_list[1][0][0]
+    assert json.loads(play_json)["fit_display"] is True
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_set_max_software_decode_resolution_updates_future_play_commands(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    media_item: MediaItem,
+) -> None:
+    mock_conn = MagicMock()
+    mock_client.return_value = mock_conn
+
+    renderer = GstVideoRenderer(mock_publisher)
+    renderer.set_max_software_decode_resolution("1920x1080")
+    renderer.play(media_item)
+
+    play_json = mock_conn.send.call_args_list[1][0][0]
+    assert json.loads(play_json)["max_software_decode_resolution"] == "1920x1080"
+
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
@@ -174,7 +217,7 @@ def test_stop_video(
     mock_client.return_value = mock_conn
     
     renderer = GstVideoRenderer(mock_publisher)
-    renderer.play(media_item)
+    renderer.play(media_item, fit_display=True)
     mock_conn.send.reset_mock()
     
     renderer.stop()
@@ -199,7 +242,7 @@ def test_pause_resume_video(
     mock_client.return_value = mock_conn
     
     renderer = GstVideoRenderer(mock_publisher)
-    renderer.play(media_item)
+    renderer.play(media_item, fit_display=True)
     mock_conn.send.reset_mock()
     
     renderer.pause()
@@ -211,7 +254,9 @@ def test_pause_resume_video(
     renderer.resume()
     mock_conn.send.assert_called_once()
     sent_json = mock_conn.send.call_args[0][0]
-    assert json.loads(sent_json)["type"] == "play"
+    sent_dict = json.loads(sent_json)
+    assert sent_dict["type"] == "play"
+    assert sent_dict["fit_display"] is True
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")

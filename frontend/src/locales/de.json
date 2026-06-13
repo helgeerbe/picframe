@@ -6,7 +6,8 @@
   "nav": {
     "remote": "Fernbedienung",
     "filters": "Einstellungen & Filter",
-    "settings": "Einstellungen"
+    "settings": "Einstellungen",
+    "logs": "Logs"
   },
   "remote": {
     "connecting": "Verbinde mit Picframe...",
@@ -16,6 +17,7 @@
     "mediaDetails": "Medien-Details",
     "noMetadata": "Keine Metadaten verfügbar",
     "location": "Ort",
+    "expand": "Vergrößern",
     "metadata": {
       "fileName": "Datei",
       "date": "Datum",
@@ -54,6 +56,12 @@
       "filterHelp": "Nutze AND, OR, NOT und Klammern. Mehrere Wörter werden als eine Phrase behandelt. Chips per Klick umschalten; Shift+Klick fügt mit AND hinzu.",
       "filterExamples": "Beispiele: family OR beach; family AND NOT beach; (family OR friends) AND holiday; New York.",
       "chipTitle": "Klicken zum Umschalten. Shift+Klick fügt mit AND hinzu.",
+      "searchLocations": "Orte suchen",
+      "searchTags": "Tags suchen",
+      "searchMore": "Mindestens 2 Zeichen eingeben.",
+      "searching": "Suche...",
+      "removeLocation": "Ort entfernen",
+      "removeTag": "Tag entfernen",
       "apply": "Anwenden",
       "applying": "Wende an...",
       "clear": "Filter leeren",
@@ -103,6 +111,23 @@
       "textLocationHelper": "Zeigt den Ort an, an dem das Medium aufgenommen wurde."
     }
   },
+  "logs": {
+    "title": "Logs",
+    "connected": "Live-Log verbunden.",
+    "disconnected": "Live-Log getrennt. Verbindung wird wiederhergestellt...",
+    "search": "Logs durchsuchen oder regulären Ausdruck eingeben",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "copy": "Kopieren",
+    "download": "Herunterladen",
+    "clear": "Leeren",
+    "expand": "Vergrößern",
+    "collapse": "Verkleinern",
+    "authRequired": "Der Log-Zugriff benötigt eine Anmeldung. Öffne die geschützte Logs-Route einmal, damit der Browser die Sitzung für den Live-Logstream speichern kann.",
+    "authenticate": "Logs anmelden",
+    "lines": "{count} Zeilen",
+    "pending": "{count} ausstehend während Pause"
+  },
   "settings": {
     "title": "Konfiguration",
     "save": "Änderungen speichern",
@@ -123,6 +148,22 @@
     "confirmAction": "Sind Sie sicher, dass Sie diese Aktion ausführen möchten?",
     "cancel": "Abbrechen",
     "confirm": "Bestätigen",
+    "displayMode": "Anzeigemodus",
+    "fullscreen": "Vollbild",
+    "custom": "Benutzerdefiniert",
+    "auth": {
+      "title": "Zugriffsschutz",
+      "scope": "Passwortschutz",
+      "scopeHelp": "Wählt, welche Bereiche der Weboberfläche Browser Basic Auth benötigen.",
+      "scopeNone": "Kein Passwort",
+      "scopeSettings": "Einstellungen, Logs und Admin-Aktionen",
+      "scopeSite": "Komplette Website",
+      "username": "Benutzername",
+      "usernameHelp": "Benutzername für geschützten Webzugriff.",
+      "password": "Passwort",
+      "passwordHelp": "Erforderlich, bevor der Passwortschutz aktiviert werden kann.",
+      "passwordPreserveHelp": "Das gespeicherte Passwort wird nach der Anmeldung angezeigt. Ändern Sie es, um ein neues Passwort zu setzen; leer lassen behält den gespeicherten Wert."
+    },
     "hardwareInputs": {
       "enabled": "GPIO-Eingänge",
       "add": "Eingang hinzufügen",
@@ -153,6 +194,7 @@
       "hardware_inputs": "GPIO-Eingänge"
     },
     "domain": {
+      "display": "Anzeige",
       "textAndClock": "Text und Uhr",
       "matting": "Matting",
       "playlist": "Playlist",

@@ -29,6 +29,7 @@ from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.exceptions import MediaProcessingError
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem
 from picframe.core.renderers.interfaces import IRenderer
+from picframe.core.services.overlay_text import apply_geo_suppress_list
 from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.renderer_assets import format_renderer_asset_issues
 
@@ -335,18 +336,36 @@ class PlaybackEngine:
             return
         payload = event.payload if isinstance(event.payload, dict) else {}
         updated_sections = payload.get("updated_sections", [])
-        if "model" not in updated_sections:
-            return
 
-        self._refresh_model_timing()
-        if self._renderer_started:
-            self._playlist_manager.build_playlist()
-            self._playlist_ready = True
-        if self._state == State.PLAYING and self._next_transition_time != float("inf"):
-            self._next_transition_time = min(
-                self._next_transition_time,
-                time.time() + self._time_delay,
+        if "model" in updated_sections:
+            self._refresh_model_timing()
+            if self._renderer_started:
+                self._playlist_manager.build_playlist()
+                self._playlist_ready = True
+            if self._state == State.PLAYING and self._next_transition_time != float("inf"):
+                self._next_transition_time = min(
+                    self._next_transition_time,
+                    time.time() + self._time_delay,
+                )
+
+        if "viewer" in updated_sections:
+            self._refresh_video_renderer_settings()
+
+    def _refresh_video_renderer_settings(self) -> None:
+        """Refresh video-player settings that can be applied without pi3d restart."""
+        if self._config_repository is None or self._video_player is None:
+            return
+        setter = getattr(self._video_player, "set_max_software_decode_resolution", None)
+        if setter is None:
+            return
+        setter(
+            str(
+                self._config_repository.get_app_config(
+                    "viewer.max_software_decode_resolution",
+                    "1280x720",
+                )
             )
+        )
 
     def _handle_renderer_config_event(self, event: RendererConfigUpdatedEvent) -> None:
         """Record renderer config updates; main loop performs renderer work."""
@@ -369,6 +388,8 @@ class PlaybackEngine:
             config.display_y,
             config.display_w,
             config.display_h,
+            config.use_glx,
+            config.use_sdl2,
             config.shader_path,
             config.font_file,
             config.mat_images,
@@ -439,6 +460,15 @@ class PlaybackEngine:
             )
         return configured_rect
 
+    def _video_fit_display(self) -> bool:
+        """Return whether videos should be scaled to the display dimensions."""
+        if self._config_repository:
+            return self._config_repository.get_app_config_bool(
+                "viewer.video_fit_display",
+                bool(self._config.get("video_fit_display", False)),
+            )
+        return bool(self._config.get("video_fit_display", False))
+
     def _refresh_model_timing(self) -> None:
         """Refresh playback timing values from live configuration."""
         if self._config_repository:
@@ -479,38 +509,56 @@ class PlaybackEngine:
         """Build overlay configuration for single or pair display items."""
         from picframe.core.events.dto import OverlayConfig
 
-        if self._config_repository:
-            show_clock = self._config_repository.get_app_config_bool(
-                "viewer.show_clock", self._config.get("show_clock", False)
-            )
-            clock_format = str(
-                self._config_repository.get_app_config(
-                    "viewer.clock_format", self._config.get("clock_format", "%H:%M")
+        def config_value(key: str, legacy_key: str, default: Any) -> Any:
+            if self._config_repository:
+                return self._config_repository.get_app_config(
+                    key,
+                    self._config.get(legacy_key, default),
                 )
-            )
-            show_text = self._config_repository.get_app_config_bool(
-                "viewer.show_text_enabled",
-                self._text_overlay_enabled(self._config.get("show_text", False)),
-            )
-        else:
-            show_clock = (
-                str(self._config.get("show_clock", False)).lower()
-                in ("true", "1", "t", "y", "yes")
-                if isinstance(self._config.get("show_clock", False), str)
-                else bool(self._config.get("show_clock", False))
-            )
-            clock_format = str(self._config.get("clock_format", "%H:%M"))
-            show_text = self._text_overlay_enabled(
-                self._config.get("show_text_enabled", self._config.get("show_text", False))
-            )
+            return self._config.get(legacy_key, default)
+
+        def config_bool(key: str, legacy_key: str, default: bool) -> bool:
+            if self._config_repository:
+                return self._config_repository.get_app_config_bool(
+                    key,
+                    bool(self._config.get(legacy_key, default)),
+                )
+            raw_value = self._config.get(legacy_key, default)
+            if isinstance(raw_value, str):
+                return raw_value.lower() in {"1", "true", "yes", "on", "t", "y"}
+            return bool(raw_value)
+
+        show_clock = config_bool("viewer.show_clock", "show_clock", False)
+        clock_format = str(config_value("viewer.clock_format", "clock_format", "%H:%M"))
+        show_text = config_bool(
+            "viewer.show_text_enabled",
+            "show_text_enabled",
+            self._text_overlay_enabled(self._config.get("show_text", False)),
+        )
 
         text_strings = tuple(self._generate_text_string(item) for item in display_item.items)
         return OverlayConfig(
             show_clock=show_clock,
             clock_format=clock_format,
+            clock_justify=str(config_value("viewer.clock_justify", "clock_justify", "R")),
+            clock_text_sz=int(config_value("viewer.clock_text_sz", "clock_text_sz", 120)),
+            clock_opacity=float(config_value("viewer.clock_opacity", "clock_opacity", 1.0)),
+            clock_top_bottom=str(config_value("viewer.clock_top_bottom", "clock_top_bottom", "T")),
+            clock_wdt_offset_pct=float(
+                config_value("viewer.clock_wdt_offset_pct", "clock_wdt_offset_pct", 3.0)
+            ),
+            clock_hgt_offset_pct=float(
+                config_value("viewer.clock_hgt_offset_pct", "clock_hgt_offset_pct", 3.0)
+            ),
             show_text=show_text,
             text_string=text_strings[display_item.primary_index] if text_strings else "",
             text_strings=text_strings if display_item.layout == DisplayLayout.PORTRAIT_PAIR else (),
+            text_justify=str(config_value("viewer.text_justify", "text_justify", "L")),
+            show_text_sz=int(config_value("viewer.show_text_sz", "show_text_sz", 40)),
+            text_bkg_hgt=float(config_value("viewer.text_bkg_hgt", "text_bkg_hgt", 0.25)),
+            text_opacity=float(config_value("viewer.text_opacity", "text_opacity", 1.0)),
+            text_x_margin=int(config_value("viewer.text_x_margin", "text_x_margin", 100)),
+            text_y_margin=int(config_value("viewer.text_y_margin", "text_y_margin", 0)),
         )
 
     @staticmethod
@@ -712,16 +760,11 @@ class PlaybackEngine:
                 
                 if duration > 0 and display_w is not None and display_h is not None and display_w > 0 and display_h > 0:
                     try:
-                        fit_display = False
-                        if self._config_repository is not None:
-                            fit_display = self._config_repository.get_app_config_bool("viewer.fit", self._config.get("fit", False))
-                        else:
-                            fit_display = self._config.get("fit", False)
                         extractor = VideoFrameExtractor(
                             media_item.filepath,
                             display_w,
                             display_h,
-                            fit_display=fit_display,
+                            fit_display=self._video_fit_display(),
                             cache_dir=self._cache_dir,
                         )
                         first_frame_path = extractor.get_frame_path("first")
@@ -765,7 +808,7 @@ class PlaybackEngine:
                     )
                     self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
                     x, y, w, h = self._video_display_rect()
-                    self._video_player.play(media_item, x, y, w, h)
+                    self._video_player.play(media_item, x, y, w, h, self._video_fit_display())
                     self._next_transition_time = float('inf')
                     self._change_state(State.PLAYING)
             else:
@@ -795,7 +838,14 @@ class PlaybackEngine:
             if self._video_player:
                 self._preload_pending_video_reveal_frame()
                 x, y, w, h = self._video_display_rect()
-                self._video_player.play(self._pending_video_media, x, y, w, h)
+                self._video_player.play(
+                    self._pending_video_media,
+                    x,
+                    y,
+                    w,
+                    h,
+                    self._video_fit_display(),
+                )
                 self._video_first_frame_deadline = time.time() + self._video_first_frame_timeout
             # We don't change state to PLAYING yet. We wait for VideoFirstFrameRenderedEvent.
             # This ensures pi3d stays opaque until GStreamer is actually rendering.
@@ -984,7 +1034,7 @@ class PlaybackEngine:
             
             if is_video and self._video_player:
                 self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
-                self._video_player.play(media_item)
+                self._video_player.play(media_item, fit_display=self._video_fit_display())
                 self._next_transition_time = float('inf')
             else:
                 if self._video_player:
@@ -1081,7 +1131,23 @@ class PlaybackEngine:
                     self._playlist_manager._media_repo.enqueue_location_lookup(media_item.latitude, media_item.longitude)
             
             if location:
-                parts.append(location)
+                if self._config_repository:
+                    raw_suppress_list = self._config_repository.get_app_config(
+                        "viewer.geo_suppress_list",
+                        self._config.get("geo_suppress_list", []),
+                    )
+                else:
+                    raw_suppress_list = self._config.get("geo_suppress_list", [])
+                suppress_list = (
+                    raw_suppress_list
+                    if isinstance(raw_suppress_list, list)
+                    else [raw_suppress_list]
+                    if raw_suppress_list
+                    else []
+                )
+                location = apply_geo_suppress_list(location, suppress_list)
+                if location:
+                    parts.append(location)
             
         return " - ".join(parts)
 

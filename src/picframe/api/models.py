@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field, model_validator
 
 from picframe.core.models.hardware_input import normalize_hardware_inputs_config
 
+AuthScope = Literal["none", "settings", "site"]
+
 
 class APIErrorResponse(BaseModel):
     """Error response returned by HTTPException and validation handlers."""
@@ -25,6 +27,39 @@ class StatusResponse(BaseModel):
 class StatusMessageResponse(StatusResponse):
     """Status response with an optional explanatory message."""
     message: str | None = Field(default=None, description="Optional status detail.")
+
+
+class BasicAuthConfigResponse(BaseModel):
+    """Public shape of the plaintext Basic Auth settings."""
+    enabled: bool = False
+    username: str = "admin"
+    scope: AuthScope = "none"
+    password_set: bool = False
+    password: str | None = None
+
+
+class BasicAuthConfigRequest(BaseModel):
+    """Request to update Basic Auth settings."""
+    scope: AuthScope | None = None
+    enabled: bool | None = None
+    username: str = "admin"
+    password: str | None = None
+
+
+class LogEventMessage(BaseModel):
+    """Log event sent over /ws/logs."""
+    type: Literal["LogEvent"] = "LogEvent"
+    timestamp: float
+    level: str
+    logger: str
+    message: str
+    formatted: str
+
+
+class LogSnapshotMessage(BaseModel):
+    """Initial log snapshot sent when a Logs websocket connects."""
+    type: Literal["LogSnapshot"] = "LogSnapshot"
+    events: list[LogEventMessage] = Field(default_factory=list)
 
 
 class MediaResponseDTO(BaseModel):
@@ -63,6 +98,22 @@ class MediaFilterOptionsResponse(BaseModel):
     locations: list[str] = Field(default_factory=list)
     tags: list[str] = Field(default_factory=list)
     sort_columns: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MediaLocationOptionDTO(BaseModel):
+    """A searchable media location option with usage count."""
+    value: str
+    count: int = 0
+
+
+class MediaLocationOptionsResponse(BaseModel):
+    """Search results for the Remote location picker."""
+    locations: list[MediaLocationOptionDTO] = Field(default_factory=list)
+
+
+class LocaleOptionsResponse(BaseModel):
+    """Installed host locales visible to Settings."""
+    locales: list[str] = Field(default_factory=list)
 
 
 class FilesystemEntryDTO(BaseModel):
@@ -225,6 +276,10 @@ class HttpConfig(BaseModel):
     use_ssl: bool = False
     keyfile: str = "path/to/key.pem"
     certfile: str = "path/to/cert.pem"
+    websocket_broadcast_rate_limit: float = 10.0
+    websocket_broadcast_capacity: int = 20
+    command_debounce_ms: int = 200
+    cors_allowed_origins: list[str] = Field(default_factory=lambda: ["*"])
 
 class PeripheralButtons(BaseModel):
     pause: str = " "

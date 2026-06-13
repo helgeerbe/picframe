@@ -126,3 +126,14 @@ class WaylandDisplayPower(IDisplayPower):
             bool: True if the display is on, False otherwise.
         """
         return self._is_on
+
+    def set_display_output(self, display_output: str) -> None:
+        """Retarget future power commands to a different Wayland output."""
+        if display_output == self._display_output:
+            return
+        logger.info(
+            "WaylandDisplayPower: Retargeting display output from %s to %s.",
+            self._display_output,
+            display_output,
+        )
+        self._display_output = display_output

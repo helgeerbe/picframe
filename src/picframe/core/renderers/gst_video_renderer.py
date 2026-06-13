@@ -54,6 +54,7 @@ class GstVideoRenderer(IVideoPlayer):
         self._publisher = event_publisher
         self._max_software_decode_resolution = max_software_decode_resolution
         self._current_media: MediaItem | None = None
+        self._fit_display = False
         self._volume: float = 1.0
         
         self._socket_path = f"/tmp/picframe_gst_{os.getpid()}.sock"
@@ -260,7 +261,15 @@ class GstVideoRenderer(IVideoPlayer):
             except Exception as e:
                 logger.error(f"Failed to send IPC command: {e}")
 
-    def play(self, media_item: MediaItem, x: int = 0, y: int = 0, w: int = 0, h: int = 0) -> None:
+    def play(
+        self,
+        media_item: MediaItem,
+        x: int = 0,
+        y: int = 0,
+        w: int = 0,
+        h: int = 0,
+        fit_display: bool = False,
+    ) -> None:
         """Start playing the specified video media item."""
         if not self._running:
             logger.error("Cannot play video: Worker is not running.")
@@ -269,6 +278,7 @@ class GstVideoRenderer(IVideoPlayer):
 
         self.stop()
         self._current_media = media_item
+        self._fit_display = fit_display
 
         uri = Path(media_item.filepath).absolute().as_uri()
         
@@ -281,6 +291,7 @@ class GstVideoRenderer(IVideoPlayer):
                 w=w,
                 h=h,
                 max_software_decode_resolution=self._max_software_decode_resolution,
+                fit_display=fit_display,
             )
         )
         logger.info(f"Sent play command for: {media_item.filepath} at ({x},{y}) {w}x{h}")
@@ -304,6 +315,7 @@ class GstVideoRenderer(IVideoPlayer):
                 PlayCommand(
                     uri=uri,
                     max_software_decode_resolution=self._max_software_decode_resolution,
+                    fit_display=self._fit_display,
                 )
             )
             logger.debug("Sent resume (play) command.")
@@ -313,6 +325,11 @@ class GstVideoRenderer(IVideoPlayer):
         self._volume = max(0.0, min(1.0, level))
         self._send_command(SetVolumeCommand(level=self._volume))
         logger.debug(f"Sent set_volume command: {self._volume}")
+
+    def set_max_software_decode_resolution(self, value: str) -> None:
+        """Update the software decode ceiling for future play commands."""
+        self._max_software_decode_resolution = value
+        logger.info("Updated GStreamer software decode ceiling to %s.", value)
 
     def _cleanup(self) -> None:
         """Clean up resources."""

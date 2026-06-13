@@ -479,6 +479,42 @@ def test_get_filter_options_returns_distinct_values(
     options = media_repo.get_filter_options(str(root))
 
     assert options["subdirectories"] == ["holiday"]
-    assert options["locations"] == ["Barcelona"]
+    assert options["locations"] == []
     assert options["tags"] == ["beach", "family"]
     assert {"key": "fname", "label": "File name"} in options["sort_columns"]
+
+
+def test_search_location_options_returns_capped_counts(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    root.mkdir()
+    media_repo.add_media_item(_media_record(root / "berlin-1.jpg", location="Berlin"))
+    media_repo.add_media_item(_media_record(root / "berlin-2.jpg", location="Berlin"))
+    media_repo.add_media_item(_media_record(root / "bern.jpg", location="Bern"))
+    media_repo.add_media_item(_media_record(root / "barcelona.jpg", location="Barcelona"))
+    deleted_id = media_repo.add_media_item(
+        _media_record(root / "deleted.jpg", location="Berlin")
+    )
+    media_repo.delete_media_item(deleted_id)
+
+    assert media_repo.search_location_options("ber", limit=1) == [
+        {"value": "Berlin", "count": 2}
+    ]
+    assert media_repo.search_location_options("ber", limit=10) == [
+        {"value": "Berlin", "count": 2},
+        {"value": "Bern", "count": 1},
+    ]
+
+
+def test_search_location_options_escapes_like_wildcards(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    root.mkdir()
+    media_repo.add_media_item(_media_record(root / "percent.jpg", location="100% City"))
+    media_repo.add_media_item(_media_record(root / "plain.jpg", location="100x City"))
+
+    assert media_repo.search_location_options("%", limit=10) == [
+        {"value": "100% City", "count": 1}
+    ]

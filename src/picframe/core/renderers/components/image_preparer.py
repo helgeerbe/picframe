@@ -10,7 +10,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from typing import Any
 
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
 from picframe.core.events.dto import RenderCommand
 from picframe.mat_image import MatImage
@@ -125,6 +125,9 @@ class ImagePreparer:
     def update_config(self, config: Any) -> None:
         """Refresh matting settings after a runtime config change."""
         self._config = config
+        self._blur_edges = bool(self.config_value(config, "blur_edges", False))
+        self._blur_amount = max(0, int(self.config_value(config, "blur_amount", 12)))
+        self._blur_zoom = max(1.0, float(self.config_value(config, "blur_zoom", 1.0)))
         self._control = self.parse_matting_control(
             self.config_value(config, "mat_images", 0.01)
         )
@@ -179,6 +182,8 @@ class ImagePreparer:
 
     def prepare_single_image(self, image: Image.Image) -> Image.Image:
         image = self._as_rgb(image)
+        if self._blur_edges:
+            return self._blur_fill_image(image)
         if not self.should_mat(image.size):
             return image
         return self._mat_images((image,), image)
@@ -187,9 +192,42 @@ class ImagePreparer:
         left = self._as_rgb(left)
         right = self._as_rgb(right)
         fallback = self._pair_composer(left, right)
+        if self._blur_edges:
+            return self._blur_fill_image(fallback)
         if not self.should_mat(left.size):
             return fallback
         return self._mat_images((left, right), fallback)
+
+    def _blur_fill_image(self, image: Image.Image) -> Image.Image:
+        display_w, display_h = self._display_size
+        if display_w <= 0 or display_h <= 0:
+            return image
+
+        background_size = (
+            max(display_w, int(display_w * self._blur_zoom)),
+            max(display_h, int(display_h * self._blur_zoom)),
+        )
+        background = ImageOps.fit(
+            image,
+            background_size,
+            method=Image.Resampling.BICUBIC,
+            centering=(0.5, 0.5),
+        )
+        if self._blur_amount > 0:
+            background = background.filter(ImageFilter.GaussianBlur(self._blur_amount))
+        background = ImageOps.fit(
+            background,
+            (display_w, display_h),
+            method=Image.Resampling.BICUBIC,
+            centering=(0.5, 0.5),
+        )
+
+        foreground = image.copy()
+        foreground.thumbnail((display_w, display_h), resample=Image.Resampling.LANCZOS)
+        x = (display_w - foreground.width) // 2
+        y = (display_h - foreground.height) // 2
+        background.paste(foreground, (x, y))
+        return background
 
     def should_mat(self, image_size: tuple[int, int]) -> bool:
         if not self._control.enabled:

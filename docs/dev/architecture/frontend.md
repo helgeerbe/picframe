@@ -35,6 +35,7 @@ This view acts as the real-time remote control and information display for the c
 
 ### 4.1 Media Display & Playback Controls
 *   **Current Media Preview:** A responsive image/video container displaying a low-resolution thumbnail or the actual image currently rendered on the Pi.
+    *   The preview exposes an expand action that opens a fullscreen frontend-only modal. The modal supports single media and portrait pairs, closes with Escape/backdrop/close button, and never changes playback state.
 *   **Transport Controls:** A sticky or prominent control bar featuring:
     *   `Previous` (Skip to previous media)
     *   `Play/Pause` (Toggle playback state, icon changes dynamically based on WebSocket state)
@@ -73,9 +74,28 @@ The `MapComponent` is a standalone Vue component responsible for rendering an in
 *   **Features:**
     *   Centers the map on the media's exact coordinates with a custom marker.
     *   Displays reverse-geocoded location text fetched from the metadata directly above the map. If the location text is unavailable (e.g., geocoding disabled or network error), the map is displayed gracefully without the accompanying text.
+    *   Provides an expand action that opens the same Leaflet map in a fullscreen modal and invalidates the Leaflet size after resize so tiles and marker positions remain correct.
 *   **Separation of Concerns:** This component operates entirely independently of the backend pi3d rendering pipeline and text overlay features. It is a purely frontend UI element.
 
-### 4.4 Text Overlay Controls
+### 4.4 Media Selection And Large Filters
+Remote owns live slideshow workflow controls such as subdirectory, date range,
+location/tag filters, shuffle, timing, and overlay content toggles. Settings
+keeps durable configuration controls and should not duplicate these workflow
+rows.
+
+Location filtering is search-first. `GET /api/media/filter-options` must not
+send the full distinct-location set on initial load; Remote calls
+`GET /api/media/location-options?q=...&limit=25` after the user types a search
+query and renders selected locations as removable chips. This prevents large
+libraries from creating huge chip clouds.
+
+Tags can remain as chips for normal-sized lists. Once the tag list exceeds the
+frontend threshold (currently 100 options), Remote switches to a searchable tag
+picker while still showing selected tags as removable chips. Both location and
+tag filters preserve the raw boolean expression text area for advanced `AND`,
+`OR`, `NOT`, and parenthesized expressions.
+
+### 4.5 Text Overlay Controls
 A dedicated panel (`TextOverlayControls.vue`) to manage text overlays on the currently playing media.
 *   **Separation of Concerns:** These controls strictly toggle the text overlays within the backend pi3d render pipeline. They do not affect, hide, or toggle any text elements within the frontend UI itself.
 *   **Configuration Payload:** All settings are collected and transmitted as a unified configuration payload using a `SET_CONFIG` command over the WebSocket connection.
@@ -90,12 +110,19 @@ A dedicated panel (`TextOverlayControls.vue`) to manage text overlays on the cur
 
 ## 5. View 2: Administrative Dashboard ("Settings")
 
-This view provides robust configuration and system management, protected by basic authentication if configured.
+This view provides robust configuration and system management.
 
 ### 5.1 Configuration Management
-A comprehensive form interface mapping to the `config.db3` schema.
-*   **Sections:** Grouped logically (Viewer, Media/Playlist, MQTT, HTTP/Security, Peripherals, GPIO Inputs, and maintenance actions).
+A comprehensive form interface mapping to the supported live portions of the
+`config.db3` schema.
+*   **Sections:** Grouped logically (Viewer, Media/Playlist, MQTT, HTTP tuning, GPIO Inputs, and maintenance actions).
 *   **Domain Editors:** Settings use constrained controls such as host path pickers, ordered chips, fixed-choice lists, color pickers, date pickers, sort-rule rows, password reveal fields, shader basename selection, and the geocoding location-format builder instead of generic text inputs.
+*   **Visible Means Works:** Compatibility-only legacy fields remain accepted by import/API models but are hidden from live Settings until runtime support exists. Hidden compatibility keys include `viewer.display_power`, old pi3d menu fields, `model.update_interval`, legacy HTTP auth fields, HTTP SSL fields, and legacy `peripherals.*`. `model.image_attr` is also hidden because next-gen MQTT publishes the complete normalized current-media attributes instead of applying a legacy selected-attribute list. `model.log_level` and `model.log_file` are visible again because runtime logging now applies them live.
+*   **Display Geometry:** `viewer.display_x/y/w/h` is edited as Fullscreen or Custom. Fullscreen persists x/y as `0` and width/height as `null`; Custom exposes signed x/y and positive width/height.
+*   **Locale:** `model.locale` is selected from `GET /api/system/locales`, preserving the saved value if it is not installed, and is passed to reverse geocoding for language selection.
+*   **Settings Auth:** Basic Auth is configured from the HTTP tab but stored outside the config DB in `${PICFRAME_DATA}/basic_auth.json`. The scope selector supports no password, Settings/Logs/admin protection with Remote and Filters still using the allowlisted workflow config API, or complete-site protection for the SPA, REST APIs, static assets, and live web sockets. Credentials are plaintext by design for alpha; after authentication the Settings UI receives the saved password for inspection/editing, and deleting `basic_auth.json` is the recovery path. HTTP Basic Auth also sets an HttpOnly `picframe_auth` cookie so protected WebSocket handshakes can authenticate reliably.
+*   **Logs:** `/logs` is a separate top-level view that connects to `/ws/logs`, renders the recent in-memory log snapshot plus live events, and provides search, level filtering, pause/resume, clear, copy, download, and autoscroll.
+*   **Apply Semantics:** Settings Apply uses component-level reloads wherever possible: renderer config updates, MQTT reconnect, media-monitor reconfiguration, GPIO reload, GStreamer video setting updates, and display-power output retargeting. A full service restart is manual troubleshooting, not a normal Apply action.
 *   **Actions:**
     *   `Save Changes`: Sends a `PUT /api/config` request.
     *   `Export Configuration`: Triggers a download of the current configuration as a JSON or YAML file.
@@ -117,7 +144,7 @@ A dedicated "Danger Zone" or Maintenance tab for system-level operations. All ac
 *   FastAPI publishes the REST contract at `/openapi.json` and Swagger UI at `/docs`.
 *   JSON endpoints declare explicit Pydantic request and response models.
 *   Expected error responses are documented with `APIErrorResponse` for `400`, `403`, `404`, `422`, and `500` where applicable.
-*   WebSockets are not represented as standard OpenAPI paths, so Picframe adds an `x-websocket-contracts` OpenAPI extension and component schemas for `/ws/state`.
+*   WebSockets are not represented as standard OpenAPI paths, so Picframe adds an `x-websocket-contracts` OpenAPI extension and component schemas for `/ws/state` and `/ws/logs`.
 
 ### 6.2 WebSockets (`/ws/state`)
 *   **Inbound commands from the UI:** `WebSocketCommandMessage` with command names such as `NEXT`, `PREV`, `PAUSE`, `PLAY`, `DISPLAY_ON`, `DISPLAY_OFF`, `DELETE`, `PURGE_FILES`, `STOP`, `REBOOT_HOST`, `SHUTDOWN_HOST`, `REQUEST_STATE`, and `SET_CONFIG`.
@@ -134,12 +161,14 @@ A dedicated "Danger Zone" or Maintenance tab for system-level operations. All ac
 *   `POST /api/system/shutdown` - Queues a host shutdown command.
 *   `POST /api/maintenance/purge-db` - Queues database cleanup of missing media rows.
 *   `POST /api/maintenance/clear-cache` - Clears generated image and video-frame cache artifacts.
+*   `GET /api/system/locales` - Returns locales installed on the host.
 *   `GET /api/filesystem/browse` - Lists safe filesystem entries for settings path pickers.
 *   `POST /api/filesystem/validate` - Validates a settings path and reports type/existence errors.
 *   `GET /api/config` - Returns the full nested configuration, or `{}` when no configuration repository is injected.
 *   `PUT /api/config` - Validates, persists, and broadcasts runtime configuration updates.
 *   `POST /api/config/import-yaml` - Imports and normalizes a legacy `configuration.yaml`.
-*   `GET /api/media/filter-options` - Returns distinct subdirectories, locations, tags, and sort columns.
+*   `GET /api/media/filter-options` - Returns distinct subdirectories, tags, and sort columns. It intentionally does not send every location for large libraries.
+*   `GET /api/media/location-options` - Returns capped searchable location options as `{ value, count }`.
 *   `POST /api/media/selection-count` - Returns selected and folder-scope media counts.
 *   `GET /api/hardware-inputs` - Returns validated GPIO button/PIR sensor configuration.
 *   `PUT /api/hardware-inputs` - Validates, persists, and broadcasts hardware input configuration.

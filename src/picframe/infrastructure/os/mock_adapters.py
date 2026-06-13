@@ -52,6 +52,10 @@ class MockDisplayPower(IDisplayPower):
         """
         return self._is_on
 
+    def set_display_output(self, display_output: str) -> None:
+        """Accept display-output retargeting for parity with real adapters."""
+        logger.info(f"MockDisplayPower: Display output set to {display_output}.")
+
 
 class MockHardwareInput(IHardwareInput):
     """Mock implementation of IHardwareInput."""

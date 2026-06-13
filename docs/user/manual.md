@@ -275,11 +275,105 @@ including symlink escapes, are rejected by the backend. Media library paths may
 be saved while missing so temporary NAS or mount outages do not force a reset.
 
 Low-level options such as renderer resource paths, WebSocket rate limits, and
-debug logging remain editable, but are grouped under collapsed Advanced areas.
-Shader selection stores the shader path without `.fs` or `.vs`; Picframe loads
-the matching shader files from that basename. Image metadata attributes and
-image/video extensions are selected from fixed supported lists. Password fields
-remain masked by default and include an eye button for temporary visibility.
+media extension lists are grouped under collapsed Advanced areas. Shader
+selection stores the shader path without `.fs` or `.vs`; Picframe loads the
+matching shader files from that basename. Settings follows a "visible means
+works" rule: compatibility-only legacy fields remain importable, but are not
+shown as live controls unless the running application consumes them.
+
+Display geometry is edited as either **Fullscreen** or **Custom**. Fullscreen
+saves `viewer.display_x=0`, `viewer.display_y=0`, and leaves
+`viewer.display_w`/`viewer.display_h` unset. Custom mode reveals x/y/width/height;
+x and y may be negative, while width and height must be positive. Applying a
+display geometry change restarts only the renderer/display component, not the
+entire `picframe.service`.
+
+`model.locale` is selected from the locales installed on the host (`locale -a`).
+If the saved locale is not currently installed, Settings keeps it visible in the
+dropdown so it is not silently lost. Reverse geocoding uses this value as the
+preferred language for location lookup responses.
+
+Settings Apply prefers live component reloads. Renderer settings publish an
+in-process renderer config update; MQTT reconnects when `mqtt.*` changes; the
+media monitor reloads `pic_dir`, link-following, and media extensions; GPIO
+inputs reconfigure in place; `viewer.max_software_decode_resolution` and
+`viewer.video_fit_display` affect future GStreamer video starts; and
+`viewer.display_hdmi` retargets display-power commands. HTTP startup fields are
+managed through CLI arguments/environment variables rather than prompting for a
+service restart. Use `sudo systemctl restart picframe.service` only as manual
+troubleshooting or after changing external service/session setup.
+
+`model.log_level` and `model.log_file` are live logging controls. Changing the
+level updates Picframe loggers without restarting. Leaving `model.log_file`
+empty disables file logging; relative file names are written under
+`${PICFRAME_DATA}/logs`, and log files rotate instead of growing forever.
+
+The **Logs** tab shows a live in-memory log stream. It connects to `/ws/logs`,
+starts with the recent log buffer, then follows new log events. The UI supports
+search/regular-expression filtering, level filters, pause/resume, clear, copy,
+download, and auto-scroll. It does not read historical rotated log files; use
+the configured log file path on disk for longer history.
+
+Optional Basic Auth is configured in **HTTP Settings** as one of three access
+scopes: **None**, **Settings, Logs and admin actions**, or **Complete website**.
+The Settings/admin scope protects configuration, logs, and maintenance actions
+while leaving Remote, Filters, media APIs, and playback controls available on
+the local network. Complete website also protects the main UI, Remote, Filters,
+static assets, media APIs, and live web sockets. Credentials are stored as
+plaintext JSON at `${PICFRAME_DATA}/basic_auth.json`; after you authenticate,
+Settings shows the saved password so it can be inspected or changed. SSL and
+bearer-token based REST automation are deferred; MQTT security remains the broker
+username/password and optional broker TLS settings.
+
+If you forget the Basic Auth password, stop Picframe if needed and delete
+`${PICFRAME_DATA}/basic_auth.json`. On the next start or config reload, Picframe
+falls back to `scope=none`, `username=admin`, and an empty password, so web UI
+password protection is disabled and can be configured again.
+
+Legacy settings retained only for compatibility/import are hidden from live
+Settings:
+
+*   `viewer.display_power`: replaced by HAL auto-detection plus
+    `viewer.display_hdmi`.
+*   `viewer.menu_text_sz` and `viewer.menu_autohide_tm`: the next-gen runtime
+    does not include the old on-screen menu.
+*   `model.update_interval`: watchdog-based monitoring does not poll on this
+    interval.
+*   `model.image_attr`: next-gen MQTT/media state publishes the full normalized
+    current-media attribute payload instead of a user-selected legacy subset.
+*   `http.auth`, `http.username`, and `http.password`: legacy import/API fields;
+    the live UI stores Basic Auth credentials and access scope in
+    `${PICFRAME_DATA}/basic_auth.json`.
+*   `http.use_ssl`, `http.keyfile`, and `http.certfile`: accepted by config
+    import/API models but not wired into FastAPI/Uvicorn.
+*   `peripherals.*`: legacy keyboard/touch settings; GPIO runtime inputs use
+    `hardware_inputs`.
+
+The MQTT current-media sensor publishes compact state (`filename`, `layout`,
+and `id`) on `media/state` and all known normalized `MediaItem` attributes on
+`media/attributes`. Changing imported `model.image_attr` values does not filter
+that payload.
+
+### Remote Media Selection
+
+The Remote page owns live workflow controls: shuffle, shuffle mode, date range,
+location/tag filters, text-overlay toggles/content, delay, and fade. Applying
+these controls persists the related model/viewer values and rebuilds playback
+without a full service restart. These controls use a public allowlisted workflow
+configuration API so Remote and Filters continue to work when Settings Basic
+Auth is enabled.
+
+Location filtering is search-first so large libraries do not render thousands
+of chips. Type at least two characters in the location search box, choose from
+the capped results, and the selected locations stay visible as removable chips.
+Tags still render as chips for normal-sized lists; when the tag list is large,
+Remote switches to a searchable tag picker with selected tags shown separately.
+The raw filter text remains available for advanced expressions using `AND`,
+`OR`, `NOT`, and parentheses.
+
+The current media preview and map can be enlarged from the Remote page. The
+fullscreen preview is frontend-only, supports portrait pairs, and does not
+change playback state.
 
 ### GPIO Hardware Inputs
 

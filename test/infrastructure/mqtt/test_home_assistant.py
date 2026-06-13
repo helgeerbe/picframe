@@ -183,7 +183,55 @@ def test_disabled_mqtt_does_not_create_client() -> None:
     adapter.start()
 
     assert FakeMqttClient.instances == []
-    assert subscriber.callbacks == {}
+    assert CurrentMediaChangedEvent in subscriber.callbacks
+    assert StateEvent in subscriber.callbacks
+
+
+def test_disabled_mqtt_can_connect_after_live_enable() -> None:
+    config = FakeConfigRepository({"mqtt.use_mqtt": False})
+    adapter, _publisher, subscriber, _state = build_adapter(config)
+
+    adapter.start()
+    config.values["mqtt.use_mqtt"] = True
+    state_callback = subscriber.callbacks[StateEvent][0]
+    state_callback(
+        StateEvent(
+            state=State.CONFIG_CHANGED,
+            payload={"updated_sections": ["mqtt"]},
+        )
+    )
+
+    assert len(FakeMqttClient.instances) == 1
+    assert FakeMqttClient.instances[0].connected_to == ("broker", 1883, 60)
+
+
+def test_mqtt_config_change_reconnects_client() -> None:
+    config = FakeConfigRepository()
+    adapter, _publisher, subscriber, _state = build_adapter(config)
+    first_client = connect_adapter(adapter)
+
+    config.values["mqtt.server"] = "new-broker"
+    config.values["mqtt.device_id"] = "picframe_new"
+    state_callback = subscriber.callbacks[StateEvent][0]
+    state_callback(
+        StateEvent(
+            state=State.CONFIG_CHANGED,
+            payload={"updated_sections": ["mqtt"]},
+        )
+    )
+
+    assert first_client.loop_stopped is True
+    assert first_client.disconnected is True
+    assert (
+        "picframe/picframe_test/availability",
+        "offline",
+        0,
+        True,
+    ) in first_client.published
+    second_client = FakeMqttClient.instances[-1]
+    assert second_client is not first_client
+    assert second_client.connected_to == ("new-broker", 1883, 60)
+    assert second_client.kwargs["client_id"] == "picframe_new"
 
 
 def test_start_connects_and_publishes_home_assistant_discovery() -> None:
@@ -282,13 +330,26 @@ def test_mqtt_rejects_right_or_both_delete_for_single_media() -> None:
 
 
 def test_media_and_state_events_publish_mqtt_state() -> None:
-    adapter, _publisher, subscriber, _state = build_adapter()
+    adapter, _publisher, subscriber, _state = build_adapter(
+        FakeConfigRepository({"model.image_attr": ["EXIF FNumber"]})
+    )
     client = connect_adapter(adapter)
 
     media_callback = subscriber.callbacks[CurrentMediaChangedEvent][0]
     state_callback = subscriber.callbacks[StateEvent][0]
 
-    media_callback(CurrentMediaChangedEvent(media_item={"filepath": "/photos/a.jpg", "id": 7}))
+    media_callback(
+        CurrentMediaChangedEvent(
+            media_item={
+                "filepath": "/photos/a.jpg",
+                "id": 7,
+                "title": "Beach",
+                "latitude": 51.5,
+                "longitude": 7.4,
+                "location": "Dortmund, Germany",
+            }
+        )
+    )
     state_callback(StateEvent(state=State.PAUSED))
 
     published = {topic: payload for topic, payload, _qos, _retain in client.published}
@@ -296,6 +357,14 @@ def test_media_and_state_events_publish_mqtt_state() -> None:
         "filename": "a.jpg",
         "layout": "single",
         "id": 7,
+    }
+    assert json.loads(published["picframe/picframe_test/media/attributes"]) == {
+        "filepath": "/photos/a.jpg",
+        "id": 7,
+        "title": "Beach",
+        "latitude": 51.5,
+        "longitude": 7.4,
+        "location": "Dortmund, Germany",
     }
     assert json.loads(published["picframe/picframe_test/state"])["state"] == "PAUSED"
 

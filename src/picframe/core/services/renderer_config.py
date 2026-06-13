@@ -17,6 +17,16 @@ def _optional_int(raw_value: Any) -> int | None:
     return int(raw_value)
 
 
+def _string_list(raw_value: Any) -> list[str]:
+    if raw_value in (None, ""):
+        return []
+    if isinstance(raw_value, str):
+        return [raw_value]
+    if isinstance(raw_value, list):
+        return [str(item) for item in raw_value if str(item).strip()]
+    return [str(raw_value)]
+
+
 def build_renderer_config(
     config_repository: Any,
     resource_paths: ResourcePaths | None = None,
@@ -42,11 +52,33 @@ def build_renderer_config(
         kenburns=config_repository.get_app_config_bool("viewer.kenburns", False),
         show_clock=config_repository.get_app_config_bool("viewer.show_clock", False),
         clock_format=str(config_repository.get_app_config("viewer.clock_format", "%H:%M")),
+        clock_justify=str(config_repository.get_app_config("viewer.clock_justify", "R")),
+        clock_text_sz=int(config_repository.get_app_config("viewer.clock_text_sz", 120)),
+        clock_opacity=float(config_repository.get_app_config("viewer.clock_opacity", 1.0)),
+        clock_top_bottom=str(config_repository.get_app_config("viewer.clock_top_bottom", "T")),
+        clock_wdt_offset_pct=float(
+            config_repository.get_app_config("viewer.clock_wdt_offset_pct", 3.0)
+        ),
+        clock_hgt_offset_pct=float(
+            config_repository.get_app_config("viewer.clock_hgt_offset_pct", 3.0)
+        ),
         show_text_enabled=config_repository.get_app_config_bool(
             "viewer.show_text_enabled", False
         ),
         text_overlay_format=str(
             config_repository.get_app_config("viewer.text_overlay_format", "%b %d, %Y")
+        ),
+        show_text_fm=str(
+            config_repository.get_app_config("viewer.show_text_fm", "%b %d, %Y")
+        ),
+        text_justify=str(config_repository.get_app_config("viewer.text_justify", "L")),
+        show_text_sz=int(config_repository.get_app_config("viewer.show_text_sz", 40)),
+        text_bkg_hgt=float(config_repository.get_app_config("viewer.text_bkg_hgt", 0.25)),
+        text_opacity=float(config_repository.get_app_config("viewer.text_opacity", 1.0)),
+        text_x_margin=int(config_repository.get_app_config("viewer.text_x_margin", 100)),
+        text_y_margin=int(config_repository.get_app_config("viewer.text_y_margin", 0)),
+        geo_suppress_list=_string_list(
+            config_repository.get_app_config("viewer.geo_suppress_list", [])
         ),
         time_fade=float(config_repository.get_app_config("model.fade_time", 2.0)),
         time_delay=float(config_repository.get_app_config("model.time_delay", 200.0)),
@@ -58,8 +90,14 @@ def build_renderer_config(
             )
         ),
         blend_type=str(config_repository.get_app_config("viewer.blend_type", "blend")),
+        blur_amount=int(config_repository.get_app_config("viewer.blur_amount", 12)),
+        blur_zoom=float(config_repository.get_app_config("viewer.blur_zoom", 1.0)),
+        blur_edges=config_repository.get_app_config_bool("viewer.blur_edges", False),
         edge_alpha=float(config_repository.get_app_config("viewer.edge_alpha", 0.5)),
         fit=config_repository.get_app_config_bool("viewer.fit", False),
+        video_fit_display=config_repository.get_app_config_bool(
+            "viewer.video_fit_display", False
+        ),
         video_extensions=config_repository.get_app_config(
             "model.video_extensions", [".mp4", ".mov", ".avi", ".mkv"]
         ),

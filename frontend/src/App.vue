@@ -19,6 +19,7 @@ const toggleLocale = () => {
           <RouterLink to="/" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700" active-class="bg-gray-200 dark:bg-gray-700">{{ t('nav.remote') }}</RouterLink>
           <RouterLink to="/filters" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700" active-class="bg-gray-200 dark:bg-gray-700">{{ t('nav.filters') }}</RouterLink>
           <RouterLink to="/settings" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700" active-class="bg-gray-200 dark:bg-gray-700">{{ t('nav.settings') }}</RouterLink>
+          <RouterLink to="/logs" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700" active-class="bg-gray-200 dark:bg-gray-700">{{ t('nav.logs') }}</RouterLink>
         </div>
         <div>
           <button @click="toggleLocale" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 uppercase">

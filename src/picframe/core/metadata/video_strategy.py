@@ -194,7 +194,7 @@ class VideoMetadataStrategy(IMetadataStrategy):
                     fit_display = False
                     if self._config_repository is not None:
                         fit_display = self._config_repository.get_app_config_bool(
-                            "viewer.fit", False
+                            "viewer.video_fit_display", False
                         )
                     frame_cache_kwargs = {}
                     if fit_display:

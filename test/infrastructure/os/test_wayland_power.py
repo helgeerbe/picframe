@@ -20,6 +20,14 @@ def test_wayland_power_initialization() -> None:
     assert adapter_custom._display_output == "DSI-1"
 
 
+def test_wayland_power_can_retarget_display_output() -> None:
+    adapter = WaylandDisplayPower(display_output="HDMI-A-1")
+
+    adapter.set_display_output("HDMI-A-2")
+
+    assert adapter._display_output == "HDMI-A-2"
+
+
 @patch("subprocess.run")
 def test_wayland_power_turn_on(mock_run: Any) -> None:
     """Test that turn_on executes the correct wlr-randr command."""

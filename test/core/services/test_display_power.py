@@ -4,7 +4,7 @@ Tests for the DisplayPowerManager service.
 
 from unittest.mock import MagicMock
 
-from picframe.core.events.dto import Command, CommandEvent
+from picframe.core.events.dto import Command, CommandEvent, State, StateEvent
 from picframe.core.services.display_power import DisplayPowerManager
 
 
@@ -15,7 +15,8 @@ def test_display_power_manager_initialization() -> None:
 
     manager = DisplayPowerManager(mock_bus, mock_adapter)
 
-    mock_bus.subscribe.assert_called_once_with(CommandEvent, manager._handle_command_event)
+    mock_bus.subscribe.assert_any_call(CommandEvent, manager._handle_command_event)
+    mock_bus.subscribe.assert_any_call(StateEvent, manager._handle_state_event)
 
 
 def test_display_power_manager_handles_display_on() -> None:
@@ -86,3 +87,20 @@ def test_display_power_manager_ignores_non_command_events() -> None:
     mock_adapter.turn_on.assert_not_called()
     mock_adapter.turn_off.assert_not_called()
     mock_adapter.toggle.assert_not_called()
+
+
+def test_display_power_manager_retargets_display_output_on_viewer_config_change() -> None:
+    mock_bus = MagicMock()
+    mock_adapter = MagicMock()
+    mock_config_repo = MagicMock()
+    mock_config_repo.get_app_config.return_value = "HDMI-A-2"
+    manager = DisplayPowerManager(mock_bus, mock_adapter, config_repository=mock_config_repo)
+
+    manager._handle_state_event(
+        StateEvent(
+            state=State.CONFIG_CHANGED,
+            payload={"updated_sections": ["viewer"]},
+        )
+    )
+
+    mock_adapter.set_display_output.assert_called_once_with("HDMI-A-2")

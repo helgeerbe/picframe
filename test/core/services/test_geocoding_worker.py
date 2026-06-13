@@ -84,3 +84,33 @@ def test_geocoding_worker_cache_hit(mock_geo_reverse_class: MagicMock, mock_repo
     mock_repo.get_location.assert_called_once_with(10.1234, 20.5678)
     mock_geo_instance.get_address.assert_not_called()
     mock_repo.save_location.assert_not_called()
+
+
+@patch('picframe.core.services.geocoding_worker.GeoReverse')
+def test_geocoding_worker_passes_configured_locale_to_geo_reverse(
+    mock_geo_reverse_class: MagicMock,
+    mock_repo: MagicMock,
+) -> None:
+    config_repo = MagicMock()
+    config_repo.get_app_config_bool.return_value = True
+    values = {
+        "model.geo_key": "user@example.com",
+        "model.locale": "de_DE.utf8",
+        "model.key_list": [["city"], ["country"]],
+    }
+    config_repo.get_app_config.side_effect = lambda key, default=None: values.get(key, default)
+
+    worker = GeocodingWorker(mock_repo, config_repo)
+    worker._init_geo_reverse()
+
+    mock_geo_reverse_class.assert_called_once_with(
+        load_geoloc=True,
+        geo_key="user@example.com",
+        key_list=[["city"], ["country"]],
+        language="de",
+    )
+
+
+def test_geocoding_worker_locale_language_falls_back_for_posix() -> None:
+    assert GeocodingWorker._language_from_locale("POSIX") == "en"
+    assert GeocodingWorker._language_from_locale("C.utf8") == "en"

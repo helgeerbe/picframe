@@ -6,7 +6,8 @@
   "nav": {
     "remote": "Remote",
     "filters": "Settings & Filters",
-    "settings": "Settings"
+    "settings": "Settings",
+    "logs": "Logs"
   },
   "remote": {
     "connecting": "Connecting to Picframe...",
@@ -16,6 +17,7 @@
     "mediaDetails": "Media Details",
     "noMetadata": "No metadata available",
     "location": "Location",
+    "expand": "Expand",
     "metadata": {
       "fileName": "File Name",
       "date": "Date",
@@ -54,6 +56,12 @@
       "filterHelp": "Use AND, OR, NOT and parentheses. Multiple words are treated as one phrase. Click chips to toggle terms with OR; Shift-click adds with AND.",
       "filterExamples": "Examples: family OR beach; family AND NOT beach; (family OR friends) AND holiday; New York.",
       "chipTitle": "Click to toggle. Shift-click adds with AND.",
+      "searchLocations": "Search locations",
+      "searchTags": "Search tags",
+      "searchMore": "Type at least 2 characters.",
+      "searching": "Searching...",
+      "removeLocation": "Remove location",
+      "removeTag": "Remove tag",
       "apply": "Apply",
       "applying": "Applying...",
       "clear": "Clear filters",
@@ -103,6 +111,23 @@
       "textLocationHelper": "Show the location where the media was taken."
     }
   },
+  "logs": {
+    "title": "Logs",
+    "connected": "Live log stream connected.",
+    "disconnected": "Live log stream disconnected. Reconnecting...",
+    "search": "Search logs or enter a regular expression",
+    "pause": "Pause",
+    "resume": "Resume",
+    "copy": "Copy",
+    "download": "Download",
+    "clear": "Clear",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "authRequired": "Log access needs authentication. Open the protected Logs route once so the browser can store the session for the live log stream.",
+    "authenticate": "Authenticate logs",
+    "lines": "{count} lines",
+    "pending": "{count} pending while paused"
+  },
   "settings": {
     "title": "Configuration",
     "save": "Save Changes",
@@ -123,6 +148,22 @@
     "confirmAction": "Are you sure you want to perform this action?",
     "cancel": "Cancel",
     "confirm": "Confirm",
+    "displayMode": "Display mode",
+    "fullscreen": "Fullscreen",
+    "custom": "Custom",
+    "auth": {
+      "title": "Access protection",
+      "scope": "Password protection",
+      "scopeHelp": "Choose which parts of the web UI require browser Basic Auth.",
+      "scopeNone": "None",
+      "scopeSettings": "Settings, Logs and admin actions",
+      "scopeSite": "Complete website",
+      "username": "Username",
+      "usernameHelp": "Username for protected web access.",
+      "password": "Password",
+      "passwordHelp": "Required before password protection can be enabled.",
+      "passwordPreserveHelp": "The saved password is shown after authentication. Edit it to change the password; leave empty to keep the stored value."
+    },
     "hardwareInputs": {
       "enabled": "GPIO inputs",
       "add": "Add input",
@@ -153,6 +194,7 @@
       "hardware_inputs": "GPIO Inputs"
     },
     "domain": {
+      "display": "Display",
       "textAndClock": "Text and Clock",
       "matting": "Matting",
       "playlist": "Playlist",

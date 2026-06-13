@@ -116,6 +116,24 @@ class WatchdogMediaMonitor(IMediaMonitor):
         if was_running:
             self.start()
 
+    def configure(
+        self,
+        directories: list[str],
+        allowed_extensions: set[str],
+        follow_links: bool,
+    ) -> None:
+        """Replace monitor settings, restarting observers when needed."""
+        was_running = self._running
+        if was_running:
+            self.stop()
+        with self._lock:
+            self._directories = list(directories)
+            self.allowed_extensions = {ext.lower() for ext in allowed_extensions}
+            self.follow_links = follow_links
+            self.handler.allowed_extensions = set(self.allowed_extensions)
+        if was_running:
+            self.start()
+
     def _is_network_mount(self, path: str) -> bool:
         """Return True when a path should use polling-based monitoring."""
         if not os.path.ismount(path):

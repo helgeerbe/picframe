@@ -1,4 +1,5 @@
 import asyncio
+import base64
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -8,6 +9,8 @@ import pytest
 from fastapi import FastAPI
 
 from picframe.api.app import create_app, media_event_to_response_dto
+from picframe.core.events.dto import Command
+from picframe.core.services.basic_auth import AUTH_COOKIE_NAME, BasicAuthStore
 from picframe.core.services.resource_paths import ResourcePaths
 
 
@@ -15,6 +18,16 @@ from picframe.core.services.resource_paths import ResourcePaths
 def client() -> "ASGITestClient":
     app = create_app(cors_allowed_origins=["*"])
     return ASGITestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolate_default_resource_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "default-home"
+    home.mkdir()
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
 
 
 class ASGITestClient:
@@ -52,6 +65,11 @@ class ASGITestClient:
         return self.request("OPTIONS", url, **kwargs)
 
 
+def basic_auth(username: str = "admin", password: str = "secret") -> dict[str, str]:
+    token = base64.b64encode(f"{username}:{password}".encode()).decode()
+    return {"Authorization": f"Basic {token}"}
+
+
 def test_health_check(client: ASGITestClient) -> None:
     response = client.get("/health")
     assert response.status_code == 200
@@ -69,14 +87,18 @@ def test_openapi_documents_rest_response_models(client: ASGITestClient) -> None:
         ("/health", "get"): "HealthResponse",
         ("/api/system/reboot", "post"): "StatusResponse",
         ("/api/system/shutdown", "post"): "StatusResponse",
+        ("/api/system/locales", "get"): "LocaleOptionsResponse",
         ("/api/maintenance/purge-db", "post"): "StatusResponse",
         ("/api/maintenance/clear-cache", "post"): "StatusMessageResponse",
         ("/api/filesystem/browse", "get"): "FilesystemBrowseResponse",
         ("/api/filesystem/validate", "post"): "FilesystemValidateResponse",
         ("/api/media/filter-options", "get"): "MediaFilterOptionsResponse",
+        ("/api/media/location-options", "get"): "MediaLocationOptionsResponse",
         ("/api/media/selection-count", "post"): "MediaSelectionCountResponse",
         ("/api/hardware-inputs", "get"): "HardwareInputsConfig",
         ("/api/hardware-inputs", "put"): "HardwareInputsUpdateResponse",
+        ("/api/auth/config", "get"): "BasicAuthConfigResponse",
+        ("/api/auth/config", "put"): "BasicAuthConfigResponse",
         ("/api/config/import-yaml", "post"): "StatusMessageResponse",
         ("/api/config", "put"): "StatusMessageResponse",
     }
@@ -126,6 +148,7 @@ def test_openapi_documents_websocket_contract(client: ASGITestClient) -> None:
     schema = client.get("/openapi.json").json()
 
     assert "/ws/state" not in schema["paths"]
+    assert "/ws/logs" not in schema["paths"]
     assert "/ws/state" in schema["info"]["description"]
     websocket_contract = schema["x-websocket-contracts"]["/ws/state"]
     assert websocket_contract["incoming"] == [
@@ -142,6 +165,12 @@ def test_openapi_documents_websocket_contract(client: ASGITestClient) -> None:
     assert "MediaChangedWebSocketMessage" in components
     assert "StateWebSocketMessage" in components
     assert "SystemErrorWebSocketMessage" in components
+    assert "LogEventMessage" in components
+    assert "LogSnapshotMessage" in components
+    assert schema["x-websocket-contracts"]["/ws/logs"]["outgoing"] == [
+        {"$ref": "#/components/schemas/LogSnapshotMessage"},
+        {"$ref": "#/components/schemas/LogEventMessage"},
+    ]
 
 
 def test_cors_headers(client: ASGITestClient) -> None:
@@ -185,6 +214,251 @@ def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
     response = client.get("/assets/app.js")
     assert response.status_code == 200
     assert response.text == "console.log('app');"
+
+
+def test_basic_auth_protects_settings_logs_and_admin_routes(tmp_path: Path) -> None:
+    base_dir = tmp_path / "picframe"
+    html_dir = base_dir / "html"
+    html_dir.mkdir(parents=True)
+    (html_dir / "index.html").write_text("<h1>Index</h1>")
+    resource_paths = ResourcePaths.from_base_dir(base_dir)
+    auth_store = BasicAuthStore(resource_paths)
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        html_dir=str(html_dir),
+        resource_paths=resource_paths,
+        auth_store=auth_store,
+    )
+    client = ASGITestClient(app)
+
+    assert client.get("/settings").status_code == 200
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "settings", "username": "admin", "password": "secret"},
+    )
+    assert response.status_code == 200
+    assert response.json()["enabled"] is True
+    assert response.json()["scope"] == "settings"
+    assert response.json()["password_set"] is True
+    assert response.json()["password"] == "secret"
+
+    assert client.get("/settings").status_code == 401
+    assert client.get("/logs").status_code == 401
+    assert client.get("/api/config").status_code == 401
+    assert client.post("/api/system/reboot").status_code == 401
+
+    assert client.get("/").status_code == 200
+    assert client.get("/api/workflow-config").status_code == 200
+    assert client.get("/api/media/filter-options").status_code == 200
+
+    assert client.get("/settings", headers=basic_auth()).status_code == 200
+    assert client.get("/logs", headers=basic_auth()).status_code == 200
+    assert client.get("/api/config", headers=basic_auth()).status_code == 200
+    response = client.get("/api/auth/config", headers=basic_auth())
+    assert response.status_code == 200
+    assert response.json()["password"] == "secret"
+
+    response = client.put(
+        "/api/auth/config",
+        headers=basic_auth(),
+        json={"scope": "none", "username": "admin", "password": ""},
+    )
+    assert response.status_code == 200
+    assert response.json()["enabled"] is False
+    assert response.json()["scope"] == "none"
+    assert "password" not in response.json()
+    assert client.get("/settings").status_code == 200
+    response = client.get("/api/auth/config")
+    assert response.status_code == 200
+    assert "password" not in response.json()
+
+
+def test_basic_auth_sets_cookie_for_protected_routes(tmp_path: Path) -> None:
+    base_dir = tmp_path / "picframe"
+    html_dir = base_dir / "html"
+    html_dir.mkdir(parents=True)
+    (html_dir / "index.html").write_text("<h1>Index</h1>")
+    resource_paths = ResourcePaths.from_base_dir(base_dir)
+    auth_store = BasicAuthStore(resource_paths)
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        html_dir=str(html_dir),
+        resource_paths=resource_paths,
+        auth_store=auth_store,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "settings", "username": "admin", "password": "secret"},
+    )
+    assert response.status_code == 200
+
+    response = client.get("/logs", headers=basic_auth())
+    assert response.status_code == 200
+    token = response.cookies.get(AUTH_COOKIE_NAME)
+    assert token
+
+    cookie_header = {"Cookie": f"{AUTH_COOKIE_NAME}={token}"}
+    assert client.get("/logs", headers=cookie_header).status_code == 200
+    assert client.get("/api/config", headers=cookie_header).status_code == 200
+    assert client.get("/logs", headers={"Cookie": f"{AUTH_COOKIE_NAME}=bad"}).status_code == 401
+
+
+def test_basic_auth_can_protect_complete_site(tmp_path: Path) -> None:
+    base_dir = tmp_path / "picframe"
+    html_dir = base_dir / "html"
+    assets_dir = html_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (html_dir / "index.html").write_text("<h1>Index</h1>")
+    (assets_dir / "app.js").write_text("console.log('app');")
+    resource_paths = ResourcePaths.from_base_dir(base_dir)
+    auth_store = BasicAuthStore(resource_paths)
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        html_dir=str(html_dir),
+        resource_paths=resource_paths,
+        auth_store=auth_store,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "site", "username": "admin", "password": "secret"},
+    )
+    assert response.status_code == 200
+    assert response.json()["enabled"] is True
+    assert response.json()["scope"] == "site"
+
+    assert client.get("/").status_code == 401
+    assert client.get("/assets/app.js").status_code == 401
+    assert client.get("/api/workflow-config").status_code == 401
+    assert client.get("/api/media/filter-options").status_code == 401
+    assert client.get("/api/auth/config").status_code == 401
+
+    assert client.get("/", headers=basic_auth()).status_code == 200
+    assert client.get("/assets/app.js", headers=basic_auth()).status_code == 200
+    assert client.get("/api/workflow-config", headers=basic_auth()).status_code == 200
+    assert client.get("/api/media/filter-options", headers=basic_auth()).status_code == 200
+    assert client.get("/api/auth/config", headers=basic_auth()).status_code == 200
+
+
+def test_basic_auth_scope_matrix_for_http_routes(tmp_path: Path) -> None:
+    base_dir = tmp_path / "picframe"
+    html_dir = base_dir / "html"
+    assets_dir = html_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (html_dir / "index.html").write_text("<h1>Index</h1>")
+    (assets_dir / "app.js").write_text("console.log('app');")
+    media_path = tmp_path / "photo.jpg"
+    media_path.write_text("jpg")
+    resource_paths = ResourcePaths.from_base_dir(base_dir)
+    auth_store = BasicAuthStore(resource_paths)
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        html_dir=str(html_dir),
+        resource_paths=resource_paths,
+        auth_store=auth_store,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "settings", "username": "admin", "password": "secret"},
+    )
+    assert response.status_code == 200
+
+    settings_protected = [
+        ("GET", "/api/auth/config", {}),
+        ("GET", "/api/config", {}),
+        ("PUT", "/api/config", {"json": {}}),
+        ("POST", "/api/config/import-yaml", {}),
+        ("GET", "/api/filesystem/browse", {}),
+        ("POST", "/api/filesystem/validate", {"json": {}}),
+        ("GET", "/api/hardware-inputs", {}),
+        ("PUT", "/api/hardware-inputs", {"json": {}}),
+        ("POST", "/api/maintenance/purge-db", {}),
+        ("POST", "/api/maintenance/clear-cache", {}),
+        ("POST", "/api/system/reboot", {}),
+        ("POST", "/api/system/shutdown", {}),
+        ("GET", "/logs", {}),
+        ("GET", "/settings", {}),
+    ]
+    for method, url, kwargs in settings_protected:
+        assert client.request(method, url, **kwargs).status_code == 401, url
+
+    settings_public = [
+        ("GET", "/", {}),
+        ("GET", "/assets/app.js", {}),
+        ("GET", "/health", {}),
+        ("GET", "/openapi.json", {}),
+        ("GET", "/api/system/locales", {}),
+        ("GET", "/api/workflow-config", {}),
+        ("PUT", "/api/workflow-config", {"json": {}}),
+        ("GET", "/api/media/filter-options", {}),
+        ("GET", "/api/media/location-options?q=ber", {}),
+        ("POST", "/api/media/selection-count", {"json": {}}),
+        ("GET", f"/media?path={media_path}", {}),
+    ]
+    for method, url, kwargs in settings_public:
+        assert client.request(method, url, **kwargs).status_code != 401, url
+
+    response = client.put(
+        "/api/auth/config",
+        headers=basic_auth(),
+        json={"scope": "site", "username": "admin", "password": ""},
+    )
+    assert response.status_code == 200
+
+    site_protected = [
+        *settings_protected,
+        *settings_public,
+        ("GET", "/docs", {}),
+    ]
+    for method, url, kwargs in site_protected:
+        assert client.request(method, url, **kwargs).status_code == 401, url
+
+    assert client.options("/api/config").status_code != 401
+
+
+def test_basic_auth_legacy_enabled_request_maps_to_settings_scope(tmp_path: Path) -> None:
+    resource_paths = ResourcePaths.from_base_dir(tmp_path / "picframe")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        resource_paths=resource_paths,
+        auth_store=BasicAuthStore(resource_paths),
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"enabled": True, "username": "admin", "password": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scope"] == "settings"
+
+
+def test_basic_auth_requires_password_when_enabled(tmp_path: Path) -> None:
+    resource_paths = ResourcePaths.from_base_dir(tmp_path / "picframe")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        resource_paths=resource_paths,
+        auth_store=BasicAuthStore(resource_paths),
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "settings", "username": "admin", "password": ""},
+    )
+
+    assert response.status_code == 400
+    assert "Password is required" in response.json()["detail"]
 
 
 def test_api_filesystem_browse_lists_home_entries(
@@ -461,6 +735,60 @@ def test_api_put_config() -> None:
     assert event.payload == payload
 
 
+def test_workflow_config_is_public_and_allowlisted() -> None:
+    mock_repo = MagicMock()
+    mock_repo.get_all_app_config.return_value = {
+        "model.shuffle": True,
+        "model.shuffle_mode": "standard",
+        "model.subdirectory": "holiday",
+        "model.date_from": "",
+        "model.date_to": "",
+        "model.location_filter": "",
+        "model.tags_filter": "",
+        "model.time_delay": 20.0,
+        "model.fade_time": 2.0,
+        "viewer.show_clock": False,
+        "viewer.show_text_enabled": True,
+        "viewer.text_overlay_format": "title location",
+    }
+    mock_publisher = MagicMock()
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    response = client.get("/api/workflow-config")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["model"]["subdirectory"] == "holiday"
+    assert "log_level" not in data["model"]
+    assert data["viewer"]["text_overlay_format"] == "title location"
+
+    update = {"model": {"shuffle": False}, "viewer": {"show_clock": True}}
+    response = client.put("/api/workflow-config", json=update)
+
+    assert response.status_code == 200
+    mock_repo.set_app_config.assert_any_call("model.shuffle", False)
+    mock_repo.set_app_config.assert_any_call("viewer.show_clock", True)
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command is Command.SET_CONFIG
+    assert event.payload == update
+
+
+def test_workflow_config_rejects_non_workflow_keys() -> None:
+    mock_repo = MagicMock()
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
+    client = ASGITestClient(app)
+
+    response = client.put("/api/workflow-config", json={"model": {"log_level": "DEBUG"}})
+
+    assert response.status_code == 403
+    mock_repo.set_app_config.assert_not_called()
+
+
 def test_api_media_filter_options() -> None:
     mock_config_repo = MagicMock()
     mock_config_repo.get_app_config.return_value = "/pictures"
@@ -484,6 +812,46 @@ def test_api_media_filter_options() -> None:
     assert response.status_code == 200
     assert response.json()["subdirectories"] == ["holiday"]
     mock_media_repo.get_filter_options.assert_called_once_with("/pictures")
+
+
+def test_api_system_locales_lists_installed_locales(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    completed = MagicMock()
+    completed.stdout = "C\nPOSIX\nen_US.utf8\n"
+    run = MagicMock(return_value=completed)
+    monkeypatch.setattr("picframe.api.app.subprocess.run", run)
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/system/locales")
+
+    assert response.status_code == 200
+    assert response.json() == {"locales": ["C", "en_US.utf8", "POSIX"]}
+    run.assert_called_once()
+
+
+def test_api_media_location_options_searches_repository() -> None:
+    mock_media_repo = MagicMock()
+    mock_media_repo.search_location_options.return_value = [
+        {"value": "Berlin", "count": 4},
+        {"value": "Bern", "count": 1},
+    ]
+
+    app = create_app(cors_allowed_origins=["*"], media_repository=mock_media_repo)
+    client = ASGITestClient(app)
+
+    response = client.get("/api/media/location-options?q=ber&limit=10")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "locations": [
+            {"value": "Berlin", "count": 4},
+            {"value": "Bern", "count": 1},
+        ]
+    }
+    mock_media_repo.search_location_options.assert_called_once_with("ber", 10)
 
 
 def test_api_media_selection_count_uses_config_pic_dir() -> None:

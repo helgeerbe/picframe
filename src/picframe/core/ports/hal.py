@@ -45,6 +45,10 @@ class IDisplayPower(Protocol):
         """
         ...
 
+    def set_display_output(self, display_output: str) -> None:
+        """Update the display output targeted by power commands."""
+        ...
+
 
 class IHardwareInput(Protocol):
     """

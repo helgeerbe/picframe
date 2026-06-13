@@ -52,8 +52,12 @@ def media_indexer(
 ) -> Generator[MediaIndexerService, None, None]:
     # Setup config repo to return some extensions
     mock_config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.pic_dir": "/pictures",
         "model.image_extensions": [".jpg", ".jpeg", ".png"],
         "model.video_extensions": [".mp4", ".mov"]
+    }.get(key, default)
+    mock_config_repo.get_app_config_bool.side_effect = lambda key, default=None: {
+        "model.follow_links": False,
     }.get(key, default)
     
     service = MediaIndexerService(
@@ -336,20 +340,49 @@ def test_handle_file_change_deleted(
 def test_handle_command_set_config(
     media_indexer: MediaIndexerService,
     mock_media_repo: MagicMock,
+    mock_config_repo: MagicMock,
     mock_media_monitor_service: MagicMock
 ) -> None:
     # Setup
+    mock_config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.pic_dir": "/new/pic/dir",
+        "model.image_extensions": [".jpg", ".jpeg", ".png"],
+        "model.video_extensions": [".mp4", ".mov"],
+    }.get(key, default)
     event = CommandEvent(command=Command.SET_CONFIG, payload={"model": {"pic_dir": "/new/pic/dir"}})
     
     # Execute
     media_indexer._handle_command(event)
     
     # Assert
-    mock_media_monitor_service.stop.assert_called_once()
-    mock_media_monitor_service.set_directories.assert_called_once_with(["/new/pic/dir"])
+    mock_media_monitor_service.configure.assert_called_once_with(
+        directories=["/new/pic/dir"],
+        allowed_extensions={".jpg", ".jpeg", ".png", ".mp4", ".mov"},
+        follow_links=False,
+    )
     mock_media_monitor_service.perform_differential_sync.assert_called_once()
-    mock_media_monitor_service.start.assert_called_once()
     mock_media_repo.purge_missing_files.assert_not_called()
+
+
+def test_handle_command_reloads_media_monitor_without_sync_for_follow_links(
+    media_indexer: MediaIndexerService,
+    mock_media_monitor_service: MagicMock,
+    mock_config_repo: MagicMock,
+) -> None:
+    mock_config_repo.get_app_config_bool.side_effect = lambda key, default=None: {
+        "model.follow_links": True,
+    }.get(key, default)
+
+    media_indexer._handle_command(
+        CommandEvent(command=Command.SET_CONFIG, payload={"model": {"follow_links": True}})
+    )
+
+    mock_media_monitor_service.configure.assert_called_once_with(
+        directories=["/pictures"],
+        allowed_extensions={".jpg", ".jpeg", ".png", ".mp4", ".mov"},
+        follow_links=True,
+    )
+    mock_media_monitor_service.perform_differential_sync.assert_not_called()
 
 
 def test_pause_resume_stop_lifecycle(

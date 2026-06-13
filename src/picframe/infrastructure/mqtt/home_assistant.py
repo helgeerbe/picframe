@@ -133,11 +133,11 @@ class HomeAssistantMqttAdapter:
 
     def start(self) -> None:
         """Connect to the MQTT broker and publish Home Assistant discovery."""
+        self._subscribe_events()
         if not self._settings.enabled:
             logger.info("MQTT is disabled.")
             return
 
-        self._subscribe_events()
         try:
             self._client = self._client_factory(
                 callback_api_version=mqtt.CallbackAPIVersion.VERSION2,
@@ -445,6 +445,9 @@ class HomeAssistantMqttAdapter:
         self._publish_media(media)
 
     def _handle_state_changed(self, event: StateEvent) -> None:
+        if event.state == State.CONFIG_CHANGED:
+            self._reload_settings_if_needed(event)
+
         if self._client is None:
             return
         state = self._state_query.get_system_state()
@@ -453,6 +456,38 @@ class HomeAssistantMqttAdapter:
         state["is_paused"] = event.state == State.PAUSED
         state["is_sleeping"] = event.state == State.SLEEPING
         self._publish_json(self._state_topic, state, retain=False)
+
+    def _reload_settings_if_needed(self, event: StateEvent) -> None:
+        payload = event.payload if isinstance(event.payload, dict) else {}
+        updated_sections = payload.get("updated_sections", [])
+        if "mqtt" not in updated_sections:
+            return
+
+        new_settings = self._load_settings()
+        if new_settings == self._settings:
+            return
+
+        self._disconnect_client()
+        self._settings = new_settings
+        if self._settings.enabled:
+            self.start()
+        else:
+            logger.info("MQTT adapter disabled by live configuration.")
+
+    def _disconnect_client(self) -> None:
+        if self._client is None:
+            self._connected = False
+            return
+
+        try:
+            self._client.publish(self._availability_topic, "offline", qos=0, retain=True)
+            self._client.loop_stop()
+            self._client.disconnect()
+        except Exception as error:  # pylint: disable=broad-except
+            logger.warning("MQTT adapter disconnect failed: %s", error)
+        finally:
+            self._connected = False
+            self._client = None
 
     def _publish_media(self, media: dict[str, Any]) -> None:
         if self._client is None:

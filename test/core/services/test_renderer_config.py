@@ -29,6 +29,24 @@ def test_build_renderer_config_maps_matting_values() -> None:
             "viewer.display_w": "1920",
             "viewer.display_h": "1080",
             "viewer.background": [0.1, 0.2, 0.3, 1.0],
+            "viewer.blur_amount": 20,
+            "viewer.blur_zoom": 1.2,
+            "viewer.blur_edges": True,
+            "viewer.video_fit_display": True,
+            "viewer.show_text_fm": "%Y",
+            "viewer.show_text_sz": 52,
+            "viewer.text_justify": "C",
+            "viewer.text_bkg_hgt": 0.3,
+            "viewer.text_opacity": 0.6,
+            "viewer.text_x_margin": 42,
+            "viewer.text_y_margin": -4,
+            "viewer.geo_suppress_list": ["County"],
+            "viewer.clock_justify": "L",
+            "viewer.clock_text_sz": 80,
+            "viewer.clock_opacity": 0.7,
+            "viewer.clock_top_bottom": "B",
+            "viewer.clock_wdt_offset_pct": 5.0,
+            "viewer.clock_hgt_offset_pct": 6.0,
             "viewer.mat_images": "on",
             "viewer.mat_type": "float",
             "viewer.outer_mat_color": [10, 20, 30],
@@ -46,6 +64,24 @@ def test_build_renderer_config_maps_matting_values() -> None:
     assert config.display_w == 1920
     assert config.display_h == 1080
     assert config.background == (0.1, 0.2, 0.3, 1.0)
+    assert config.blur_amount == 20
+    assert config.blur_zoom == 1.2
+    assert config.blur_edges is True
+    assert config.video_fit_display is True
+    assert config.show_text_fm == "%Y"
+    assert config.show_text_sz == 52
+    assert config.text_justify == "C"
+    assert config.text_bkg_hgt == 0.3
+    assert config.text_opacity == 0.6
+    assert config.text_x_margin == 42
+    assert config.text_y_margin == -4
+    assert config.geo_suppress_list == ["County"]
+    assert config.clock_justify == "L"
+    assert config.clock_text_sz == 80
+    assert config.clock_opacity == 0.7
+    assert config.clock_top_bottom == "B"
+    assert config.clock_wdt_offset_pct == 5.0
+    assert config.clock_hgt_offset_pct == 6.0
     assert config.mat_images == "on"
     assert config.mat_type == "float"
     assert config.outer_mat_color == [10, 20, 30]

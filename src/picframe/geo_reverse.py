@@ -25,13 +25,13 @@ HEADERS = {
 MINIMUM_INTERVAL = 2.0 # Actually 1.0 is ok, just to be kind
 
 class GeoReverse:
-    def __init__(self, load_geoloc, geo_key, zoom=18, key_list=None):
+    def __init__(self, load_geoloc, geo_key, zoom=18, key_list=None, language=None):
         self.__logger = logging.getLogger("geo_reverse.GeoReverse")
         self.__load_geoloc = load_geoloc
         self.__geo_key = geo_key
         self.__zoom = zoom
         self.__key_list = key_list
-        self.__language = locale.getlocale()[0][:2]
+        self.__language = (language or locale.getlocale()[0] or "en")[:2]
         self.__lastRequest = 0 # FSN properly distance the request
 
     def get_address(self, lat, lon):
@@ -67,4 +67,3 @@ class GeoReverse:
         except Exception as e:  # TODO return different thing for different exceptions
             self.__logger.error("lat=%f, lon=%f -> %s", lat, lon, e)
             return ""
-
