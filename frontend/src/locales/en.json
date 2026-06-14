@@ -28,6 +28,8 @@
     "noMetadata": "No metadata available",
     "location": "Location",
     "expand": "Expand",
+    "previewLoadFailed": "Preview could not be loaded.",
+    "retryPreview": "Retry preview",
     "metadata": {
       "fileName": "File Name",
       "date": "Date",

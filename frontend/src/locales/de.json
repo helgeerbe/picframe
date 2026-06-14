@@ -28,6 +28,8 @@
     "noMetadata": "Keine Metadaten verfügbar",
     "location": "Ort",
     "expand": "Vergrößern",
+    "previewLoadFailed": "Vorschau konnte nicht geladen werden.",
+    "retryPreview": "Vorschau erneut laden",
     "metadata": {
       "fileName": "Datei",
       "date": "Datum",

@@ -35,6 +35,10 @@ export const usePlayerStore = defineStore('player', () => {
   let ws: WebSocket | null = null
   let reconnectTimer: number | null = null
   const reconnectDelayMs = 5000
+  let heartbeatTimer: number | null = null
+  let lastMessageAt = 0
+  const heartbeatIntervalMs = 10000
+  const staleConnectionMs = 25000
 
   function connect() {
     if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) {
@@ -58,6 +62,8 @@ export const usePlayerStore = defineStore('player', () => {
     socket.onopen = () => {
       if (ws !== socket) return
       connectionStatus.value = 'connected'
+      lastMessageAt = Date.now()
+      startHeartbeat()
       console.log('WebSocket connected')
       // Request initial state upon connection
       sendCommand('REQUEST_STATE')
@@ -65,6 +71,7 @@ export const usePlayerStore = defineStore('player', () => {
 
     socket.onmessage = (event) => {
       if (ws !== socket) return
+      lastMessageAt = Date.now()
       try {
         const data = JSON.parse(event.data)
         if (data.type === 'MediaChangedEvent') {
@@ -109,6 +116,7 @@ export const usePlayerStore = defineStore('player', () => {
     socket.onclose = () => {
       if (ws !== socket) return
       ws = null
+      stopHeartbeat()
       console.log('WebSocket disconnected, retrying in 5s...')
       scheduleReconnect()
     }
@@ -119,6 +127,30 @@ export const usePlayerStore = defineStore('player', () => {
       console.error('WebSocket error:', error)
       socket.close()
     }
+  }
+
+  function startHeartbeat() {
+    stopHeartbeat()
+    heartbeatTimer = window.setInterval(() => {
+      if (!ws || ws.readyState !== WebSocket.OPEN) {
+        connectionStatus.value = 'reconnecting'
+        stopHeartbeat()
+        scheduleReconnect()
+        return
+      }
+      if (Date.now() - lastMessageAt > staleConnectionMs) {
+        connectionStatus.value = 'reconnecting'
+        ws.close()
+        return
+      }
+      sendCommand('REQUEST_STATE')
+    }, heartbeatIntervalMs)
+  }
+
+  function stopHeartbeat() {
+    if (heartbeatTimer === null) return
+    window.clearInterval(heartbeatTimer)
+    heartbeatTimer = null
   }
 
   function scheduleReconnect() {
@@ -134,8 +166,16 @@ export const usePlayerStore = defineStore('player', () => {
 
   function sendCommand(command: string, payload?: any): boolean {
     if (ws && isConnected.value && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ command, ...payload }))
-      return true
+      try {
+        ws.send(JSON.stringify({ command, ...payload }))
+        return true
+      } catch (error) {
+        console.warn('WebSocket send failed, reconnecting', error)
+        connectionStatus.value = 'reconnecting'
+        ws.close()
+        scheduleReconnect()
+        return false
+      }
     }
     console.warn('Cannot send command, WebSocket not connected')
     return false
