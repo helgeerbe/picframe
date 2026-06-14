@@ -25,6 +25,17 @@ def test_start_transition(config):
     state = controller.update(100.0)
     assert state.render_state == RenderState.TRANSITIONING
     assert state.image_alpha > 0.0 # It increments immediately on update
+    assert state.text_alpha == 0.0
+
+def test_start_transition_hides_existing_text(config):
+    controller = AnimationController(config)
+    controller._text_alpha = 1.0
+
+    controller.start_transition(100.0)
+    state = controller.update(100.0)
+
+    assert state.render_state == RenderState.TRANSITIONING
+    assert state.text_alpha == 0.0
 
 def test_transition_completion(config):
     controller = AnimationController(config)

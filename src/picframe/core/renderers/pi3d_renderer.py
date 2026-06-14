@@ -37,6 +37,8 @@ from picframe.core.services.overlay_text import apply_geo_suppress_list
 PI3D_LABWC_IDENTIFIER = "picframe-pi3d"
 VIDEO_WINDOW_TITLE = "picframe-video"
 RESUME_REDRAW_FRAMES = 5
+TEXT_CLEAR_REDRAW_FRAMES = 2
+TEXT_VISIBLE_ALPHA_THRESHOLD = 0.0
 
 
 @dataclass(order=True)
@@ -578,6 +580,7 @@ class Pi3dRenderer(IRenderer):
             
         tm = time.time()
         anim_state = self._animation_controller.update(tm)
+        previous_text_alpha = getattr(self, "_last_text_alpha", -1.0)
 
         # Process local queue
         try:
@@ -605,7 +608,7 @@ class Pi3dRenderer(IRenderer):
         if (anim_state.render_state in (RenderState.TRANSITIONING, RenderState.TEXT_ANIMATING) or
             self._kenburns or
             anim_state.frames_to_render > 0 or
-            anim_state.text_alpha != getattr(self, '_last_text_alpha', -1.0)):
+            anim_state.text_alpha != previous_text_alpha):
             needs_redraw = True
             
         # 2. Check dynamic overlays (Clock)
@@ -635,6 +638,9 @@ class Pi3dRenderer(IRenderer):
 
         self._last_redraw_time = tm
         self._last_text_alpha = anim_state.text_alpha
+        text_finished_fading_out = previous_text_alpha > 0.0 and anim_state.text_alpha <= 0.0
+        if text_finished_fading_out:
+            self._animation_controller.force_redraw(TEXT_CLEAR_REDRAW_FRAMES)
 
         # Check for transition completion
         if anim_state.render_state == RenderState.STATIC and getattr(self, '_was_transitioning', False):
@@ -656,7 +662,11 @@ class Pi3dRenderer(IRenderer):
         # Draw components
         self._image_renderer.draw()
         
-        if self._text_renderer and self._overlay_config.show_text:
+        if (
+            self._text_renderer
+            and self._overlay_config.show_text
+            and anim_state.text_alpha > TEXT_VISIBLE_ALPHA_THRESHOLD
+        ):
             self._text_renderer.draw()
             
         if self._clock_renderer and self._overlay_config.show_clock:

@@ -18,6 +18,7 @@ from picframe.core.events.dto import (
 from picframe.core.renderers.pi3d_renderer import (
     PI3D_LABWC_IDENTIFIER,
     RESUME_REDRAW_FRAMES,
+    TEXT_CLEAR_REDRAW_FRAMES,
     VIDEO_WINDOW_TITLE,
     Pi3dRenderer,
 )
@@ -455,6 +456,63 @@ def test_renderer_render_frame(
     mock_image_renderer.draw.assert_called_once()
     # Should transition to TEXT_ANIMATING
     assert renderer._animation_controller._state == RenderState.TEXT_ANIMATING
+
+
+def test_renderer_does_not_draw_text_during_image_transition(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._overlay_config = OverlayConfig(show_clock=False, show_text=True, text_string="Test")
+    renderer._animation_controller._state = RenderState.TRANSITIONING
+    renderer._animation_controller._image_alpha = 0.5
+    renderer._animation_controller._text_alpha = 0.0
+    renderer._animation_controller._show_text = True
+    renderer._last_text_alpha = 0.0
+    renderer._kenburns = False
+    mock_clock_renderer.has_changed.return_value = False
+
+    with patch("time.time", return_value=100.0):
+        result = renderer.render_frame()
+
+    assert result is True
+    mock_image_renderer.draw.assert_called_once()
+    mock_text_renderer.set_alpha.assert_called_once_with(0.0)
+    mock_text_renderer.draw.assert_not_called()
+
+
+def test_renderer_skips_text_draw_and_flushes_buffers_after_fade_out(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    """When text reaches alpha zero, pi3d needs extra clean frames to swap buffers."""
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._overlay_config = OverlayConfig(show_clock=False, show_text=True, text_string="Test")
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._show_text = True
+    renderer._animation_controller._text_alpha = 0.01
+    renderer._animation_controller._text_timer = 90.0
+    renderer._animation_controller._fps = 60
+    renderer._last_text_alpha = 0.01
+    renderer._kenburns = False
+    mock_clock_renderer.has_changed.return_value = False
+
+    with patch("time.time", return_value=100.0):
+        result = renderer.render_frame()
+
+    assert result is True
+    mock_image_renderer.draw.assert_called_once()
+    mock_text_renderer.set_alpha.assert_called_once_with(0.0)
+    mock_text_renderer.draw.assert_not_called()
+    assert renderer._animation_controller._frames_to_render == TEXT_CLEAR_REDRAW_FRAMES
 
 
 def test_renderer_render_frame_not_running(

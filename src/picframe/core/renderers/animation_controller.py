@@ -87,6 +87,7 @@ class AnimationController:
         """
         self._state = RenderState.TRANSITIONING
         self._image_alpha = 0.0
+        self._text_alpha = 0.0
         self._next_tm = current_time + self._time_delay
         self._kb_xstep = kb_xstep
         self._kb_ystep = kb_ystep
