@@ -202,6 +202,40 @@ def _workflow_config_from_app_config(config: AppConfig) -> dict[str, dict[str, A
     }
 
 
+async def _send_websocket_text(websocket: WebSocket, message: str) -> bool:
+    """Send a WebSocket message, treating already-closed clients as disconnected."""
+    try:
+        await websocket.send_text(message)
+        return True
+    except WebSocketDisconnect:
+        return False
+    except RuntimeError as exc:
+        logger.debug("WebSocket send skipped after close: %s", exc)
+        return False
+
+
+async def _run_websocket_tasks(*coroutines: Any) -> None:
+    """Run paired WebSocket send/receive loops until either side disconnects."""
+    tasks = [asyncio.create_task(coroutine) for coroutine in coroutines]
+    try:
+        done, pending = await asyncio.wait(
+            set(tasks),
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+        if pending:
+            await asyncio.gather(*pending, return_exceptions=True)
+        for task in done:
+            task.result()
+    except WebSocketDisconnect:
+        pass
+    finally:
+        for task in tasks:
+            if not task.done():
+                task.cancel()
+
+
 def _path_picker_root() -> Path:
     return Path.home().expanduser().resolve()
 
@@ -697,7 +731,10 @@ def create_app(
             payload = event.to_dict()
             payload["type"] = "LogEvent"
             snapshot_events.append(payload)
-        await websocket.send_text(json.dumps({"type": "LogSnapshot", "events": snapshot_events}))
+        if not await _send_websocket_text(
+            websocket, json.dumps({"type": "LogSnapshot", "events": snapshot_events})
+        ):
+            return
         log_event_buffer.subscribe(handle_log_event)
 
         async def receive_messages() -> None:
@@ -710,21 +747,13 @@ def create_app(
         async def send_messages() -> None:
             try:
                 while True:
-                    await websocket.send_text(await send_queue.get())
+                    if not await _send_websocket_text(websocket, await send_queue.get()):
+                        return
             except WebSocketDisconnect:
                 pass
 
         try:
-            receive_task = asyncio.create_task(receive_messages())
-            send_task = asyncio.create_task(send_messages())
-            done, pending = await asyncio.wait(
-                {receive_task, send_task},
-                return_when=asyncio.FIRST_COMPLETED,
-            )
-            for task in pending:
-                task.cancel()
-            for task in done:
-                task.result()
+            await _run_websocket_tasks(receive_messages(), send_messages())
         finally:
             log_event_buffer.unsubscribe(handle_log_event)
 
@@ -882,7 +911,8 @@ def create_app(
                                                 config_payload
                                             )
                                         except HTTPException as exc:
-                                            await websocket.send_text(
+                                            sent = await _send_websocket_text(
+                                                websocket,
                                                 json.dumps(
                                                     {
                                                         "type": "StateEvent",
@@ -892,8 +922,10 @@ def create_app(
                                                             "message": exc.detail,
                                                         },
                                                     }
-                                                )
+                                                ),
                                             )
+                                            if not sent:
+                                                return
                                             continue
                                     event_publisher.publish(
                                         CommandEvent(
@@ -909,16 +941,13 @@ def create_app(
             try:
                 while True:
                     msg = await send_queue.get()
-                    await websocket.send_text(msg)
+                    if not await _send_websocket_text(websocket, msg):
+                        return
             except WebSocketDisconnect:
                 pass
 
         try:
-            # Run both tasks concurrently
-            await asyncio.gather(
-                receive_messages(),
-                send_messages(),
-            )
+            await _run_websocket_tasks(receive_messages(), send_messages())
         except WebSocketDisconnect:
             logger.info("WebSocket client disconnected")
         except Exception as e:

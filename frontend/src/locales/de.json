@@ -9,6 +9,16 @@
     "settings": "Einstellungen",
     "logs": "Logs"
   },
+  "connection": {
+    "live": "Live",
+    "connecting": "Verbinde",
+    "reconnecting": "Verbinde neu",
+    "offline": "Offline",
+    "liveTitle": "Echtzeit-Steuerverbindung ist aktiv.",
+    "connectingTitle": "Echtzeit-Steuerverbindung wird aufgebaut.",
+    "reconnectingTitle": "Echtzeit-Steuerverbindung getrennt. Neuer Versuch...",
+    "offlineTitle": "Echtzeit-Steuerverbindung ist offline."
+  },
   "remote": {
     "connecting": "Verbinde mit Picframe...",
     "establishing": "Stelle Echtzeit-WebSocket-Verbindung her.",

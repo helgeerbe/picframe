@@ -53,7 +53,7 @@ import HelperText from '../components/HelperText.vue'
 const { t } = useI18n()
 const playerStore = usePlayerStore()
 const configStore = useConfigStore()
-const { currentMedia, isPlaying, brightness, isDisplayOn, isConnected } = storeToRefs(playerStore)
+const { currentMedia, isPlaying, brightness, isDisplayOn } = storeToRefs(playerStore)
 const {
   config: appConfig,
   filterOptions,
@@ -123,11 +123,7 @@ const handleDocumentKeydown = (event: KeyboardEvent) => {
   }
 }
 
-// Initialize WebSocket connection if not already connected
 onMounted(() => {
-  if (!isConnected.value) {
-    playerStore.connect()
-  }
   void configStore.fetchWorkflowConfig()
   void configStore.fetchFilterOptions()
   document.addEventListener('click', handleDocumentClick)
@@ -808,16 +804,6 @@ const metadataFields = computed(() => {
 
 <template>
   <div class="max-w-7xl mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
-    
-    <!-- Connection Status Banner -->
-    <div v-if="!isConnected" class="bg-amber-500/10 border-l-4 border-amber-500 text-amber-700 dark:text-amber-400 p-4 rounded-r-lg shadow-sm flex items-center" role="alert">
-      <div class="animate-pulse mr-3 h-3 w-3 bg-amber-500 rounded-full"></div>
-      <div>
-        <p class="font-bold text-sm">{{ t('remote.connecting') }}</p>
-        <p class="text-xs opacity-80">{{ t('remote.establishing') }}</p>
-      </div>
-    </div>
-
     <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
       
       <!-- Left Column: Media & Controls -->

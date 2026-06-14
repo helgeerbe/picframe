@@ -92,3 +92,22 @@ def test_clock_renderer_applies_overlay_style(mock_display, mock_shader):
     assert kwargs["justify"] == "L"
     assert kwargs["color"][3] == 127
     assert kwargs["width"] == mock_display.width - (int(mock_display.width * 0.05) * 2)
+
+
+def test_clock_renderer_rebuilds_when_style_changes_at_same_time(mock_display, mock_shader):
+    with patch('picframe.core.renderers.components.clock_renderer.pi3d.FixedString') as mock_fixed_string:
+        mock_fixed_string.return_value.sprite = MagicMock()
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+
+        with patch('picframe.core.renderers.components.clock_renderer.datetime') as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "12:00"
+
+            renderer.update_config(OverlayConfig(show_clock=True, clock_text_sz=72))
+            renderer.draw()
+
+            renderer.update_config(OverlayConfig(show_clock=True, clock_text_sz=96))
+            renderer.draw()
+
+    assert mock_fixed_string.call_count == 2
+    assert mock_fixed_string.call_args_list[0].kwargs["font_size"] == 72
+    assert mock_fixed_string.call_args_list[1].kwargs["font_size"] == 96

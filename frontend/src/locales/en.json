@@ -9,6 +9,16 @@
     "settings": "Settings",
     "logs": "Logs"
   },
+  "connection": {
+    "live": "Live",
+    "connecting": "Connecting",
+    "reconnecting": "Reconnecting",
+    "offline": "Offline",
+    "liveTitle": "Realtime control connection is live.",
+    "connectingTitle": "Realtime control connection is starting.",
+    "reconnectingTitle": "Realtime control connection disconnected. Retrying...",
+    "offlineTitle": "Realtime control connection is offline."
+  },
   "remote": {
     "connecting": "Connecting to Picframe...",
     "establishing": "Establishing real-time WebSocket connection.",

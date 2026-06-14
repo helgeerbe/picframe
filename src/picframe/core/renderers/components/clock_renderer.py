@@ -24,14 +24,35 @@ class ClockRenderer:
         self._current_time_str = ""
         self._config: OverlayConfig | None = None
         self._brightness = 1.0
+        self._visual_signature: tuple[Any, ...] | None = None
 
     def update_config(self, config: OverlayConfig, brightness: float = 1.0) -> None:
         """Update the clock configuration."""
+        visual_signature = self._build_visual_signature(config, brightness)
+        if visual_signature != self._visual_signature:
+            self._clock_block = None
+            self._current_time_str = ""
+            self._visual_signature = visual_signature
+
         self._config = config
         self._brightness = brightness
         if not config.show_clock:
             self._clock_block = None
             self._current_time_str = ""
+
+    @staticmethod
+    def _build_visual_signature(config: OverlayConfig, brightness: float) -> tuple[Any, ...]:
+        return (
+            bool(config.show_clock),
+            str(config.clock_format),
+            str(config.clock_justify or "R").upper(),
+            int(config.clock_text_sz),
+            float(config.clock_opacity),
+            str(config.clock_top_bottom or "T").upper(),
+            float(config.clock_wdt_offset_pct),
+            float(config.clock_hgt_offset_pct),
+            float(brightness),
+        )
 
     def has_changed(self) -> bool:
         """Check if the clock string needs to be updated based on the current time."""

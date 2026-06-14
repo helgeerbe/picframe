@@ -2,13 +2,13 @@ import asyncio
 import base64
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 from fastapi import FastAPI
 
-from picframe.api.app import create_app, media_event_to_response_dto
+from picframe.api.app import create_app, media_event_to_response_dto, _send_websocket_text
 from picframe.core.events.dto import Command
 from picframe.core.services.basic_auth import AUTH_COOKIE_NAME, BasicAuthStore
 from picframe.core.services.resource_paths import ResourcePaths
@@ -171,6 +171,17 @@ def test_openapi_documents_websocket_contract(client: ASGITestClient) -> None:
         {"$ref": "#/components/schemas/LogSnapshotMessage"},
         {"$ref": "#/components/schemas/LogEventMessage"},
     ]
+
+
+def test_websocket_send_helper_treats_closed_socket_as_disconnect() -> None:
+    websocket = MagicMock()
+    websocket.send_text = AsyncMock(
+        side_effect=RuntimeError(
+            "Unexpected ASGI message 'websocket.send', after sending 'websocket.close'"
+        )
+    )
+
+    assert asyncio.run(_send_websocket_text(websocket, '{"type":"StateEvent"}')) is False
 
 
 def test_cors_headers(client: ASGITestClient) -> None:

@@ -22,6 +22,7 @@ class TextRenderer:
         self._text_blocks: list[pi3d.FixedString] = []
         self._current_text = ""
         self._current_texts: tuple[str, ...] = ()
+        self._visual_signature: tuple[Any, ...] | None = None
 
     def update_config(self, config: OverlayConfig, brightness: float = 1.0) -> None:
         """Update the text overlay based on the new configuration."""
@@ -34,12 +35,19 @@ class TextRenderer:
             self._text_blocks = []
             self._current_text = ""
             self._current_texts = ()
+            self._visual_signature = None
             return
 
-        if text_strings != self._current_texts or not self._text_blocks:
+        visual_signature = self._build_visual_signature(config, brightness)
+        if (
+            text_strings != self._current_texts
+            or visual_signature != self._visual_signature
+            or not self._text_blocks
+        ):
             self._logger.debug(f"Rebuilding text overlay: {text_strings}")
             self._current_text = config.text_string
             self._current_texts = text_strings
+            self._visual_signature = visual_signature
 
             font_size = max(8, int(config.show_text_sz))
             margin = max(0, int(config.text_x_margin))
@@ -90,6 +98,18 @@ class TextRenderer:
                 self._text_blocks.append(text_block)
 
             self._text_block = self._text_blocks[0] if self._text_blocks else None
+
+    @staticmethod
+    def _build_visual_signature(config: OverlayConfig, brightness: float) -> tuple[Any, ...]:
+        return (
+            int(config.show_text_sz),
+            str(config.text_justify or "L").upper(),
+            float(config.text_opacity),
+            float(config.text_bkg_hgt),
+            int(config.text_x_margin),
+            int(config.text_y_margin),
+            float(brightness),
+        )
 
     def set_alpha(self, alpha: float) -> None:
         """Set the alpha transparency of the text."""

@@ -20,6 +20,19 @@ const showDate = ref(false)
 const showFolder = ref(false)
 const showLocation = ref(false)
 
+const syncControlsFromConfig = () => {
+  const viewerConfig = configStore.config?.viewer || {}
+  showClock.value = !!viewerConfig.show_clock
+
+  const showTextStr = (viewerConfig.text_overlay_format || '').toLowerCase()
+  showTitle.value = showTextStr.includes('title')
+  showCaption.value = showTextStr.includes('caption')
+  showName.value = showTextStr.includes('name')
+  showDate.value = showTextStr.includes('date')
+  showFolder.value = showTextStr.includes('folder')
+  showLocation.value = showTextStr.includes('location')
+}
+
 onMounted(async () => {
   if (!configStore.config || Object.keys(configStore.config).length === 0) {
     try {
@@ -28,17 +41,7 @@ onMounted(async () => {
       console.error("Failed to fetch config for overlays", e)
     }
   }
-  
-  const viewerConfig = configStore.config?.viewer || {}
-  showClock.value = !!viewerConfig.show_clock
-  
-  const showTextStr = (viewerConfig.text_overlay_format || '').toLowerCase()
-  showTitle.value = showTextStr.includes('title')
-  showCaption.value = showTextStr.includes('caption')
-  showName.value = showTextStr.includes('name')
-  showDate.value = showTextStr.includes('date')
-  showFolder.value = showTextStr.includes('folder')
-  showLocation.value = showTextStr.includes('location')
+  syncControlsFromConfig()
   
   isLoading.value = false
 })
@@ -62,8 +65,11 @@ const handleChange = () => {
     }
   }
   
-  // Send unified configuration payload via WebSocket
-  playerStore.sendCommand('SET_CONFIG', payload)
+  const sent = playerStore.sendCommand('SET_CONFIG', payload)
+  if (!sent) {
+    syncControlsFromConfig()
+    return
+  }
   
   // Update local config store to stay in sync
   if (configStore.config && configStore.config.viewer) {
@@ -107,8 +113,17 @@ const controls = [
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t(ctrl.labelKey) }}</span>
             <HelperText :text="t(ctrl.helperKey)" />
           </div>
-          <label class="relative inline-flex items-center cursor-pointer">
-            <input type="checkbox" class="sr-only peer" v-model="ctrl.ref.value" @change="handleChange">
+          <label
+            class="relative inline-flex items-center"
+            :class="playerStore.isConnected ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'"
+          >
+            <input
+              v-model="ctrl.ref.value"
+              type="checkbox"
+              class="sr-only peer"
+              :disabled="!playerStore.isConnected"
+              @change="handleChange"
+            >
             <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
           </label>
         </div>

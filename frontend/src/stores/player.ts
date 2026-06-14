@@ -1,5 +1,7 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
+
+export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline'
 
 export interface MediaItem {
   id?: number | null
@@ -21,7 +23,8 @@ export const usePlayerStore = defineStore('player', () => {
   const isPlaying = ref(false)
   const brightness = ref(1.0)
   const isDisplayOn = ref(true)
-  const isConnected = ref(false)
+  const connectionStatus = ref<ConnectionStatus>('offline')
+  const isConnected = computed(() => connectionStatus.value === 'connected')
   const systemError = ref<{
     message: string
     component: string
@@ -30,8 +33,17 @@ export const usePlayerStore = defineStore('player', () => {
   } | null>(null)
 
   let ws: WebSocket | null = null
+  let reconnectTimer: number | null = null
+  const reconnectDelayMs = 5000
 
   function connect() {
+    if (ws?.readyState === WebSocket.OPEN || ws?.readyState === WebSocket.CONNECTING) {
+      return
+    }
+    if (reconnectTimer !== null) {
+      return
+    }
+
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
     // In development, connect to the FastAPI backend port (e.g., 9000)
@@ -39,16 +51,20 @@ export const usePlayerStore = defineStore('player', () => {
       ? `ws://${window.location.hostname}:9000/ws/state`
       : `${protocol}//${host}/ws/state`
 
-    ws = new WebSocket(wsUrl)
+    connectionStatus.value = connectionStatus.value === 'reconnecting' ? 'reconnecting' : 'connecting'
+    const socket = new WebSocket(wsUrl)
+    ws = socket
 
-    ws.onopen = () => {
-      isConnected.value = true
+    socket.onopen = () => {
+      if (ws !== socket) return
+      connectionStatus.value = 'connected'
       console.log('WebSocket connected')
       // Request initial state upon connection
       sendCommand('REQUEST_STATE')
     }
 
-    ws.onmessage = (event) => {
+    socket.onmessage = (event) => {
+      if (ws !== socket) return
       try {
         const data = JSON.parse(event.data)
         if (data.type === 'MediaChangedEvent') {
@@ -90,24 +106,39 @@ export const usePlayerStore = defineStore('player', () => {
       }
     }
 
-    ws.onclose = () => {
-      isConnected.value = false
+    socket.onclose = () => {
+      if (ws !== socket) return
+      ws = null
       console.log('WebSocket disconnected, retrying in 5s...')
-      setTimeout(connect, 5000)
+      scheduleReconnect()
     }
 
-    ws.onerror = (error) => {
+    socket.onerror = (error) => {
+      if (ws !== socket) return
+      connectionStatus.value = 'offline'
       console.error('WebSocket error:', error)
-      ws?.close()
+      socket.close()
     }
   }
 
-  function sendCommand(command: string, payload?: any) {
-    if (ws && isConnected.value) {
-      ws.send(JSON.stringify({ command, ...payload }))
-    } else {
-      console.warn('Cannot send command, WebSocket not connected')
+  function scheduleReconnect() {
+    if (reconnectTimer !== null) {
+      return
     }
+    connectionStatus.value = 'reconnecting'
+    reconnectTimer = window.setTimeout(() => {
+      reconnectTimer = null
+      connect()
+    }, reconnectDelayMs)
+  }
+
+  function sendCommand(command: string, payload?: any): boolean {
+    if (ws && isConnected.value && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ command, ...payload }))
+      return true
+    }
+    console.warn('Cannot send command, WebSocket not connected')
+    return false
   }
 
   function normalizeMediaUrls(media: MediaItem): MediaItem {
@@ -170,6 +201,7 @@ export const usePlayerStore = defineStore('player', () => {
     isPlaying,
     brightness,
     isConnected,
+    connectionStatus,
     systemError,
     connect,
     sendCommand,
