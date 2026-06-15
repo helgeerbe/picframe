@@ -600,7 +600,7 @@ class Pi3dRenderer(IRenderer):
         except queue.Empty:
             pass
 
-        if self._video_reveal_parked:
+        if self._video_reveal_parked and anim_state.frames_to_render <= 0:
             time.sleep(0.05)
             return True
 

@@ -981,6 +981,69 @@ class FakePipeline:
         return gst_worker.Gst.StateChangeReturn.SUCCESS
 
 
+class FakeSinkStats:
+    def __init__(self, rendered: int) -> None:
+        self.rendered = rendered
+
+    def get_value(self, key: str) -> int:
+        assert key == "rendered"
+        return self.rendered
+
+
+def test_async_done_waits_for_sink_rendered_stats_before_first_frame_event(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker.conn = MagicMock()
+    worker.conn.closed = False
+    stats = FakeSinkStats(rendered=0)
+    sink = MagicMock()
+    sink.get_property.return_value = stats
+    pipeline = MagicMock()
+    pipeline.get_by_name.return_value = sink
+    worker.pipeline = pipeline
+    timeout_add = MagicMock(return_value=123)
+    monkeypatch.setattr(gst_worker.GLib, "timeout_add", timeout_add)
+
+    worker._on_async_done(MagicMock(), MagicMock())
+
+    pipeline.set_state.assert_called_once_with(gst_worker.Gst.State.PLAYING)
+    timeout_add.assert_called_once()
+    assert timeout_add.call_args.args[0] == gst_worker.FIRST_FRAME_PROBE_INTERVAL_MS
+    assert callable(timeout_add.call_args.args[1])
+    worker.conn.send.assert_not_called()
+    assert worker._first_frame_probe_source_id == 123
+
+    stats.rendered = 1
+
+    assert worker._first_frame_probe_tick() is False
+    sent_event = json.loads(worker.conn.send.call_args.args[0])
+    assert sent_event["type"] == "first_frame_rendered"
+    assert worker._first_frame_event_sent is True
+    assert worker._first_frame_probe_source_id is None
+
+
+def test_async_done_accepts_first_frame_when_sink_stats_are_unavailable(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker.conn = MagicMock()
+    worker.conn.closed = False
+    sink = MagicMock()
+    sink.get_property.side_effect = AttributeError("no stats")
+    pipeline = MagicMock()
+    pipeline.get_by_name.return_value = sink
+    worker.pipeline = pipeline
+    timeout_add = MagicMock()
+    monkeypatch.setattr(gst_worker.GLib, "timeout_add", timeout_add)
+
+    worker._on_async_done(MagicMock(), MagicMock())
+
+    sent_event = json.loads(worker.conn.send.call_args.args[0])
+    assert sent_event["type"] == "first_frame_rendered"
+    timeout_add.assert_not_called()
+
+
 def test_start_pipeline_uses_gtk_playbin_when_geometry_is_valid(monkeypatch) -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     fake_pipeline = FakePipeline()

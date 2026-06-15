@@ -8,7 +8,9 @@ It communicates with the main application process via an IPC socket using JSON m
 import argparse
 import logging
 import os
+import re
 import sys
+import time
 from dataclasses import dataclass
 from multiprocessing.connection import Connection, Listener
 from typing import Any
@@ -46,6 +48,8 @@ PIPELINE_SKIPPED = "skipped"
 DEFAULT_SOFTWARE_DECODE_LIMIT = "1280x720"
 UNSUPPORTED_MEDIA_CODE = "unsupported_media"
 EOS_GTK_WINDOW_OPACITY = 0.99
+FIRST_FRAME_PROBE_INTERVAL_MS = 16
+FIRST_FRAME_PROBE_TIMEOUT_SECONDS = 2.0
 
 
 @dataclass(frozen=True)
@@ -191,6 +195,9 @@ class GstWorker:
         self._gtk_sink_widget: Any = None
         self._gtk_video_sink: Any = None
         self._gtk_pump_source_id: int | None = None
+        self._first_frame_event_sent = False
+        self._first_frame_probe_source_id: int | None = None
+        self._first_frame_probe_started_at = 0.0
 
     @staticmethod
     def _read_hardware_model() -> str:
@@ -291,6 +298,118 @@ class GstWorker:
                 self.conn.send(event.to_json())
             except Exception as e:
                 logger.error(f"Failed to send IPC event: {e}")
+
+    def _send_first_frame_rendered_once(self) -> None:
+        if self._first_frame_event_sent:
+            return
+        self._first_frame_event_sent = True
+        self._first_frame_probe_source_id = None
+        self._send_event(FirstFrameRenderedEvent())
+
+    def _current_video_sink(self) -> Any | None:
+        if self._gtk_video_sink is not None:
+            return self._gtk_video_sink
+        if self.pipeline is None:
+            return None
+        try:
+            return self.pipeline.get_by_name("sink")
+        except Exception:
+            return None
+
+    @staticmethod
+    def _stats_rendered_count(stats: Any) -> int | None:
+        if stats is None:
+            return None
+
+        if isinstance(stats, dict):
+            value = stats.get("rendered")
+            try:
+                return int(value)
+            except (TypeError, ValueError):
+                return None
+
+        try:
+            value = stats.get_value("rendered")
+            return int(value)
+        except Exception:
+            pass
+
+        try:
+            stats_text = stats.to_string()
+        except Exception:
+            stats_text = str(stats)
+        match = re.search(r"\brendered\s*[:=]\s*(?:\([^)]*\))?(\d+)", stats_text)
+        if match is None:
+            return None
+        try:
+            return int(match.group(1))
+        except ValueError:
+            return None
+
+    def _current_sink_rendered_count(self) -> int | None:
+        sink = self._current_video_sink()
+        if sink is None:
+            return None
+        try:
+            stats = sink.get_property("stats")
+        except Exception:
+            return None
+        return self._stats_rendered_count(stats)
+
+    def _schedule_first_frame_probe(self) -> None:
+        if self._first_frame_event_sent:
+            return
+
+        rendered_count = self._current_sink_rendered_count()
+        if rendered_count is None:
+            logger.debug("Video sink render stats unavailable; accepting async-done.")
+            self._send_first_frame_rendered_once()
+            return
+        if rendered_count > 0:
+            self._send_first_frame_rendered_once()
+            return
+
+        if self._first_frame_probe_source_id is not None or not GST_AVAILABLE:
+            return
+        self._first_frame_probe_started_at = time.monotonic()
+        self._first_frame_probe_source_id = GLib.timeout_add(
+            FIRST_FRAME_PROBE_INTERVAL_MS,
+            self._first_frame_probe_tick,
+        )
+
+    def _first_frame_probe_tick(self) -> bool:
+        if self.pipeline is None or self._first_frame_event_sent:
+            self._first_frame_probe_source_id = None
+            return False
+
+        rendered_count = self._current_sink_rendered_count()
+        if rendered_count is None:
+            logger.debug("Video sink render stats became unavailable; accepting async-done.")
+            self._send_first_frame_rendered_once()
+            return False
+        if rendered_count > 0:
+            logger.debug("Video sink rendered first frame.")
+            self._send_first_frame_rendered_once()
+            return False
+
+        elapsed = time.monotonic() - self._first_frame_probe_started_at
+        if elapsed >= FIRST_FRAME_PROBE_TIMEOUT_SECONDS:
+            logger.warning(
+                "Timed out waiting for video sink rendered-frame stats; "
+                "main process first-frame timeout remains active."
+            )
+            self._first_frame_probe_source_id = None
+            return False
+        return True
+
+    def _stop_first_frame_probe(self) -> None:
+        if self._first_frame_probe_source_id is not None and GST_AVAILABLE:
+            try:
+                GLib.source_remove(self._first_frame_probe_source_id)
+            except Exception:
+                pass
+        self._first_frame_probe_source_id = None
+        self._first_frame_probe_started_at = 0.0
 
     def _dispatch_command(self, cmd: IpcMessage) -> None:
         """Dispatch an incoming command to the appropriate handler."""
@@ -1745,6 +1864,8 @@ class GstWorker:
         self._current_decision = decision
         self._current_hardware_limit = hardware_limit
         self._current_software_limit = software_limit
+        self._first_frame_event_sent = False
+        self._first_frame_probe_started_at = 0.0
 
     def _send_video_diagnostics(
         self,
@@ -2114,6 +2235,8 @@ class GstWorker:
             self.pipeline.set_state(Gst.State.PAUSED)
 
     def _handle_stop(self) -> None:
+        self._stop_first_frame_probe()
+        self._first_frame_event_sent = False
         if self.pipeline:
             self.pipeline.set_state(Gst.State.NULL)
             if self.bus:
@@ -2339,10 +2462,10 @@ class GstWorker:
         )
 
     def _on_async_done(self, bus: Any, msg: Any) -> None:
-        self._send_event(FirstFrameRenderedEvent())
         # Ensure pipeline is playing after async-done
         if self.pipeline:
             self.pipeline.set_state(Gst.State.PLAYING)
+        self._schedule_first_frame_probe()
 
     def cleanup(self) -> None:
         self._handle_stop()

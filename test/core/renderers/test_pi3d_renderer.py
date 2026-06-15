@@ -422,6 +422,27 @@ def test_renderer_render_frame_video_reveal_parked(
     mock_image_renderer.draw.assert_not_called()
 
 
+@patch("time.sleep")
+def test_renderer_render_frame_drains_forced_video_reveal_redraws_before_parking(
+    mock_sleep: MagicMock,
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._video_reveal_parked = True
+    renderer._animation_controller.force_redraw(1)
+
+    result = renderer.render_frame()
+
+    assert result is True
+    mock_sleep.assert_not_called()
+    mock_image_renderer.draw.assert_called_once_with()
+
+
 def test_renderer_config_event_updates_image_renderer(
     config: RendererConfig,
     mock_pi3d: MagicMock,
