@@ -12,9 +12,11 @@ from picframe.core.events.dto import (
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_VIDEO_FIRST_FRAME,
     RENDER_WAKE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfigUpdatedEvent,
+    TransitionCompletedEvent,
 )
 from picframe.core.renderers.pi3d_renderer import (
     PI3D_LABWC_IDENTIFIER,
@@ -299,6 +301,28 @@ def test_renderer_execute_video(
     mock_image_renderer.execute.assert_called_once_with(command)
     # The state should not change to TRANSITIONING if execute returns False
     assert renderer._animation_controller._state == RenderState.STATIC
+
+
+def test_renderer_execute_video_first_frame_marks_delayed_handoff(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    mock_image_renderer.execute.return_value = (True, 0.0, 0.0)
+
+    command = RenderCommand(
+        image_path="/cache/video.1.frame",
+        overlay=OverlayConfig(show_text=True, text_string="Video"),
+        render_action=RENDER_VIDEO_FIRST_FRAME,
+    )
+
+    renderer.execute(command)
+
+    assert renderer._video_first_frame_transition is True
+    assert renderer._was_transitioning is True
+    assert renderer._animation_controller._state == RenderState.TRANSITIONING
 
 
 def test_renderer_resume_forces_redraw_frames(
@@ -624,6 +648,152 @@ def test_renderer_render_frame_static(
     mock_sleep.assert_called_once_with(0.05)
     if renderer._display:
         renderer._display.loop_running.assert_not_called()
+
+
+@patch("time.sleep")
+def test_renderer_normal_transition_completion_ignores_text_hold(
+    mock_sleep: MagicMock,
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    publisher = MagicMock()
+    renderer = Pi3dRenderer(config, event_publisher=publisher)
+    renderer.start()
+    renderer._was_transitioning = True
+    renderer._video_first_frame_transition = False
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._show_text = True
+    renderer._animation_controller._text_alpha = 1.0
+    renderer._animation_controller._text_timer = 200.0
+    renderer._last_text_alpha = 1.0
+    renderer._last_redraw_time = 100.0
+    renderer._overlay_config = OverlayConfig(
+        show_clock=False,
+        show_text=True,
+        text_string="Photo",
+    )
+    mock_clock_renderer.has_changed.return_value = False
+
+    with patch("time.time", return_value=101.0):
+        result = renderer.render_frame()
+
+    assert result is True
+    assert isinstance(publisher.publish.call_args.args[0], TransitionCompletedEvent)
+    assert renderer._was_transitioning is False
+    mock_sleep.assert_called_once_with(0.05)
+
+
+@patch("time.sleep")
+def test_renderer_video_first_frame_waits_while_text_is_visible(
+    mock_sleep: MagicMock,
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    publisher = MagicMock()
+    renderer = Pi3dRenderer(config, event_publisher=publisher)
+    renderer.start()
+    renderer._was_transitioning = True
+    renderer._video_first_frame_transition = True
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._image_alpha = 1.0
+    renderer._animation_controller._show_text = True
+    renderer._animation_controller._text_alpha = 1.0
+    renderer._animation_controller._text_timer = 200.0
+    renderer._last_text_alpha = 1.0
+    renderer._last_redraw_time = 100.0
+    renderer._overlay_config = OverlayConfig(
+        show_clock=False,
+        show_text=True,
+        text_string="Video",
+    )
+    mock_clock_renderer.has_changed.return_value = False
+
+    with patch("time.time", return_value=101.0):
+        result = renderer.render_frame()
+
+    assert result is True
+    publisher.publish.assert_not_called()
+    assert renderer._was_transitioning is True
+    mock_sleep.assert_called_once_with(0.05)
+
+
+def test_renderer_video_first_frame_waits_for_clean_redraw_frames(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    publisher = MagicMock()
+    renderer = Pi3dRenderer(config, event_publisher=publisher)
+    renderer.start()
+    renderer._was_transitioning = True
+    renderer._video_first_frame_transition = True
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._image_alpha = 1.0
+    renderer._animation_controller._show_text = True
+    renderer._animation_controller._text_alpha = 0.0
+    renderer._animation_controller._frames_to_render = 1
+    renderer._last_text_alpha = 0.0
+    renderer._last_redraw_time = 100.0
+    renderer._overlay_config = OverlayConfig(
+        show_clock=False,
+        show_text=True,
+        text_string="Video",
+    )
+    mock_clock_renderer.has_changed.return_value = False
+
+    with patch("time.time", return_value=101.0):
+        result = renderer.render_frame()
+
+    assert result is True
+    publisher.publish.assert_not_called()
+    assert renderer._was_transitioning is True
+    mock_image_renderer.draw.assert_called_once_with()
+
+
+@patch("time.sleep")
+def test_renderer_video_first_frame_completes_after_text_fade_out(
+    mock_sleep: MagicMock,
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    publisher = MagicMock()
+    renderer = Pi3dRenderer(config, event_publisher=publisher)
+    renderer.start()
+    renderer._was_transitioning = True
+    renderer._video_first_frame_transition = True
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._image_alpha = 1.0
+    renderer._animation_controller._show_text = True
+    renderer._animation_controller._text_alpha = 0.0
+    renderer._animation_controller._frames_to_render = 0
+    renderer._last_text_alpha = 0.0
+    renderer._last_redraw_time = 100.0
+    renderer._overlay_config = OverlayConfig(
+        show_clock=False,
+        show_text=True,
+        text_string="Video",
+    )
+    mock_clock_renderer.has_changed.return_value = False
+
+    with patch("time.time", return_value=101.0):
+        result = renderer.render_frame()
+
+    assert result is True
+    assert isinstance(publisher.publish.call_args.args[0], TransitionCompletedEvent)
+    assert renderer._was_transitioning is False
+    assert renderer._video_first_frame_transition is False
+    mock_sleep.assert_called_once_with(0.05)
 
 
 def test_renderer_enqueue_task(

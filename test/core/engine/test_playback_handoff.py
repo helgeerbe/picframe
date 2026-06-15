@@ -7,6 +7,7 @@ from picframe.core.engine.playback import PlaybackEngine
 from picframe.core.events.dto import (
     PlaybackCompletedEvent,
     RENDER_WAKE_VIDEO_REVEAL,
+    RENDER_VIDEO_FIRST_FRAME,
     RenderCommand,
     State,
     TransitionCompletedEvent,
@@ -100,6 +101,7 @@ def test_video_handoff_sequence(
     render_call = mock_renderer.execute.call_args[0][0]
     assert isinstance(render_call, RenderCommand)
     assert render_call.image_path == "/path/to/video.1.frame"
+    assert render_call.render_action == RENDER_VIDEO_FIRST_FRAME
     
     # 3. Transition completed for the first frame
     engine._handle_transition_completed(TransitionCompletedEvent())

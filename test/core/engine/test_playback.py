@@ -18,6 +18,7 @@ from picframe.core.events.dto import (
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
     RENDER_WAKE_VIDEO_REVEAL,
+    RENDER_VIDEO_FIRST_FRAME,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
@@ -840,6 +841,7 @@ def test_engine_trigger_next_media_video(
     call_args = mock_renderer.execute.call_args[0][0]
     assert isinstance(call_args, RenderCommand)
     assert call_args.image_path == "/path/to/video.1.frame"
+    assert call_args.render_action == RENDER_VIDEO_FIRST_FRAME
     assert mock_get_frames.call_args.kwargs["extract_missing"] is True
 
 

@@ -18,12 +18,14 @@ from picframe.core.events.dto import (
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_VIDEO_FIRST_FRAME,
     RENDER_WAKE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
     State,
     StateEvent,
+    TransitionCompletedEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.models.media import DisplayItem, DisplayLayout
@@ -121,6 +123,7 @@ class Pi3dRenderer(IRenderer):
         self._display: Any | None = None
         self._image_renderer: ImageRenderer | None = None
         self._video_reveal_parked = False
+        self._video_first_frame_transition = False
         
         # Text Overlay State
         self._overlay_config = self._build_overlay_config(text_string="")
@@ -481,6 +484,30 @@ class Pi3dRenderer(IRenderer):
             self._display.destroy()
             self._display = None
 
+    def _overlay_has_visible_text(self) -> bool:
+        if not self._overlay_config.show_text:
+            return False
+        if self._overlay_config.text_string:
+            return True
+        return any(self._overlay_config.text_strings)
+
+    def _transition_completed_ready(self, anim_state: Any) -> bool:
+        if not getattr(self, '_was_transitioning', False):
+            return False
+        if anim_state.render_state != RenderState.STATIC:
+            return False
+        if not self._video_first_frame_transition:
+            return True
+        return self._animation_controller.video_handoff_ready(anim_state)
+
+    def _publish_transition_completed_if_ready(self, anim_state: Any) -> None:
+        if not self._transition_completed_ready(anim_state):
+            return
+        if self._event_publisher is not None:
+            self._event_publisher.publish(TransitionCompletedEvent())
+        self._was_transitioning = False
+        self._video_first_frame_transition = False
+
     def execute(self, command: RenderCommand) -> None:
         """
         Load a new image and initiate a transition.
@@ -502,6 +529,7 @@ class Pi3dRenderer(IRenderer):
                 return
             elif command.image_path == "RESUME":
                 self._video_reveal_parked = False
+                self._video_first_frame_transition = False
                 self._image_renderer.clear_video_reveal_texture()
                 self._animation_controller.resume()
                 self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
@@ -531,10 +559,12 @@ class Pi3dRenderer(IRenderer):
                 return
 
             # Delegate to ImageRenderer
+            is_video_first_frame = command.render_action == RENDER_VIDEO_FIRST_FRAME
             success, kb_xstep, kb_ystep = self._image_renderer.execute(command)
             if success:
                 self._video_reveal_parked = False
                 if getattr(command, "background_only", False):
+                    self._video_first_frame_transition = False
                     self._logger.debug("Loaded image into background buffer only.")
                     self._animation_controller.force_redraw(2)
                     # Ensure we wake up from SUSPENDED state to process the redraw
@@ -545,14 +575,20 @@ class Pi3dRenderer(IRenderer):
                         import threading
                         threading.Timer(0.5, self._animation_controller.suspend).start()
                 else:
+                    self._video_first_frame_transition = is_video_first_frame
                     self._animation_controller.start_transition(time.time(), kb_xstep, kb_ystep)
                     self._was_transitioning = True
-                    self._animation_controller.update_text_config(self._overlay_config.show_text, True)
+                    self._animation_controller.update_text_config(
+                        self._overlay_has_visible_text(),
+                        True,
+                    )
                     
                     if self._text_renderer:
                         self._text_renderer.update_config(self._overlay_config)
                     if self._clock_renderer:
                         self._clock_renderer.update_config(self._overlay_config)
+            else:
+                self._video_first_frame_transition = False
                 
         except Exception as e:
             self._logger.error(f"Failed to execute RenderCommand: {e}")
@@ -630,11 +666,7 @@ class Pi3dRenderer(IRenderer):
         # --- STATIC BYPASS ---
         if not needs_redraw:
             # If we just finished a transition, we need to emit the event
-            if getattr(self, '_was_transitioning', False) and anim_state.render_state == RenderState.STATIC:
-                from picframe.core.events.dto import TransitionCompletedEvent
-                if self._event_publisher is not None:
-                    self._event_publisher.publish(TransitionCompletedEvent())
-                self._was_transitioning = False
+            self._publish_transition_completed_if_ready(anim_state)
             time.sleep(0.05) # Yield CPU to OS
             return True      # Keep PlaybackEngine loop alive
 
@@ -650,11 +682,7 @@ class Pi3dRenderer(IRenderer):
             self._animation_controller.force_redraw(TEXT_CLEAR_REDRAW_FRAMES)
 
         # Check for transition completion
-        if anim_state.render_state == RenderState.STATIC and getattr(self, '_was_transitioning', False):
-            if self._event_publisher is not None:
-                from picframe.core.events.dto import TransitionCompletedEvent
-                self._event_publisher.publish(TransitionCompletedEvent())
-            self._was_transitioning = False
+        self._publish_transition_completed_if_ready(anim_state)
 
         self._last_render_state = anim_state.render_state
 

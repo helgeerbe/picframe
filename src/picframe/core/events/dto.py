@@ -6,15 +6,16 @@ across the application. All events are implemented as frozen dataclasses
 to guarantee thread safety when passed between the asynchronous control
 loop and the synchronous render loop.
 """
+
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from typing import Any
-
 
 RENDER_PRELOAD_VIDEO_REVEAL = "PRELOAD_VIDEO_REVEAL"
 RENDER_PROMOTE_VIDEO_REVEAL = "PROMOTE_VIDEO_REVEAL"
 RENDER_PARK_VIDEO_REVEAL = "PARK_VIDEO_REVEAL"
 RENDER_WAKE_VIDEO_REVEAL = "WAKE_VIDEO_REVEAL"
+RENDER_VIDEO_FIRST_FRAME = "VIDEO_FIRST_FRAME"
 
 
 class Command(Enum):

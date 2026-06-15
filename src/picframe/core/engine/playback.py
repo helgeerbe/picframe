@@ -16,6 +16,7 @@ from picframe.core.events.dto import (
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
     RENDER_WAKE_VIDEO_REVEAL,
+    RENDER_VIDEO_FIRST_FRAME,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
@@ -789,7 +790,14 @@ class PlaybackEngine:
                 # 2. Send RenderCommand for the first frame
                 if first_img is not None:
                     self._logger.debug(f"Sending first frame to renderer: {first_frame_path}")
-                    self._renderer.execute(RenderCommand(image_path=first_frame_path, overlay=overlay_config, image_obj=first_img))
+                    self._renderer.execute(
+                        RenderCommand(
+                            image_path=first_frame_path,
+                            overlay=overlay_config,
+                            image_obj=first_img,
+                            render_action=RENDER_VIDEO_FIRST_FRAME,
+                        )
+                    )
                     
                     # 3. Change state to PREPARING_VIDEO
                     self._change_state(State.PREPARING_VIDEO)

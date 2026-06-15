@@ -112,6 +112,18 @@ class AnimationController:
         """
         self._frames_to_render = frames
 
+    def video_handoff_ready(self, animation_state: AnimationState) -> bool:
+        """Return whether a video first-frame title card is clean for handoff."""
+        if animation_state.render_state != RenderState.STATIC:
+            return False
+        if animation_state.image_alpha < 1.0:
+            return False
+        if animation_state.frames_to_render > 0 or self._frames_to_render > 0:
+            return False
+        if not self._show_text:
+            return True
+        return animation_state.text_alpha <= 0.0
+
     def update_text_config(self, show_text: bool, text_changed: bool) -> None:
         """
         Update text overlay configuration and trigger animations if needed.

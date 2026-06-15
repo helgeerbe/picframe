@@ -1,5 +1,11 @@
 import pytest
-from picframe.core.renderers.animation_controller import AnimationController, RenderState
+
+from picframe.core.renderers.animation_controller import (
+    AnimationController,
+    AnimationState,
+    RenderState,
+)
+
 
 @pytest.fixture
 def config():
@@ -105,3 +111,63 @@ def test_force_redraw(config):
     controller.force_redraw(5)
     state = controller.update(100.0)
     assert state.frames_to_render == 5 # Pre-decremented value returned
+
+def test_video_handoff_ready_without_text(config):
+    controller = AnimationController(config)
+    controller._show_text = False
+    state = AnimationState(
+        render_state=RenderState.STATIC,
+        image_alpha=1.0,
+        text_alpha=0.0,
+        kenburns_x=0.0,
+        kenburns_y=0.0,
+        frames_to_render=0,
+    )
+
+    assert controller.video_handoff_ready(state)
+
+def test_video_handoff_waits_for_text_fade_out_and_clean_frames(config):
+    controller = AnimationController(config)
+    controller._show_text = True
+    visible_state = AnimationState(
+        render_state=RenderState.STATIC,
+        image_alpha=1.0,
+        text_alpha=1.0,
+        kenburns_x=0.0,
+        kenburns_y=0.0,
+        frames_to_render=0,
+    )
+    fading_state = AnimationState(
+        render_state=RenderState.STATIC,
+        image_alpha=1.0,
+        text_alpha=0.5,
+        kenburns_x=0.0,
+        kenburns_y=0.0,
+        frames_to_render=0,
+    )
+    clean_frame_state = AnimationState(
+        render_state=RenderState.STATIC,
+        image_alpha=1.0,
+        text_alpha=0.0,
+        kenburns_x=0.0,
+        kenburns_y=0.0,
+        frames_to_render=1,
+    )
+    ready_state = AnimationState(
+        render_state=RenderState.STATIC,
+        image_alpha=1.0,
+        text_alpha=0.0,
+        kenburns_x=0.0,
+        kenburns_y=0.0,
+        frames_to_render=0,
+    )
+
+    assert not controller.video_handoff_ready(visible_state)
+    assert not controller.video_handoff_ready(fading_state)
+    assert not controller.video_handoff_ready(clean_frame_state)
+
+    controller._frames_to_render = 1
+    assert not controller.video_handoff_ready(ready_state)
+
+    controller._frames_to_render = 0
+    assert controller.video_handoff_ready(ready_state)
