@@ -789,6 +789,14 @@ class PlaybackEngine:
                 
                 # 2. Send RenderCommand for the first frame
                 if first_img is not None:
+                    # Arm the pending video before pi3d starts the title-card
+                    # transition so an immediate completion event cannot be lost.
+                    self._pending_video_media = media_item
+                    self._pending_last_img = last_img
+                    self._pending_last_frame_path = last_frame_path
+                    self._next_transition_time = float('inf')
+                    self._change_state(State.PREPARING_VIDEO)
+
                     self._logger.debug(f"Sending first frame to renderer: {first_frame_path}")
                     self._renderer.execute(
                         RenderCommand(
@@ -798,16 +806,6 @@ class PlaybackEngine:
                             render_action=RENDER_VIDEO_FIRST_FRAME,
                         )
                     )
-                    
-                    # 3. Change state to PREPARING_VIDEO
-                    self._change_state(State.PREPARING_VIDEO)
-                    
-                    # We need to wait for TransitionCompletedEvent before playing the video.
-                    # For now, we'll store the pending media item.
-                    self._pending_video_media = media_item
-                    self._pending_last_img = last_img
-                    self._pending_last_frame_path = last_frame_path
-                    self._next_transition_time = float('inf')
                 else:
                     self._logger.warning(
                         "Could not generate first frame for %s; playing video directly.",

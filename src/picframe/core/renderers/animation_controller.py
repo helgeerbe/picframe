@@ -196,6 +196,7 @@ class AnimationController:
                 self._text_alpha -= 1.0 / (self._fps * self._text_fade_time)
                 if self._text_alpha <= 0.0:
                     self._text_alpha = 0.0
+                    self._show_text = False
 
         return AnimationState(
             render_state=self._state,

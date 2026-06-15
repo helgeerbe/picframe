@@ -845,6 +845,56 @@ def test_engine_trigger_next_media_video(
     assert mock_get_frames.call_args.kwargs["extract_missing"] is True
 
 
+def test_engine_arms_pending_video_before_first_frame_transition_can_complete(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.MOV",
+        media_type=MediaType.VIDEO,
+        filename="video.MOV",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    mock_playlist_manager.get_next.return_value = media_item
+    mock_renderer.get_display_rect.return_value = (0, 0, 1920, 1080)
+
+    def complete_first_frame_immediately(command: RenderCommand) -> None:
+        if command.render_action == RENDER_VIDEO_FIRST_FRAME:
+            engine._handle_transition_completed(TransitionCompletedEvent())
+
+    mock_renderer.execute.side_effect = complete_first_frame_immediately
+
+    with patch("os.path.exists", return_value=True), patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+        return_value=(MagicMock(), MagicMock()),
+    ):
+        engine._trigger_next_media()
+
+    first_render_call = mock_renderer.execute.call_args_list[0].args[0]
+    assert isinstance(first_render_call, RenderCommand)
+    assert first_render_call.render_action == RENDER_VIDEO_FIRST_FRAME
+    assert engine._state == State.PREPARING_VIDEO
+    mock_video_player.play.assert_called_once_with(
+        media_item, 0, 0, 1920, 1080, False
+    )
+
+
 def test_engine_trigger_next_media_video_uses_cache_dir(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,

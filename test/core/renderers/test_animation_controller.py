@@ -100,6 +100,23 @@ def test_text_fade_out(config):
     state = controller.update(100.0)
     assert state.text_alpha < 1.0 # Should start fading out
 
+def test_text_fade_out_completes_overlay_cycle(config):
+    controller = AnimationController(config)
+    controller.update_text_config(True, False)
+
+    controller._state = RenderState.STATIC
+    controller._text_alpha = 0.01
+    controller._text_timer = 90.0
+
+    state = controller.update(100.0)
+
+    assert state.text_alpha == 0.0
+    assert controller._show_text is False
+
+    next_state = controller.update(101.0)
+    assert next_state.text_alpha == 0.0
+    assert controller._state == RenderState.STATIC
+
 def test_suspend(config):
     controller = AnimationController(config)
     controller.suspend()
