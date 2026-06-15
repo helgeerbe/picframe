@@ -26,11 +26,13 @@
 ## Video Handoff
 - The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:
   - Extract/cache the first decoded video frame and a tail-decoded final EOS frame under the managed runtime cache directory.
-  - Transition into the first frame with pi3d.
-  - Start GStreamer after that transition.
-  - Swap pi3d's hidden background to the last frame during video playback.
+  - Render the first frame with pi3d as a video title card. If overlay text is present, wait through text fade-in, `viewer.show_text_tm`, fade-out to zero alpha, and clean redraw drain before starting GStreamer.
+  - Preload pi3d's hidden background with the last frame before playback starts.
+  - Promote the hidden last-frame reveal only after the GStreamer worker reports that a real video frame has rendered when sink stats expose that count.
+  - At EOS, dim the GTK4 video window to 99% opacity, wake pi3d to redraw behind it, then close the video window.
   - Transition out from the last frame when GStreamer reaches EOS.
-- On Wayland, prefer the GTK-backed `gtkwaylandsink` presentation path when its window can exactly match the configured pi3d display rectangle. Fullscreen rectangles use fullscreen GTK windows; custom non-fullscreen rectangles are labwc-oriented and use Picframe-owned labwc config to suppress decorations and position the pi3d SDL window. The GTK video surface hides the cursor during playback.
+- On Wayland, prefer the GTK4 `playbin` + `gtk4paintablesink` presentation path inside a borderless transparent GTK4 host. Fullscreen rectangles fill the host; custom non-fullscreen rectangles use a fullscreen transparent host with the paintable placed at `viewer.display_x/y/w/h`. The GTK4 video surface hides the cursor during playback.
+- If GTK4, `gtk4paintablesink`, or geometry confirmation is unavailable, preserve the `waylandsink` render-rectangle fallback. The fallback must use explicit render rectangles instead of mixing custom geometry with sink fullscreen.
 - Only one renderer should actively own visible display output at a time.
 - Clear Image Cache removes generated cache artifacts such as video transition frames, but original media files and media database rows are handled by separate operations.
 

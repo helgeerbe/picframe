@@ -125,6 +125,11 @@ Full-GPU opacity probe:
 labwc -s "python3 poc_video_handoff_v2.py /path/to/image1.jpg /path/to/video.mp4 /path/to/image2.jpg --pipeline-mode gtk-gpu-opacity --eos-window-opacity 0.99 --eos-redraw-seconds 0.25 --require-gpu"
 ```
 
+This is a historical GTK3 proof-of-concept mode. Production Wayland playback
+now prefers GTK4 `playbin` + `gtk4paintablesink` in a transparent GTK4 host and
+uses the same EOS window-opacity redraw idea without depending on
+`gtkwaylandsink`.
+
 The `gtk-gpu-opacity` mode uses `playbin` with `gtkwaylandsink` hosted inside a
 fullscreen GTK3 window. It does not intentionally add `videoconvert`,
 `videoscale`, caps forcing, or GStreamer `alpha` during playback. At EOS it

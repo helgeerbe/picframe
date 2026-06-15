@@ -1,14 +1,13 @@
 # Active Context
 
 ## Current Focus
-Ticket #687 is implementing Settings coverage and live component reloads while
-preserving the broader next-gen GStreamer/video reliability stream. Settings
-Apply should reload or reconnect individual runtime components where possible
-instead of restarting `picframe.service`.
+The active branch is `gtk4`, focused on the next-gen GTK4/GStreamer Wayland
+video handoff: avoid EOS flicker, preserve fullscreen and custom display
+geometry, and keep text overlays out of the surface revealed when video starts
+or stops.
 
 ## Current Repo State
-- Branch: `v2-dev`, tracking `origin/v2-dev`.
-- Known local modification before this Memory Bank update: `.gitignore` ignores `.Codexrules`.
+- Branch: `gtk4`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -34,8 +33,10 @@ instead of restarting `picframe.service`.
 - Ticket #687 access/logging decision: Basic Auth is stored as plaintext JSON under `${PICFRAME_DATA}/basic_auth.json` with three UI scopes: none, Settings/Logs/admin actions, or complete website. Settings/admin scope leaves Remote/Filters public through the allowlisted workflow-config API; complete-website scope also protects the SPA, static assets, media APIs, workflow API, and live web sockets. After authentication, Settings receives the saved plaintext password for inspection/editing; deleting `basic_auth.json` is the recovery path and disables password protection. Successful HTTP Basic Auth sets an HttpOnly `picframe_auth` cookie so protected WebSocket handshakes can authenticate reliably. REST bearer tokens and MQTT bearer-token payloads are deferred; MQTT security remains broker credentials plus optional TLS.
 - Recent video hardening treats failed `ffprobe`, invalid probe JSON, or no video stream as unplayable during indexing; stale video cache rows with incomplete metadata are revalidated and marked inactive if extraction fails. GStreamer worker startup now preflights discoverability before sink creation and avoids requesting fullscreen when a render rectangle is supplied.
 - Raspberry Pi 4/labwc video validation now shows GStreamer exposes `v4l2h264dec` and `v4l2slh265dec` when `GST_V4L2_ENABLE_PROBE=1` is set before worker startup. H.264 1080p and HEVC Main 8-bit 4K playback are validated with DMABuf; HEVC Main10/HDR MOV and MOV/QuickTime 60 fps remain guarded.
-- Raspberry Pi 4/labwc PoC validation showed GTK3 + `gtkwaylandsink` removes the video-to-pi3d EOS flicker without opacity tricks. Production now prefers that path when a borderless GTK window can exactly cover `viewer.display_x/y/w/h`, and falls back to `waylandsink` render rectangles otherwise.
-- The GTK video path should hide its own cursor. Fullscreen playback should use a fullscreen GTK window; custom non-fullscreen geometry should use labwc-kiosk because Cage is fullscreen-kiosk oriented. Picframe-owned labwc rules give the pi3d SDL window a stable `picframe-pi3d` identifier and apply configured `MoveTo`/`ResizeTo` geometry before the window maps.
+- Production Wayland video now prefers GTK4 `playbin` + `gtk4paintablesink` inside a borderless transparent GTK4 host. Fullscreen playback fills the host; custom geometry uses a fullscreen transparent host and places the video paintable at `viewer.display_x/y/w/h`. The worker dims the GTK4 window to 99% opacity at EOS so pi3d can redraw behind it before the video window closes; fallback remains `waylandsink` with explicit render rectangles.
+- The GTK4 video path hides its own cursor. Custom non-fullscreen geometry is labwc-oriented because Cage is fullscreen-kiosk oriented. Picframe-owned labwc rules give the pi3d SDL window a stable `picframe-pi3d` identifier and apply configured `MoveTo`/`ResizeTo` geometry before the window maps.
+- Video first-frame handoff now behaves like a title card: pi3d blends in the cached first frame, honors `viewer.show_text_tm`, fades text out, drains clean redraw frames, then starts GStreamer. The last-frame reveal is promoted only after worker sink stats confirm at least one rendered video frame when those stats are available.
+- Installer and user docs require GTK4 packages `gir1.2-gtk-4.0` and `gstreamer1.0-gtk4`; GTK3/`gtkwaylandsink` is no longer a production dependency.
 - Video transition caches now use the first decoded frame and a tail-decoded final EOS frame, with fixed duration-offset sampling only as the final fallback.
 
 ## Immediate Next Steps
@@ -50,7 +51,7 @@ instead of restarting `picframe.service`.
 - Preserve the #687 Apply boundary: do not add an automatic `systemctl restart picframe.service` path for Settings Apply, and do not add a new passwordless sudo rule for service restart as part of this ticket.
 - Preserve the #687 access boundary: Basic Auth supports explicit none, Settings/Logs/admin, and complete-website scopes. Do not add bearer-token REST or MQTT authentication in this ticket.
 - Preserve Pi worker V4L2 probing and caps-driven GStreamer discovery while keeping unsupported-media skips as warnings/completions rather than generic system errors.
-- Preserve the GTK-backed Wayland handoff boundary: no production opacity or GStreamer alpha tricks; exact GTK geometry is required or the worker falls back.
+- Preserve the GTK4-backed Wayland handoff boundary: prefer `gtk4paintablesink`, use the 99% GTK4 window opacity redraw handshake at EOS, keep GStreamer alpha/videoconvert handoff tricks out of production, and fall back to explicit `waylandsink` render rectangles when GTK4 or geometry confirmation is unavailable.
 - Keep final-frame extraction at indexing/cache time using tail decoding, not at video EOS runtime.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.

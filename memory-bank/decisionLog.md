@@ -24,8 +24,11 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Prefer GStreamer registry/caps negotiation over hardcoded Raspberry Pi hardware tables.
 - Enforce a software decode ceiling with graceful skip/error events for unsupported video.
 - Use the First/Last Frame Sandwich pattern for seamless image/video handoff.
-- On Wayland, prefer GTK-backed `gtkwaylandsink` playback when a borderless GTK window can exactly match the configured pi3d display rectangle; otherwise fall back to the existing `waylandsink` render-rectangle path.
-- GTK-backed video playback hides the cursor on the video surface. Fullscreen rectangles use fullscreen GTK windows; custom non-fullscreen rectangles are labwc-oriented and rely on Picframe-owned labwc config to suppress server decorations and place the pi3d SDL window with `MoveTo`/`ResizeTo`.
+- On Wayland, prefer GTK4 `playbin` + `gtk4paintablesink` playback in a borderless transparent GTK4 host; otherwise fall back to the existing `waylandsink` render-rectangle path.
+- Fullscreen video fills the GTK4 host. Custom non-fullscreen video uses a fullscreen transparent GTK4 host with the paintable placed at `viewer.display_x/y/w/h`; labwc remains the custom-geometry compositor target and Picframe-owned labwc config places the pi3d SDL window with `MoveTo`/`ResizeTo`.
+- At EOS, dim the GTK4 video window to 99% opacity, wake pi3d to redraw, then close the video window. Do not add GStreamer alpha/videoconvert handoff tricks to the production path.
+- Video first-frame handoff is a title-card render action: if overlay text is generated, `viewer.show_text_tm` is honored, text fades out to zero, and clean redraw frames drain before GStreamer starts.
+- Promote the cached last-frame reveal only after the worker reports a rendered video frame when sink stats provide that signal.
 - Cache the final video transition frame by seeking near EOS and decoding a short tail window to the actual final decoded frame; keep fixed duration-offset sampling only as fallback.
 - Enable `GST_V4L2_ENABLE_PROBE=1` for the GStreamer worker on Raspberry Pi/Compute Module hardware so V4L2 hardware decoder elements are discoverable before Gst initializes.
 - Treat VLC as a diagnostic reference only: VLC's FFmpeg DRM/V4L2-request plus `wl_dmabuf` success does not relax Picframe's GStreamer guards until an equivalent GStreamer path is validated. HEVC Main 8-bit 60 fps support is path-specific: validated MKV may use hardware playbin, while MOV/QuickTime 60 fps remains guarded.

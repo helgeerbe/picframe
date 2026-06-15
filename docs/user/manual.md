@@ -561,10 +561,15 @@ runtime configuration before the pi3d window is mapped.
 Picframe also hides the mouse cursor on the GTK video surface during playback.
 
 Video transition frames are generated during indexing/cache work, not at EOS
-runtime. The first transition frame is the first decoded video frame. The final
-transition frame is taken by seeking near the end of the video and decoding a
-short tail window through EOS, which makes the cached last frame match the
-actual video handoff more closely than sampling a fixed duration offset.
+runtime. The first transition frame is the first decoded video frame and is
+shown as a short title card before video playback starts. If text overlay is
+enabled and produces text for the video, Picframe keeps that text visible for
+`viewer.show_text_tm`, fades it out, redraws clean image frames, and then starts
+the video. If no overlay text is shown, video start remains immediate after the
+first-frame transition. The final transition frame is taken by seeking near the
+end of the video and decoding a short tail window through EOS, which makes the
+cached last frame match the actual video handoff more closely than sampling a
+fixed duration offset.
 
 Hardware playback is selected only when the Raspberry Pi model is known to
 support the codec at the stream resolution/framerate and GStreamer exposes a

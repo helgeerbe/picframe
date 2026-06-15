@@ -35,6 +35,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - First/Last Frame Sandwich pattern implementation work is present in recent commit history.
 - Video indexing hardening: unprobeable videos, invalid probe JSON, and files with no video stream are skipped/marked inactive; stale placeholder video rows are revalidated; transition-frame cache failures no longer block otherwise playable videos; the GStreamer worker preflights discoverability before creating a sink.
 - Raspberry Pi 4 GStreamer hardware playback validation: `GST_V4L2_ENABLE_PROBE=1` exposes `v4l2h264dec` and `v4l2slh265dec`; H.264 1080p and HEVC Main 8-bit 4K paths play with DMABuf and EOS. HEVC Main 8-bit MKV 4K60 plays in the standalone GStreamer `playbin` probe, while MOV/QuickTime 60 fps and Main10/HDR MOV remain guarded.
+- GTK4 Wayland video handoff: production playback prefers GTK4 `playbin` + `gtk4paintablesink`, supports fullscreen and custom geometry, uses a 99% GTK4 window-opacity redraw handshake at EOS, gates last-frame reveal promotion on a rendered video frame when sink stats expose it, and waits for video title-card overlay text to fade out before starting GStreamer.
 - Legacy `configuration.yaml` import follow-ups #676/#677 are complete: the Settings UI/API path is documented, `viewer.show_text` is normalized into next-gen overlay keys, `mqtt.port` is preserved, and legacy startup-only HTTP keys are intentionally ignored.
 - Ticket #687 Settings coverage/live reloads: Settings adds display Fullscreen/Custom geometry, installed-locale dropdown, additional durable renderer/model controls, and fixes `geo_suppress_list` to `viewer`; Remote adds frontend-only media/map enlargement and search-first location filtering with selected chips; backend adds `/api/system/locales` and `/api/media/location-options`; Settings Apply uses component reload/reconnect paths instead of a full service restart.
 - Ticket #687 visible-settings audit: `model.recent_n` and `model.reshuffle_num` are confirmed playlist-backed; `model.locale` now feeds reverse-geocoding language; renderer text/clock/blur/video-fit settings now flow into runtime config paths. Runtime logging controls are restored through live `model.log_level`/`model.log_file` handling and a protected Logs tab. Compatibility-only hidden Settings keys are documented: `viewer.display_power`, old menu fields, `model.update_interval`, HTTP SSL fields, legacy HTTP auth fields, and legacy `peripherals.*`. `model.image_attr` remains hidden because MQTT now publishes all normalized current-media attributes.
@@ -42,14 +43,14 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - #687 implementation is in verification/closeout: Settings coverage, live reloads, Remote enlargement/filtering, `model.image_attr` compatibility docs, live logging, Logs tab, three-scope Basic Auth with cookie-backed WebSocket auth plus documented password recovery, and legacy peripherals documentation are being verified before commit/issue closeout.
-- Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and target-hardware validation.
+- Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
 
 ## Next
 - Continue caps-driven hardware capability discovery in the GStreamer worker, with Pi V4L2 probing enabled before worker startup.
 - Validate more H.264 1080p60 and HEVC container variants before relaxing additional guards.
 - Surface software fallback / unsupported-media decisions as events visible to logs and the UI.
-- Validate video handoff on target Wayland/Raspberry Pi hardware.
+- Continue Raspberry Pi/labwc validation of GTK4 video handoff timing, especially EOS redraw behavior and custom display geometry.
 - Reconcile frontend specification with actual implemented UI and fill gaps only through tracked issues.
 - Keep legacy import documentation aligned with the explicit UI/API import path rather than adding a separate `picframe migrate` command unless a new tracked requirement asks for headless migration.
 

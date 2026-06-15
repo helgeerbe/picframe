@@ -69,6 +69,15 @@ playback engine wakes pi3d to redraw before destroying the video window. If
 GTK4, `gtk4paintablesink`, or geometry confirmation is unavailable, the worker
 falls back to the prior `waylandsink` render-rectangle path.
 
+The first video frame is treated as a pi3d title card before GStreamer starts.
+When an overlay is generated, pi3d blends in the first frame, keeps the text
+visible for `viewer.show_text_tm`, fades the text out to zero alpha, and drains
+clean redraw frames before publishing the transition completion that starts the
+video worker. This keeps overlay text out of the surface that Wayland may reveal
+around the handoff. The worker also waits for sink stats to report a rendered
+video frame when available before the playback engine promotes the cached final
+frame as pi3d's hidden reveal surface.
+
 Transition-frame caching is also aligned with EOS handoff. The first cached
 frame is extracted from the first decoded video frame. The final cached frame
 is extracted by seeking near the end and decoding a short tail window through
