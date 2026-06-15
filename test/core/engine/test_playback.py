@@ -1087,7 +1087,7 @@ def test_engine_video_handoff_uses_configured_custom_rect(
     )
 
 
-def test_engine_video_display_rect_uses_fullscreen_for_unset_geometry(
+def test_engine_video_display_rect_uses_renderer_rect_for_unset_fullscreen_geometry(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
@@ -1112,7 +1112,7 @@ def test_engine_video_display_rect_uses_fullscreen_for_unset_geometry(
         config_repository=config_repo,
     )
 
-    assert engine._video_display_rect() == (0, 0, 0, 0)
+    assert engine._video_display_rect() == (0, 0, 1800, 1000)
     assert engine._video_frame_dimensions() == (1800, 1000)
 
 
@@ -1160,7 +1160,7 @@ def test_engine_video_handoff_uses_fullscreen_for_unset_geometry(
     ):
         engine._trigger_next_media()
 
-    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 0, 0, False)
+    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 1800, 1000, False)
 
 
 def test_engine_video_first_frame_timeout_completes_handoff(

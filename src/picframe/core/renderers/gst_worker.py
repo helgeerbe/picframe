@@ -563,9 +563,13 @@ class GstWorker:
         )
 
         if pipeline_variant == PIPELINE_HARDWARE_PLAYBIN:
+            sink_description = f"{sink_name} name=sink {sink_props_str}".replace(
+                '"',
+                '\\"',
+            )
             return (
                 f'playbin name=player uri="{uri}" flags=0x00000001 '
-                f'video-sink="{sink_name} name=sink {sink_props_str}" '
+                f'video-sink="{sink_description}" '
                 'audio-sink="fakesink sync=false"'
             )
 
@@ -1221,15 +1225,7 @@ class GstWorker:
     ) -> str:
         has_render_rectangle = w > 0 and h > 0
         sink_props = []
-        fullscreen_wayland = (
-            sink_name == "waylandsink"
-            and x == 0
-            and y == 0
-            and has_render_rectangle
-        )
-        if fullscreen_wayland:
-            sink_props.append("fullscreen=true")
-        elif has_render_rectangle:
+        if has_render_rectangle:
             sink_props.append(f'render-rectangle="<{x}, {y}, {w}, {h}>"')
         else:
             sink_props.append("fullscreen=true")
@@ -1900,21 +1896,15 @@ class GstWorker:
             
         sink = Gst.ElementFactory.make(sink_name, "sink")
         has_render_rectangle = w > 0 and h > 0
-        fullscreen_wayland = (
-            sink_name == "waylandsink"
-            and x == 0
-            and y == 0
-            and has_render_rectangle
-        )
 
-        if not has_render_rectangle or fullscreen_wayland:
+        if not has_render_rectangle:
             try:
                 if hasattr(sink.props, 'fullscreen'):
                     sink.set_property("fullscreen", True)
             except Exception:
                 pass
 
-        if has_render_rectangle and not fullscreen_wayland:
+        if has_render_rectangle:
             try:
                 Gst.util_set_object_arg(sink, "render-rectangle", f"<{x}, {y}, {w}, {h}>")
             except Exception as e:

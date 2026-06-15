@@ -442,14 +442,11 @@ class PlaybackEngine:
     def _video_display_rect(self) -> tuple[int, int, int, int]:
         renderer_rect = self._renderer.get_display_rect()
         if self._configured_display_is_fullscreen():
-            fullscreen_rect = (0, 0, 0, 0)
-            if renderer_rect != fullscreen_rect:
-                self._logger.info(
-                    "Using fullscreen video display rect %s instead of renderer-reported %s.",
-                    fullscreen_rect,
-                    renderer_rect,
-                )
-            return fullscreen_rect
+            self._logger.info(
+                "Using renderer display rect %s for fullscreen video handoff.",
+                renderer_rect,
+            )
+            return renderer_rect
 
         configured_rect = self._configured_display_rect()
         if configured_rect is None:

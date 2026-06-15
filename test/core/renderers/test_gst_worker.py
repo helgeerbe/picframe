@@ -292,7 +292,7 @@ def test_sink_bin_does_not_set_fullscreen_when_render_rectangle_is_supplied(
     )
 
 
-def test_wayland_sink_uses_fullscreen_for_origin_rectangle(monkeypatch) -> None:
+def test_wayland_sink_uses_render_rectangle_for_origin_rectangle(monkeypatch) -> None:
     created_elements = {}
     util_set_object_arg = MagicMock()
 
@@ -350,11 +350,13 @@ def test_wayland_sink_uses_fullscreen_for_origin_rectangle(monkeypatch) -> None:
     worker._create_sink_bin(0, 0, 2560, 1440)
 
     sink = created_elements["sink"]
-    assert ("fullscreen", True) in sink.set_property_calls
-    util_set_object_arg.assert_not_called()
+    assert ("fullscreen", True) not in sink.set_property_calls
+    util_set_object_arg.assert_called_once_with(
+        sink, "render-rectangle", "<0, 0, 2560, 1440>"
+    )
 
 
-def test_pipeline_description_forces_software_decoders_and_uses_fullscreen_wayland(
+def test_pipeline_description_forces_software_decoders_and_uses_wayland_rectangle(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
@@ -376,8 +378,8 @@ def test_pipeline_description_forces_software_decoders_and_uses_fullscreen_wayla
     assert 'uri="file:///movie.mov"' in description
     assert "force-sw-decoders=true" in description
     assert "waylandsink name=sink" in description
-    assert "fullscreen=true" in description
-    assert "render-rectangle" not in description
+    assert 'render-rectangle="<0, 0, 2560, 1440>"' in description
+    assert "fullscreen=true" not in description
     assert "rotate-method=8" in description
     assert "videoscale add-borders=true" in description
     assert "video/x-raw,width=2560,height=1440,format=RGBA" in description
@@ -449,8 +451,8 @@ def test_hardware_direct_pipeline_preserves_direct_wayland_path(monkeypatch) -> 
     )
 
     assert "queue name=video_queue ! waylandsink name=sink" in description
-    assert "fullscreen=true" in description
-    assert "render-rectangle" not in description
+    assert 'render-rectangle="<0, 0, 2560, 1440>"' in description
+    assert "fullscreen=true" not in description
     assert "videoconvert" not in description
     assert "videoscale" not in description
     assert "video/x-raw,format=RGBA" not in description
@@ -501,10 +503,22 @@ def test_hardware_playbin_pipeline_uses_video_only_wayland_sink(monkeypatch) -> 
 
     assert description.startswith('playbin name=player uri="file:///movie.mp4"')
     assert "flags=0x00000001" in description
-    assert 'video-sink="waylandsink name=sink fullscreen=true rotate-method=8"' in description
+    assert (
+        'video-sink="waylandsink name=sink '
+        'render-rectangle=\\"<0, 0, 2560, 1440>\\" rotate-method=8"'
+    ) in description
     assert 'audio-sink="fakesink sync=false"' in description
     assert "force-sw-decoders=true" not in description
     assert "videoconvert" not in description
+
+
+def test_sink_props_use_fullscreen_when_geometry_is_unknown() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+
+    assert (
+        worker._build_sink_props("waylandsink", 0, 0, 0, 0)
+        == "fullscreen=true rotate-method=8"
+    )
 
 
 def test_gtk_playbin_attempt_requires_wayland_hardware_and_valid_geometry(
