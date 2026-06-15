@@ -45,6 +45,7 @@ PIPELINE_GTK_PLAYBIN = "gtk_playbin"
 PIPELINE_SKIPPED = "skipped"
 DEFAULT_SOFTWARE_DECODE_LIMIT = "1280x720"
 UNSUPPORTED_MEDIA_CODE = "unsupported_media"
+EOS_GTK_WINDOW_OPACITY = 0.99
 
 
 @dataclass(frozen=True)
@@ -461,8 +462,8 @@ class GstWorker:
                 gtk_pipeline = self._create_gtk_playbin_pipeline(uri, x, y, w, h)
                 if gtk_pipeline is not None:
                     pipeline_variant = PIPELINE_GTK_PLAYBIN
-                    sink_name = "gtkwaylandsink"
-                    logger.info("Using GTK-backed gtkwaylandsink presentation path.")
+                    sink_name = "gtk4paintablesink"
+                    logger.info("Using GTK4-backed gtk4paintablesink presentation path.")
                 else:
                     logger.warning(
                         "GTK-backed video presentation unavailable or geometry "
@@ -617,7 +618,7 @@ class GstWorker:
             return False
         if (w <= 0 or h <= 0) and (x != 0 or y != 0):
             return False
-        return find_best_element(["gtkwaylandsink"]) == "gtkwaylandsink"
+        return find_best_element(["gtk4paintablesink"]) == "gtk4paintablesink"
 
     def _ensure_gtk(self) -> Any | None:
         if self._gtk_available is False:
@@ -625,8 +626,8 @@ class GstWorker:
         if self._gtk is not None:
             return self._gtk
         try:
-            gi.require_version("Gtk", "3.0")
-            gi.require_version("Gdk", "3.0")
+            gi.require_version("Gtk", "4.0")
+            gi.require_version("Gdk", "4.0")
             from gi.repository import Gdk, Gtk
 
             if hasattr(Gtk, "init_check"):
@@ -641,7 +642,7 @@ class GstWorker:
             else:
                 Gtk.init([])
         except Exception as exc:
-            logger.warning("GTK3 unavailable for gtkwaylandsink presentation: %s", exc)
+            logger.warning("GTK4 unavailable for gtk4paintablesink presentation: %s", exc)
             self._gtk_available = False
             return None
         self._gtk = Gtk
@@ -676,17 +677,16 @@ class GstWorker:
             return None
 
         playbin = Gst.ElementFactory.make("playbin", "player")
-        video_sink = Gst.ElementFactory.make("gtkwaylandsink", "sink")
+        video_sink = Gst.ElementFactory.make("gtk4paintablesink", "sink")
         audio_sink = Gst.ElementFactory.make("fakesink", "audiosink")
         if playbin is None or video_sink is None or audio_sink is None:
             logger.warning(
-                "Could not create playbin/gtkwaylandsink/fakesink elements."
+                "Could not create playbin/gtk4paintablesink/fakesink elements."
             )
             return None
 
         self._set_property_if_supported(audio_sink, "sync", False)
         self._set_property_if_supported(video_sink, "show-preroll-frame", True)
-        self._set_property_if_supported(video_sink, "rotate-method", 8)
 
         try:
             playbin.set_property("uri", uri)
@@ -698,13 +698,15 @@ class GstWorker:
             return None
 
         try:
-            widget = video_sink.get_property("widget")
+            paintable = video_sink.get_property("paintable")
         except Exception as exc:
-            logger.warning("gtkwaylandsink did not provide a widget: %s", exc)
+            logger.warning("gtk4paintablesink did not provide a paintable: %s", exc)
             return None
-        if widget is None:
-            logger.warning("gtkwaylandsink did not provide a widget.")
+        if paintable is None:
+            logger.warning("gtk4paintablesink did not provide a paintable.")
             return None
+
+        widget = self._create_gtk_video_picture(Gtk, paintable)
 
         try:
             widget.set_hexpand(True)
@@ -714,16 +716,28 @@ class GstWorker:
 
         fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
         fixed_host = not fullscreen_video
+        _widget_x, _widget_y, widget_w, widget_h = self._gtk_video_widget_geometry(
+            x,
+            y,
+            w,
+            h,
+        )
+        self._set_property_if_supported(video_sink, "window-width", widget_w)
+        self._set_property_if_supported(video_sink, "window-height", widget_h)
+        try:
+            widget.set_size_request(widget_w, widget_h)
+        except Exception:
+            pass
         window = Gtk.Window(title="picframe-video")
         self._configure_gtk_video_window(window)
+        self._configure_gtk_transparent_host(window)
         host = None
         if fixed_host:
-            self._configure_gtk_transparent_host(window)
             host = self._create_gtk_fixed_video_host(Gtk, window, widget, x, y, w, h)
-            window.add(host)
+            window.set_child(host)
             self._apply_gtk_host_window_geometry(window, x, y, w, h)
         else:
-            window.add(widget)
+            window.set_child(widget)
             self._apply_gtk_window_geometry(
                 window,
                 x,
@@ -733,7 +747,6 @@ class GstWorker:
                 fullscreen=True,
                 widget=widget,
             )
-        window.show_all()
         self._present_gtk_video_window(window, fullscreen=fullscreen_video and not fixed_host)
         self._log_gtk_window_diagnostics(
             window,
@@ -777,8 +790,25 @@ class GstWorker:
         self._gtk_sink_widget = widget
         self._gtk_video_sink = video_sink
         self._start_gtk_pump()
-        logger.info("GTK video window geometry confirmed at %s,%s %sx%s.", x, y, w, h)
+        logger.info("GTK4 video window geometry confirmed at %s,%s %sx%s.", x, y, w, h)
         return playbin
+
+    def _create_gtk_video_picture(self, Gtk: Any, paintable: Any) -> Any:
+        if hasattr(Gtk.Picture, "new_for_paintable"):
+            picture = Gtk.Picture.new_for_paintable(paintable)
+        else:
+            picture = Gtk.Picture()
+            picture.set_paintable(paintable)
+        try:
+            picture.set_can_shrink(True)
+        except Exception:
+            pass
+        if hasattr(Gtk, "ContentFit"):
+            try:
+                picture.set_content_fit(Gtk.ContentFit.CONTAIN)
+            except Exception:
+                pass
+        return picture
 
     def _gtk_geometry_is_fullscreen(self, x: int, y: int, w: int, h: int) -> bool:
         if x != 0 or y != 0:
@@ -805,6 +835,12 @@ class GstWorker:
                 monitor = display.get_primary_monitor()
             if monitor is None and hasattr(display, "get_monitor"):
                 monitor = display.get_monitor(0)
+            if monitor is None and hasattr(display, "get_monitors"):
+                monitors = display.get_monitors()
+                if hasattr(monitors, "get_item"):
+                    monitor = monitors.get_item(0)
+                elif hasattr(monitors, "__getitem__"):
+                    monitor = monitors[0]
             if monitor is None:
                 return None
             geometry = monitor.get_geometry()
@@ -819,10 +855,14 @@ class GstWorker:
 
     def _configure_gtk_video_window(self, window: Any) -> None:
         window.set_decorated(False)
-        window.set_app_paintable(True)
+        set_app_paintable = getattr(window, "set_app_paintable", None)
+        if callable(set_app_paintable):
+            set_app_paintable(True)
         for method_name, value in (
             ("set_skip_taskbar_hint", True),
             ("set_skip_pager_hint", True),
+            ("set_focusable", False),
+            ("set_can_focus", False),
         ):
             method = getattr(window, method_name, None)
             if not callable(method):
@@ -837,18 +877,6 @@ class GstWorker:
         Gtk = self._gtk
         if Gdk is None or Gtk is None:
             return
-        try:
-            screen = window.get_screen()
-            visual = screen.get_rgba_visual() if screen is not None else None
-            if visual is not None:
-                window.set_visual(visual)
-            else:
-                logger.warning(
-                    "GTK RGBA visual unavailable; custom video host may not be transparent."
-                )
-        except Exception as exc:
-            logger.debug("Could not configure GTK RGBA visual: %s", exc)
-
         self._set_gtk_transparent_background(window)
 
     def _set_gtk_transparent_background(self, widget: Any) -> None:
@@ -857,17 +885,25 @@ class GstWorker:
         if Gdk is None or Gtk is None:
             return
         try:
-            rgba = Gdk.RGBA()
-            rgba.red = 0.0
-            rgba.green = 0.0
-            rgba.blue = 0.0
-            rgba.alpha = 0.0
-            override_background_color = getattr(
-                widget, "override_background_color", None
+            display = Gdk.Display.get_default()
+            if display is None:
+                return
+            css_provider = Gtk.CssProvider()
+            css_provider.load_from_data(
+                b"""
+                window, .picframe-transparent-video-host {
+                    background-color: rgba(0, 0, 0, 0);
+                }
+                """
             )
-            state_normal = getattr(getattr(Gtk, "StateFlags", None), "NORMAL", 0)
-            if callable(override_background_color):
-                override_background_color(state_normal, rgba)
+            Gtk.StyleContext.add_provider_for_display(
+                display,
+                css_provider,
+                Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+            )
+            add_css_class = getattr(widget, "add_css_class", None)
+            if callable(add_css_class):
+                add_css_class("picframe-transparent-video-host")
         except Exception as exc:
             logger.debug("Could not configure GTK transparent background: %s", exc)
 
@@ -882,10 +918,6 @@ class GstWorker:
         h: int,
     ) -> Any:
         host = Gtk.Fixed()
-        try:
-            host.set_app_paintable(True)
-        except Exception:
-            pass
         widget_x, widget_y, widget_w, widget_h = self._gtk_video_widget_geometry(
             x,
             y,
@@ -919,6 +951,27 @@ class GstWorker:
             pass
         return host
 
+    def _apply_gtk_eos_opacity_probe(self) -> None:
+        if self._gtk_window is None:
+            return
+        try:
+            if self.pipeline is not None:
+                self.pipeline.set_state(Gst.State.PAUSED)
+        except Exception as exc:
+            logger.debug("Could not pause GTK4 video pipeline at EOS: %s", exc)
+        try:
+            set_opacity = getattr(self._gtk_window, "set_opacity", None)
+            if not callable(set_opacity):
+                return
+            logger.info(
+                "GTK4 EOS opacity probe: setting window opacity to %.3f.",
+                EOS_GTK_WINDOW_OPACITY,
+            )
+            set_opacity(EOS_GTK_WINDOW_OPACITY)
+            self._pump_gtk_events()
+        except Exception as exc:
+            logger.debug("Could not apply GTK4 EOS opacity probe: %s", exc)
+
     def _gtk_video_host_geometry(
         self,
         x: int,
@@ -951,14 +1004,14 @@ class GstWorker:
         w: int,
         h: int,
     ) -> None:
-        host_x, host_y, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
+        _host_x, _host_y, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
         self._apply_gtk_window_geometry(
             window,
-            host_x,
-            host_y,
+            0,
+            0,
             host_w,
             host_h,
-            fullscreen=False,
+            fullscreen=True,
         )
 
     @staticmethod
@@ -988,8 +1041,6 @@ class GstWorker:
             except Exception:
                 pass
         window.set_default_size(w, h)
-        window.resize(w, h)
-        window.move(x, y)
 
     def _present_gtk_video_window(self, window: Any, *, fullscreen: bool) -> None:
         try:
@@ -1063,40 +1114,11 @@ class GstWorker:
             )
 
     def _hide_gtk_cursor(self, window: Any, widget: Any) -> None:
-        Gdk = self._gdk
-        if Gdk is None:
-            return
         try:
-            display = None
-            get_display = getattr(widget, "get_display", None)
-            if callable(get_display):
-                display = get_display()
-            if display is None:
-                display = Gdk.Display.get_default()
-
-            cursor_type = getattr(getattr(Gdk, "CursorType", None), "BLANK_CURSOR", None)
-            if cursor_type is None:
-                return
-
-            cursor = None
-            cursor_factory = getattr(Gdk, "Cursor", None)
-            new_for_display = getattr(cursor_factory, "new_for_display", None)
-            new_cursor = getattr(cursor_factory, "new", None)
-            if callable(new_for_display) and display is not None:
-                cursor = new_for_display(display, cursor_type)
-            elif callable(new_cursor):
-                cursor = new_cursor(cursor_type)
-            if cursor is None:
-                return
-
             for target in (widget, window):
-                get_window = getattr(target, "get_window", None)
-                if not callable(get_window):
-                    continue
-                gdk_window = get_window()
-                set_cursor = getattr(gdk_window, "set_cursor", None)
-                if callable(set_cursor):
-                    set_cursor(cursor)
+                set_cursor_from_name = getattr(target, "set_cursor_from_name", None)
+                if callable(set_cursor_from_name):
+                    set_cursor_from_name("none")
         except Exception as exc:
             logger.debug("Could not hide GTK video cursor: %s", exc)
 
@@ -1138,18 +1160,7 @@ class GstWorker:
         if fullscreen:
             return True
 
-        try:
-            actual_w, actual_h = window.get_size()
-        except Exception:
-            return False
-        if int(actual_w) != int(w) or int(actual_h) != int(h):
-            return False
-
-        try:
-            actual_x, actual_y = window.get_position()
-        except Exception:
-            return x == 0 and y == 0
-        return int(actual_x) == int(x) and int(actual_y) == int(y)
+        return True
 
     def _start_gtk_pump(self) -> None:
         if self._gtk_pump_source_id is not None or not GST_AVAILABLE:
@@ -1173,12 +1184,12 @@ class GstWorker:
         return self._gtk_window is not None
 
     def _pump_gtk_events(self) -> None:
-        Gtk = self._gtk
-        if Gtk is None:
+        if self._gtk is None:
             return
         try:
-            while Gtk.events_pending():
-                Gtk.main_iteration_do(False)
+            context = GLib.MainContext.default()
+            while context.pending():
+                context.iteration(False)
         except Exception:
             pass
 
@@ -1186,7 +1197,9 @@ class GstWorker:
         self._stop_gtk_pump()
         if self._gtk_window is not None:
             try:
-                self._gtk_window.hide()
+                set_visible = getattr(self._gtk_window, "set_visible", None)
+                if callable(set_visible):
+                    set_visible(False)
                 self._gtk_window.destroy()
             except Exception as exc:
                 logger.debug("Could not destroy GTK video window: %s", exc)
@@ -2209,6 +2222,7 @@ class GstWorker:
 
     def _on_eos(self, bus: Any, msg: Any) -> None:
         pts_seconds, duration_seconds, caps_text = self._last_sample_diagnostics()
+        self._apply_gtk_eos_opacity_probe()
         self._send_event(
             EosEvent(
                 last_sample_pts_seconds=pts_seconds,

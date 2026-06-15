@@ -18,6 +18,7 @@ from picframe.core.events.dto import (
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_WAKE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
@@ -521,6 +522,12 @@ class Pi3dRenderer(IRenderer):
             elif command.render_action == RENDER_PARK_VIDEO_REVEAL:
                 self._video_reveal_parked = True
                 self._logger.debug("Parked pi3d video reveal surface without hard suspend.")
+                return
+            elif command.render_action == RENDER_WAKE_VIDEO_REVEAL:
+                self._video_reveal_parked = False
+                self._animation_controller.resume()
+                self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
+                self._logger.debug("Woke parked pi3d video reveal surface for EOS handoff.")
                 return
 
             # Delegate to ImageRenderer

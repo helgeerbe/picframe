@@ -6,6 +6,7 @@ import pytest
 from picframe.core.engine.playback import PlaybackEngine
 from picframe.core.events.dto import (
     PlaybackCompletedEvent,
+    RENDER_WAKE_VIDEO_REVEAL,
     RenderCommand,
     State,
     TransitionCompletedEvent,
@@ -67,7 +68,7 @@ def test_video_handoff_sequence(
     2. Next media is Video -> Send .1.frame to renderer, state PREPARING_VIDEO
     3. TransitionCompletedEvent -> Play video, still PREPARING_VIDEO
     4. VideoFirstFrameRenderedEvent -> promote cached last frame behind video
-    5. PlaybackCompletedEvent -> stop video and schedule immediate next media without renderer work
+    5. PlaybackCompletedEvent -> wake pi3d reveal, stop video, and schedule next media
     """
     engine = PlaybackEngine(
         event_publisher=mock_event_publisher,
@@ -122,10 +123,13 @@ def test_video_handoff_sequence(
     
     # 5. Video playback completed
     mock_renderer.execute.reset_mock()
-    with patch("os.path.exists", return_value=True):
+    with patch("os.path.exists", return_value=True), patch("time.sleep") as sleep_mock:
         engine._handle_playback_completed(PlaybackCompletedEvent())
 
-        mock_renderer.execute.assert_not_called()
+        wake_cmd = mock_renderer.execute.call_args.args[0]
+        assert isinstance(wake_cmd, RenderCommand)
+        assert wake_cmd.render_action == RENDER_WAKE_VIDEO_REVEAL
+        sleep_mock.assert_called_once_with(0.25)
         mock_video_player.stop.assert_called_once_with()
         assert engine._next_transition_time == 0.0
     

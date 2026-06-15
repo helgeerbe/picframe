@@ -53,20 +53,21 @@ not also request sink fullscreen; the rectangle is the positioning contract.
 Raspberry Pi 4 / labwc PoC testing showed that a fully covering plain
 `waylandsink` surface can trigger a short pi3d redraw flicker when the video
 surface closes at EOS. Production playback therefore prefers a `playbin` +
-`gtkwaylandsink` path on Wayland when the worker can create a borderless GTK3
-window whose size and position exactly match Picframe's configured pi3d display
-rectangle (`viewer.display_x/y/w/h`).
+`gtk4paintablesink` path on Wayland when the worker can create a borderless
+transparent GTK4 host window and place the video paintable at Picframe's
+configured pi3d display rectangle (`viewer.display_x/y/w/h`).
 
 This path keeps video playback GPU-friendly: it does not add GStreamer `alpha`,
 `videoconvert`, or `videoscale` elements just for handoff. The GTK window is
 created and pumped inside the out-of-process GStreamer worker, hides its own
 cursor, and EOS still flows back through IPC to the playback engine. If the
-rectangle is effectively fullscreen, the worker requests a fullscreen GTK
-window. Custom non-fullscreen rectangles are labwc-oriented because Cage is a
-fullscreen kiosk compositor; the installer provisions a Picframe-owned labwc
-config to disable server decorations for the GTK video window. If GTK3,
-`gtkwaylandsink`, or geometry confirmation is unavailable, the worker falls
-back to the prior `waylandsink` render-rectangle path.
+rectangle is effectively fullscreen, the video paintable fills the GTK4 host.
+Custom non-fullscreen rectangles use a fullscreen transparent host with a fixed
+child placement because GTK4/Wayland does not provide the old GTK3 move/resize
+window controls. The worker dims the GTK4 window to 99% opacity at EOS, then the
+playback engine wakes pi3d to redraw before destroying the video window. If
+GTK4, `gtk4paintablesink`, or geometry confirmation is unavailable, the worker
+falls back to the prior `waylandsink` render-rectangle path.
 
 Transition-frame caching is also aligned with EOS handoff. The first cached
 frame is extracted from the first decoded video frame. The final cached frame

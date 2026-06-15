@@ -514,7 +514,7 @@ def test_gtk_playbin_attempt_requires_wayland_hardware_and_valid_geometry(
     monkeypatch.setattr(
         gst_worker,
         "find_best_element",
-        lambda names: "gtkwaylandsink" if "gtkwaylandsink" in names else None,
+        lambda names: "gtk4paintablesink" if "gtk4paintablesink" in names else None,
     )
 
     assert worker._should_attempt_gtk_playbin(
@@ -608,7 +608,7 @@ def test_gtk_window_geometry_sets_widget_size_for_fullscreen_path() -> None:
     window.fullscreen.assert_called_once_with()
 
 
-def test_gtk_window_geometry_uses_move_resize_for_custom_path() -> None:
+def test_gtk_window_geometry_sets_default_size_for_custom_path() -> None:
     window = MagicMock()
 
     GstWorker._apply_gtk_window_geometry(
@@ -621,8 +621,8 @@ def test_gtk_window_geometry_uses_move_resize_for_custom_path() -> None:
     )
 
     window.set_default_size.assert_called_once_with(300, 400)
-    window.resize.assert_called_once_with(300, 400)
-    window.move.assert_called_once_with(10, 20)
+    window.resize.assert_not_called()
+    window.move.assert_not_called()
     window.fullscreen.assert_not_called()
 
 
@@ -642,12 +642,12 @@ def test_gtk_window_geometry_sets_widget_size_for_custom_path() -> None:
 
     widget.set_size_request.assert_called_once_with(300, 400)
     window.set_default_size.assert_called_once_with(300, 400)
-    window.resize.assert_called_once_with(300, 400)
-    window.move.assert_called_once_with(10, 20)
+    window.resize.assert_not_called()
+    window.move.assert_not_called()
     window.fullscreen.assert_not_called()
 
 
-def test_gtk_host_window_geometry_uses_monitor_sized_normal_window_for_custom_geometry(
+def test_gtk_host_window_geometry_uses_fullscreen_monitor_host_for_custom_geometry(
     monkeypatch,
 ) -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
@@ -661,9 +661,9 @@ def test_gtk_host_window_geometry_uses_monitor_sized_normal_window_for_custom_ge
     worker._apply_gtk_host_window_geometry(window, 100, 80, 1800, 1000)
 
     window.set_default_size.assert_called_once_with(2560, 1440)
-    window.resize.assert_called_once_with(2560, 1440)
-    window.move.assert_called_once_with(0, 0)
-    window.fullscreen.assert_not_called()
+    window.resize.assert_not_called()
+    window.move.assert_not_called()
+    window.fullscreen.assert_called_once_with()
 
 
 def test_configure_gtk_video_window_matches_poc_hints() -> None:
@@ -676,6 +676,8 @@ def test_configure_gtk_video_window_matches_poc_hints() -> None:
     window.set_app_paintable.assert_called_once_with(True)
     window.set_skip_taskbar_hint.assert_called_once_with(True)
     window.set_skip_pager_hint.assert_called_once_with(True)
+    window.set_focusable.assert_called_once_with(False)
+    window.set_can_focus.assert_called_once_with(False)
     window.set_resizable.assert_not_called()
     window.set_accept_focus.assert_not_called()
     window.set_focus_on_map.assert_not_called()
@@ -736,7 +738,6 @@ def test_create_gtk_fixed_video_host_places_widget_in_fullscreen_host(
     )
 
     FakeGtk.Fixed.assert_called_once_with()
-    host.set_app_paintable.assert_called_once_with(True)
     worker._set_gtk_transparent_background.assert_called_once_with(host)
     widget.set_size_request.assert_called_once_with(1800, 1000)
     host.put.assert_called_once_with(widget, 100, 80)
@@ -796,7 +797,7 @@ def test_gtk_window_matches_geometry_accepts_fullscreen_before_size_settles() ->
     window.get_position.assert_not_called()
 
 
-def test_gtk_window_matches_geometry_requires_exact_custom_geometry() -> None:
+def test_gtk_window_matches_geometry_accepts_non_fixed_custom_window() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker._pump_gtk_events = MagicMock()
     window = MagicMock()
@@ -804,17 +805,6 @@ def test_gtk_window_matches_geometry_requires_exact_custom_geometry() -> None:
     window.get_position.return_value = (10, 20)
 
     assert worker._gtk_window_matches_geometry(
-        window,
-        10,
-        20,
-        300,
-        400,
-        fullscreen=False,
-    )
-
-    window.get_position.return_value = (11, 20)
-
-    assert not worker._gtk_window_matches_geometry(
         window,
         10,
         20,
@@ -886,41 +876,16 @@ def test_gtk_window_matches_geometry_accepts_fixed_host_fullscreen_child(
     )
 
 
-def test_hide_gtk_cursor_applies_blank_cursor_to_widget_and_window() -> None:
-    class FakeCursorType:
-        BLANK_CURSOR = "blank"
-
-    class FakeCursor:
-        @staticmethod
-        def new_for_display(display, cursor_type):
-            return ("cursor", display, cursor_type)
-
-    class FakeDisplay:
-        @staticmethod
-        def get_default():
-            return "default-display"
-
-    class FakeGdk:
-        Cursor = FakeCursor
-        CursorType = FakeCursorType
-        Display = FakeDisplay
-
-    widget_gdk_window = MagicMock()
-    window_gdk_window = MagicMock()
+def test_hide_gtk_cursor_uses_gtk4_cursor_name_on_widget_and_window() -> None:
     widget = MagicMock()
     window = MagicMock()
-    widget.get_display.return_value = "widget-display"
-    widget.get_window.return_value = widget_gdk_window
-    window.get_window.return_value = window_gdk_window
 
     worker = GstWorker("/tmp/picframe-test-gst.sock")
-    worker._gdk = FakeGdk
 
     worker._hide_gtk_cursor(window, widget)
 
-    expected_cursor = ("cursor", "widget-display", "blank")
-    widget_gdk_window.set_cursor.assert_called_once_with(expected_cursor)
-    window_gdk_window.set_cursor.assert_called_once_with(expected_cursor)
+    widget.set_cursor_from_name.assert_called_once_with("none")
+    window.set_cursor_from_name.assert_called_once_with("none")
 
 
 def test_hide_gtk_cursor_tolerates_missing_cursor_api() -> None:
@@ -930,7 +895,7 @@ def test_hide_gtk_cursor_tolerates_missing_cursor_api() -> None:
     worker._hide_gtk_cursor(MagicMock(), MagicMock())
 
 
-def test_on_eos_sends_event_without_handoff_mutation() -> None:
+def test_on_eos_dims_gtk_window_before_sending_event() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker.conn = MagicMock()
     worker.conn.closed = False
@@ -943,9 +908,9 @@ def test_on_eos_sends_event_without_handoff_mutation() -> None:
 
     worker._on_eos(MagicMock(), MagicMock())
 
-    worker.pipeline.set_state.assert_not_called()
-    worker._gtk_window.set_opacity.assert_not_called()
-    worker._pump_gtk_events.assert_not_called()
+    worker.pipeline.set_state.assert_called_once_with(gst_worker.Gst.State.PAUSED)
+    worker._gtk_window.set_opacity.assert_called_once_with(gst_worker.EOS_GTK_WINDOW_OPACITY)
+    worker._pump_gtk_events.assert_called_once_with()
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "eos"
     assert sent_event["last_sample_pts_seconds"] == 1.25
@@ -1034,7 +999,7 @@ def test_start_pipeline_uses_gtk_playbin_when_geometry_is_valid(monkeypatch) -> 
 
     assert worker.pipeline is fake_pipeline
     assert worker._current_pipeline_variant == PIPELINE_GTK_PLAYBIN
-    assert worker._current_sink_name == "gtkwaylandsink"
+    assert worker._current_sink_name == "gtk4paintablesink"
     assert fake_pipeline.properties["volume"] == 1.0
     assert diagnostics.call_count >= 2
 

@@ -15,6 +15,7 @@ from picframe.core.events.dto import (
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_WAKE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
@@ -37,6 +38,7 @@ from picframe.core.services.renderer_assets import format_renderer_asset_issues
 VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS = 0.5
 VIDEO_REVEAL_SETTLE_FRAMES = 5
 VIDEO_REVEAL_SETTLE_TIMEOUT_SECONDS = 0.5
+VIDEO_REVEAL_EOS_REDRAW_SECONDS = 0.25
 
 
 class PlaybackEngine:
@@ -1001,7 +1003,15 @@ class PlaybackEngine:
         if hasattr(self, '_active_video_uses_reveal_sandwich'):
             delattr(self, '_active_video_uses_reveal_sandwich')
 
-        if not uses_reveal_sandwich:
+        if uses_reveal_sandwich:
+            self._renderer.execute(
+                RenderCommand(
+                    image_path="WAKE_VIDEO_REVEAL",
+                    render_action=RENDER_WAKE_VIDEO_REVEAL,
+                )
+            )
+            time.sleep(VIDEO_REVEAL_EOS_REDRAW_SECONDS)
+        else:
             self._renderer.execute(RenderCommand(image_path="RESUME", overlay=None))
 
         if self._video_player:

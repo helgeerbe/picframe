@@ -17,6 +17,7 @@ from picframe.core.events.dto import (
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_WAKE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
@@ -1365,7 +1366,9 @@ def test_engine_parks_video_reveal_after_settle_frames(
     assert engine._video_reveal_park_pending is False
 
 
-def test_engine_playback_completed_for_sandwich_video_does_not_resume_renderer(
+@patch("time.sleep")
+def test_engine_playback_completed_for_sandwich_video_wakes_renderer_before_stop(
+    mock_sleep: MagicMock,
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
@@ -1396,7 +1399,11 @@ def test_engine_playback_completed_for_sandwich_video_does_not_resume_renderer(
 
     engine._handle_playback_completed(PlaybackCompletedEvent())
 
-    mock_renderer.execute.assert_not_called()
+    wake_cmd = mock_renderer.execute.call_args.args[0]
+    assert isinstance(wake_cmd, RenderCommand)
+    assert wake_cmd.image_path == "WAKE_VIDEO_REVEAL"
+    assert wake_cmd.render_action == RENDER_WAKE_VIDEO_REVEAL
+    mock_sleep.assert_called_once_with(0.25)
     mock_video_player.stop.assert_called_once_with()
     assert engine._next_transition_time == 0.0
     assert engine._video_reveal_park_pending is False

@@ -376,7 +376,7 @@ apt-get install -y \
     libgles2-mesa-dev \
     gir1.2-gst-plugins-base-1.0 \
     gir1.2-gstreamer-1.0 \
-    gir1.2-gtk-3.0 \
+    gir1.2-gtk-4.0 \
     libheif1 \
     libheif-dev \
     libjpeg-dev \
@@ -405,6 +405,7 @@ apt-get install -y \
     gstreamer1.0-plugins-good \
     gstreamer1.0-plugins-bad \
     gstreamer1.0-plugins-ugly \
+    gstreamer1.0-gtk4 \
     gstreamer1.0-tools \
     pciutils \
     lshw

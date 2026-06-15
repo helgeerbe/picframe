@@ -12,6 +12,7 @@ from picframe.core.events.dto import (
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_WAKE_VIDEO_REVEAL,
     RenderCommand,
     RendererConfigUpdatedEvent,
 )
@@ -375,6 +376,29 @@ def test_renderer_parks_video_reveal_surface(
 
     assert renderer._video_reveal_parked is True
     assert renderer._animation_controller._state == RenderState.STATIC
+    mock_image_renderer.execute.assert_not_called()
+
+
+def test_renderer_wakes_parked_video_reveal_surface(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._video_reveal_parked = True
+    renderer._animation_controller.suspend()
+
+    renderer.execute(
+        RenderCommand(
+            image_path="WAKE_VIDEO_REVEAL",
+            render_action=RENDER_WAKE_VIDEO_REVEAL,
+        )
+    )
+
+    assert renderer._video_reveal_parked is False
+    assert renderer._animation_controller._frames_to_render == RESUME_REDRAW_FRAMES
+    mock_image_renderer.clear_video_reveal_texture.assert_not_called()
     mock_image_renderer.execute.assert_not_called()
 
 
