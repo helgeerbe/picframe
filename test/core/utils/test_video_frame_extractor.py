@@ -93,6 +93,15 @@ def test_cached_frame_path_uses_managed_cache_and_media_freshness(tmp_path: Path
     resized_path = VideoFrameExtractor.get_cached_frame_path(
         str(video_path), 1280, 720, False, "first", str(cache_dir)
     )
+    background_path = VideoFrameExtractor.get_cached_frame_path(
+        str(video_path),
+        1920,
+        1080,
+        False,
+        "first",
+        str(cache_dir),
+        background=(0.2, 0.2, 0.3, 1.0),
+    )
 
     assert first_path == repeated_path
     assert Path(first_path).parent == cache_dir
@@ -102,6 +111,7 @@ def test_cached_frame_path_uses_managed_cache_and_media_freshness(tmp_path: Path
     assert first_path != last_path
     assert first_path != fit_path
     assert first_path != resized_path
+    assert first_path != background_path
     assert first_path != str(video_path.with_suffix(".1.frame"))
 
     video_path.write_bytes(b"second version")
@@ -111,6 +121,17 @@ def test_cached_frame_path_uses_managed_cache_and_media_freshness(tmp_path: Path
     )
 
     assert changed_path != first_path
+
+
+def test_cached_frame_path_ignores_background_for_legacy_sidecar_path() -> None:
+    assert VideoFrameExtractor.get_cached_frame_path(
+        "test.mp4",
+        1920,
+        1080,
+        False,
+        "first",
+        background=(0.2, 0.2, 0.3, 1.0),
+    ) == "test.1.frame"
 
 
 def test_get_first_and_last_frames_cache_only_does_not_extract_missing_frames(
@@ -285,6 +306,44 @@ def test_scale_frame_portrait() -> None:
     assert scaled_img.getpixel((960, 540)) == (255, 0, 0)
     # Check a pixel in the black pillarbox (right)
     assert scaled_img.getpixel((1910, 540)) == (0, 0, 0)
+
+def test_scale_frame_uses_configured_background_color() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        1920,
+        1080,
+        fit_display=False,
+        background=(0.2, 0.2, 0.3, 1.0),
+    )
+    portrait_img = Image.new("RGB", (1080, 1920), "red")
+
+    scaled_img = extractor._scale_frame(portrait_img)
+
+    assert scaled_img.getpixel((10, 540)) == (51, 51, 76)
+    assert scaled_img.getpixel((960, 540)) == (255, 0, 0)
+
+
+def test_scale_frame_defaults_invalid_background_to_black() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        1920,
+        1080,
+        fit_display=False,
+        background=("bad", 0.2, 0.3),
+    )
+    portrait_img = Image.new("RGB", (1080, 1920), "red")
+
+    scaled_img = extractor._scale_frame(portrait_img)
+
+    assert scaled_img.getpixel((10, 540)) == (0, 0, 0)
+
+
+def test_normalize_background_rgb_clamps_channels() -> None:
+    assert VideoFrameExtractor._normalize_background_rgb((-1.0, 0.5, 2.0, 0.0)) == (
+        0,
+        128,
+        255,
+    )
 
 def test_scale_frame_landscape() -> None:
     extractor = VideoFrameExtractor("test.mp4", 1920, 1080, fit_display=False)

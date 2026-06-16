@@ -14,6 +14,7 @@ from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
 from picframe.core.renderers.ipc_protocol import (
     EosEvent,
     ErrorEvent,
+    PlayCommand,
     VideoDiagnosticsEvent,
     WarningEvent,
     parse_ipc_message,
@@ -160,6 +161,7 @@ def test_play_video(
     assert "file:///path/to/video.mp4" in play_dict["uri"]
     assert play_dict["max_software_decode_resolution"] == "1280x720"
     assert play_dict["fit_display"] is False
+    assert play_dict["host_background"] is None
 
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
@@ -180,6 +182,41 @@ def test_play_video_sends_fit_display(
 
     play_json = mock_conn.send.call_args_list[1][0][0]
     assert json.loads(play_json)["fit_display"] is True
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_play_video_sends_host_background(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    media_item: MediaItem,
+) -> None:
+    mock_conn = MagicMock()
+    mock_client.return_value = mock_conn
+
+    renderer = GstVideoRenderer(mock_publisher)
+    renderer.play(media_item, host_background=(0.2, 0.2, 0.3, 1.0))
+
+    play_json = mock_conn.send.call_args_list[1][0][0]
+    assert json.loads(play_json)["host_background"] == [0.2, 0.2, 0.3, 1.0]
+
+
+def test_parse_play_command_preserves_host_background() -> None:
+    command = parse_ipc_message(
+        json.dumps(
+            {
+                "type": "play",
+                "uri": "file:///path/to/video.mp4",
+                "host_background": [0.2, 0.2, 0.3, 1.0],
+            }
+        )
+    )
+
+    assert isinstance(command, PlayCommand)
+    assert command.host_background == [0.2, 0.2, 0.3, 1.0]
 
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
@@ -365,6 +402,31 @@ def test_handle_unsupported_media_error_publishes_warning_and_completion(
     assert isinstance(warning, VideoPlaybackWarningEvent)
     assert warning.warning_type == "unsupported_media"
     assert warning.decoder == "Skipping video 1920x1080"
+    assert isinstance(mock_publisher.publish.call_args_list[1][0][0], PlaybackCompletedEvent)
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_handle_gtk_presentation_error_publishes_system_error_and_completion(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+) -> None:
+    renderer = GstVideoRenderer(mock_publisher)
+
+    event = ErrorEvent(
+        details="GTK4 video presentation is required",
+        code="gtk_presentation_unavailable",
+    )
+    renderer._handle_event(event)
+
+    assert mock_publisher.publish.call_count == 2
+    error = mock_publisher.publish.call_args_list[0][0][0]
+    assert isinstance(error, SystemErrorEvent)
+    assert error.message == "GTK4 video presentation is required"
+    assert error.code == "gtk_presentation_unavailable"
     assert isinstance(mock_publisher.publish.call_args_list[1][0][0], PlaybackCompletedEvent)
 
 

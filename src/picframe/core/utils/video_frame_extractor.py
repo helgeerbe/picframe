@@ -14,7 +14,7 @@ import tempfile
 import threading
 from hashlib import sha256
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 from PIL import Image
 
@@ -44,6 +44,7 @@ class VideoFrameExtractor:
         display_height: int,
         fit_display: bool = False,
         cache_dir: str | None = None,
+        background: Any = None,
     ) -> None:
         """
         Initialize the VideoFrameExtractor.
@@ -56,12 +57,15 @@ class VideoFrameExtractor:
                          while maintaining aspect ratio. If False, fills the display.
             cache_dir: Optional directory for generated frame cache files. If omitted,
                        legacy sidecar frame paths are used next to the video.
+            background: Optional RGBA/RGB float color used for letterbox/pillarbox bars.
         """
         self.video_path: str = video_path
         self.display_width: int = display_width
         self.display_height: int = display_height
         self.fit_display: bool = fit_display
         self.cache_dir: str | None = cache_dir
+        self.background: Any = background
+        self._background_rgb = self._normalize_background_rgb(background)
         self.logger: logging.Logger = logging.getLogger("VideoFrameExtractor")
 
     @staticmethod
@@ -81,6 +85,7 @@ class VideoFrameExtractor:
         fit_display: bool,
         role: str,
         cache_dir: str | None = None,
+        background: Any = None,
     ) -> str:
         """Return the deterministic path for a cached transition frame."""
         role_suffix = {"first": "1", "last": "2"}.get(role)
@@ -101,6 +106,7 @@ class VideoFrameExtractor:
                 str(width),
                 str(height),
                 str(bool(fit_display)),
+                VideoFrameExtractor._background_cache_signature(background),
                 role,
             ]
         )
@@ -117,7 +123,23 @@ class VideoFrameExtractor:
             self.fit_display,
             role,
             self.cache_dir,
+            background=self.background,
         )
+
+    @staticmethod
+    def _normalize_background_rgb(background: Any) -> tuple[int, int, int]:
+        try:
+            if background is None or len(background) < 3:
+                return (0, 0, 0)
+            rgb = tuple(float(background[index]) for index in range(3))
+        except (TypeError, ValueError, IndexError):
+            return (0, 0, 0)
+        return tuple(round(max(0.0, min(1.0, value)) * 255) for value in rgb)
+
+    @staticmethod
+    def _background_cache_signature(background: Any) -> str:
+        red, green, blue = VideoFrameExtractor._normalize_background_rgb(background)
+        return f"{red},{green},{blue}"
 
     def _scale_frame(self, frame: Image.Image) -> Image.Image:
         """
@@ -141,7 +163,7 @@ class VideoFrameExtractor:
             new_width = int(self.display_height * aspect_ratio_frame)
 
         resized_frame = frame.resize((new_width, new_height), resample=Image.Resampling.BICUBIC)
-        canvas = Image.new("RGB", (self.display_width, self.display_height), "black")
+        canvas = Image.new("RGB", (self.display_width, self.display_height), self._background_rgb)
         x_offset = (self.display_width - new_width) // 2
         y_offset = (self.display_height - new_height) // 2
         canvas.paste(resized_frame, (x_offset, y_offset))
@@ -358,6 +380,7 @@ class VideoFrameExtractor:
         sar: str = "1:1",
         fit_display: bool = False,
         cache_dir: str | None = None,
+        background: Any = None,
     ) -> bool:
         """
         Extract and save the first and last frames of the video to disk.
@@ -373,6 +396,7 @@ class VideoFrameExtractor:
             sar: The Sample Aspect Ratio string (default: "1:1").
             fit_display: Whether frames are cached for fit-display mode.
             cache_dir: Optional directory for generated frame cache files.
+            background: Optional RGBA/RGB float color used for generated bars.
 
         Returns:
             True if both frames were successfully extracted and saved (or already exist),
@@ -380,10 +404,10 @@ class VideoFrameExtractor:
         """
         logger = logging.getLogger("VideoFrameExtractor")
         first_path = VideoFrameExtractor.get_cached_frame_path(
-            video_path, width, height, fit_display, "first", cache_dir
+            video_path, width, height, fit_display, "first", cache_dir, background
         )
         last_path = VideoFrameExtractor.get_cached_frame_path(
-            video_path, width, height, fit_display, "last", cache_dir
+            video_path, width, height, fit_display, "last", cache_dir, background
         )
 
         if os.path.exists(first_path) and os.path.exists(last_path):
@@ -397,7 +421,14 @@ class VideoFrameExtractor:
             Path(cache_dir).expanduser().mkdir(parents=True, exist_ok=True)
 
         # Create a temporary instance just to use the extraction methods
-        extractor = VideoFrameExtractor(video_path, width, height, fit_display=fit_display, cache_dir=cache_dir)
+        extractor = VideoFrameExtractor(
+            video_path,
+            width,
+            height,
+            fit_display=fit_display,
+            cache_dir=cache_dir,
+            background=background,
+        )
         
         try:
             first_image = extractor._get_frame_as_image(0)
@@ -467,6 +498,7 @@ class VideoFrameExtractor:
                 sar,
                 fit_display=self.fit_display,
                 cache_dir=self.cache_dir,
+                background=self.background,
             )
 
         if os.path.exists(first_path) and os.path.exists(last_path):
@@ -489,6 +521,7 @@ class VideoFrameExtractor:
         height: int = 0,
         fit_display: bool = False,
         cache_dir: str | None = None,
+        background: Any = None,
     ) -> Image.Image | None:
         """
         Retrieve the cached first frame of a video as a Pillow Image object.
@@ -502,13 +535,14 @@ class VideoFrameExtractor:
             height: The display height used for cached-frame keying.
             fit_display: Whether fit-display mode is part of the cache key.
             cache_dir: Optional managed cache directory.
+            background: Optional RGBA/RGB float color used for cache keying.
 
         Returns:
             The first frame as a Pillow Image object, or None if the cached file
             does not exist or cannot be loaded.
         """
         path = VideoFrameExtractor.get_cached_frame_path(
-            video_path, width, height, fit_display, "first", cache_dir
+            video_path, width, height, fit_display, "first", cache_dir, background
         )
 
         if os.path.exists(path):

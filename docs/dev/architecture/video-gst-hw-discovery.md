@@ -52,22 +52,23 @@ not also request sink fullscreen; the rectangle is the positioning contract.
 ### Current Handoff Strategy: GTK Wayland Presentation
 Raspberry Pi 4 / labwc PoC testing showed that a fully covering plain
 `waylandsink` surface can trigger a short pi3d redraw flicker when the video
-surface closes at EOS. Production playback therefore prefers a `playbin` +
-`gtk4paintablesink` path on Wayland when the worker can create a borderless
-transparent GTK4 host window and place the video paintable at Picframe's
-configured pi3d display rectangle (`viewer.display_x/y/w/h`).
+surface closes at EOS. Production playback therefore requires GTK4
+`gtk4paintablesink` presentation on Wayland. Raspberry Pi/labwc uses a
+fullscreen transparent GTK4 host. GNOME/VM uses a fullscreen opaque GTK4 host
+colored from `viewer.background` so desktop shell UI cannot show through during
+custom-size playback.
 
-This path keeps video playback GPU-friendly: it does not add GStreamer `alpha`,
-`videoconvert`, or `videoscale` elements just for handoff. The GTK window is
-created and pumped inside the out-of-process GStreamer worker, hides its own
-cursor, and EOS still flows back through IPC to the playback engine. If the
-rectangle is effectively fullscreen, the video paintable fills the GTK4 host.
-Custom non-fullscreen rectangles use a fullscreen transparent host with a fixed
-child placement because GTK4/Wayland does not provide the old GTK3 move/resize
-window controls. The worker dims the GTK4 window to 99% opacity at EOS, then the
-playback engine wakes pi3d to redraw before destroying the video window. If
-GTK4, `gtk4paintablesink`, or geometry confirmation is unavailable, the worker
-falls back to the prior `waylandsink` render-rectangle path.
+The GTK window is created and pumped inside the out-of-process GStreamer worker,
+hides its own cursor, and EOS still flows back through IPC to the playback
+engine. If the rectangle is effectively fullscreen, the video paintable fills
+the GTK4 host. Custom non-fullscreen rectangles use the same fullscreen host
+with fixed child placement because GTK4/Wayland does not provide the old GTK3
+move/resize window controls. The GTK-compatible path converts decoded frames to
+8-bit RGBA before `gtk4paintablesink` so VM software playback can present HEVC
+Main10 MOV files safely. The worker dims the GTK4 window to 99% opacity at EOS,
+then the playback engine wakes pi3d to redraw before destroying the video
+window. If GTK4 or `gtk4paintablesink` is unavailable, the worker reports
+`gtk_presentation_unavailable` instead of falling back to legacy sinks.
 
 The first video frame is treated as a pi3d title card before GStreamer starts.
 When an overlay is generated, pi3d blends in the first frame, keeps the text

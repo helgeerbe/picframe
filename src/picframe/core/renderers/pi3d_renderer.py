@@ -122,6 +122,7 @@ class Pi3dRenderer(IRenderer):
         # State
         self._display: Any | None = None
         self._image_renderer: ImageRenderer | None = None
+        self._render_rect: tuple[int, int, int, int] | None = None
         self._video_reveal_parked = False
         self._video_first_frame_transition = False
         
@@ -356,6 +357,13 @@ class Pi3dRenderer(IRenderer):
             return None
         return (x, y, w, h)
 
+    def _custom_display_requires_fullscreen_host(self) -> bool:
+        if "WAYLAND_DISPLAY" not in os.environ:
+            return False
+        if self._configured_labwc_geometry() is None:
+            return False
+        return self._find_labwc_pid() is None
+
     def _labwc_config_dir(self) -> Path:
         base_dir = Path(os.environ.get("PICFRAME_DIR", "~/.picframe")).expanduser()
         return base_dir / "labwc"
@@ -452,14 +460,31 @@ class Pi3dRenderer(IRenderer):
         """Initialize the pi3d display and sprite."""
         self._logger.info("Starting Pi3dRenderer")
         self._prepare_wayland_window_identity()
+        self._render_rect = (
+            self._configured_labwc_geometry()
+            if self._custom_display_requires_fullscreen_host()
+            else None
+        )
         self._prepare_labwc_geometry_rules()
         self._logger.debug("Calling pi3d.Display.create...")
+        display_x = 0 if self._render_rect is not None else self._display_x
+        display_y = 0 if self._render_rect is not None else self._display_y
+        display_w = None if self._render_rect is not None else self._display_w
+        display_h = None if self._render_rect is not None else self._display_h
+        if self._render_rect is not None:
+            self._logger.info(
+                "Using fullscreen pi3d host with render rect %s,%s %sx%s.",
+                self._render_rect[0],
+                self._render_rect[1],
+                self._render_rect[2],
+                self._render_rect[3],
+            )
         try:
             self._display = pi3d.Display.create(
-                x=self._display_x,
-                y=self._display_y,
-                w=self._display_w,
-                h=self._display_h,
+                x=display_x,
+                y=display_y,
+                w=display_w,
+                h=display_h,
                 frames_per_second=self._fps,
                 display_config=pi3d.DISPLAY_CONFIG_HIDE_CURSOR | pi3d.DISPLAY_CONFIG_NO_FRAME,
                 background=self._background,
@@ -475,11 +500,26 @@ class Pi3dRenderer(IRenderer):
         shader = pi3d.Shader(self._shader_path)
         flat_shader = pi3d.Shader("uv_flat")
         
-        self._image_renderer = ImageRenderer(self._display, shader, self._config)
+        self._image_renderer = ImageRenderer(
+            self._display,
+            shader,
+            self._config,
+            render_rect=self._render_rect,
+        )
         
         font_file = os.path.expanduser(self._config.font_file)
-        self._text_renderer = TextRenderer(self._display, flat_shader, font_file)
-        self._clock_renderer = ClockRenderer(self._display, flat_shader, font_file)
+        self._text_renderer = TextRenderer(
+            self._display,
+            flat_shader,
+            font_file,
+            render_rect=self._render_rect,
+        )
+        self._clock_renderer = ClockRenderer(
+            self._display,
+            flat_shader,
+            font_file,
+            render_rect=self._render_rect,
+        )
 
     def stop(self) -> None:
         """Destroy the pi3d display."""
@@ -487,6 +527,7 @@ class Pi3dRenderer(IRenderer):
         if self._display is not None:
             self._display.destroy()
             self._display = None
+        self._render_rect = None
 
     def _overlay_has_visible_text(self) -> bool:
         if not self._overlay_config.show_text:
@@ -603,14 +644,8 @@ class Pi3dRenderer(IRenderer):
 
     def get_display_rect(self) -> tuple[int, int, int, int]:
         """Get the actual (x, y, width, height) of the rendering display."""
-        if self._display_w and self._display_h:
-            return (
-                int(self._display_x),
-                int(self._display_y),
-                int(self._display_w),
-                int(self._display_h),
-            )
-
+        if self._render_rect is not None:
+            return self._render_rect
         if self._display is None:
             return (self._display_x, self._display_y, self._display_w or 0, self._display_h or 0)
         

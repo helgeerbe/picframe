@@ -2,6 +2,7 @@
 Playback Engine for orchestrating media playback and rendering.
 """
 import logging
+import os
 import threading
 import time
 from collections.abc import Callable
@@ -37,6 +38,7 @@ from picframe.core.services.renderer_assets import format_renderer_asset_issues
 
 
 VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS = 0.5
+VIDEO_TRANSITION_FRAME_GENERATE_TIMEOUT_SECONDS = 20.0
 VIDEO_REVEAL_SETTLE_FRAMES = 5
 VIDEO_REVEAL_SETTLE_TIMEOUT_SECONDS = 0.5
 VIDEO_REVEAL_EOS_REDRAW_SECONDS = 0.25
@@ -434,9 +436,21 @@ class PlaybackEngine:
             return False
 
     def _video_frame_dimensions(self) -> tuple[int, int]:
-        _, _, renderer_w, renderer_h = self._renderer.get_display_rect()
+        renderer_x, renderer_y, renderer_w, renderer_h = self._renderer.get_display_rect()
+        if renderer_w > 0 and renderer_h > 0:
+            return renderer_w, renderer_h
         configured_rect = self._configured_display_rect()
         if configured_rect is not None:
+            self._logger.info(
+                "Using configured video frame dimensions %sx%s because renderer "
+                "reported invalid rect %s,%s %sx%s.",
+                configured_rect[2],
+                configured_rect[3],
+                renderer_x,
+                renderer_y,
+                renderer_w,
+                renderer_h,
+            )
             return configured_rect[2], configured_rect[3]
         return renderer_w, renderer_h
 
@@ -444,17 +458,28 @@ class PlaybackEngine:
         renderer_rect = self._renderer.get_display_rect()
         if self._configured_display_is_fullscreen():
             self._logger.info(
-                "Using renderer display rect %s for fullscreen video handoff.",
+                "Using fullscreen video handoff for renderer display rect %s.",
                 renderer_rect,
             )
-            return renderer_rect
+            return (0, 0, 0, 0)
 
         configured_rect = self._configured_display_rect()
         if configured_rect is None:
             return renderer_rect
+        renderer_x, renderer_y, renderer_w, renderer_h = renderer_rect
+        if renderer_w > 0 and renderer_h > 0:
+            if configured_rect != renderer_rect:
+                self._logger.info(
+                    "Using renderer-reported video display rect %s instead of "
+                    "configured rect %s.",
+                    renderer_rect,
+                    configured_rect,
+                )
+            return renderer_rect
         if configured_rect != renderer_rect:
             self._logger.info(
-                "Using configured video display rect %s instead of renderer-reported %s.",
+                "Using configured video display rect %s because renderer reported "
+                "invalid rect %s.",
                 configured_rect,
                 renderer_rect,
             )
@@ -468,6 +493,11 @@ class PlaybackEngine:
                 bool(self._config.get("video_fit_display", False)),
             )
         return bool(self._config.get("video_fit_display", False))
+
+    def _video_host_background(self) -> tuple[float, ...] | None:
+        if self._renderer_config is None:
+            return None
+        return tuple(self._renderer_config.background)
 
     def _refresh_model_timing(self) -> None:
         """Refresh playback timing values from live configuration."""
@@ -766,6 +796,7 @@ class PlaybackEngine:
                             display_h,
                             fit_display=self._video_fit_display(),
                             cache_dir=self._cache_dir,
+                            background=self._video_host_background(),
                         )
                         first_frame_path = extractor.get_frame_path("first")
                         last_frame_path = extractor.get_frame_path("last")
@@ -813,7 +844,15 @@ class PlaybackEngine:
                     )
                     self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
                     x, y, w, h = self._video_display_rect()
-                    self._video_player.play(media_item, x, y, w, h, self._video_fit_display())
+                    self._video_player.play(
+                        media_item,
+                        x,
+                        y,
+                        w,
+                        h,
+                        self._video_fit_display(),
+                        self._video_host_background(),
+                    )
                     self._next_transition_time = float('inf')
                     self._change_state(State.PLAYING)
             else:
@@ -850,6 +889,7 @@ class PlaybackEngine:
                     w,
                     h,
                     self._video_fit_display(),
+                    self._video_host_background(),
                 )
                 self._video_first_frame_deadline = time.time() + self._video_first_frame_timeout
             # We don't change state to PLAYING yet. We wait for VideoFirstFrameRenderedEvent.
@@ -900,6 +940,16 @@ class PlaybackEngine:
             self._video_frame_load_in_progress = True
 
         result: dict[str, Any] = {}
+        first_path = extractor.get_frame_path("first")
+        last_path = extractor.get_frame_path("last")
+        frames_missing = not (
+            os.path.exists(first_path) and os.path.exists(last_path)
+        )
+        timeout_seconds = (
+            VIDEO_TRANSITION_FRAME_GENERATE_TIMEOUT_SECONDS
+            if frames_missing
+            else VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS
+        )
 
         def load_frames() -> None:
             try:
@@ -921,11 +971,12 @@ class PlaybackEngine:
             daemon=True,
         )
         loader.start()
-        loader.join(VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS)
+        loader.join(timeout_seconds)
         if loader.is_alive():
             self._logger.warning(
-                "Timed out loading cached video transition frames after %.2fs; playing video directly.",
-                VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS,
+                "Timed out %s video transition frames after %.2fs; playing video directly.",
+                "generating" if frames_missing else "loading cached",
+                timeout_seconds,
             )
             return None
 
@@ -1047,7 +1098,16 @@ class PlaybackEngine:
             
             if is_video and self._video_player:
                 self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
-                self._video_player.play(media_item, fit_display=self._video_fit_display())
+                x, y, w, h = self._video_display_rect()
+                self._video_player.play(
+                    media_item,
+                    x,
+                    y,
+                    w,
+                    h,
+                    self._video_fit_display(),
+                    self._video_host_background(),
+                )
                 self._next_transition_time = float('inf')
             else:
                 if self._video_player:

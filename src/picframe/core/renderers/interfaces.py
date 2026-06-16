@@ -20,6 +20,7 @@ class IVideoPlayer(Protocol):
         w: int = 0,
         h: int = 0,
         fit_display: bool = False,
+        host_background: list[float] | tuple[float, ...] | None = None,
     ) -> None:
         """Start playing the specified video media item within the given screen rectangle."""
         ...

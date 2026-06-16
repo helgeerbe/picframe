@@ -18,10 +18,18 @@ from picframe.core.renderers.components.image_preparer import ImagePreparer
 class ImageRenderer:
     """Renders images and handles transitions on the pi3d display."""
 
-    def __init__(self, display: Any, shader: Any, config: RendererConfig) -> None:
+    def __init__(
+        self,
+        display: Any,
+        shader: Any,
+        config: RendererConfig,
+        render_rect: tuple[int, int, int, int] | None = None,
+    ) -> None:
         self._logger = logging.getLogger(__name__)
         self._display = display
         self._shader = shader
+        self._render_rect = render_rect
+        self._render_width, self._render_height = self._resolve_render_size()
         self.update_config(config)
         
         # State
@@ -64,7 +72,7 @@ class ImageRenderer:
             self._image_preparer.update_config(config)
         else:
             self._image_preparer = ImagePreparer(
-                (self._display.width, self._display.height),
+                (self._render_width, self._render_height),
                 config,
                 self._create_portrait_pair_image,
                 logger=self._logger,
@@ -89,14 +97,36 @@ class ImageRenderer:
             
         self._slide = pi3d.Sprite(
             camera=camera,
-            w=self._display.width,
-            h=self._display.height,
+            w=self._render_width,
+            h=self._render_height,
             z=5.0
         )
         self._slide.set_shader(self._shader)
         self._slide.unif[47] = self._edge_alpha
         self._slide.unif[54] = float(self._blend_type)
         self._slide.unif[55] = 1.0  # brightness
+        self._position_slide()
+
+    def _resolve_render_size(self) -> tuple[int, int]:
+        if self._render_rect is not None:
+            _, _, width, height = self._render_rect
+            if width > 0 and height > 0:
+                return int(width), int(height)
+        return int(self._display.width), int(self._display.height)
+
+    def _render_center(self) -> tuple[float, float]:
+        if self._render_rect is None:
+            return 0.0, 0.0
+        x, y, width, height = self._render_rect
+        center_x = -int(self._display.width) / 2 + x + width / 2
+        center_y = int(self._display.height) / 2 - y - height / 2
+        return center_x, center_y
+
+    def _position_slide(self) -> None:
+        if not self._slide or self._render_rect is None:
+            return
+        center_x, center_y = self._render_center()
+        self._slide.position(center_x, center_y, 5.0)
 
     def execute(self, command: RenderCommand) -> tuple[bool, float, float]:
         """
@@ -207,7 +237,7 @@ class ImageRenderer:
         self._slide.unif[51:53] = self._slide.unif[48:50]
 
     def _texture_scale_values(self, texture: Any) -> tuple[float, float, float, float]:
-        wh_rat = (self._display.width * texture.iy) / (self._display.height * texture.ix)
+        wh_rat = (self._render_width * texture.iy) / (self._render_height * texture.ix)
         if (wh_rat > 1.0 and self._fit) or (wh_rat <= 1.0 and not self._fit):
             return wh_rat, 1.0, (wh_rat - 1.0) * 0.5, 0.0
 

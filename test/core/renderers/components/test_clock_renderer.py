@@ -94,6 +94,34 @@ def test_clock_renderer_applies_overlay_style(mock_display, mock_shader):
     assert kwargs["width"] == mock_display.width - (int(mock_display.width * 0.05) * 2)
 
 
+def test_clock_renderer_positions_clock_inside_render_rect(mock_display, mock_shader):
+    with patch('picframe.core.renderers.components.clock_renderer.pi3d.FixedString') as mock_fixed_string:
+        sprite = MagicMock()
+        sprite.height = 60
+        mock_fixed_string.return_value.sprite = sprite
+        renderer = ClockRenderer(
+            mock_display,
+            mock_shader,
+            "font.ttf",
+            render_rect=(0, 0, 1000, 900),
+        )
+        renderer.update_config(
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_wdt_offset_pct=5,
+                clock_hgt_offset_pct=10,
+            )
+        )
+        with patch('picframe.core.renderers.components.clock_renderer.datetime') as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "12:00"
+            renderer.draw()
+
+    kwargs = mock_fixed_string.call_args.kwargs
+    assert kwargs["width"] == 900
+    sprite.position.assert_called_once_with(-460.0, 420.0, 0.1)
+
+
 def test_clock_renderer_rebuilds_when_style_changes_at_same_time(mock_display, mock_shader):
     with patch('picframe.core.renderers.components.clock_renderer.pi3d.FixedString') as mock_fixed_string:
         mock_fixed_string.return_value.sprite = MagicMock()

@@ -4,12 +4,15 @@ from unittest.mock import MagicMock
 
 from picframe.core.renderers import gst_worker
 from picframe.core.renderers.gst_worker import (
+    GTK_PRESENTATION_UNAVAILABLE_CODE,
     PIPELINE_COMPATIBLE,
+    PIPELINE_GTK_COMPATIBLE,
     PIPELINE_GTK_PLAYBIN,
     PIPELINE_HARDWARE_DIRECT,
     PIPELINE_HARDWARE_PLAYBIN,
     PIPELINE_SKIPPED,
     GstWorker,
+    PlayRequest,
     PlaybackDecision,
     VideoStreamFacts,
 )
@@ -226,310 +229,115 @@ def test_handle_play_skips_uri_without_video_stream(monkeypatch) -> None:
     assert sent_event["details"] == "No playable video stream found."
 
 
-def test_sink_bin_does_not_set_fullscreen_when_render_rectangle_is_supplied(
-    monkeypatch,
-) -> None:
-    created_elements = {}
-    util_set_object_arg = MagicMock()
-
-    class FakePad:
-        pass
-
-    class FakeElement:
-        def __init__(self, name: str) -> None:
-            self.name = name
-            self.props = SimpleNamespace(fullscreen=False)
-            self.set_property_calls = []
-
-        def set_property(self, key: str, value) -> None:
-            self.set_property_calls.append((key, value))
-
-        def link(self, other) -> bool:
-            return True
-
-        def get_static_pad(self, name: str) -> FakePad:
-            return FakePad()
-
-    class FakeBin(FakeElement):
-        def __init__(self, name: str) -> None:
-            super().__init__(name)
-            self.children = []
-            self.pads = []
-
-        def add(self, element) -> None:
-            self.children.append(element)
-
-        def add_pad(self, pad) -> None:
-            self.pads.append(pad)
-
-    def make_element(element_name: str, name: str) -> FakeElement:
-        element = FakeElement(name)
-        created_elements[name] = element
-        return element
-
-    fake_gst = SimpleNamespace(
-        Bin=SimpleNamespace(new=lambda name: FakeBin(name)),
-        Caps=SimpleNamespace(from_string=lambda value: value),
-        ElementFactory=SimpleNamespace(make=make_element),
-        GhostPad=SimpleNamespace(new=lambda name, pad: FakePad()),
-        util_set_object_arg=util_set_object_arg,
-    )
-    monkeypatch.setattr(gst_worker, "Gst", fake_gst)
-    monkeypatch.setattr(
-        gst_worker,
-        "find_best_element",
-        lambda names: "waylandsink" if "waylandsink" in names else None,
-    )
-
+def test_gtk_compatible_pipeline_keeps_natural_video_by_default() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
 
-    worker._create_sink_bin(3, 4, 100, 200)
-
-    sink = created_elements["sink"]
-    assert ("fullscreen", True) not in sink.set_property_calls
-    util_set_object_arg.assert_called_once_with(
-        sink, "render-rectangle", "<3, 4, 100, 200>"
-    )
-
-
-def test_wayland_sink_uses_render_rectangle_for_origin_rectangle(monkeypatch) -> None:
-    created_elements = {}
-    util_set_object_arg = MagicMock()
-
-    class FakePad:
-        pass
-
-    class FakeElement:
-        def __init__(self, name: str) -> None:
-            self.name = name
-            self.props = SimpleNamespace(fullscreen=False)
-            self.set_property_calls = []
-
-        def set_property(self, key: str, value) -> None:
-            self.set_property_calls.append((key, value))
-
-        def link(self, other) -> bool:
-            return True
-
-        def get_static_pad(self, name: str) -> FakePad:
-            return FakePad()
-
-    class FakeBin(FakeElement):
-        def __init__(self, name: str) -> None:
-            super().__init__(name)
-            self.children = []
-            self.pads = []
-
-        def add(self, element) -> None:
-            self.children.append(element)
-
-        def add_pad(self, pad) -> None:
-            self.pads.append(pad)
-
-    def make_element(element_name: str, name: str) -> FakeElement:
-        element = FakeElement(name)
-        created_elements[name] = element
-        return element
-
-    fake_gst = SimpleNamespace(
-        Bin=SimpleNamespace(new=lambda name: FakeBin(name)),
-        Caps=SimpleNamespace(from_string=lambda value: value),
-        ElementFactory=SimpleNamespace(make=make_element),
-        GhostPad=SimpleNamespace(new=lambda name, pad: FakePad()),
-        util_set_object_arg=util_set_object_arg,
-    )
-    monkeypatch.setattr(gst_worker, "Gst", fake_gst)
-    monkeypatch.setattr(
-        gst_worker,
-        "find_best_element",
-        lambda names: "waylandsink" if "waylandsink" in names else None,
-    )
-
-    worker = GstWorker("/tmp/picframe-test-gst.sock")
-
-    worker._create_sink_bin(0, 0, 2560, 1440)
-
-    sink = created_elements["sink"]
-    assert ("fullscreen", True) not in sink.set_property_calls
-    util_set_object_arg.assert_called_once_with(
-        sink, "render-rectangle", "<0, 0, 2560, 1440>"
-    )
-
-
-def test_pipeline_description_forces_software_decoders_and_uses_wayland_rectangle(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        gst_worker,
-        "find_best_element",
-        lambda names: "waylandsink" if "waylandsink" in names else None,
-    )
-    worker = GstWorker("/tmp/picframe-test-gst.sock")
-
-    description = worker._build_pipeline_description(
+    description = worker._build_gtk_compatible_pipeline_description(
         "file:///movie.mov",
-        0,
-        0,
-        2560,
-        1440,
+        300,
+        400,
         force_software_decoders=True,
     )
 
-    assert 'uri="file:///movie.mov"' in description
-    assert "force-sw-decoders=true" in description
-    assert "waylandsink name=sink" in description
-    assert 'render-rectangle="<0, 0, 2560, 1440>"' in description
-    assert "fullscreen=true" not in description
-    assert "rotate-method=8" in description
-    assert "videoscale add-borders=true" in description
-    assert "video/x-raw,width=2560,height=1440,format=RGBA" in description
+    assert 'uridecodebin name=decoder uri="file:///movie.mov" force-sw-decoders=true' in description
+    assert "queue name=video_queue" in description
+    assert "videoconvert" in description
+    assert "video/x-raw,format=RGBA,pixel-aspect-ratio=1/1" in description
+    assert "gtk4paintablesink name=sink" in description
+    assert "videoscale" not in description
+    assert "video/x-raw,width=300,height=400" not in description
+    assert "render-rectangle" not in description
 
 
-def test_pipeline_description_uses_rectangle_for_offset_wayland_video(monkeypatch) -> None:
-    monkeypatch.setattr(
-        gst_worker,
-        "find_best_element",
-        lambda names: "waylandsink" if "waylandsink" in names else None,
-    )
+def test_gtk_compatible_pipeline_leaves_fit_to_gtk_picture() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
 
-    description = worker._build_pipeline_description(
+    description = worker._build_gtk_compatible_pipeline_description(
         "file:///movie.mov",
-        10,
-        20,
-        300,
-        400,
-        force_software_decoders=False,
-    )
-
-    assert "force-sw-decoders=true" not in description
-    assert 'render-rectangle="<10, 20, 300, 400>"' in description
-    assert "fullscreen=true" not in description
-    assert "videoscale add-borders=true" in description
-    assert "video/x-raw,width=300,height=400,format=RGBA" in description
-
-
-def test_pipeline_description_disables_borders_when_video_fit_display_is_enabled(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        gst_worker,
-        "find_best_element",
-        lambda names: "waylandsink" if "waylandsink" in names else None,
-    )
-    worker = GstWorker("/tmp/picframe-test-gst.sock")
-
-    description = worker._build_pipeline_description(
-        "file:///movie.mov",
-        10,
-        20,
         300,
         400,
         force_software_decoders=False,
         fit_display=True,
     )
 
-    assert "videoscale add-borders=false" in description
-
-
-def test_hardware_direct_pipeline_preserves_direct_wayland_path(monkeypatch) -> None:
-    monkeypatch.setattr(
-        gst_worker,
-        "find_best_element",
-        lambda names: "waylandsink" if "waylandsink" in names else None,
-    )
-    worker = GstWorker("/tmp/picframe-test-gst.sock")
-
-    description = worker._build_pipeline_description(
-        "file:///movie.mp4",
-        0,
-        0,
-        2560,
-        1440,
-        force_software_decoders=False,
-        pipeline_variant=PIPELINE_HARDWARE_DIRECT,
-    )
-
-    assert "queue name=video_queue ! waylandsink name=sink" in description
-    assert 'render-rectangle="<0, 0, 2560, 1440>"' in description
-    assert "fullscreen=true" not in description
-    assert "videoconvert" not in description
-    assert "videoscale" not in description
-    assert "video/x-raw,format=RGBA" not in description
-    assert "alpha alpha=0.99" not in description
-
-
-def test_hardware_direct_pipeline_uses_rectangle_for_offset_wayland_video(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
-        gst_worker,
-        "find_best_element",
-        lambda names: "waylandsink" if "waylandsink" in names else None,
-    )
-    worker = GstWorker("/tmp/picframe-test-gst.sock")
-
-    description = worker._build_pipeline_description(
-        "file:///movie.mp4",
-        10,
-        20,
-        300,
-        400,
-        force_software_decoders=False,
-        pipeline_variant=PIPELINE_HARDWARE_DIRECT,
-    )
-
-    assert 'render-rectangle="<10, 20, 300, 400>"' in description
-    assert "fullscreen=true" not in description
-
-
-def test_hardware_playbin_pipeline_uses_video_only_wayland_sink(monkeypatch) -> None:
-    monkeypatch.setattr(
-        gst_worker,
-        "find_best_element",
-        lambda names: "waylandsink" if "waylandsink" in names else None,
-    )
-    worker = GstWorker("/tmp/picframe-test-gst.sock")
-
-    description = worker._build_pipeline_description(
-        "file:///movie.mp4",
-        0,
-        0,
-        2560,
-        1440,
-        force_software_decoders=False,
-        pipeline_variant=PIPELINE_HARDWARE_PLAYBIN,
-    )
-
-    assert description.startswith('playbin name=player uri="file:///movie.mp4"')
-    assert "flags=0x00000001" in description
-    assert (
-        'video-sink="waylandsink name=sink '
-        'render-rectangle=\\"<0, 0, 2560, 1440>\\" rotate-method=8"'
-    ) in description
-    assert 'audio-sink="fakesink sync=false"' in description
     assert "force-sw-decoders=true" not in description
-    assert "videoconvert" not in description
+    assert "video/x-raw,format=RGBA,pixel-aspect-ratio=1/1" in description
+    assert "videoscale" not in description
+    assert "video/x-raw,width=300,height=400" not in description
+    assert "gtk4paintablesink name=sink" in description
 
 
-def test_sink_props_use_fullscreen_when_geometry_is_unknown() -> None:
-    worker = GstWorker("/tmp/picframe-test-gst.sock")
-
-    assert (
-        worker._build_sink_props("waylandsink", 0, 0, 0, 0)
-        == "fullscreen=true rotate-method=8"
-    )
-
-
-def test_gtk_playbin_attempt_requires_wayland_hardware_and_valid_geometry(
+def test_create_gtk_compatible_pipeline_sizes_gtk_widget_for_fullscreen(
     monkeypatch,
 ) -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
-    monkeypatch.setattr(
-        gst_worker,
-        "find_best_element",
-        lambda names: "gtk4paintablesink" if "gtk4paintablesink" in names else None,
+    worker._ensure_gtk = MagicMock(return_value=MagicMock())
+    worker._gtk_primary_monitor_geometry = MagicMock(return_value=(0, 0, 2560, 1440))
+    worker._configure_gtk_paintable = MagicMock()
+    worker._present_gtk_paintable_sink = MagicMock(return_value=True)
+    sink = MagicMock()
+    paintable = MagicMock()
+    sink.get_property.return_value = paintable
+    pipeline = MagicMock()
+    pipeline.get_by_name.return_value = sink
+    parse_launch = MagicMock(return_value=pipeline)
+    monkeypatch.setattr(gst_worker.Gst, "parse_launch", parse_launch)
+
+    result = worker._create_gtk_compatible_pipeline(
+        "file:///movie.mov",
+        0,
+        0,
+        0,
+        0,
+        force_software_decoders=True,
     )
+
+    assert result is pipeline
+    assert "videoscale" not in parse_launch.call_args.args[0]
+    assert "video/x-raw,format=RGBA,pixel-aspect-ratio=1/1" in parse_launch.call_args.args[0]
+    assert "video/x-raw,width=2560,height=1440" not in parse_launch.call_args.args[0]
+    assert worker._present_gtk_paintable_sink.call_args.kwargs["set_sink_window_size"] is True
+    assert worker._present_gtk_paintable_sink.call_args.kwargs["content_fit"] == "contain"
+
+
+def test_create_gtk_compatible_pipeline_fills_fit_display_video(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._ensure_gtk = MagicMock(return_value=MagicMock())
+    worker._gtk_primary_monitor_geometry = MagicMock(return_value=(0, 0, 2560, 1440))
+    worker._configure_gtk_paintable = MagicMock()
+    worker._present_gtk_paintable_sink = MagicMock(return_value=True)
+    sink = MagicMock()
+    paintable = MagicMock()
+    sink.get_property.return_value = paintable
+    pipeline = MagicMock()
+    pipeline.get_by_name.return_value = sink
+    monkeypatch.setattr(gst_worker.Gst, "parse_launch", MagicMock(return_value=pipeline))
+
+    result = worker._create_gtk_compatible_pipeline(
+        "file:///movie.mov",
+        0,
+        0,
+        2560,
+        1440,
+        force_software_decoders=True,
+        fit_display=True,
+    )
+
+    assert result is pipeline
+    assert "videoscale" not in gst_worker.Gst.parse_launch.call_args.args[0]
+    assert (
+        "video/x-raw,format=RGBA,pixel-aspect-ratio=1/1"
+        in gst_worker.Gst.parse_launch.call_args.args[0]
+    )
+    assert worker._present_gtk_paintable_sink.call_args.kwargs["set_sink_window_size"] is True
+    assert worker._present_gtk_paintable_sink.call_args.kwargs["content_fit"] == "fill"
+
+
+def test_gtk_playbin_attempt_uses_only_pi_hardware_path() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Raspberry Pi 4 Model B Rev 1.2"
 
     assert worker._should_attempt_gtk_playbin(
         "waylandsink",
@@ -549,7 +357,7 @@ def test_gtk_playbin_attempt_requires_wayland_hardware_and_valid_geometry(
         force_software_decoders=False,
         pipeline_variant=PIPELINE_HARDWARE_DIRECT,
     )
-    assert not worker._should_attempt_gtk_playbin(
+    assert worker._should_attempt_gtk_playbin(
         "glimagesink",
         0,
         0,
@@ -567,6 +375,104 @@ def test_gtk_playbin_attempt_requires_wayland_hardware_and_valid_geometry(
         force_software_decoders=True,
         pipeline_variant=PIPELINE_HARDWARE_DIRECT,
     )
+    worker._hardware_model = "Ubuntu VM"
+    assert not worker._should_attempt_gtk_playbin(
+        "waylandsink",
+        0,
+        0,
+        2560,
+        1440,
+        force_software_decoders=False,
+        pipeline_variant=PIPELINE_HARDWARE_DIRECT,
+    )
+    assert not worker._should_attempt_gtk_playbin(
+        "waylandsink",
+        0,
+        0,
+        2560,
+        1440,
+        force_software_decoders=True,
+        pipeline_variant=PIPELINE_COMPATIBLE,
+    )
+    assert not worker._should_attempt_gtk_playbin(
+        "waylandsink",
+        0,
+        0,
+        2560,
+        1440,
+        force_software_decoders=True,
+        pipeline_variant=PIPELINE_COMPATIBLE,
+    )
+
+
+def test_gtk_compatible_attempt_allows_ubuntu_vm_software_path() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Ubuntu VM"
+
+    assert worker._should_attempt_gtk_compatible(
+        "waylandsink",
+        0,
+        0,
+        1920,
+        1080,
+        pipeline_variant=PIPELINE_COMPATIBLE,
+    )
+    assert not worker._should_attempt_gtk_compatible(
+        "waylandsink",
+        0,
+        0,
+        1920,
+        1080,
+        pipeline_variant=PIPELINE_HARDWARE_DIRECT,
+    )
+    assert worker._should_attempt_gtk_compatible(
+        "glimagesink",
+        0,
+        0,
+        1920,
+        1080,
+        pipeline_variant=PIPELINE_COMPATIBLE,
+    )
+
+
+def test_ensure_gtk_retries_after_transient_init_failure(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    fake_gtk = SimpleNamespace()
+    fake_gdk = SimpleNamespace()
+    init_gtk4 = MagicMock(
+        side_effect=[
+            RuntimeError("display not ready"),
+            (fake_gtk, fake_gdk),
+        ]
+    )
+    monkeypatch.setattr(worker, "_init_gtk4", init_gtk4)
+
+    assert worker._ensure_gtk() is None
+    assert "display not ready" in worker._gtk_presentation_failure
+
+    assert worker._ensure_gtk() is fake_gtk
+    assert worker._gdk is fake_gdk
+    assert init_gtk4.call_count == 2
+
+
+def test_initialize_gtk_supports_no_arg_init_check() -> None:
+    fake_gtk = SimpleNamespace(init_check=MagicMock(return_value=True))
+
+    GstWorker._initialize_gtk(fake_gtk)
+
+    fake_gtk.init_check.assert_called_once_with()
+
+
+def test_initialize_gtk_falls_back_to_legacy_init_check_argument() -> None:
+    fake_gtk = SimpleNamespace(
+        init_check=MagicMock(side_effect=[TypeError("old signature"), True])
+    )
+
+    GstWorker._initialize_gtk(fake_gtk)
+
+    assert fake_gtk.init_check.call_count == 2
+    assert fake_gtk.init_check.call_args_list[0].args == ()
+    assert fake_gtk.init_check.call_args_list[1].args == ([],)
 
 
 def test_gtk_geometry_is_fullscreen_for_origin_unset_or_monitor_size(
@@ -598,6 +504,7 @@ def test_gtk_window_geometry_uses_fullscreen_for_fullscreen_path() -> None:
     )
 
     window.set_default_size.assert_called_once_with(2560, 1440)
+    window.set_fullscreened.assert_called_once_with(True)
     window.fullscreen.assert_called_once_with()
     window.move.assert_not_called()
     window.resize.assert_not_called()
@@ -619,6 +526,7 @@ def test_gtk_window_geometry_sets_widget_size_for_fullscreen_path() -> None:
 
     window.set_default_size.assert_called_once_with(2560, 1440)
     widget.set_size_request.assert_called_once_with(2560, 1440)
+    window.set_fullscreened.assert_called_once_with(True)
     window.fullscreen.assert_called_once_with()
 
 
@@ -677,6 +585,7 @@ def test_gtk_host_window_geometry_uses_fullscreen_monitor_host_for_custom_geomet
     window.set_default_size.assert_called_once_with(2560, 1440)
     window.resize.assert_not_called()
     window.move.assert_not_called()
+    window.set_fullscreened.assert_called_once_with(True)
     window.fullscreen.assert_called_once_with()
 
 
@@ -687,15 +596,28 @@ def test_configure_gtk_video_window_matches_poc_hints() -> None:
     worker._configure_gtk_video_window(window)
 
     window.set_decorated.assert_called_once_with(False)
+    window.set_titlebar.assert_not_called()
     window.set_app_paintable.assert_called_once_with(True)
+    window.set_deletable.assert_called_once_with(False)
+    window.set_resizable.assert_called_once_with(False)
+    window.set_hide_on_close.assert_called_once_with(True)
     window.set_skip_taskbar_hint.assert_called_once_with(True)
     window.set_skip_pager_hint.assert_called_once_with(True)
-    window.set_focusable.assert_called_once_with(False)
-    window.set_can_focus.assert_called_once_with(False)
-    window.set_resizable.assert_not_called()
+    window.set_focusable.assert_called_once_with(True)
+    window.set_can_focus.assert_called_once_with(True)
+    window.set_focus_on_map.assert_called_once_with(True)
     window.set_accept_focus.assert_not_called()
-    window.set_focus_on_map.assert_not_called()
     window.set_type_hint.assert_not_called()
+
+
+def test_configure_gtk_video_window_disables_app_paintable_for_opaque_host() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    window = MagicMock()
+
+    worker._configure_gtk_video_window(window, transparent=False)
+
+    window.set_decorated.assert_called_once_with(False)
+    window.set_app_paintable.assert_called_once_with(False)
 
 
 def test_present_gtk_video_window_sets_opacity_fullscreen_and_presents() -> None:
@@ -706,9 +628,10 @@ def test_present_gtk_video_window_sets_opacity_fullscreen_and_presents() -> None
     worker._present_gtk_video_window(window, fullscreen=True)
 
     window.set_opacity.assert_called_once_with(1.0)
-    window.fullscreen.assert_called_once_with()
-    window.present.assert_called_once_with()
-    worker._pump_gtk_events.assert_called_once_with()
+    assert window.fullscreen.call_count == 2
+    assert window.present.call_count >= 2
+    window.grab_focus.assert_called()
+    assert worker._pump_gtk_events.call_count == 2
 
 
 def test_present_gtk_video_window_keeps_custom_geometry_unfullscreened() -> None:
@@ -720,8 +643,110 @@ def test_present_gtk_video_window_keeps_custom_geometry_unfullscreened() -> None
 
     window.set_opacity.assert_called_once_with(1.0)
     window.fullscreen.assert_not_called()
-    window.present.assert_called_once_with()
+    assert window.present.call_count >= 1
+    window.grab_focus.assert_called()
     worker._pump_gtk_events.assert_called_once_with()
+
+
+def test_gtk_video_host_uses_transparency_on_raspberry_pi(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Raspberry Pi 4 Model B Rev 1.2"
+    monkeypatch.setattr(worker, "_find_labwc_pid", MagicMock(return_value=None))
+
+    assert worker._gtk_video_host_uses_transparency()
+    worker._find_labwc_pid.assert_not_called()
+
+
+def test_gtk_video_host_uses_transparency_on_labwc_env(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Ubuntu VM"
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "labwc")
+    monkeypatch.setattr(worker, "_find_labwc_pid", MagicMock(return_value=None))
+
+    assert worker._gtk_video_host_uses_transparency()
+    worker._find_labwc_pid.assert_not_called()
+
+
+def test_gtk_video_host_uses_opaque_background_on_gnome_vm(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Ubuntu VM"
+    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
+    monkeypatch.setenv("DESKTOP_SESSION", "ubuntu")
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.setattr(worker, "_find_labwc_pid", MagicMock(return_value=None))
+
+    assert not worker._gtk_video_host_uses_transparency()
+    worker._find_labwc_pid.assert_called_once_with()
+
+
+def test_set_gtk_video_host_background_can_make_configured_opaque_color() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    display = object()
+    css_provider = MagicMock()
+    widget = MagicMock()
+
+    class FakeGdk:
+        Display = SimpleNamespace(get_default=MagicMock(return_value=display))
+
+    class FakeGtk:
+        CssProvider = MagicMock(return_value=css_provider)
+        StyleContext = SimpleNamespace(add_provider_for_display=MagicMock())
+        STYLE_PROVIDER_PRIORITY_APPLICATION = 600
+
+    worker._gdk = FakeGdk
+    worker._gtk = FakeGtk
+
+    worker._set_gtk_video_host_background(
+        widget,
+        transparent=False,
+        host_background=(0.2, 0.2, 0.3, 1.0),
+    )
+
+    css = css_provider.load_from_data.call_args.args[0].decode("utf-8")
+    assert ".picframe-transparent-video-host" in css
+    assert ".picframe-opaque-video-host" in css
+    assert "rgba(51, 51, 76, 1)" in css
+    widget.remove_css_class.assert_any_call("picframe-transparent-video-host")
+    widget.remove_css_class.assert_any_call("picframe-opaque-video-host")
+    widget.add_css_class.assert_called_once_with("picframe-opaque-video-host")
+
+
+def test_set_gtk_video_host_background_defaults_invalid_opaque_color_to_black() -> None:
+    assert GstWorker._gtk_opaque_host_background_css(None) == "rgba(0, 0, 0, 1)"
+    assert GstWorker._gtk_opaque_host_background_css(object()) == "rgba(0, 0, 0, 1)"
+    assert GstWorker._gtk_opaque_host_background_css(("bad", 0.2, 0.3)) == (
+        "rgba(0, 0, 0, 1)"
+    )
+
+
+def test_gtk_opaque_host_background_css_clamps_channels() -> None:
+    assert GstWorker._gtk_opaque_host_background_css((-1.0, 0.5, 2.0, 0.0)) == (
+        "rgba(0, 128, 255, 1)"
+    )
+
+
+def test_set_gtk_video_host_background_can_make_transparent() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    display = object()
+    css_provider = MagicMock()
+    widget = MagicMock()
+
+    class FakeGdk:
+        Display = SimpleNamespace(get_default=MagicMock(return_value=display))
+
+    class FakeGtk:
+        CssProvider = MagicMock(return_value=css_provider)
+        StyleContext = SimpleNamespace(add_provider_for_display=MagicMock())
+        STYLE_PROVIDER_PRIORITY_APPLICATION = 600
+
+    worker._gdk = FakeGdk
+    worker._gtk = FakeGtk
+
+    worker._set_gtk_video_host_background(widget, transparent=True)
+
+    css = css_provider.load_from_data.call_args.args[0].decode("utf-8")
+    assert "rgba(0, 0, 0, 0)" in css
+    widget.add_css_class.assert_called_once_with("picframe-transparent-video-host")
 
 
 def test_create_gtk_fixed_video_host_places_widget_in_fullscreen_host(
@@ -733,7 +758,7 @@ def test_create_gtk_fixed_video_host_places_widget_in_fullscreen_host(
         "_gtk_primary_monitor_geometry",
         lambda: (0, 0, 2560, 1440),
     )
-    worker._set_gtk_transparent_background = MagicMock()
+    worker._set_gtk_video_host_background = MagicMock()
 
     class FakeGtk:
         Fixed = MagicMock(return_value=MagicMock())
@@ -752,7 +777,13 @@ def test_create_gtk_fixed_video_host_places_widget_in_fullscreen_host(
     )
 
     FakeGtk.Fixed.assert_called_once_with()
-    worker._set_gtk_transparent_background.assert_called_once_with(host)
+    worker._set_gtk_video_host_background.assert_called_once_with(
+        host,
+        transparent=True,
+        host_background=None,
+    )
+    widget.set_hexpand.assert_called_once_with(True)
+    widget.set_vexpand.assert_called_once_with(True)
     widget.set_size_request.assert_called_once_with(1800, 1000)
     host.put.assert_called_once_with(widget, 100, 80)
     window.set_default_size.assert_called_once_with(2560, 1440)
@@ -768,7 +799,7 @@ def test_create_gtk_fixed_video_host_expands_fullscreen_request_to_monitor(
         "_gtk_primary_monitor_geometry",
         lambda: (0, 0, 2560, 1440),
     )
-    worker._set_gtk_transparent_background = MagicMock()
+    worker._set_gtk_video_host_background = MagicMock()
 
     class FakeGtk:
         Fixed = MagicMock(return_value=MagicMock())
@@ -786,10 +817,434 @@ def test_create_gtk_fixed_video_host_expands_fullscreen_request_to_monitor(
         0,
     )
 
+    worker._set_gtk_video_host_background.assert_called_once_with(
+        host,
+        transparent=True,
+        host_background=None,
+    )
+    widget.set_hexpand.assert_called_once_with(True)
+    widget.set_vexpand.assert_called_once_with(True)
     widget.set_size_request.assert_called_once_with(2560, 1440)
     host.put.assert_called_once_with(widget, 0, 0)
     window.set_default_size.assert_called_once_with(2560, 1440)
     host.set_size_request.assert_called_once_with(2560, 1440)
+
+
+def test_gtk_fixed_host_child_rect_removes_offset_for_opaque_fullscreen(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    monkeypatch.setattr(
+        worker,
+        "_gtk_video_host_geometry",
+        lambda *args: (0, 0, 2560, 1440),
+    )
+
+    assert worker._gtk_fixed_host_child_rect(
+        100,
+        80,
+        1800,
+        1000,
+        fullscreen=True,
+        transparent=False,
+    ) == (0, 0, 2560, 1440)
+    assert worker._gtk_fixed_host_child_rect(
+        100,
+        80,
+        1800,
+        1000,
+        fullscreen=True,
+        transparent=True,
+    ) == (100, 80, 1800, 1000)
+    assert worker._gtk_fixed_host_child_rect(
+        100,
+        80,
+        1800,
+        1000,
+        fullscreen=False,
+        transparent=False,
+    ) == (100, 80, 1800, 1000)
+
+
+def test_present_gtk_paintable_uses_fullscreen_host_for_custom_geometry(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    window = MagicMock()
+    widget = MagicMock()
+    host = MagicMock()
+    video_sink = MagicMock()
+
+    class FakeGtk:
+        Window = MagicMock(return_value=window)
+
+    monkeypatch.setattr(worker, "_gtk_geometry_is_fullscreen", lambda *args: False)
+    monkeypatch.setattr(worker, "_gtk_video_host_uses_transparency", lambda: False)
+    monkeypatch.setattr(worker, "_create_gtk_video_picture", MagicMock(return_value=widget))
+    fixed_host = MagicMock(return_value=host)
+    monkeypatch.setattr(worker, "_create_gtk_fixed_video_host", fixed_host)
+    apply_window_geometry = MagicMock()
+    monkeypatch.setattr(worker, "_apply_gtk_window_geometry", apply_window_geometry)
+    apply_host_geometry = MagicMock()
+    monkeypatch.setattr(worker, "_apply_gtk_host_window_geometry", apply_host_geometry)
+    monkeypatch.setattr(worker, "_configure_gtk_video_window", MagicMock())
+    configure_background = MagicMock()
+    monkeypatch.setattr(worker, "_configure_gtk_video_host_background", configure_background)
+    monkeypatch.setattr(worker, "_present_gtk_video_window", MagicMock())
+    monkeypatch.setattr(worker, "_log_gtk_window_diagnostics", MagicMock())
+    monkeypatch.setattr(worker, "_hide_gtk_cursor", MagicMock())
+    monkeypatch.setattr(worker, "_gtk_window_matches_geometry", lambda *args, **kwargs: True)
+    monkeypatch.setattr(worker, "_start_gtk_pump", MagicMock())
+
+    result = worker._present_gtk_paintable_sink(
+        FakeGtk,
+        video_sink,
+        MagicMock(),
+        10,
+        20,
+        300,
+        400,
+        set_sink_window_size=False,
+        content_fit="fill",
+        host_background=(0.2, 0.2, 0.3, 1.0),
+    )
+
+    assert result is True
+    configure_background.assert_called_once_with(
+        window,
+        transparent=False,
+        host_background=(0.2, 0.2, 0.3, 1.0),
+    )
+    fixed_host.assert_called_once_with(
+        FakeGtk,
+        window,
+        widget,
+        10,
+        20,
+        300,
+        400,
+        transparent=False,
+        host_background=(0.2, 0.2, 0.3, 1.0),
+    )
+    window.set_child.assert_called_once_with(host)
+    apply_host_geometry.assert_called_once_with(window, 10, 20, 300, 400)
+    apply_window_geometry.assert_not_called()
+    worker._present_gtk_video_window.assert_called_once_with(window, fullscreen=True)
+
+
+def test_present_gtk_paintable_keeps_window_when_geometry_confirmation_is_late(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    window = MagicMock()
+    widget = MagicMock()
+    host = MagicMock()
+    video_sink = MagicMock()
+
+    class FakeGtk:
+        Window = MagicMock(return_value=window)
+
+    monkeypatch.setattr(worker, "_gtk_geometry_is_fullscreen", lambda *args: False)
+    monkeypatch.setattr(worker, "_gtk_video_host_uses_transparency", lambda: False)
+    monkeypatch.setattr(worker, "_create_gtk_video_picture", MagicMock(return_value=widget))
+    monkeypatch.setattr(worker, "_create_gtk_fixed_video_host", MagicMock(return_value=host))
+    monkeypatch.setattr(worker, "_apply_gtk_host_window_geometry", MagicMock())
+    monkeypatch.setattr(worker, "_configure_gtk_video_window", MagicMock())
+    monkeypatch.setattr(worker, "_configure_gtk_video_host_background", MagicMock())
+    monkeypatch.setattr(worker, "_present_gtk_video_window", MagicMock())
+    monkeypatch.setattr(worker, "_log_gtk_window_diagnostics", MagicMock())
+    monkeypatch.setattr(worker, "_hide_gtk_cursor", MagicMock())
+    monkeypatch.setattr(worker, "_gtk_window_matches_geometry", lambda *args, **kwargs: False)
+    monkeypatch.setattr(worker, "_start_gtk_pump", MagicMock())
+
+    result = worker._present_gtk_paintable_sink(
+        FakeGtk,
+        video_sink,
+        MagicMock(),
+        10,
+        20,
+        300,
+        400,
+        set_sink_window_size=False,
+        content_fit="contain",
+    )
+
+    assert result is True
+    assert worker._gtk_window is window
+    window.destroy.assert_not_called()
+
+
+def test_present_gtk_paintable_uses_fullscreen_host_for_opaque_fullscreen(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    window = MagicMock()
+    widget = MagicMock()
+    host = MagicMock()
+    video_sink = MagicMock()
+
+    class FakeGtk:
+        Window = MagicMock(return_value=window)
+
+    monkeypatch.setattr(worker, "_gtk_geometry_is_fullscreen", lambda *args: True)
+    monkeypatch.setattr(worker, "_gtk_video_host_uses_transparency", lambda: False)
+    monkeypatch.setattr(worker, "_gtk_video_host_geometry", lambda *args: (0, 0, 1920, 1080))
+    monkeypatch.setattr(worker, "_gtk_video_widget_geometry", lambda *args: (0, 0, 1920, 1080))
+    monkeypatch.setattr(worker, "_create_gtk_video_picture", MagicMock(return_value=widget))
+    fixed_host = MagicMock(return_value=host)
+    monkeypatch.setattr(worker, "_create_gtk_fixed_video_host", fixed_host)
+    apply_window_geometry = MagicMock()
+    monkeypatch.setattr(worker, "_apply_gtk_window_geometry", apply_window_geometry)
+    apply_host_geometry = MagicMock()
+    monkeypatch.setattr(worker, "_apply_gtk_host_window_geometry", apply_host_geometry)
+    configure_window = MagicMock()
+    monkeypatch.setattr(worker, "_configure_gtk_video_window", configure_window)
+    configure_background = MagicMock()
+    monkeypatch.setattr(worker, "_configure_gtk_video_host_background", configure_background)
+    monkeypatch.setattr(worker, "_present_gtk_video_window", MagicMock())
+    monkeypatch.setattr(worker, "_log_gtk_window_diagnostics", MagicMock())
+    monkeypatch.setattr(worker, "_hide_gtk_cursor", MagicMock())
+    monkeypatch.setattr(worker, "_gtk_window_matches_geometry", lambda *args, **kwargs: True)
+    monkeypatch.setattr(worker, "_start_gtk_pump", MagicMock())
+
+    result = worker._present_gtk_paintable_sink(
+        FakeGtk,
+        video_sink,
+        MagicMock(),
+        0,
+        0,
+        0,
+        0,
+        set_sink_window_size=True,
+        content_fit="fill",
+    )
+
+    assert result is True
+    configure_window.assert_called_once_with(window, transparent=False)
+    configure_background.assert_called_once_with(
+        window,
+        transparent=False,
+        host_background=None,
+    )
+    fixed_host.assert_called_once_with(
+        FakeGtk,
+        window,
+        widget,
+        0,
+        0,
+        1920,
+        1080,
+        transparent=False,
+        host_background=None,
+    )
+    window.set_child.assert_called_once_with(host)
+    apply_host_geometry.assert_called_once_with(window, 0, 0, 0, 0)
+    apply_window_geometry.assert_not_called()
+    worker._present_gtk_video_window.assert_called_once_with(window, fullscreen=True)
+
+
+def test_present_gtk_paintable_keeps_direct_fullscreen_on_transparent_host(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    window = MagicMock()
+    widget = MagicMock()
+    video_sink = MagicMock()
+
+    class FakeGtk:
+        Window = MagicMock(return_value=window)
+
+    monkeypatch.setattr(worker, "_gtk_geometry_is_fullscreen", lambda *args: True)
+    monkeypatch.setattr(worker, "_gtk_video_host_uses_transparency", lambda: True)
+    monkeypatch.setattr(worker, "_gtk_video_widget_geometry", lambda *args: (0, 0, 1920, 1080))
+    monkeypatch.setattr(worker, "_create_gtk_video_picture", MagicMock(return_value=widget))
+    fixed_host = MagicMock()
+    monkeypatch.setattr(worker, "_create_gtk_fixed_video_host", fixed_host)
+    apply_window_geometry = MagicMock()
+    monkeypatch.setattr(worker, "_apply_gtk_window_geometry", apply_window_geometry)
+    apply_host_geometry = MagicMock()
+    monkeypatch.setattr(worker, "_apply_gtk_host_window_geometry", apply_host_geometry)
+    configure_window = MagicMock()
+    monkeypatch.setattr(worker, "_configure_gtk_video_window", configure_window)
+    configure_background = MagicMock()
+    monkeypatch.setattr(worker, "_configure_gtk_video_host_background", configure_background)
+    monkeypatch.setattr(worker, "_present_gtk_video_window", MagicMock())
+    monkeypatch.setattr(worker, "_log_gtk_window_diagnostics", MagicMock())
+    monkeypatch.setattr(worker, "_hide_gtk_cursor", MagicMock())
+    monkeypatch.setattr(worker, "_gtk_window_matches_geometry", lambda *args, **kwargs: True)
+    monkeypatch.setattr(worker, "_start_gtk_pump", MagicMock())
+
+    result = worker._present_gtk_paintable_sink(
+        FakeGtk,
+        video_sink,
+        MagicMock(),
+        0,
+        0,
+        0,
+        0,
+        set_sink_window_size=True,
+        content_fit="fill",
+    )
+
+    assert result is True
+    configure_window.assert_called_once_with(window, transparent=True)
+    window.set_child.assert_called_once_with(widget)
+    fixed_host.assert_not_called()
+    apply_host_geometry.assert_not_called()
+    apply_window_geometry.assert_called_once_with(
+        window,
+        0,
+        0,
+        0,
+        0,
+        fullscreen=True,
+        widget=widget,
+    )
+
+
+def test_create_gtk_video_picture_uses_contain_by_default() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    picture = MagicMock()
+
+    class FakeGtk:
+        ContentFit = SimpleNamespace(CONTAIN="contain", FILL="fill")
+        Picture = SimpleNamespace(new_for_paintable=MagicMock(return_value=picture))
+
+    result = worker._create_gtk_video_picture(FakeGtk, MagicMock())
+
+    assert result is picture
+    picture.set_content_fit.assert_called_once_with("contain")
+
+
+def test_create_gtk_video_picture_can_fill_pre_shaped_frames() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    picture = MagicMock()
+
+    class FakeGtk:
+        ContentFit = SimpleNamespace(CONTAIN="contain", FILL="fill")
+        Picture = SimpleNamespace(new_for_paintable=MagicMock(return_value=picture))
+
+    result = worker._create_gtk_video_picture(
+        FakeGtk,
+        MagicMock(),
+        content_fit="fill",
+    )
+
+    assert result is picture
+    picture.set_content_fit.assert_called_once_with("fill")
+
+
+def test_create_gtk_video_picture_preserves_aspect_without_content_fit() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    picture = MagicMock()
+
+    class FakeGtk:
+        Picture = SimpleNamespace(new_for_paintable=MagicMock(return_value=picture))
+
+    result = worker._create_gtk_video_picture(FakeGtk, MagicMock())
+
+    assert result is picture
+    picture.set_keep_aspect_ratio.assert_called_once_with(True)
+
+
+def test_create_gtk_playbin_pipeline_contains_non_fit_video(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    playbin = MagicMock()
+    video_sink = MagicMock()
+    audio_sink = MagicMock()
+    paintable = MagicMock()
+    video_sink.get_property.return_value = paintable
+
+    def make_element(factory_name: str, name: str):
+        assert (factory_name, name) in {
+            ("playbin", "player"),
+            ("gtk4paintablesink", "sink"),
+            ("fakesink", "audiosink"),
+        }
+        return {
+            "player": playbin,
+            "sink": video_sink,
+            "audiosink": audio_sink,
+        }[name]
+
+    monkeypatch.setattr(
+        gst_worker,
+        "Gst",
+        SimpleNamespace(ElementFactory=SimpleNamespace(make=make_element)),
+    )
+    monkeypatch.setattr(worker, "_ensure_gtk", lambda: MagicMock())
+    worker._configure_gtk_paintable = MagicMock()
+    worker._present_gtk_paintable_sink = MagicMock(return_value=True)
+
+    result = worker._create_gtk_playbin_pipeline(
+        "file:///movie.mp4",
+        0,
+        0,
+        960,
+        540,
+        fit_display=False,
+    )
+
+    assert result is playbin
+    worker._present_gtk_paintable_sink.assert_called_once()
+    assert worker._present_gtk_paintable_sink.call_args.kwargs["set_sink_window_size"] is True
+    assert worker._present_gtk_paintable_sink.call_args.kwargs["content_fit"] == "contain"
+
+
+def test_create_gtk_playbin_pipeline_fills_fit_display_video(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    playbin = MagicMock()
+    video_sink = MagicMock()
+    audio_sink = MagicMock()
+    paintable = MagicMock()
+    video_sink.get_property.return_value = paintable
+
+    def make_element(factory_name: str, name: str):
+        assert (factory_name, name) in {
+            ("playbin", "player"),
+            ("gtk4paintablesink", "sink"),
+            ("fakesink", "audiosink"),
+        }
+        return {
+            "player": playbin,
+            "sink": video_sink,
+            "audiosink": audio_sink,
+        }[name]
+
+    monkeypatch.setattr(
+        gst_worker,
+        "Gst",
+        SimpleNamespace(ElementFactory=SimpleNamespace(make=make_element)),
+    )
+    monkeypatch.setattr(worker, "_ensure_gtk", lambda: MagicMock())
+    worker._configure_gtk_paintable = MagicMock()
+    worker._present_gtk_paintable_sink = MagicMock(return_value=True)
+
+    result = worker._create_gtk_playbin_pipeline(
+        "file:///movie.mp4",
+        0,
+        0,
+        960,
+        540,
+        fit_display=True,
+    )
+
+    assert result is playbin
+    worker._present_gtk_paintable_sink.assert_called_once()
+    assert worker._present_gtk_paintable_sink.call_args.kwargs["set_sink_window_size"] is True
+    assert worker._present_gtk_paintable_sink.call_args.kwargs["content_fit"] == "fill"
+
+
+def test_configure_gtk_paintable_forces_aspect_ratio() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    paintable = MagicMock()
+    paintable.find_property.return_value = object()
+    paintable.get_property.return_value = True
+
+    worker._configure_gtk_paintable(paintable)
+
+    paintable.set_property.assert_called_once_with("force-aspect-ratio", True)
+    paintable.get_property.assert_called_once_with("force-aspect-ratio")
 
 
 def test_gtk_window_matches_geometry_accepts_fullscreen_before_size_settles() -> None:
@@ -919,12 +1374,23 @@ def test_on_eos_dims_gtk_window_before_sending_event() -> None:
     worker._last_sample_diagnostics = MagicMock(
         return_value=(1.25, 0.04, "video/x-raw(memory:DMABuf)")
     )
+    eos_order = []
+    worker._gtk_window.set_opacity.side_effect = lambda value: eos_order.append(
+        ("opacity", value)
+    )
+    worker.conn.send.side_effect = lambda payload: eos_order.append(
+        ("send", json.loads(payload)["type"])
+    )
 
     worker._on_eos(MagicMock(), MagicMock())
 
     worker.pipeline.set_state.assert_called_once_with(gst_worker.Gst.State.PAUSED)
     worker._gtk_window.set_opacity.assert_called_once_with(gst_worker.EOS_GTK_WINDOW_OPACITY)
     worker._pump_gtk_events.assert_called_once_with()
+    assert eos_order == [
+        ("opacity", gst_worker.EOS_GTK_WINDOW_OPACITY),
+        ("send", "eos"),
+    ]
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "eos"
     assert sent_event["last_sample_pts_seconds"] == 1.25
@@ -1050,6 +1516,7 @@ def test_start_pipeline_uses_gtk_playbin_when_geometry_is_valid(monkeypatch) -> 
     diagnostics = MagicMock()
 
     monkeypatch.setattr(worker, "_select_sink_name", lambda: "waylandsink")
+    monkeypatch.setattr(worker, "_gtk_paintable_sink_available", lambda: True)
     monkeypatch.setattr(
         worker,
         "_select_playback_decision",
@@ -1060,7 +1527,11 @@ def test_start_pipeline_uses_gtk_playbin_when_geometry_is_valid(monkeypatch) -> 
         ),
     )
     monkeypatch.setattr(worker, "_should_attempt_gtk_playbin", lambda *args, **kwargs: True)
-    monkeypatch.setattr(worker, "_create_gtk_playbin_pipeline", lambda *args: fake_pipeline)
+    monkeypatch.setattr(
+        worker,
+        "_create_gtk_playbin_pipeline",
+        lambda *args, **kwargs: fake_pipeline,
+    )
     monkeypatch.setattr(worker, "_connect_pipeline_telemetry_hooks", lambda: None)
     monkeypatch.setattr(worker, "_send_video_diagnostics", diagnostics)
 
@@ -1081,14 +1552,79 @@ def test_start_pipeline_uses_gtk_playbin_when_geometry_is_valid(monkeypatch) -> 
     assert diagnostics.call_count >= 2
 
 
-def test_start_pipeline_falls_back_when_gtk_geometry_is_not_confirmed(
+def test_start_pipeline_uses_gtk_compatible_for_ubuntu_vm_software(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Ubuntu VM"
+    fake_pipeline = FakePipeline()
+    diagnostics = MagicMock()
+    gtk_playbin = MagicMock(return_value=FakePipeline())
+    gtk_compatible = MagicMock(return_value=fake_pipeline)
+
+    monkeypatch.setattr(worker, "_select_sink_name", lambda: "waylandsink")
+    monkeypatch.setattr(worker, "_gtk_paintable_sink_available", lambda: True)
+    monkeypatch.setattr(
+        gst_worker,
+        "find_best_element",
+        lambda names: "gtk4paintablesink" if "gtk4paintablesink" in names else None,
+    )
+    monkeypatch.setattr(
+        worker,
+        "_select_playback_decision",
+        lambda *args, **kwargs: PlaybackDecision(
+            pipeline_variant=PIPELINE_COMPATIBLE,
+            force_software_decoders=True,
+            decision="software_fallback",
+            fallback_reason="hardware_decoder_unavailable",
+        ),
+    )
+    monkeypatch.setattr(worker, "_create_gtk_playbin_pipeline", gtk_playbin)
+    monkeypatch.setattr(
+        worker,
+        "_create_gtk_compatible_pipeline",
+        gtk_compatible,
+    )
+    monkeypatch.setattr(worker, "_connect_pipeline_telemetry_hooks", lambda: None)
+    monkeypatch.setattr(worker, "_send_video_diagnostics", diagnostics)
+
+    worker._start_pipeline(
+        "file:///movie.mp4",
+        0,
+        0,
+        1920,
+        1080,
+        force_software_decoders=False,
+        stream_facts=h264_facts(1920, 1080),
+    )
+
+    gtk_playbin.assert_not_called()
+    gtk_compatible.assert_called_once_with(
+        "file:///movie.mp4",
+        0,
+        0,
+        1920,
+        1080,
+        force_software_decoders=True,
+        fit_display=False,
+        host_background=None,
+    )
+    assert worker.pipeline is fake_pipeline
+    assert worker._current_pipeline_variant == PIPELINE_GTK_COMPATIBLE
+    assert worker._current_sink_name == "gtk4paintablesink"
+    assert fake_pipeline.properties["volume"] == 1.0
+    assert diagnostics.call_count >= 2
+
+
+def test_start_pipeline_tries_gtk_compatible_when_gtk_playbin_fails(
     monkeypatch,
 ) -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     fake_pipeline = FakePipeline()
-    parse_launch = MagicMock(return_value=fake_pipeline)
+    gtk_compatible = MagicMock(return_value=fake_pipeline)
 
     monkeypatch.setattr(worker, "_select_sink_name", lambda: "waylandsink")
+    monkeypatch.setattr(worker, "_gtk_paintable_sink_available", lambda: True)
     monkeypatch.setattr(
         worker,
         "_select_playback_decision",
@@ -1099,7 +1635,69 @@ def test_start_pipeline_falls_back_when_gtk_geometry_is_not_confirmed(
         ),
     )
     monkeypatch.setattr(worker, "_should_attempt_gtk_playbin", lambda *args, **kwargs: True)
-    monkeypatch.setattr(worker, "_create_gtk_playbin_pipeline", lambda *args: None)
+    monkeypatch.setattr(worker, "_create_gtk_playbin_pipeline", MagicMock(return_value=None))
+    monkeypatch.setattr(worker, "_should_attempt_gtk_compatible", lambda *args, **kwargs: True)
+    monkeypatch.setattr(worker, "_create_gtk_compatible_pipeline", gtk_compatible)
+    monkeypatch.setattr(worker, "_connect_pipeline_telemetry_hooks", lambda: None)
+    monkeypatch.setattr(worker, "_send_video_diagnostics", lambda *args, **kwargs: None)
+
+    worker._start_pipeline(
+        "file:///movie.mp4",
+        10,
+        20,
+        300,
+        400,
+        force_software_decoders=False,
+        stream_facts=h264_facts(1920, 1080),
+    )
+
+    assert worker.pipeline is fake_pipeline
+    assert worker._current_pipeline_variant == PIPELINE_GTK_COMPATIBLE
+    assert worker._current_sink_name == "gtk4paintablesink"
+    gtk_compatible.assert_called_once_with(
+        "file:///movie.mp4",
+        10,
+        20,
+        300,
+        400,
+        force_software_decoders=False,
+        fit_display=False,
+        host_background=None,
+    )
+
+
+def test_start_pipeline_reports_error_when_required_gtk_geometry_is_not_confirmed(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    conn = MagicMock()
+    conn.closed = False
+    worker.conn = conn
+    parse_launch = MagicMock()
+
+    monkeypatch.setattr(worker, "_select_sink_name", lambda: "waylandsink")
+    monkeypatch.setattr(worker, "_gtk_paintable_sink_available", lambda: True)
+    monkeypatch.setattr(
+        worker,
+        "_select_playback_decision",
+        lambda *args, **kwargs: PlaybackDecision(
+            pipeline_variant=PIPELINE_HARDWARE_DIRECT,
+            force_software_decoders=False,
+            decision="hardware_direct",
+        ),
+    )
+    monkeypatch.setattr(worker, "_should_attempt_gtk_playbin", lambda *args, **kwargs: True)
+
+    def fail_gtk_playbin(*args, **kwargs):
+        worker._gtk_presentation_failure = "GTK4 initialization failed: display not ready"
+        return None
+
+    monkeypatch.setattr(
+        worker,
+        "_create_gtk_playbin_pipeline",
+        fail_gtk_playbin,
+    )
+    monkeypatch.setattr(worker, "_should_attempt_gtk_compatible", lambda *args, **kwargs: False)
     monkeypatch.setattr(worker, "_connect_pipeline_telemetry_hooks", lambda: None)
     monkeypatch.setattr(worker, "_send_video_diagnostics", lambda *args, **kwargs: None)
     monkeypatch.setattr(gst_worker.Gst, "parse_launch", parse_launch)
@@ -1114,11 +1712,51 @@ def test_start_pipeline_falls_back_when_gtk_geometry_is_not_confirmed(
         stream_facts=h264_facts(1920, 1080),
     )
 
-    assert worker.pipeline is fake_pipeline
-    assert worker._current_pipeline_variant == PIPELINE_HARDWARE_DIRECT
-    assert worker._current_sink_name == "waylandsink"
-    assert parse_launch.call_args.args[0].startswith('uridecodebin name=decoder uri="file:///movie.mp4"')
-    assert 'render-rectangle="<10, 20, 300, 400>"' in parse_launch.call_args.args[0]
+    assert worker.pipeline is None
+    parse_launch.assert_not_called()
+    sent_event = json.loads(conn.send.call_args.args[0])
+    assert sent_event["type"] == "error"
+    assert sent_event["code"] == GTK_PRESENTATION_UNAVAILABLE_CODE
+    assert "GTK4 video presentation is required" in sent_event["details"]
+    assert "display not ready" in sent_event["details"]
+
+
+def test_start_pipeline_reports_error_when_gtk4_sink_is_missing(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    conn = MagicMock()
+    conn.closed = False
+    worker.conn = conn
+    parse_launch = MagicMock()
+
+    monkeypatch.setattr(worker, "_select_sink_name", lambda: "waylandsink")
+    monkeypatch.setattr(worker, "_gtk_paintable_sink_available", lambda: False)
+    monkeypatch.setattr(
+        worker,
+        "_select_playback_decision",
+        lambda *args, **kwargs: PlaybackDecision(
+            pipeline_variant=PIPELINE_COMPATIBLE,
+            force_software_decoders=True,
+            decision="software_fallback",
+        ),
+    )
+    monkeypatch.setattr(gst_worker.Gst, "parse_launch", parse_launch)
+
+    worker._start_pipeline(
+        "file:///movie.mp4",
+        0,
+        0,
+        1920,
+        1080,
+        force_software_decoders=False,
+        stream_facts=h264_facts(1920, 1080),
+    )
+
+    assert worker.pipeline is None
+    parse_launch.assert_not_called()
+    sent_event = json.loads(conn.send.call_args.args[0])
+    assert sent_event["type"] == "error"
+    assert sent_event["code"] == GTK_PRESENTATION_UNAVAILABLE_CODE
+    assert "gtk4paintablesink element is not installed" in sent_event["details"]
 
 
 def test_select_pipeline_variant_uses_hardware_direct_for_wayland_hardware(
@@ -1363,6 +2001,48 @@ def test_pi4_h265_main10_skips_unsupported_wayland_presentation(
     assert decision.error_code == "unsupported_media"
 
 
+def test_pi_h265_main10_skips_when_hardware_decoder_is_unavailable(
+    monkeypatch,
+) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Raspberry Pi 4 Model B Rev 1.2"
+    monkeypatch.setattr(gst_worker, "find_best_element", lambda names: None)
+
+    decision = worker._select_playback_decision(
+        "file:///IMG_0103.MOV",
+        "waylandsink",
+        force_software_decoders=False,
+        max_software_decode_resolution="1920x1080",
+        stream_facts=h265_main10_facts(1920, 1080),
+    )
+
+    assert decision.pipeline_variant == PIPELINE_SKIPPED
+    assert decision.force_software_decoders is False
+    assert decision.decision == "skip"
+    assert decision.fallback_reason == "hardware_decoder_unavailable"
+    assert decision.error_code == "unsupported_media"
+
+
+def test_pi_h265_main10_forced_software_decode_is_still_skipped() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Raspberry Pi 4 Model B Rev 1.2"
+
+    decision = worker._select_playback_decision(
+        "file:///IMG_0103.MOV",
+        "waylandsink",
+        force_software_decoders=True,
+        max_software_decode_resolution="1920x1080",
+        stream_facts=h265_main10_facts(1920, 1080),
+        fallback_reason="software_fallback",
+    )
+
+    assert decision.pipeline_variant == PIPELINE_SKIPPED
+    assert decision.force_software_decoders is False
+    assert decision.decision == "skip"
+    assert decision.fallback_reason == "software_fallback"
+    assert decision.error_code == "unsupported_media"
+
+
 def test_non_pi_h265_without_known_hardware_uses_software_fallback() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker._hardware_model = "Ubuntu VM"
@@ -1374,6 +2054,25 @@ def test_non_pi_h265_without_known_hardware_uses_software_fallback() -> None:
         force_software_decoders=False,
         max_software_decode_resolution="1920x1080",
         stream_facts=h265_main_facts(1280, 720),
+    )
+
+    assert decision.pipeline_variant == PIPELINE_COMPATIBLE
+    assert decision.force_software_decoders is True
+    assert decision.decision == "software_fallback"
+    assert decision.fallback_reason == "hardware_unsupported_for_model"
+
+
+def test_ubuntu_vm_h265_main10_uses_software_fallback_when_within_limit() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Ubuntu VM"
+    worker._hardware_decode_available_for_facts = lambda stream_facts: False
+
+    decision = worker._select_playback_decision(
+        "file:///IMG_0103.MOV",
+        "waylandsink",
+        force_software_decoders=False,
+        max_software_decode_resolution="1920x1080",
+        stream_facts=h265_main10_facts(1920, 1080),
     )
 
     assert decision.pipeline_variant == PIPELINE_COMPATIBLE
@@ -1715,7 +2414,7 @@ def test_not_negotiated_error_retries_once_with_software_decoders() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker.conn = MagicMock()
     worker.conn.closed = False
-    worker._current_play_request = ("file:///movie.mov", 1, 2, 300, 400)
+    worker._current_play_request = PlayRequest("file:///movie.mov", 1, 2, 300, 400, False)
     worker._start_pipeline = MagicMock()
 
     worker._on_error(
@@ -1738,6 +2437,7 @@ def test_not_negotiated_error_retries_once_with_software_decoders() -> None:
         max_software_decode_resolution=None,
         stream_facts=None,
         fit_display=False,
+        host_background=None,
     )
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "warning"
@@ -1745,11 +2445,36 @@ def test_not_negotiated_error_retries_once_with_software_decoders() -> None:
     assert sent_event["decoder"] == "force-sw-decoders"
 
 
+def test_pi_hardware_only_stream_does_not_retry_with_software_decode() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._hardware_model = "Raspberry Pi 4 Model B Rev 1.2"
+    worker.conn = MagicMock()
+    worker.conn.closed = False
+    worker._current_play_request = PlayRequest("file:///IMG_0103.MOV", 1, 2, 300, 400, False)
+    worker._current_stream_facts = h265_main10_facts(1920, 1080)
+    worker._start_pipeline = MagicMock()
+    worker._handle_stop = MagicMock()
+
+    worker._on_error(
+        MagicMock(),
+        FakeGstErrorMessage(
+            "Internal data stream error.",
+            "streaming stopped, reason not-negotiated (-4)",
+        ),
+    )
+
+    worker._start_pipeline.assert_not_called()
+    sent_event = json.loads(worker.conn.send.call_args[0][0])
+    assert sent_event["type"] == "error"
+    assert sent_event["details"] == "Internal data stream error."
+    worker._handle_stop.assert_called_once()
+
+
 def test_hardware_direct_error_retries_compatible_pipeline_first() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker.conn = MagicMock()
     worker.conn.closed = False
-    worker._current_play_request = ("file:///movie.mov", 1, 2, 300, 400)
+    worker._current_play_request = PlayRequest("file:///movie.mov", 1, 2, 300, 400, False)
     worker._current_pipeline_variant = PIPELINE_HARDWARE_DIRECT
     worker._start_pipeline = MagicMock()
 
@@ -1775,6 +2500,7 @@ def test_hardware_direct_error_retries_compatible_pipeline_first() -> None:
         max_software_decode_resolution=None,
         stream_facts=None,
         fit_display=False,
+        host_background=None,
     )
 
 
@@ -1804,7 +2530,7 @@ def test_second_not_negotiated_error_is_forwarded() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker.conn = MagicMock()
     worker.conn.closed = False
-    worker._current_play_request = ("file:///movie.mov", 1, 2, 300, 400)
+    worker._current_play_request = PlayRequest("file:///movie.mov", 1, 2, 300, 400, False)
     worker._software_decode_retry_attempted = True
     worker._handle_stop = MagicMock()
 

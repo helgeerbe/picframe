@@ -124,13 +124,79 @@ def test_renderer_start_stop(
     assert renderer._display is None
 
 
-def test_renderer_get_display_rect_prefers_configured_geometry(
+def test_renderer_uses_fullscreen_host_for_custom_geometry_without_labwc(
+    mock_pi3d: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = RendererConfig(
+        display_x=0,
+        display_y=0,
+        display_w=1000,
+        display_h=900,
+        font_file="/path/to/font.ttf",
+    )
+    renderer = Pi3dRenderer(config)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+    monkeypatch.setattr(renderer, "_find_labwc_pid", lambda: None)
+
+    with (
+        patch("picframe.core.renderers.pi3d_renderer.ImageRenderer") as image_renderer,
+        patch("picframe.core.renderers.pi3d_renderer.TextRenderer") as text_renderer,
+        patch("picframe.core.renderers.pi3d_renderer.ClockRenderer") as clock_renderer,
+    ):
+        renderer.start()
+
+    create_kwargs = mock_pi3d.Display.create.call_args.kwargs
+    assert create_kwargs["x"] == 0
+    assert create_kwargs["y"] == 0
+    assert create_kwargs["w"] is None
+    assert create_kwargs["h"] is None
+    assert renderer.get_display_rect() == (0, 0, 1000, 900)
+    assert image_renderer.call_args.kwargs["render_rect"] == (0, 0, 1000, 900)
+    assert text_renderer.call_args.kwargs["render_rect"] == (0, 0, 1000, 900)
+    assert clock_renderer.call_args.kwargs["render_rect"] == (0, 0, 1000, 900)
+
+
+def test_renderer_keeps_configured_window_geometry_with_labwc(
+    mock_pi3d: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = RendererConfig(
+        display_x=10,
+        display_y=20,
+        display_w=1000,
+        display_h=900,
+        font_file="/path/to/font.ttf",
+    )
+    renderer = Pi3dRenderer(config)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+    monkeypatch.setattr(renderer, "_find_labwc_pid", lambda: 1234)
+    monkeypatch.setattr(renderer, "_prepare_labwc_geometry_rules", MagicMock())
+
+    with (
+        patch("picframe.core.renderers.pi3d_renderer.ImageRenderer") as image_renderer,
+        patch("picframe.core.renderers.pi3d_renderer.TextRenderer") as text_renderer,
+        patch("picframe.core.renderers.pi3d_renderer.ClockRenderer") as clock_renderer,
+    ):
+        renderer.start()
+
+    create_kwargs = mock_pi3d.Display.create.call_args.kwargs
+    assert create_kwargs["x"] == 10
+    assert create_kwargs["y"] == 20
+    assert create_kwargs["w"] == 1000
+    assert create_kwargs["h"] == 900
+    assert image_renderer.call_args.kwargs["render_rect"] is None
+    assert text_renderer.call_args.kwargs["render_rect"] is None
+    assert clock_renderer.call_args.kwargs["render_rect"] is None
+
+
+def test_renderer_get_display_rect_prefers_actual_display_geometry(
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
     mock_clock_renderer: MagicMock,
 ) -> None:
-    """Configured pi3d geometry is the contract for matching video overlays."""
+    """Actual pi3d geometry is the contract for matching video overlays."""
     config = RendererConfig(
         display_x=100,
         display_y=80,
@@ -147,7 +213,7 @@ def test_renderer_get_display_rect_prefers_configured_geometry(
     renderer._display.width = 1920
     renderer._display.height = 1080
 
-    assert renderer.get_display_rect() == (100, 80, 1800, 1000)
+    assert renderer.get_display_rect() == (0, 80, 1920, 1080)
 
 
 def test_renderer_sets_stable_sdl_window_identity(

@@ -38,6 +38,7 @@ class PlayCommand(IpcMessage):
     h: int = 0
     max_software_decode_resolution: str | None = None
     fit_display: bool = False
+    host_background: list[float] | tuple[float, ...] | None = None
     type: str = field(default="play", init=False)
 
 @dataclass(frozen=True)

@@ -192,13 +192,19 @@ class VideoMetadataStrategy(IMetadataStrategy):
                     target_w = self.display_w if self.display_w > 0 else width
                     target_h = self.display_h if self.display_h > 0 else height
                     fit_display = False
+                    background = None
                     if self._config_repository is not None:
                         fit_display = self._config_repository.get_app_config_bool(
                             "viewer.video_fit_display", False
                         )
+                        background = self._config_repository.get_app_config(
+                            "viewer.background", None
+                        )
                     frame_cache_kwargs = {}
                     if fit_display:
                         frame_cache_kwargs["fit_display"] = fit_display
+                    if background is not None:
+                        frame_cache_kwargs["background"] = background
                     if self.cache_dir is not None:
                         frame_cache_kwargs["cache_dir"] = self.cache_dir
                     frames_cached = VideoFrameExtractor.extract_and_save_frames(

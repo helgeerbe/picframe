@@ -44,12 +44,16 @@ PIPELINE_COMPATIBLE = "compatible"
 PIPELINE_HARDWARE_DIRECT = "hardware_direct"
 PIPELINE_HARDWARE_PLAYBIN = "hardware_playbin"
 PIPELINE_GTK_PLAYBIN = "gtk_playbin"
+PIPELINE_GTK_COMPATIBLE = "gtk_compatible"
 PIPELINE_SKIPPED = "skipped"
 DEFAULT_SOFTWARE_DECODE_LIMIT = "1280x720"
 UNSUPPORTED_MEDIA_CODE = "unsupported_media"
+GTK_PRESENTATION_UNAVAILABLE_CODE = "gtk_presentation_unavailable"
 EOS_GTK_WINDOW_OPACITY = 0.99
 FIRST_FRAME_PROBE_INTERVAL_MS = 16
 FIRST_FRAME_PROBE_TIMEOUT_SECONDS = 2.0
+GTK_TRANSPARENT_HOST_CLASS = "picframe-transparent-video-host"
+GTK_OPAQUE_HOST_CLASS = "picframe-opaque-video-host"
 
 
 @dataclass(frozen=True)
@@ -88,6 +92,17 @@ class PlaybackDecision:
     error_code: str | None = None
     hardware_limit: str | None = None
     software_limit: str | None = None
+
+
+@dataclass(frozen=True)
+class PlayRequest:
+    uri: str
+    x: int
+    y: int
+    w: int
+    h: int
+    fit_display: bool
+    host_background: list[float] | tuple[float, ...] | None = None
 
 
 RPI_HARDWARE_DECODE_LIMITS: dict[str, dict[str, DecodeHardwareLimit]] = {
@@ -172,7 +187,7 @@ class GstWorker:
         self.volume: float = 1.0
         self.running = True
         self.loop: Any = GLib.MainLoop() if GST_AVAILABLE else None
-        self._current_play_request: tuple[str, int, int, int, int, bool] | None = None
+        self._current_play_request: PlayRequest | None = None
         self._current_stream_facts: VideoStreamFacts | None = None
         self._current_max_software_decode_resolution: str | None = None
         self._software_decode_retry_attempted = False
@@ -189,12 +204,12 @@ class GstWorker:
         self._hardware_model = self._read_hardware_model()
         self._gtk: Any | None = None
         self._gdk: Any | None = None
-        self._gtk_available: bool | None = None
         self._gtk_window: Any = None
         self._gtk_host: Any = None
         self._gtk_sink_widget: Any = None
         self._gtk_video_sink: Any = None
         self._gtk_pump_source_id: int | None = None
+        self._gtk_presentation_failure: str | None = None
         self._first_frame_event_sent = False
         self._first_frame_probe_source_id: int | None = None
         self._first_frame_probe_started_at = 0.0
@@ -422,6 +437,7 @@ class GstWorker:
                 cmd.h,
                 cmd.max_software_decode_resolution,
                 cmd.fit_display,
+                cmd.host_background,
             )
         elif isinstance(cmd, PauseCommand):
             self._handle_pause()
@@ -441,6 +457,7 @@ class GstWorker:
         h: int,
         max_software_decode_resolution: str | None = None,
         fit_display: bool = False,
+        host_background: list[float] | tuple[float, ...] | None = None,
     ) -> None:
         try:
             stream_facts, reason = self._discover_video_stream_facts(uri)
@@ -450,7 +467,15 @@ class GstWorker:
                 self._send_event(ErrorEvent(details=details, code=UNSUPPORTED_MEDIA_CODE))
                 return
 
-            self._current_play_request = (uri, x, y, w, h, fit_display)
+            self._current_play_request = PlayRequest(
+                uri=uri,
+                x=x,
+                y=y,
+                w=w,
+                h=h,
+                fit_display=fit_display,
+                host_background=host_background,
+            )
             self._current_stream_facts = stream_facts
             self._current_max_software_decode_resolution = max_software_decode_resolution
             self._software_decode_retry_attempted = False
@@ -465,6 +490,7 @@ class GstWorker:
                 max_software_decode_resolution=max_software_decode_resolution,
                 stream_facts=stream_facts,
                 fit_display=fit_display,
+                host_background=host_background,
             )
         except Exception as e:
             logger.error(f"Exception during playback setup: {e}")
@@ -485,6 +511,7 @@ class GstWorker:
         max_software_decode_resolution: str | None = None,
         stream_facts: VideoStreamFacts | None = None,
         fit_display: bool = False,
+        host_background: list[float] | tuple[float, ...] | None = None,
     ) -> None:
         self._handle_stop()
 
@@ -569,6 +596,13 @@ class GstWorker:
                 decision.fallback_reason,
             )
             gtk_pipeline = None
+            gtk_playbin_attempted = False
+            self._gtk_presentation_failure = None
+            if not self._gtk_paintable_sink_available():
+                self._gtk_presentation_failure = "gtk4paintablesink element is not installed"
+                self._send_gtk_presentation_unavailable_error()
+                return
+
             if self._should_attempt_gtk_playbin(
                 sink_name,
                 x,
@@ -578,7 +612,16 @@ class GstWorker:
                 force_software_decoders=force_software_decoders,
                 pipeline_variant=pipeline_variant,
             ):
-                gtk_pipeline = self._create_gtk_playbin_pipeline(uri, x, y, w, h)
+                gtk_playbin_attempted = True
+                gtk_pipeline = self._create_gtk_playbin_pipeline(
+                    uri,
+                    x,
+                    y,
+                    w,
+                    h,
+                    fit_display=fit_display,
+                    host_background=host_background,
+                )
                 if gtk_pipeline is not None:
                     pipeline_variant = PIPELINE_GTK_PLAYBIN
                     sink_name = "gtk4paintablesink"
@@ -586,10 +629,45 @@ class GstWorker:
                 else:
                     logger.warning(
                         "GTK-backed video presentation unavailable or geometry "
-                        "could not be confirmed; falling back to %s/%s.",
-                        decision.pipeline_variant,
-                        sink_name,
+                        "could not be confirmed.",
                     )
+            if gtk_pipeline is None and self._should_attempt_gtk_compatible(
+                sink_name,
+                x,
+                y,
+                w,
+                h,
+                pipeline_variant=(
+                    PIPELINE_COMPATIBLE if gtk_playbin_attempted else pipeline_variant
+                ),
+            ):
+                gtk_pipeline = self._create_gtk_compatible_pipeline(
+                    uri,
+                    x,
+                    y,
+                    w,
+                    h,
+                    force_software_decoders=force_software_decoders,
+                    fit_display=fit_display,
+                    host_background=host_background,
+                )
+                if gtk_pipeline is not None:
+                    pipeline_variant = PIPELINE_GTK_COMPATIBLE
+                    sink_name = "gtk4paintablesink"
+                    logger.info("Using GTK4-compatible gtk4paintablesink presentation path.")
+                else:
+                    logger.warning(
+                        "GTK-compatible video presentation unavailable or geometry "
+                        "could not be confirmed.",
+                    )
+
+            if gtk_pipeline is None:
+                self._gtk_presentation_failure = (
+                    self._gtk_presentation_failure
+                    or "No GTK4 presentation path matched the playback decision"
+                )
+                self._send_gtk_presentation_unavailable_error()
+                return
 
             self._reset_pipeline_telemetry(
                 pipeline_variant,
@@ -602,21 +680,7 @@ class GstWorker:
                 stage="decision",
                 fallback_reason=fallback_reason,
             )
-            if gtk_pipeline is not None:
-                self.pipeline = gtk_pipeline
-            else:
-                pipeline_description = self._build_pipeline_description(
-                    uri,
-                    x,
-                    y,
-                    w,
-                    h,
-                    force_software_decoders=force_software_decoders,
-                    pipeline_variant=pipeline_variant,
-                    sink_name=sink_name,
-                    fit_display=fit_display,
-                )
-                self.pipeline = Gst.parse_launch(pipeline_description)
+            self.pipeline = gtk_pipeline
             if force_software_decoders:
                 logger.info("Retrying %s with software decoders forced.", uri)
             self._connect_pipeline_telemetry_hooks()
@@ -657,70 +721,30 @@ class GstWorker:
             self._send_event(ErrorEvent(details=str(e)))
             self._handle_stop()
 
-    def _build_pipeline_description(
-        self,
-        uri: str,
-        x: int,
-        y: int,
-        w: int,
-        h: int,
-        *,
-        force_software_decoders: bool,
-        pipeline_variant: str = PIPELINE_COMPATIBLE,
-        sink_name: str | None = None,
-        fit_display: bool = False,
-    ) -> str:
-        force_sw = " force-sw-decoders=true" if force_software_decoders else ""
-        sink_name = sink_name or self._select_sink_name()
-        sink_props_str = self._build_sink_props(
-            sink_name,
-            x,
-            y,
-            w,
-            h,
-            pipeline_variant=pipeline_variant,
-        )
-
-        if pipeline_variant == PIPELINE_HARDWARE_PLAYBIN:
-            sink_description = f"{sink_name} name=sink {sink_props_str}".replace(
-                '"',
-                '\\"',
-            )
-            return (
-                f'playbin name=player uri="{uri}" flags=0x00000001 '
-                f'video-sink="{sink_description}" '
-                'audio-sink="fakesink sync=false"'
-            )
-
-        if pipeline_variant == PIPELINE_HARDWARE_DIRECT:
-            return (
-                f'uridecodebin name=decoder uri="{uri}"{force_sw} '
-                "decoder. ! "
-                "queue name=video_queue ! "
-                f"{sink_name} name=sink {sink_props_str}"
-            )
-
-        add_borders = "false" if fit_display else "true"
-        caps = "video/x-raw,format=RGBA"
-        if w > 0 and h > 0:
-            caps = f"video/x-raw,width={w},height={h},format=RGBA"
-
-        return (
-            f'uridecodebin name=decoder uri="{uri}"{force_sw} '
-            "decoder. ! "
-            "videoconvert ! "
-            f"videoscale add-borders={add_borders} ! "
-            "videoconvert ! "
-            f"{caps} ! "
-            "alpha alpha=0.99 ! "
-            f"{sink_name} name=sink {sink_props_str}"
-        )
-
     def _select_sink_name(self) -> str:
         sink_name = find_best_element(
             ["waylandsink", "glimagesink", "ximagesink", "autovideosink"]
         )
         return sink_name or "autovideosink"
+
+    @staticmethod
+    def _gtk_paintable_sink_available() -> bool:
+        return find_best_element(["gtk4paintablesink"]) == "gtk4paintablesink"
+
+    def _send_gtk_presentation_unavailable_error(self) -> None:
+        details = (
+            "GTK4 video presentation is required on Wayland but could not "
+            "be initialized or confirmed."
+        )
+        if self._gtk_presentation_failure:
+            details = f"{details} Last GTK4 failure: {self._gtk_presentation_failure}."
+        logger.error(details)
+        self._send_event(
+            ErrorEvent(
+                details=details,
+                code=GTK_PRESENTATION_UNAVAILABLE_CODE,
+            )
+        )
 
     def _should_attempt_gtk_playbin(
         self,
@@ -733,45 +757,78 @@ class GstWorker:
         force_software_decoders: bool,
         pipeline_variant: str,
     ) -> bool:
-        if force_software_decoders:
+        if (w <= 0 or h <= 0) and (x != 0 or y != 0):
             return False
-        if sink_name != "waylandsink":
-            return False
-        if pipeline_variant not in {PIPELINE_HARDWARE_DIRECT, PIPELINE_HARDWARE_PLAYBIN}:
+
+        is_raspberry_pi = self._raspberry_pi_model_family(self._hardware_model) is not None
+        if is_raspberry_pi:
+            return (
+                not force_software_decoders
+                and pipeline_variant in {
+                    PIPELINE_HARDWARE_DIRECT,
+                    PIPELINE_HARDWARE_PLAYBIN,
+                }
+            )
+
+        return False
+
+    def _should_attempt_gtk_compatible(
+        self,
+        sink_name: str,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        *,
+        pipeline_variant: str,
+    ) -> bool:
+        if pipeline_variant != PIPELINE_COMPATIBLE:
             return False
         if (w <= 0 or h <= 0) and (x != 0 or y != 0):
             return False
-        return find_best_element(["gtk4paintablesink"]) == "gtk4paintablesink"
+        return True
 
     def _ensure_gtk(self) -> Any | None:
-        if self._gtk_available is False:
-            return None
         if self._gtk is not None:
             return self._gtk
         try:
-            gi.require_version("Gtk", "4.0")
-            gi.require_version("Gdk", "4.0")
-            from gi.repository import Gdk, Gtk
-
-            if hasattr(Gtk, "init_check"):
-                init_result = Gtk.init_check([])
-                gtk_initialized = (
-                    bool(init_result[0])
-                    if isinstance(init_result, tuple)
-                    else bool(init_result)
-                )
-                if not gtk_initialized:
-                    raise RuntimeError("Gtk.init_check returned False")
-            else:
-                Gtk.init([])
+            Gtk, Gdk = self._init_gtk4()
         except Exception as exc:
             logger.warning("GTK4 unavailable for gtk4paintablesink presentation: %s", exc)
-            self._gtk_available = False
+            self._gtk_presentation_failure = f"GTK4 initialization failed: {exc}"
             return None
         self._gtk = Gtk
         self._gdk = Gdk
-        self._gtk_available = True
+        self._gtk_presentation_failure = None
         return self._gtk
+
+    def _init_gtk4(self) -> tuple[Any, Any]:
+        gi.require_version("Gtk", "4.0")
+        gi.require_version("Gdk", "4.0")
+        from gi.repository import Gdk, Gtk
+
+        self._initialize_gtk(Gtk)
+        return Gtk, Gdk
+
+    @staticmethod
+    def _initialize_gtk(Gtk: Any) -> None:
+        if hasattr(Gtk, "init_check"):
+            try:
+                init_result = Gtk.init_check()
+            except TypeError:
+                init_result = Gtk.init_check([])
+            gtk_initialized = (
+                bool(init_result[0])
+                if isinstance(init_result, tuple)
+                else bool(init_result)
+            )
+            if not gtk_initialized:
+                raise RuntimeError("Gtk.init_check returned False")
+        else:
+            try:
+                Gtk.init()
+            except TypeError:
+                Gtk.init([])
 
     @staticmethod
     def _set_property_if_supported(element: Any, property_name: str, value: Any) -> None:
@@ -794,9 +851,15 @@ class GstWorker:
         y: int,
         w: int,
         h: int,
+        *,
+        fit_display: bool = False,
+        host_background: list[float] | tuple[float, ...] | None = None,
     ) -> Any | None:
         Gtk = self._ensure_gtk()
         if Gtk is None:
+            self._gtk_presentation_failure = (
+                self._gtk_presentation_failure or "GTK4 could not be initialized"
+            )
             return None
 
         playbin = Gst.ElementFactory.make("playbin", "player")
@@ -805,6 +868,9 @@ class GstWorker:
         if playbin is None or video_sink is None or audio_sink is None:
             logger.warning(
                 "Could not create playbin/gtk4paintablesink/fakesink elements."
+            )
+            self._gtk_presentation_failure = (
+                "Could not create playbin, gtk4paintablesink, or fakesink"
             )
             return None
 
@@ -818,45 +884,227 @@ class GstWorker:
             playbin.set_property("audio-sink", audio_sink)
         except Exception as exc:
             logger.warning("Could not configure GTK playbin pipeline: %s", exc)
+            self._gtk_presentation_failure = f"Could not configure GTK playbin: {exc}"
             return None
 
         try:
             paintable = video_sink.get_property("paintable")
         except Exception as exc:
             logger.warning("gtk4paintablesink did not provide a paintable: %s", exc)
+            self._gtk_presentation_failure = (
+                f"gtk4paintablesink paintable lookup failed: {exc}"
+            )
             return None
         if paintable is None:
             logger.warning("gtk4paintablesink did not provide a paintable.")
+            self._gtk_presentation_failure = "gtk4paintablesink did not provide a paintable"
             return None
 
-        widget = self._create_gtk_video_picture(Gtk, paintable)
+        self._configure_gtk_paintable(paintable)
+        if not self._present_gtk_paintable_sink(
+            Gtk,
+            video_sink,
+            paintable,
+            x,
+            y,
+            w,
+            h,
+            set_sink_window_size=True,
+            content_fit="fill" if fit_display else "contain",
+            host_background=host_background,
+        ):
+            self._gtk_presentation_failure = (
+                self._gtk_presentation_failure or "GTK4 paintable window presentation failed"
+            )
+            return None
+        return playbin
 
-        try:
-            widget.set_hexpand(True)
-            widget.set_vexpand(True)
-        except Exception:
-            pass
+    def _build_gtk_compatible_pipeline_description(
+        self,
+        uri: str,
+        w: int,
+        h: int,
+        *,
+        force_software_decoders: bool,
+        fit_display: bool = False,
+    ) -> str:
+        force_sw = " force-sw-decoders=true" if force_software_decoders else ""
 
-        fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
-        fixed_host = not fullscreen_video
-        _widget_x, _widget_y, widget_w, widget_h = self._gtk_video_widget_geometry(
+        return (
+            f'uridecodebin name=decoder uri="{uri}"{force_sw} '
+            "decoder. ! "
+            "queue name=video_queue ! "
+            "videoconvert ! "
+            "video/x-raw,format=RGBA,pixel-aspect-ratio=1/1 ! "
+            "gtk4paintablesink name=sink"
+        )
+
+    def _create_gtk_compatible_pipeline(
+        self,
+        uri: str,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        *,
+        force_software_decoders: bool,
+        fit_display: bool = False,
+        host_background: list[float] | tuple[float, ...] | None = None,
+    ) -> Any | None:
+        Gtk = self._ensure_gtk()
+        if Gtk is None:
+            self._gtk_presentation_failure = (
+                self._gtk_presentation_failure or "GTK4 could not be initialized"
+            )
+            return None
+
+        _, _, widget_w, widget_h = self._gtk_video_widget_geometry(
             x,
             y,
             w,
             h,
         )
-        self._set_property_if_supported(video_sink, "window-width", widget_w)
-        self._set_property_if_supported(video_sink, "window-height", widget_h)
+        pipeline_description = self._build_gtk_compatible_pipeline_description(
+            uri,
+            widget_w,
+            widget_h,
+            force_software_decoders=force_software_decoders,
+            fit_display=fit_display,
+        )
+        logger.info(
+            "GTK-compatible video pipeline for %s,%s %sx%s fit_display=%s: %s",
+            x,
+            y,
+            w,
+            h,
+            fit_display,
+            pipeline_description,
+        )
+
+        try:
+            pipeline = Gst.parse_launch(pipeline_description)
+        except Exception as exc:
+            logger.warning("Could not create GTK-compatible pipeline: %s", exc)
+            self._gtk_presentation_failure = (
+                f"Could not create GTK-compatible pipeline: {exc}"
+            )
+            return None
+
+        try:
+            video_sink = pipeline.get_by_name("sink")
+        except Exception as exc:
+            logger.warning("GTK-compatible pipeline did not expose a sink: %s", exc)
+            self._gtk_presentation_failure = (
+                f"GTK-compatible pipeline did not expose a sink: {exc}"
+            )
+            return None
+        if video_sink is None:
+            logger.warning("GTK-compatible pipeline did not expose a sink.")
+            self._gtk_presentation_failure = "GTK-compatible pipeline did not expose a sink"
+            return None
+
+        self._set_property_if_supported(video_sink, "show-preroll-frame", True)
+        try:
+            paintable = video_sink.get_property("paintable")
+        except Exception as exc:
+            logger.warning("gtk4paintablesink did not provide a paintable: %s", exc)
+            self._gtk_presentation_failure = (
+                f"gtk4paintablesink paintable lookup failed: {exc}"
+            )
+            return None
+        if paintable is None:
+            logger.warning("gtk4paintablesink did not provide a paintable.")
+            self._gtk_presentation_failure = "gtk4paintablesink did not provide a paintable"
+            return None
+
+        self._configure_gtk_paintable(paintable)
+        if not self._present_gtk_paintable_sink(
+            Gtk,
+            video_sink,
+            paintable,
+            x,
+            y,
+            w,
+            h,
+            set_sink_window_size=True,
+            content_fit="fill" if fit_display else "contain",
+            host_background=host_background,
+        ):
+            self._gtk_presentation_failure = (
+                self._gtk_presentation_failure or "GTK4 paintable window presentation failed"
+            )
+            return None
+        return pipeline
+
+    def _present_gtk_paintable_sink(
+        self,
+        Gtk: Any,
+        video_sink: Any,
+        paintable: Any,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        *,
+        set_sink_window_size: bool,
+        content_fit: str,
+        host_background: list[float] | tuple[float, ...] | None = None,
+    ) -> bool:
+        transparent_host = self._gtk_video_host_uses_transparency()
+        fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
+        fixed_host = not fullscreen_video or not transparent_host
+        _, _, widget_w, widget_h = self._gtk_video_widget_geometry(
+            x,
+            y,
+            w,
+            h,
+        )
+        picture = self._create_gtk_video_picture(Gtk, paintable, content_fit=content_fit)
+        widget = picture
+
+        self._pin_gtk_video_widget(Gtk, widget)
+
+        if set_sink_window_size:
+            self._set_property_if_supported(video_sink, "window-width", widget_w)
+            self._set_property_if_supported(video_sink, "window-height", widget_h)
+        logger.info(
+            "GTK4 video paintable content-fit=%s widget-size=%sx%s.",
+            content_fit,
+            widget_w,
+            widget_h,
+        )
         try:
             widget.set_size_request(widget_w, widget_h)
         except Exception:
             pass
         window = Gtk.Window(title="picframe-video")
-        self._configure_gtk_video_window(window)
-        self._configure_gtk_transparent_host(window)
+        self._configure_gtk_video_window(window, transparent=transparent_host)
+        self._configure_gtk_video_host_background(
+            window,
+            transparent=transparent_host,
+            host_background=host_background,
+        )
         host = None
         if fixed_host:
-            host = self._create_gtk_fixed_video_host(Gtk, window, widget, x, y, w, h)
+            host_x, host_y, host_w, host_h = self._gtk_fixed_host_child_rect(
+                x,
+                y,
+                w,
+                h,
+                fullscreen=fullscreen_video,
+                transparent=transparent_host,
+            )
+            host = self._create_gtk_fixed_video_host(
+                Gtk,
+                window,
+                widget,
+                host_x,
+                host_y,
+                host_w,
+                host_h,
+                transparent=transparent_host,
+                host_background=host_background,
+            )
             window.set_child(host)
             self._apply_gtk_host_window_geometry(window, x, y, w, h)
         else:
@@ -867,10 +1115,10 @@ class GstWorker:
                 y,
                 w,
                 h,
-                fullscreen=True,
+                fullscreen=fullscreen_video,
                 widget=widget,
             )
-        self._present_gtk_video_window(window, fullscreen=fullscreen_video and not fixed_host)
+        self._present_gtk_video_window(window, fullscreen=fullscreen_video or fixed_host)
         self._log_gtk_window_diagnostics(
             window,
             widget,
@@ -880,6 +1128,7 @@ class GstWorker:
             h,
             fullscreen_video,
             fixed_host=fixed_host,
+            host_transparent=transparent_host,
         )
         self._hide_gtk_cursor(window, widget)
 
@@ -892,21 +1141,16 @@ class GstWorker:
             fullscreen=fullscreen_video,
             widget=widget,
             fixed_host=fixed_host,
+            host_transparent=transparent_host,
         ):
             logger.warning(
                 "GTK video window geometry did not match requested "
-                "%s,%s %sx%s.",
+                "%s,%s %sx%s; continuing with GTK4 presentation.",
                 x,
                 y,
                 w,
                 h,
             )
-            try:
-                window.destroy()
-            except Exception:
-                pass
-            self._pump_gtk_events()
-            return None
 
         self._gtk_window = window
         self._gtk_host = host
@@ -914,9 +1158,15 @@ class GstWorker:
         self._gtk_video_sink = video_sink
         self._start_gtk_pump()
         logger.info("GTK4 video window geometry confirmed at %s,%s %sx%s.", x, y, w, h)
-        return playbin
+        return True
 
-    def _create_gtk_video_picture(self, Gtk: Any, paintable: Any) -> Any:
+    def _create_gtk_video_picture(
+        self,
+        Gtk: Any,
+        paintable: Any,
+        *,
+        content_fit: str = "contain",
+    ) -> Any:
         if hasattr(Gtk.Picture, "new_for_paintable"):
             picture = Gtk.Picture.new_for_paintable(paintable)
         else:
@@ -928,10 +1178,37 @@ class GstWorker:
             pass
         if hasattr(Gtk, "ContentFit"):
             try:
-                picture.set_content_fit(Gtk.ContentFit.CONTAIN)
+                fit = Gtk.ContentFit.FILL if content_fit == "fill" else Gtk.ContentFit.CONTAIN
+                picture.set_content_fit(fit)
+            except Exception:
+                pass
+        else:
+            try:
+                picture.set_keep_aspect_ratio(content_fit != "fill")
             except Exception:
                 pass
         return picture
+
+    @staticmethod
+    def _pin_gtk_video_widget(Gtk: Any, widget: Any) -> None:
+        try:
+            widget.set_hexpand(True)
+            widget.set_vexpand(True)
+        except Exception:
+            pass
+        try:
+            widget.set_halign(Gtk.Align.START)
+            widget.set_valign(Gtk.Align.START)
+        except Exception:
+            pass
+
+    def _configure_gtk_paintable(self, paintable: Any) -> None:
+        self._set_property_if_supported(paintable, "force-aspect-ratio", True)
+        try:
+            force_aspect_ratio = paintable.get_property("force-aspect-ratio")
+        except Exception:
+            force_aspect_ratio = "unknown"
+        logger.info("GTK4 paintable force-aspect-ratio=%s.", force_aspect_ratio)
 
     def _gtk_geometry_is_fullscreen(self, x: int, y: int, w: int, h: int) -> bool:
         if x != 0 or y != 0:
@@ -946,6 +1223,21 @@ class GstWorker:
         return monitor_x == 0 and monitor_y == 0 and monitor_w == w and monitor_h == h
 
     def _gtk_primary_monitor_geometry(self) -> tuple[int, int, int, int] | None:
+        monitor = self._gtk_primary_monitor()
+        if monitor is None:
+            return None
+        try:
+            geometry = monitor.get_geometry()
+            return (
+                int(getattr(geometry, "x", 0)),
+                int(getattr(geometry, "y", 0)),
+                int(getattr(geometry, "width")),
+                int(getattr(geometry, "height")),
+            )
+        except Exception:
+            return None
+
+    def _gtk_primary_monitor(self) -> Any | None:
         Gdk = self._gdk
         if Gdk is None:
             return None
@@ -964,28 +1256,24 @@ class GstWorker:
                     monitor = monitors.get_item(0)
                 elif hasattr(monitors, "__getitem__"):
                     monitor = monitors[0]
-            if monitor is None:
-                return None
-            geometry = monitor.get_geometry()
-            return (
-                int(getattr(geometry, "x", 0)),
-                int(getattr(geometry, "y", 0)),
-                int(getattr(geometry, "width")),
-                int(getattr(geometry, "height")),
-            )
+            return monitor
         except Exception:
             return None
 
-    def _configure_gtk_video_window(self, window: Any) -> None:
+    def _configure_gtk_video_window(self, window: Any, *, transparent: bool = True) -> None:
         window.set_decorated(False)
         set_app_paintable = getattr(window, "set_app_paintable", None)
         if callable(set_app_paintable):
-            set_app_paintable(True)
+            set_app_paintable(transparent)
         for method_name, value in (
+            ("set_deletable", False),
+            ("set_resizable", False),
+            ("set_hide_on_close", True),
             ("set_skip_taskbar_hint", True),
             ("set_skip_pager_hint", True),
-            ("set_focusable", False),
-            ("set_can_focus", False),
+            ("set_focusable", True),
+            ("set_can_focus", True),
+            ("set_focus_on_map", True),
         ):
             method = getattr(window, method_name, None)
             if not callable(method):
@@ -995,14 +1283,76 @@ class GstWorker:
             except Exception:
                 pass
 
-    def _configure_gtk_transparent_host(self, window: Any) -> None:
+    def _gtk_video_host_uses_transparency(self) -> bool:
+        if self._raspberry_pi_model_family(self._hardware_model) is not None:
+            return True
+        desktop_text = " ".join(
+            os.environ.get(name, "")
+            for name in ("XDG_CURRENT_DESKTOP", "DESKTOP_SESSION", "WAYLAND_DISPLAY")
+        ).lower()
+        if "labwc" in desktop_text:
+            return True
+        return self._find_labwc_pid() is not None
+
+    @staticmethod
+    def _find_labwc_pid() -> int | None:
+        pid = os.getpid()
+        seen: set[int] = set()
+        while pid > 1 and pid not in seen:
+            seen.add(pid)
+            try:
+                with open(f"/proc/{pid}/comm", encoding="utf-8") as comm_file:
+                    comm = comm_file.read().strip()
+                if comm == "labwc":
+                    return pid
+                with open(f"/proc/{pid}/status", encoding="utf-8") as status_file:
+                    status = status_file.read()
+            except OSError:
+                return None
+
+            parent_pid = None
+            for line in status.splitlines():
+                if line.startswith("PPid:"):
+                    try:
+                        parent_pid = int(line.split()[1])
+                    except (IndexError, ValueError):
+                        return None
+                    break
+            if parent_pid is None or parent_pid == pid:
+                return None
+            pid = parent_pid
+        return None
+
+    def _configure_gtk_video_host_background(
+        self,
+        window: Any,
+        *,
+        transparent: bool,
+        host_background: list[float] | tuple[float, ...] | None = None,
+    ) -> None:
         Gdk = self._gdk
         Gtk = self._gtk
         if Gdk is None or Gtk is None:
             return
-        self._set_gtk_transparent_background(window)
+        self._set_gtk_video_host_background(
+            window,
+            transparent=transparent,
+            host_background=host_background,
+        )
+        logger.info(
+            "GTK video host background=%s.",
+            "transparent"
+            if transparent
+            else self._gtk_opaque_host_background_css(host_background),
+        )
 
-    def _set_gtk_transparent_background(self, widget: Any) -> None:
+    def _set_gtk_video_host_background(
+        self,
+        widget: Any,
+        *,
+        transparent: bool,
+        host_background: list[float] | tuple[float, ...] | None = None,
+    ) -> None:
         Gdk = self._gdk
         Gtk = self._gtk
         if Gdk is None or Gtk is None:
@@ -1011,24 +1361,50 @@ class GstWorker:
             display = Gdk.Display.get_default()
             if display is None:
                 return
+            opaque_background = self._gtk_opaque_host_background_css(host_background)
             css_provider = Gtk.CssProvider()
             css_provider.load_from_data(
-                b"""
-                window, .picframe-transparent-video-host {
+                f"""
+                window.{GTK_TRANSPARENT_HOST_CLASS},
+                .{GTK_TRANSPARENT_HOST_CLASS} {{
                     background-color: rgba(0, 0, 0, 0);
-                }
-                """
+                }}
+                window.{GTK_OPAQUE_HOST_CLASS},
+                .{GTK_OPAQUE_HOST_CLASS} {{
+                    background-color: {opaque_background};
+                }}
+                """.encode("utf-8")
             )
             Gtk.StyleContext.add_provider_for_display(
                 display,
                 css_provider,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
             )
+            selected_class = (
+                GTK_TRANSPARENT_HOST_CLASS if transparent else GTK_OPAQUE_HOST_CLASS
+            )
+            remove_css_class = getattr(widget, "remove_css_class", None)
+            if callable(remove_css_class):
+                remove_css_class(GTK_TRANSPARENT_HOST_CLASS)
+                remove_css_class(GTK_OPAQUE_HOST_CLASS)
             add_css_class = getattr(widget, "add_css_class", None)
             if callable(add_css_class):
-                add_css_class("picframe-transparent-video-host")
+                add_css_class(selected_class)
         except Exception as exc:
-            logger.debug("Could not configure GTK transparent background: %s", exc)
+            logger.debug("Could not configure GTK video host background: %s", exc)
+
+    @staticmethod
+    def _gtk_opaque_host_background_css(
+        host_background: list[float] | tuple[float, ...] | None,
+    ) -> str:
+        try:
+            if host_background is None or len(host_background) < 3:
+                return "rgba(0, 0, 0, 1)"
+            rgb = tuple(float(host_background[index]) for index in range(3))
+        except (TypeError, ValueError):
+            return "rgba(0, 0, 0, 1)"
+        channels = tuple(round(max(0.0, min(1.0, value)) * 255) for value in rgb)
+        return f"rgba({channels[0]}, {channels[1]}, {channels[2]}, 1)"
 
     def _create_gtk_fixed_video_host(
         self,
@@ -1039,6 +1415,9 @@ class GstWorker:
         y: int,
         w: int,
         h: int,
+        *,
+        transparent: bool = True,
+        host_background: list[float] | tuple[float, ...] | None = None,
     ) -> Any:
         host = Gtk.Fixed()
         widget_x, widget_y, widget_w, widget_h = self._gtk_video_widget_geometry(
@@ -1047,13 +1426,17 @@ class GstWorker:
             w,
             h,
         )
-        self._set_gtk_transparent_background(host)
-        for target in (host, widget):
-            try:
-                target.set_hexpand(True)
-                target.set_vexpand(True)
-            except Exception:
-                pass
+        self._set_gtk_video_host_background(
+            host,
+            transparent=transparent,
+            host_background=host_background,
+        )
+        try:
+            host.set_hexpand(True)
+            host.set_vexpand(True)
+        except Exception:
+            pass
+        self._pin_gtk_video_widget(Gtk, widget)
         try:
             widget.set_size_request(widget_w, widget_h)
         except Exception:
@@ -1119,6 +1502,21 @@ class GstWorker:
         _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
         return (0, 0, host_w, host_h)
 
+    def _gtk_fixed_host_child_rect(
+        self,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        *,
+        fullscreen: bool,
+        transparent: bool,
+    ) -> tuple[int, int, int, int]:
+        if fullscreen and not transparent:
+            _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
+            return (0, 0, host_w, host_h)
+        return (x, y, w, h)
+
     def _apply_gtk_host_window_geometry(
         self,
         window: Any,
@@ -1127,7 +1525,7 @@ class GstWorker:
         w: int,
         h: int,
     ) -> None:
-        _host_x, _host_y, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
+        _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
         self._apply_gtk_window_geometry(
             window,
             0,
@@ -1156,6 +1554,9 @@ class GstWorker:
                         widget.set_size_request(w, h)
                     except Exception:
                         pass
+            set_fullscreened = getattr(window, "set_fullscreened", None)
+            if callable(set_fullscreened):
+                set_fullscreened(True)
             window.fullscreen()
             return
         if widget is not None:
@@ -1171,13 +1572,33 @@ class GstWorker:
             if callable(set_opacity):
                 set_opacity(1.0)
             if fullscreen:
+                set_fullscreened = getattr(window, "set_fullscreened", None)
+                if callable(set_fullscreened):
+                    set_fullscreened(True)
                 window.fullscreen()
             present = getattr(window, "present", None)
             if callable(present):
                 present()
+            self._focus_gtk_video_window(window)
+            if fullscreen:
+                self._pump_gtk_events()
+                window.fullscreen()
+                if callable(present):
+                    present()
+                self._focus_gtk_video_window(window)
         except Exception as exc:
             logger.debug("Could not present GTK video window: %s", exc)
         self._pump_gtk_events()
+
+    @staticmethod
+    def _focus_gtk_video_window(window: Any) -> None:
+        for method_name in ("grab_focus", "present"):
+            method = getattr(window, method_name, None)
+            if callable(method):
+                try:
+                    method()
+                except Exception:
+                    pass
 
     def _log_gtk_window_diagnostics(
         self,
@@ -1190,6 +1611,7 @@ class GstWorker:
         fullscreen: bool,
         *,
         fixed_host: bool = False,
+        host_transparent: bool = True,
     ) -> None:
         try:
             actual_w, actual_h = window.get_size()
@@ -1233,7 +1655,8 @@ class GstWorker:
         )
         if fixed_host:
             logger.info(
-                "GTK video uses monitor-sized transparent host with fixed child placement."
+                "GTK video uses monitor-sized %s host with fixed child placement.",
+                "transparent" if host_transparent else "opaque",
             )
 
     def _hide_gtk_cursor(self, window: Any, widget: Any) -> None:
@@ -1256,13 +1679,23 @@ class GstWorker:
         fullscreen: bool = False,
         widget: Any | None = None,
         fixed_host: bool = False,
+        host_transparent: bool = True,
     ) -> bool:
         self._pump_gtk_events()
         if fixed_host:
+            if fullscreen:
+                return True
             if widget is None:
                 return False
             expected_x, expected_y, expected_w, expected_h = (
-                self._gtk_video_widget_geometry(x, y, w, h)
+                self._gtk_fixed_host_child_rect(
+                    x,
+                    y,
+                    w,
+                    h,
+                    fullscreen=fullscreen,
+                    transparent=host_transparent,
+                )
             )
             try:
                 allocation = widget.get_allocation()
@@ -1332,26 +1765,6 @@ class GstWorker:
         self._gtk_video_sink = None
         self._pump_gtk_events()
 
-    def _build_sink_props(
-        self,
-        sink_name: str,
-        x: int,
-        y: int,
-        w: int,
-        h: int,
-        *,
-        pipeline_variant: str = PIPELINE_COMPATIBLE,
-    ) -> str:
-        has_render_rectangle = w > 0 and h > 0
-        sink_props = []
-        if has_render_rectangle:
-            sink_props.append(f'render-rectangle="<{x}, {y}, {w}, {h}>"')
-        else:
-            sink_props.append("fullscreen=true")
-        if sink_name == "waylandsink":
-            sink_props.append("rotate-method=8")
-        return " ".join(sink_props)
-
     def _select_pipeline_variant(
         self,
         uri: str,
@@ -1388,6 +1801,14 @@ class GstWorker:
             allow_rotation=True,
         )
 
+        if force_software_decoders and self._requires_pi_hardware_only(stream_facts):
+            return self._skip_decision(
+                stream_facts,
+                hardware_limit_str,
+                software_limit_str,
+                fallback_reason or "hardware_presentation_unsupported",
+            )
+
         if force_software_decoders:
             if not software_allowed:
                 return self._skip_decision(
@@ -1410,6 +1831,13 @@ class GstWorker:
             hardware_limit,
         )
         if hardware_rejection_reason is not None:
+            if self._requires_pi_hardware_only(stream_facts):
+                return self._skip_decision(
+                    stream_facts,
+                    hardware_limit_str,
+                    software_limit_str,
+                    hardware_rejection_reason,
+                )
             if software_allowed:
                 return PlaybackDecision(
                     pipeline_variant=PIPELINE_COMPATIBLE,
@@ -1428,6 +1856,13 @@ class GstWorker:
 
         hardware_available = self._hardware_decode_available_for_facts(stream_facts)
         if not hardware_available:
+            if self._requires_pi_hardware_only(stream_facts):
+                return self._skip_decision(
+                    stream_facts,
+                    hardware_limit_str,
+                    software_limit_str,
+                    "hardware_decoder_unavailable",
+                )
             if software_allowed:
                 return PlaybackDecision(
                     pipeline_variant=PIPELINE_COMPATIBLE,
@@ -1544,6 +1979,15 @@ class GstWorker:
             "profile=(string)main-10" in caps_string
             or "bit-depth-luma=(uint)10" in caps_string
             or "bt2100" in caps_string
+        )
+
+    def _requires_pi_hardware_only(
+        self,
+        stream_facts: VideoStreamFacts | None,
+    ) -> bool:
+        return (
+            self._raspberry_pi_model_family(self._hardware_model) is not None
+            and self._requires_compatible_hardware_presentation(stream_facts)
         )
 
     def _uses_playbin_hardware_presentation(
@@ -1970,77 +2414,6 @@ class GstWorker:
         stream_facts, reason = self._discover_video_stream_facts(uri)
         return stream_facts is not None, reason
 
-    def _create_sink_bin(self, x: int, y: int, w: int, h: int) -> Any:
-        bin = Gst.Bin.new("sink_bin")
-        elements, sink_pad_element = self._build_sink_elements(x, y, w, h)
-
-        for elem in elements:
-            bin.add(elem)
-
-        self._link_elements(elements)
-
-        pad = sink_pad_element.get_static_pad("sink")
-        ghost_pad = Gst.GhostPad.new("sink", pad)
-        bin.add_pad(ghost_pad)
-
-        return bin
-
-    def _build_sink_elements(self, x: int, y: int, w: int, h: int) -> tuple[list[Any], Any]:
-        hw_converter = find_best_element(["v4l2convert"])
-        
-        elements = []
-        queue = Gst.ElementFactory.make("queue", "video_queue")
-        elements.append(queue)
-        if hw_converter:
-            conv = Gst.ElementFactory.make(hw_converter, "conv")
-            elements.append(conv)
-        else:
-            conv1 = Gst.ElementFactory.make("videoconvert", "conv1")
-            scale = Gst.ElementFactory.make("videoscale", "scale")
-            scale.set_property("add-borders", False)
-            conv2 = Gst.ElementFactory.make("videoconvert", "conv2")
-            elements.extend([conv1, scale, conv2])
-        sink_pad_element = queue
-            
-        capsfilter = Gst.ElementFactory.make("capsfilter", "capsfilter")
-        caps = Gst.Caps.from_string("video/x-raw,format=RGBA")
-        capsfilter.set_property("caps", caps)
-        elements.append(capsfilter)
-        
-        alpha = Gst.ElementFactory.make("alpha", "alpha")
-        alpha.set_property("alpha", 0.99)
-        elements.append(alpha)
-            
-        sink_name = find_best_element(["waylandsink", "glimagesink", "ximagesink", "autovideosink"])
-        if not sink_name:
-            sink_name = "autovideosink"
-            
-        sink = Gst.ElementFactory.make(sink_name, "sink")
-        has_render_rectangle = w > 0 and h > 0
-
-        if not has_render_rectangle:
-            try:
-                if hasattr(sink.props, 'fullscreen'):
-                    sink.set_property("fullscreen", True)
-            except Exception:
-                pass
-
-        if has_render_rectangle:
-            try:
-                Gst.util_set_object_arg(sink, "render-rectangle", f"<{x}, {y}, {w}, {h}>")
-            except Exception as e:
-                logger.warning(f"Sink {sink_name} does not support render-rectangle property: {e}")
-
-        if sink_name == "waylandsink":
-            sink.set_property("rotate-method", 8)
-            
-        elements.append(sink)
-        return elements, sink_pad_element
-
-    def _link_elements(self, elements: list[Any]) -> None:
-        for i in range(len(elements) - 1):
-            elements[i].link(elements[i + 1])
-
     def _on_decoder_pad_added(self, element: Any, pad: Any) -> None:
         caps = pad.get_current_caps()
         if not caps:
@@ -2391,27 +2764,25 @@ class GstWorker:
             message,
             debug,
         )
-        if len(request) == 6:
-            uri, x, y, w, h, fit_display = request
-        else:
-            uri, x, y, w, h = request
-            fit_display = False
         self._start_pipeline(
-            uri,
-            x,
-            y,
-            w,
-            h,
+            request.uri,
+            request.x,
+            request.y,
+            request.w,
+            request.h,
             force_software_decoders=False,
             pipeline_variant=PIPELINE_COMPATIBLE,
             fallback_reason="hardware_direct_failed",
             max_software_decode_resolution=self._current_max_software_decode_resolution,
             stream_facts=self._current_stream_facts,
-            fit_display=fit_display,
+            fit_display=request.fit_display,
+            host_background=request.host_background,
         )
 
     def _should_retry_with_software_decode(self, message: str, debug: str) -> bool:
         if self._software_decode_retry_attempted or self._current_play_request is None:
+            return False
+        if self._requires_pi_hardware_only(self._current_stream_facts):
             return False
         return self._is_negotiation_or_stream_error(message, debug)
 
@@ -2443,22 +2814,18 @@ class GstWorker:
                     decoder="force-sw-decoders",
                 )
             )
-        if len(request) == 6:
-            uri, x, y, w, h, fit_display = request
-        else:
-            uri, x, y, w, h = request
-            fit_display = False
         self._start_pipeline(
-            uri,
-            x,
-            y,
-            w,
-            h,
+            request.uri,
+            request.x,
+            request.y,
+            request.w,
+            request.h,
             force_software_decoders=True,
             fallback_reason="software_fallback",
             max_software_decode_resolution=self._current_max_software_decode_resolution,
             stream_facts=self._current_stream_facts,
-            fit_display=fit_display,
+            fit_display=request.fit_display,
+            host_background=request.host_background,
         )
 
     def _on_async_done(self, bus: Any, msg: Any) -> None:

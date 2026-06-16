@@ -15,16 +15,36 @@ from picframe.core.events.dto import OverlayConfig
 class ClockRenderer:
     """Renders a live clock overlay on the pi3d display."""
 
-    def __init__(self, display: Any, shader: Any, font_file: str) -> None:
+    def __init__(
+        self,
+        display: Any,
+        shader: Any,
+        font_file: str,
+        render_rect: tuple[int, int, int, int] | None = None,
+    ) -> None:
         self._logger = logging.getLogger(__name__)
         self._display = display
         self._shader = shader
         self._font_file = font_file
+        self._render_rect = render_rect
         self._clock_block: pi3d.FixedString | None = None
         self._current_time_str = ""
         self._config: OverlayConfig | None = None
         self._brightness = 1.0
         self._visual_signature: tuple[Any, ...] | None = None
+
+    def _render_bounds(self) -> tuple[int, int, int, int]:
+        if self._render_rect is not None:
+            return self._render_rect
+        return (0, 0, int(self._display.width), int(self._display.height))
+
+    def _render_center(self) -> tuple[float, float]:
+        x, y, width, height = self._render_bounds()
+        if self._render_rect is None:
+            return 0.0, 0.0
+        center_x = -int(self._display.width) / 2 + x + width / 2
+        center_y = int(self._display.height) / 2 - y - height / 2
+        return center_x, center_y
 
     def update_config(self, config: OverlayConfig, brightness: float = 1.0) -> None:
         """Update the clock configuration."""
@@ -40,8 +60,7 @@ class ClockRenderer:
             self._clock_block = None
             self._current_time_str = ""
 
-    @staticmethod
-    def _build_visual_signature(config: OverlayConfig, brightness: float) -> tuple[Any, ...]:
+    def _build_visual_signature(self, config: OverlayConfig, brightness: float) -> tuple[Any, ...]:
         return (
             bool(config.show_clock),
             str(config.clock_format),
@@ -52,6 +71,7 @@ class ClockRenderer:
             float(config.clock_wdt_offset_pct),
             float(config.clock_hgt_offset_pct),
             float(brightness),
+            self._render_rect,
         )
 
     def has_changed(self) -> bool:
@@ -86,8 +106,10 @@ class ClockRenderer:
             self._current_time_str = now_str
 
             font_size = max(8, int(self._config.clock_text_sz))
-            x_margin = int(self._display.width * max(0.0, self._config.clock_wdt_offset_pct) / 100)
-            y_margin = int(self._display.height * max(0.0, self._config.clock_hgt_offset_pct) / 100)
+            _, _, render_w, render_h = self._render_bounds()
+            render_center_x, render_center_y = self._render_center()
+            x_margin = int(render_w * max(0.0, self._config.clock_wdt_offset_pct) / 100)
+            y_margin = int(render_h * max(0.0, self._config.clock_hgt_offset_pct) / 100)
             opacity = int(
                 255 * max(0.0, min(1.0, self._config.clock_opacity)) * self._brightness
             )
@@ -103,15 +125,25 @@ class ClockRenderer:
                     shadow_radius=3,
                     shader=self._shader,
                     justify=justify,
-                    width=max(font_size * 4, self._display.width - (x_margin * 2)),
+                    width=max(font_size * 4, render_w - (x_margin * 2)),
                     color=(255, 255, 255, opacity)
                 )
 
-                x = 0
+                x = render_center_x
                 if str(self._config.clock_top_bottom or "T").upper() == "B":
-                    y = - (self._display.height // 2) + (self._clock_block.sprite.height // 2) + y_margin
+                    y = (
+                        render_center_y
+                        - (render_h // 2)
+                        + (self._clock_block.sprite.height // 2)
+                        + y_margin
+                    )
                 else:
-                    y = (self._display.height // 2) - (self._clock_block.sprite.height // 2) - y_margin
+                    y = (
+                        render_center_y
+                        + (render_h // 2)
+                        - (self._clock_block.sprite.height // 2)
+                        - y_margin
+                    )
                 self._clock_block.sprite.position(x, y, 0.1)
             except Exception as e:
                 self._logger.error(f"Failed to create clock FixedString: {e}")

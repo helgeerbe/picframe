@@ -55,6 +55,7 @@ class GstVideoRenderer(IVideoPlayer):
         self._max_software_decode_resolution = max_software_decode_resolution
         self._current_media: MediaItem | None = None
         self._fit_display = False
+        self._host_background: list[float] | tuple[float, ...] | None = None
         self._volume: float = 1.0
         
         self._socket_path = f"/tmp/picframe_gst_{os.getpid()}.sock"
@@ -269,6 +270,7 @@ class GstVideoRenderer(IVideoPlayer):
         w: int = 0,
         h: int = 0,
         fit_display: bool = False,
+        host_background: list[float] | tuple[float, ...] | None = None,
     ) -> None:
         """Start playing the specified video media item."""
         if not self._running:
@@ -279,6 +281,7 @@ class GstVideoRenderer(IVideoPlayer):
         self.stop()
         self._current_media = media_item
         self._fit_display = fit_display
+        self._host_background = host_background
 
         uri = Path(media_item.filepath).absolute().as_uri()
         
@@ -292,6 +295,7 @@ class GstVideoRenderer(IVideoPlayer):
                 h=h,
                 max_software_decode_resolution=self._max_software_decode_resolution,
                 fit_display=fit_display,
+                host_background=host_background,
             )
         )
         logger.info(f"Sent play command for: {media_item.filepath} at ({x},{y}) {w}x{h}")
@@ -316,6 +320,7 @@ class GstVideoRenderer(IVideoPlayer):
                     uri=uri,
                     max_software_decode_resolution=self._max_software_decode_resolution,
                     fit_display=self._fit_display,
+                    host_background=self._host_background,
                 )
             )
             logger.debug("Sent resume (play) command.")

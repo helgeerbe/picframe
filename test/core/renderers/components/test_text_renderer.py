@@ -101,6 +101,30 @@ def test_text_renderer_applies_overlay_style(mock_display, mock_shader):
     assert kwargs["width"] == mock_display.width - (expected_margin * 2)
 
 
+def test_text_renderer_positions_text_inside_render_rect(mock_display, mock_shader):
+    with patch('picframe.core.renderers.components.text_renderer.pi3d.FixedString') as mock_fixed_string:
+        sprite = MagicMock()
+        sprite.height = 50
+        mock_fixed_string.return_value.sprite = sprite
+        renderer = TextRenderer(
+            mock_display,
+            mock_shader,
+            "font.ttf",
+            render_rect=(0, 0, 1000, 900),
+        )
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Viewport",
+                text_y_margin=12,
+            )
+        )
+
+    kwargs = mock_fixed_string.call_args.kwargs
+    assert kwargs["width"] == 800
+    sprite.position.assert_called_once_with(-460.0, -323.0, 0.1)
+
+
 def test_text_renderer_rebuilds_when_style_changes_for_same_text(mock_display, mock_shader):
     with patch('picframe.core.renderers.components.text_renderer.pi3d.FixedString') as mock_fixed_string:
         mock_fixed_string.return_value.sprite = MagicMock()

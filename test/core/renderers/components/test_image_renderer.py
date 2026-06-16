@@ -79,6 +79,24 @@ def test_image_renderer_initialization(
         renderer._slide.set_shader.assert_called_once_with(shader)
 
 
+def test_image_renderer_render_rect_positions_slide_and_sets_size(
+    mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
+) -> None:
+    shader = MagicMock()
+    renderer = ImageRenderer(
+        mock_display,
+        shader,
+        config,
+        render_rect=(0, 0, 1000, 900),
+    )
+
+    mock_pi3d.Sprite.assert_called_once()
+    assert mock_pi3d.Sprite.call_args.kwargs["w"] == 1000
+    assert mock_pi3d.Sprite.call_args.kwargs["h"] == 900
+    if renderer._slide:
+        renderer._slide.position.assert_called_once_with(-460.0, 90.0, 5.0)
+
+
 def test_image_renderer_initialization_honors_fit_true(
     mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
 ) -> None:

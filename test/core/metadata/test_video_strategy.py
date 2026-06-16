@@ -118,6 +118,7 @@ def test_extract_passes_cache_dir_and_fit_mode(
     mock_run.return_value = mock_run_result
     mock_config_repo = MagicMock()
     mock_config_repo.get_app_config_bool.return_value = True
+    mock_config_repo.get_app_config.return_value = [0.2, 0.2, 0.3, 1.0]
     strategy = VideoMetadataStrategy(
         display_w=1280,
         display_h=720,
@@ -131,12 +132,14 @@ def test_extract_passes_cache_dir_and_fit_mode(
         "viewer.video_fit_display",
         False,
     )
+    mock_config_repo.get_app_config.assert_called_with("viewer.background", None)
     mock_extract.assert_called_once_with(
         "/path/to/video.mp4",
         10.0,
         1280,
         720,
         fit_display=True,
+        background=[0.2, 0.2, 0.3, 1.0],
         cache_dir="/tmp/picframe-cache",
     )
 

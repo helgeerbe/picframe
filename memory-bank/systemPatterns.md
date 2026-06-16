@@ -31,8 +31,8 @@
   - Promote the hidden last-frame reveal only after the GStreamer worker reports that a real video frame has rendered when sink stats expose that count.
   - At EOS, dim the GTK4 video window to 99% opacity, wake pi3d to redraw behind it, then close the video window.
   - Transition out from the last frame when GStreamer reaches EOS.
-- On Wayland, prefer the GTK4 `playbin` + `gtk4paintablesink` presentation path inside a borderless transparent GTK4 host. Fullscreen rectangles fill the host; custom non-fullscreen rectangles use a fullscreen transparent host with the paintable placed at `viewer.display_x/y/w/h`. The GTK4 video surface hides the cursor during playback.
-- If GTK4, `gtk4paintablesink`, or geometry confirmation is unavailable, preserve the `waylandsink` render-rectangle fallback. The fallback must use explicit render rectangles instead of mixing custom geometry with sink fullscreen.
+- On Wayland, require the GTK4 `playbin`/GTK-compatible `gtk4paintablesink` presentation path inside a borderless fullscreen GTK4 host. Raspberry Pi/labwc uses a transparent host; GNOME/VM uses an opaque host colored from `viewer.background`. Fullscreen rectangles fill the host; custom non-fullscreen rectangles place the paintable at the renderer-reported `viewer.display_x/y/w/h` rectangle. The GTK4 video surface hides the cursor during playback.
+- If GTK4 or `gtk4paintablesink` is unavailable, publish a GTK presentation system error instead of falling back to legacy sinks.
 - Only one renderer should actively own visible display output at a time.
 - Clear Image Cache removes generated cache artifacts such as video transition frames, but original media files and media database rows are handled by separate operations.
 

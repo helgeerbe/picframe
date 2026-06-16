@@ -114,6 +114,7 @@ def test_video_handoff_sequence(
         1920,
         1080,
         False,
+        None,
     )
     
     # 4. Video first frame rendered (GStreamer is ready)
