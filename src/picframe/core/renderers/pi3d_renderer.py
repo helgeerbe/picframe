@@ -250,18 +250,22 @@ class Pi3dRenderer(IRenderer):
             if self._config.show_text_enabled:
                 new_text_strings = self._generate_text_strings(self._current_media)
                 new_text_string = new_text_strings[0] if new_text_strings else ""
+                new_overlay_text_strings = new_text_strings if len(new_text_strings) == 2 else ()
                 if (
                     new_text_string != self._overlay_config.text_string
-                    or new_text_strings != self._overlay_config.text_strings
+                    or new_overlay_text_strings != self._overlay_config.text_strings
                 ):
                     self._overlay_config = self._build_overlay_config(
                         text_string=new_text_string,
-                        text_strings=new_text_strings if len(new_text_strings) == 2 else (),
+                        text_strings=new_overlay_text_strings,
                     )
                     if self._text_renderer:
                         self._text_renderer.update_config(self._overlay_config)
                     self._animation_controller.force_redraw(2)
-                    self._animation_controller.update_text_config(True, True)
+                    self._animation_controller.update_text_config(
+                        self._overlay_has_visible_text(),
+                        True,
+                    )
 
     def _prepare_wayland_window_identity(self) -> None:
         """Give the SDL/pi3d Wayland window a stable app-id for labwc rules."""

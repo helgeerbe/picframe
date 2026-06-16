@@ -1,4 +1,5 @@
 """Unit tests for the Pi3dRenderer."""
+from dataclasses import replace
 import os
 import queue
 import signal
@@ -8,6 +9,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from picframe.core.events.dto import (
+    CurrentMediaChangedEvent,
     OverlayConfig,
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
@@ -26,6 +28,7 @@ from picframe.core.renderers.pi3d_renderer import (
     Pi3dRenderer,
 )
 from picframe.core.renderers.animation_controller import RenderState
+from picframe.core.models.media import DisplayItem, MediaItem, MediaType
 
 
 @pytest.fixture
@@ -323,6 +326,46 @@ def test_renderer_execute_video_first_frame_marks_delayed_handoff(
     assert renderer._video_first_frame_transition is True
     assert renderer._was_transitioning is True
     assert renderer._animation_controller._state == RenderState.TRANSITIONING
+
+
+def test_renderer_current_media_event_does_not_restart_same_single_overlay_text(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    text_config = replace(
+        config,
+        show_text_enabled=True,
+        text_overlay_format="name",
+    )
+    renderer = Pi3dRenderer(text_config)
+    renderer.start()
+    renderer._overlay_config = renderer._build_overlay_config(text_string="video.mp4")
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._show_text = False
+    renderer._animation_controller._text_alpha = 0.0
+    renderer._animation_controller._frames_to_render = 0
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+
+    renderer._handle_state_event(
+        CurrentMediaChangedEvent(media_item=DisplayItem.single(media_item))
+    )
+
+    assert renderer._overlay_config.text_string == "video.mp4"
+    assert renderer._overlay_config.text_strings == ()
+    assert renderer._animation_controller._show_text is False
+    assert renderer._animation_controller._frames_to_render == 0
+    mock_text_renderer.update_config.assert_not_called()
 
 
 def test_renderer_resume_forces_redraw_frames(
