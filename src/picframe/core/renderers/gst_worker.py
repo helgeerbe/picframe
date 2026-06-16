@@ -50,6 +50,7 @@ DEFAULT_SOFTWARE_DECODE_LIMIT = "1280x720"
 UNSUPPORTED_MEDIA_CODE = "unsupported_media"
 GTK_PRESENTATION_UNAVAILABLE_CODE = "gtk_presentation_unavailable"
 EOS_GTK_WINDOW_OPACITY = 0.99
+STARTUP_GTK_WINDOW_OPACITY = 0.0
 FIRST_FRAME_PROBE_INTERVAL_MS = 16
 FIRST_FRAME_PROBE_TIMEOUT_SECONDS = 2.0
 GTK_TRANSPARENT_HOST_CLASS = "picframe-transparent-video-host"
@@ -319,6 +320,7 @@ class GstWorker:
             return
         self._first_frame_event_sent = True
         self._first_frame_probe_source_id = None
+        self._reveal_gtk_video_window()
         self._send_event(FirstFrameRenderedEvent())
 
     def _current_video_sink(self) -> Any | None:
@@ -1118,7 +1120,11 @@ class GstWorker:
                 fullscreen=fullscreen_video,
                 widget=widget,
             )
-        self._present_gtk_video_window(window, fullscreen=fullscreen_video or fixed_host)
+        self._present_gtk_video_window(
+            window,
+            fullscreen=fullscreen_video or fixed_host,
+            opacity=STARTUP_GTK_WINDOW_OPACITY,
+        )
         self._log_gtk_window_diagnostics(
             window,
             widget,
@@ -1566,11 +1572,17 @@ class GstWorker:
                 pass
         window.set_default_size(w, h)
 
-    def _present_gtk_video_window(self, window: Any, *, fullscreen: bool) -> None:
+    def _present_gtk_video_window(
+        self,
+        window: Any,
+        *,
+        fullscreen: bool,
+        opacity: float = 1.0,
+    ) -> None:
         try:
             set_opacity = getattr(window, "set_opacity", None)
             if callable(set_opacity):
-                set_opacity(1.0)
+                set_opacity(opacity)
             if fullscreen:
                 set_fullscreened = getattr(window, "set_fullscreened", None)
                 if callable(set_fullscreened):
@@ -1588,6 +1600,22 @@ class GstWorker:
                 self._focus_gtk_video_window(window)
         except Exception as exc:
             logger.debug("Could not present GTK video window: %s", exc)
+        self._pump_gtk_events()
+
+    def _reveal_gtk_video_window(self) -> None:
+        window = self._gtk_window
+        if window is None:
+            return
+        try:
+            set_opacity = getattr(window, "set_opacity", None)
+            if callable(set_opacity):
+                set_opacity(1.0)
+            present = getattr(window, "present", None)
+            if callable(present):
+                present()
+            self._focus_gtk_video_window(window)
+        except Exception as exc:
+            logger.debug("Could not reveal GTK video window: %s", exc)
         self._pump_gtk_events()
 
     @staticmethod

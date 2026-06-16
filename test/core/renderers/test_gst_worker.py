@@ -648,6 +648,22 @@ def test_present_gtk_video_window_keeps_custom_geometry_unfullscreened() -> None
     worker._pump_gtk_events.assert_called_once_with()
 
 
+def test_present_gtk_video_window_can_start_hidden() -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    worker._pump_gtk_events = MagicMock()
+    window = MagicMock()
+
+    worker._present_gtk_video_window(
+        window,
+        fullscreen=True,
+        opacity=gst_worker.STARTUP_GTK_WINDOW_OPACITY,
+    )
+
+    window.set_opacity.assert_called_once_with(gst_worker.STARTUP_GTK_WINDOW_OPACITY)
+    window.fullscreen.assert_called()
+    window.present.assert_called()
+
+
 def test_gtk_video_host_uses_transparency_on_raspberry_pi(monkeypatch) -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker._hardware_model = "Raspberry Pi 4 Model B Rev 1.2"
@@ -929,7 +945,11 @@ def test_present_gtk_paintable_uses_fullscreen_host_for_custom_geometry(
     window.set_child.assert_called_once_with(host)
     apply_host_geometry.assert_called_once_with(window, 10, 20, 300, 400)
     apply_window_geometry.assert_not_called()
-    worker._present_gtk_video_window.assert_called_once_with(window, fullscreen=True)
+    worker._present_gtk_video_window.assert_called_once_with(
+        window,
+        fullscreen=True,
+        opacity=gst_worker.STARTUP_GTK_WINDOW_OPACITY,
+    )
 
 
 def test_present_gtk_paintable_keeps_window_when_geometry_confirmation_is_late(
@@ -1040,7 +1060,11 @@ def test_present_gtk_paintable_uses_fullscreen_host_for_opaque_fullscreen(
     window.set_child.assert_called_once_with(host)
     apply_host_geometry.assert_called_once_with(window, 0, 0, 0, 0)
     apply_window_geometry.assert_not_called()
-    worker._present_gtk_video_window.assert_called_once_with(window, fullscreen=True)
+    worker._present_gtk_video_window.assert_called_once_with(
+        window,
+        fullscreen=True,
+        opacity=gst_worker.STARTUP_GTK_WINDOW_OPACITY,
+    )
 
 
 def test_present_gtk_paintable_keeps_direct_fullscreen_on_transparent_host(
@@ -1463,6 +1487,8 @@ def test_async_done_waits_for_sink_rendered_stats_before_first_frame_event(
     worker.conn = MagicMock()
     worker.conn.closed = False
     stats = FakeSinkStats(rendered=0)
+    worker._gtk_window = MagicMock()
+    worker._pump_gtk_events = MagicMock()
     sink = MagicMock()
     sink.get_property.return_value = stats
     pipeline = MagicMock()
@@ -1470,6 +1496,13 @@ def test_async_done_waits_for_sink_rendered_stats_before_first_frame_event(
     worker.pipeline = pipeline
     timeout_add = MagicMock(return_value=123)
     monkeypatch.setattr(gst_worker.GLib, "timeout_add", timeout_add)
+    reveal_order = []
+    worker._gtk_window.set_opacity.side_effect = lambda value: reveal_order.append(
+        ("opacity", value)
+    )
+    worker.conn.send.side_effect = lambda payload: reveal_order.append(
+        ("send", json.loads(payload)["type"])
+    )
 
     worker._on_async_done(MagicMock(), MagicMock())
 
@@ -1485,6 +1518,10 @@ def test_async_done_waits_for_sink_rendered_stats_before_first_frame_event(
     assert worker._first_frame_probe_tick() is False
     sent_event = json.loads(worker.conn.send.call_args.args[0])
     assert sent_event["type"] == "first_frame_rendered"
+    assert reveal_order == [
+        ("opacity", 1.0),
+        ("send", "first_frame_rendered"),
+    ]
     assert worker._first_frame_event_sent is True
     assert worker._first_frame_probe_source_id is None
 
@@ -1495,6 +1532,8 @@ def test_async_done_accepts_first_frame_when_sink_stats_are_unavailable(
     worker = GstWorker("/tmp/picframe-test-gst.sock")
     worker.conn = MagicMock()
     worker.conn.closed = False
+    worker._gtk_window = MagicMock()
+    worker._pump_gtk_events = MagicMock()
     sink = MagicMock()
     sink.get_property.side_effect = AttributeError("no stats")
     pipeline = MagicMock()
@@ -1507,6 +1546,7 @@ def test_async_done_accepts_first_frame_when_sink_stats_are_unavailable(
 
     sent_event = json.loads(worker.conn.send.call_args.args[0])
     assert sent_event["type"] == "first_frame_rendered"
+    worker._gtk_window.set_opacity.assert_called_once_with(1.0)
     timeout_add.assert_not_called()
 
 
