@@ -48,6 +48,11 @@ building a pipeline. This protects against stale cache rows and emits a clear
 error such as "No playable video stream found" before any Wayland sink is
 created. When Picframe supplies an explicit render rectangle, the worker does
 not also request sink fullscreen; the rectangle is the positioning contract.
+Internally, the worker is intentionally split into focused helpers:
+`gst_playback_policy.py` owns Pi/VM hardware/software decisions and skip
+reasons, `gtk_video_presenter.py` owns GTK4 host/window/picture behavior, and
+`gst_pipeline_builder.py` owns GTK playbin and GTK-compatible pipeline
+construction.
 
 ### Current Handoff Strategy: GTK Wayland Presentation
 Raspberry Pi 4 / labwc PoC testing showed that a fully covering plain

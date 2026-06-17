@@ -17,7 +17,7 @@
 - `PlaybackEngine` owns state transitions, timing, command handling, and media-to-renderer orchestration.
 - `Pi3dRenderer` should stay presentation-focused: draw what it is commanded to draw, with local renderer state only for rendering concerns such as clock ticks.
 - pi3d/OpenGL runs on the main thread; FastAPI, MQTT, media monitoring, geocoding, and hardware input operate in background threads.
-- GStreamer video playback runs out of process in `gst_worker.py` and communicates through JSON IPC over a Unix-domain socket.
+- GStreamer video playback runs out of process in `gst_worker.py` and communicates through JSON IPC over a Unix-domain socket. The worker delegates playback policy to `gst_playback_policy.py`, GTK4 presentation state to `gtk_video_presenter.py`, and GTK pipeline construction to `gst_pipeline_builder.py`.
 - A display item is either one media item or an image-only portrait pair. Videos are never paired and always use the fullscreen video path.
 - Portrait pairs are composed in memory for rendering; they do not create persistent generated files.
 - Shuffle mode is applied after display slots are built so portrait pairs remain one shuffled slot; `fewer_repeats` uses existing `last_displayed` history and creates no new media DB fields.
