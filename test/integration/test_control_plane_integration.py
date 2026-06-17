@@ -10,6 +10,8 @@ from picframe.api.app import create_app, system_error_websocket_message
 from picframe.core.events.dto import SystemErrorEvent
 from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
 from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
+from picframe.core.services.basic_auth import BasicAuthStore
+from picframe.core.services.resource_paths import ResourcePaths
 
 
 class ASGITestClient:
@@ -68,12 +70,15 @@ def test_api_config_media_and_maintenance_with_temp_repositories(tmp_path: Path)
             }
         )
 
+        resource_paths = ResourcePaths.from_base_dir(tmp_path / "picframe-runtime")
         app = create_app(
             cors_allowed_origins=["*"],
             config_repository=config_repo,
             media_repository=media_repo,
             image_processing_service=image_service,
             html_dir=str(tmp_path / "missing-html"),
+            resource_paths=resource_paths,
+            auth_store=BasicAuthStore(resource_paths),
         )
         client = ASGITestClient(app)
 

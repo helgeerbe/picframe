@@ -29,6 +29,14 @@ class StatusMessageResponse(StatusResponse):
     message: str | None = Field(default=None, description="Optional status detail.")
 
 
+class SystemServiceStatusResponse(BaseModel):
+    """Runtime status for the managed Picframe systemd service."""
+    status: Literal["active", "inactive", "unavailable"] = "unavailable"
+    active: bool = False
+    restart_available: bool = False
+    message: str | None = None
+
+
 class BasicAuthConfigResponse(BaseModel):
     """Public shape of the plaintext Basic Auth settings."""
     enabled: bool = False

@@ -90,3 +90,11 @@ class ISystemManager(Protocol):
     def shutdown(self) -> None:
         """Shut down the host system."""
         ...
+
+    def picframe_service_status(self) -> str:
+        """Return active, inactive, or unavailable for picframe.service."""
+        ...
+
+    def restart_picframe_service(self) -> bool:
+        """Restart picframe.service if it is currently active."""
+        ...

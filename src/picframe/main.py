@@ -202,6 +202,7 @@ def run_picframe(
         html_dir=html_dir or str(resource_paths.html_dir),
         resource_paths=resource_paths,
         log_event_buffer=logging_service.buffer,
+        system_manager=hal_adapters.system_manager,
     )
     web_server = WebServer(app, port=port)
 

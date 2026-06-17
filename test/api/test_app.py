@@ -65,6 +65,26 @@ class ASGITestClient:
         return self.request("OPTIONS", url, **kwargs)
 
 
+class FakeSystemManager:
+    def __init__(self, status: str = "active", restart_result: bool = True) -> None:
+        self.status = status
+        self.restart_result = restart_result
+        self.restart_calls = 0
+
+    def reboot(self) -> None:
+        pass
+
+    def shutdown(self) -> None:
+        pass
+
+    def picframe_service_status(self) -> str:
+        return self.status
+
+    def restart_picframe_service(self) -> bool:
+        self.restart_calls += 1
+        return self.restart_result
+
+
 def basic_auth(username: str = "admin", password: str = "secret") -> dict[str, str]:
     token = base64.b64encode(f"{username}:{password}".encode()).decode()
     return {"Authorization": f"Basic {token}"}
@@ -86,6 +106,8 @@ def test_openapi_documents_rest_response_models(client: ASGITestClient) -> None:
     expected_refs = {
         ("/health", "get"): "HealthResponse",
         ("/api/system/reboot", "post"): "StatusResponse",
+        ("/api/system/restart-service", "post"): "StatusMessageResponse",
+        ("/api/system/service-status", "get"): "SystemServiceStatusResponse",
         ("/api/system/shutdown", "post"): "StatusResponse",
         ("/api/system/locales", "get"): "LocaleOptionsResponse",
         ("/api/maintenance/purge-db", "post"): "StatusResponse",
@@ -258,6 +280,8 @@ def test_basic_auth_protects_settings_logs_and_admin_routes(tmp_path: Path) -> N
     assert client.get("/logs").status_code == 401
     assert client.get("/api/config").status_code == 401
     assert client.post("/api/system/reboot").status_code == 401
+    assert client.get("/api/system/service-status").status_code == 401
+    assert client.post("/api/system/restart-service").status_code == 401
 
     assert client.get("/").status_code == 200
     assert client.get("/api/workflow-config").status_code == 200
@@ -395,6 +419,8 @@ def test_basic_auth_scope_matrix_for_http_routes(tmp_path: Path) -> None:
         ("POST", "/api/maintenance/purge-db", {}),
         ("POST", "/api/maintenance/clear-cache", {}),
         ("POST", "/api/system/reboot", {}),
+        ("POST", "/api/system/restart-service", {}),
+        ("GET", "/api/system/service-status", {}),
         ("POST", "/api/system/shutdown", {}),
         ("GET", "/logs", {}),
         ("GET", "/settings", {}),
@@ -841,6 +867,57 @@ def test_api_system_locales_lists_installed_locales(
     assert response.status_code == 200
     assert response.json() == {"locales": ["C", "en_US.utf8", "POSIX"]}
     run.assert_called_once()
+
+
+def test_api_system_service_status_reports_active_service() -> None:
+    system_manager = FakeSystemManager(status="active")
+    app = create_app(cors_allowed_origins=["*"], system_manager=system_manager)
+    client = ASGITestClient(app)
+
+    response = client.get("/api/system/service-status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "active",
+        "active": True,
+        "restart_available": True,
+        "message": None,
+    }
+
+
+def test_api_system_service_status_reports_unavailable_without_manager() -> None:
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/system/service-status")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unavailable"
+    assert response.json()["restart_available"] is False
+
+
+def test_api_restart_service_restarts_when_active() -> None:
+    system_manager = FakeSystemManager(status="active", restart_result=True)
+    app = create_app(cors_allowed_origins=["*"], system_manager=system_manager)
+    client = ASGITestClient(app)
+
+    response = client.post("/api/system/restart-service")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "restarting"}
+    assert system_manager.restart_calls == 1
+
+
+def test_api_restart_service_returns_manual_required_when_inactive() -> None:
+    system_manager = FakeSystemManager(status="inactive", restart_result=True)
+    app = create_app(cors_allowed_origins=["*"], system_manager=system_manager)
+    client = ASGITestClient(app)
+
+    response = client.post("/api/system/restart-service")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "manual_required"
+    assert system_manager.restart_calls == 0
 
 
 def test_api_media_location_options_searches_repository() -> None:

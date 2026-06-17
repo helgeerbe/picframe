@@ -23,6 +23,7 @@ def mock_pi3d() -> Generator[MagicMock, None, None]:
         mock_sprite = MagicMock()
         mock_sprite.unif = [0.0] * 60
         mock.Sprite.return_value = mock_sprite
+        mock.Texture.return_value = MagicMock(ix=1920, iy=1080)
         
         # Mock Display.INSTANCE to avoid AttributeError in Camera initialization
         mock_display_instance = MagicMock()
@@ -77,6 +78,24 @@ def test_image_renderer_initialization(
     mock_pi3d.Sprite.assert_called_once()
     if renderer._slide:
         renderer._slide.set_shader.assert_called_once_with(shader)
+
+
+def test_image_renderer_initializes_background_texture(
+    mock_pi3d: MagicMock, mock_display: MagicMock, config: dict[str, Any]
+) -> None:
+    shader = MagicMock()
+    renderer = ImageRenderer(
+        mock_display,
+        shader,
+        {**config, "background": (0.2, 0.4, 0.6, 1.0)},
+    )
+
+    texture_image = mock_pi3d.Texture.call_args.args[0]
+    assert isinstance(texture_image, Image.Image)
+    assert texture_image.size == (1920, 1080)
+    assert texture_image.getpixel((0, 0)) == (51, 102, 153)
+    if renderer._slide:
+        renderer._slide.set_textures.assert_called()
 
 
 def test_image_renderer_render_rect_positions_slide_and_sets_size(
@@ -218,7 +237,8 @@ def test_image_renderer_execute_image(
     }
     assert renderer._next_tm == 100.0 + 200.0
     assert renderer._sfg == mock_texture
-    assert renderer._sbg == mock_texture  # First image, so sbg is set to sfg
+    assert renderer._sbg is not None
+    assert renderer._sbg != mock_texture
 
 
 def test_image_renderer_does_not_mat_preloaded_video_frame(
@@ -269,7 +289,8 @@ def test_image_renderer_preloads_video_reveal_without_changing_visible_textures(
 
     assert result is True
     assert renderer._sfg == first_texture
-    assert renderer._sbg == first_texture
+    assert renderer._sbg is not None
+    assert renderer._sbg != reveal_texture
     assert renderer._video_reveal_texture == reveal_texture
     if renderer._slide:
         renderer._slide.set_textures.assert_not_called()

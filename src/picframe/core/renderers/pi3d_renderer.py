@@ -82,6 +82,32 @@ class Pi3dRenderer(IRenderer):
             return False
         return True
 
+    @staticmethod
+    def _geometry_signature(config: RendererConfig) -> tuple[Any, ...]:
+        """Return display rectangle fields from renderer config."""
+        return (
+            config.display_x,
+            config.display_y,
+            config.display_w,
+            config.display_h,
+        )
+
+    @staticmethod
+    def _service_restart_signature(config: RendererConfig) -> tuple[Any, ...]:
+        """Return display backend fields that require restarting Picframe."""
+        return (
+            config.use_glx,
+            config.use_sdl2,
+        )
+
+    @staticmethod
+    def _component_rebuild_signature(config: RendererConfig) -> tuple[Any, ...]:
+        """Return component resources that can be rebuilt on the mapped display."""
+        return (
+            config.shader_path,
+            config.font_file,
+        )
+
     def __init__(
         self,
         config: RendererConfig,
@@ -123,6 +149,7 @@ class Pi3dRenderer(IRenderer):
         self._display: Any | None = None
         self._image_renderer: ImageRenderer | None = None
         self._render_rect: tuple[int, int, int, int] | None = None
+        self._pending_component_rebuild = False
         self._video_reveal_parked = False
         self._video_first_frame_transition = False
         
@@ -131,19 +158,21 @@ class Pi3dRenderer(IRenderer):
         self._text_renderer: TextRenderer | None = None
         self._clock_renderer: ClockRenderer | None = None
         
-        # Convert RendererConfig to dict for AnimationController compatibility
-        anim_config = {
-            "fps": config.fps,
-            "time_fade": config.time_fade,
-            "time_delay": config.time_delay,
-            "show_text_tm": config.show_text_tm,
-            "kenburns": config.kenburns
-        }
-        self._animation_controller = AnimationController(anim_config)
+        self._animation_controller = AnimationController(self._animation_config())
         self._animation_controller.update_text_config(self._overlay_config.show_text, False)
         
         self._local_queue: queue.PriorityQueue[PrioritizedRenderTask] = queue.PriorityQueue()
         self._current_media: Any | None = None
+
+    def _animation_config(self) -> dict[str, Any]:
+        """Return animation settings in the shape expected by AnimationController."""
+        return {
+            "fps": self._config.fps,
+            "time_fade": self._config.time_fade,
+            "time_delay": self._config.time_delay,
+            "show_text_tm": self._config.show_text_tm,
+            "kenburns": self._config.kenburns,
+        }
 
     def _generate_text_string(self, media_item: Any) -> str:
         """Generate the text overlay string based on configuration and media metadata."""
@@ -196,26 +225,34 @@ class Pi3dRenderer(IRenderer):
             return
             
         self._logger.info("Renderer received RendererConfigUpdatedEvent. Updating state.")
-        self._config = event.config
-        self._display_x = self._config.display_x
-        self._display_y = self._config.display_y
-        self._display_w = self._config.display_w
-        self._display_h = self._config.display_h
-        self._fps = self._config.fps
-        self._background = self._config.background
-        self._use_glx = self._config.use_glx
-        self._use_sdl2 = self._config.use_sdl2
-        self._shader_path = os.path.expanduser(self._config.shader_path)
-        self._kenburns = self._config.kenburns
+        old_config = self._config
+        restart_required = self.requires_restart_for_config(old_config, event.config)
+        component_rebuild_required = self._requires_component_rebuild_for_config(
+            old_config,
+            event.config,
+        )
+        self._apply_config_state(event.config)
+        self._apply_live_display_settings()
 
-        anim_config = {
-            "fps": self._config.fps,
-            "time_fade": self._config.time_fade,
-            "time_delay": self._config.time_delay,
-            "show_text_tm": self._config.show_text_tm,
-            "kenburns": self._config.kenburns,
-        }
-        self._animation_controller.update_config(anim_config)
+        if restart_required:
+            self._logger.info(
+                "Renderer geometry/backend update requires Picframe service restart; "
+                "keeping the active pi3d display mapped with its current resources."
+            )
+            return
+
+        if component_rebuild_required and self._display is not None:
+            self._pending_component_rebuild = True
+            self._logger.info(
+                "Renderer config update will rebuild pi3d components on the existing display."
+            )
+            return
+
+        self._apply_live_component_config()
+
+    def _apply_live_component_config(self) -> None:
+        """Apply config fields supported by active renderer components."""
+        self._animation_controller.update_config(self._animation_config())
         if self._image_renderer:
             self._image_renderer.update_config(self._config)
         
@@ -243,6 +280,15 @@ class Pi3dRenderer(IRenderer):
             self._overlay_config.text_string != old_text_string
         )
 
+    def _apply_live_display_settings(self) -> None:
+        """Apply display settings pi3d supports changing on the fly."""
+        if self._display is None:
+            return
+        try:
+            self._display.frames_per_second = self._fps
+        except Exception as exc:
+            self._logger.debug("Could not update pi3d display FPS: %s", exc)
+
     def _handle_state_event(self, event: Any) -> None:
         if isinstance(event, CurrentMediaChangedEvent):
             self._current_media = event.media_item
@@ -267,6 +313,20 @@ class Pi3dRenderer(IRenderer):
                         self._overlay_has_visible_text(),
                         True,
                     )
+
+    def _apply_config_state(self, config: RendererConfig) -> None:
+        """Refresh renderer-owned config values without touching active components."""
+        self._config = config
+        self._display_x = self._config.display_x
+        self._display_y = self._config.display_y
+        self._display_w = self._config.display_w
+        self._display_h = self._config.display_h
+        self._fps = self._config.fps
+        self._background = self._config.background
+        self._use_glx = self._config.use_glx
+        self._use_sdl2 = self._config.use_sdl2
+        self._shader_path = os.path.expanduser(self._config.shader_path)
+        self._kenburns = self._config.kenburns
 
     def _prepare_wayland_window_identity(self) -> None:
         """Give the SDL/pi3d Wayland window a stable app-id for labwc rules."""
@@ -344,13 +404,17 @@ class Pi3dRenderer(IRenderer):
             self._logger.warning("Could not ask labwc to reload geometry rules: %s", exc)
 
     def _configured_labwc_geometry(self) -> tuple[int, int, int, int] | None:
-        if self._display_w is None or self._display_h is None:
+        return self._configured_geometry_for_config(self._config)
+
+    @staticmethod
+    def _configured_geometry_for_config(config: RendererConfig) -> tuple[int, int, int, int] | None:
+        if config.display_w is None or config.display_h is None:
             return None
         try:
-            x = int(self._display_x)
-            y = int(self._display_y)
-            w = int(self._display_w)
-            h = int(self._display_h)
+            x = int(config.display_x)
+            y = int(config.display_y)
+            w = int(config.display_w)
+            h = int(config.display_h)
         except (TypeError, ValueError):
             return None
         if w <= 0 or h <= 0:
@@ -358,11 +422,70 @@ class Pi3dRenderer(IRenderer):
         return (x, y, w, h)
 
     def _custom_display_requires_fullscreen_host(self) -> bool:
+        return self._custom_display_requires_fullscreen_host_for_config(self._config)
+
+    def _custom_display_requires_fullscreen_host_for_config(
+        self,
+        config: RendererConfig,
+    ) -> bool:
         if "WAYLAND_DISPLAY" not in os.environ:
             return False
-        if self._configured_labwc_geometry() is None:
+        if self._configured_geometry_for_config(config) is None:
             return False
         return self._find_labwc_pid() is None
+
+    def _uses_fullscreen_host_for_config(self, config: RendererConfig) -> bool:
+        geometry = self._configured_geometry_for_config(config)
+        if geometry is None:
+            try:
+                x = int(config.display_x)
+                y = int(config.display_y)
+            except (TypeError, ValueError):
+                return False
+            return x == 0 and y == 0
+        return self._custom_display_requires_fullscreen_host_for_config(config)
+
+    def _render_rect_for_config(self, config: RendererConfig) -> tuple[int, int, int, int] | None:
+        geometry = self._configured_geometry_for_config(config)
+        if geometry is not None and self._uses_fullscreen_host_for_config(config):
+            return geometry
+        return None
+
+    def _requires_component_rebuild_for_config(
+        self,
+        old_config: RendererConfig | None,
+        new_config: RendererConfig,
+    ) -> bool:
+        """Return whether active pi3d components should be recreated."""
+        if self._display is None:
+            return False
+        old_config = old_config or self._config
+        if self._component_rebuild_signature(old_config) != self._component_rebuild_signature(new_config):
+            return True
+        if self._geometry_signature(old_config) == self._geometry_signature(new_config):
+            return False
+        return (
+            self._uses_fullscreen_host_for_config(old_config)
+            and self._uses_fullscreen_host_for_config(new_config)
+        )
+
+    def requires_restart_for_config(
+        self,
+        old_config: RendererConfig | None,
+        new_config: RendererConfig,
+    ) -> bool:
+        """Return whether a renderer config change needs a pi3d display recreation."""
+        if self._display is None:
+            return False
+        old_config = old_config or self._config
+        if self._service_restart_signature(old_config) != self._service_restart_signature(new_config):
+            return True
+        if self._geometry_signature(old_config) == self._geometry_signature(new_config):
+            return False
+        return not (
+            self._uses_fullscreen_host_for_config(old_config)
+            and self._uses_fullscreen_host_for_config(new_config)
+        )
 
     def _labwc_config_dir(self) -> Path:
         base_dir = Path(os.environ.get("PICFRAME_DIR", "~/.picframe")).expanduser()
@@ -459,12 +582,9 @@ class Pi3dRenderer(IRenderer):
     def start(self) -> None:
         """Initialize the pi3d display and sprite."""
         self._logger.info("Starting Pi3dRenderer")
+        self._reset_start_runtime_state()
         self._prepare_wayland_window_identity()
-        self._render_rect = (
-            self._configured_labwc_geometry()
-            if self._custom_display_requires_fullscreen_host()
-            else None
-        )
+        self._render_rect = self._render_rect_for_config(self._config)
         self._prepare_labwc_geometry_rules()
         self._logger.debug("Calling pi3d.Display.create...")
         display_x = 0 if self._render_rect is not None else self._display_x
@@ -495,7 +615,11 @@ class Pi3dRenderer(IRenderer):
         except Exception as e:
             self._logger.error(f"Failed to create pi3d display: {e}", exc_info=True)
             raise
-        
+
+        self._create_render_components()
+
+    def _create_render_components(self) -> None:
+        """Create pi3d-dependent render components for the current display."""
         pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self._shader_path)
         flat_shader = pi3d.Shader("uv_flat")
@@ -527,7 +651,120 @@ class Pi3dRenderer(IRenderer):
         if self._display is not None:
             self._display.destroy()
             self._display = None
+        self._image_renderer = None
+        self._text_renderer = None
+        self._clock_renderer = None
         self._render_rect = None
+        self._pending_component_rebuild = False
+        self._reset_pi3d_singletons()
+
+    def _reset_start_runtime_state(self) -> None:
+        """Reset transient render state whenever a new pi3d display is created."""
+        self._video_reveal_parked = False
+        self._video_first_frame_transition = False
+        self._was_transitioning = False
+        self._last_text_alpha = -1.0
+        self._last_redraw_time = 0.0
+        self._last_render_state = RenderState.STATIC
+        self._local_queue = queue.PriorityQueue()
+        self._animation_controller = AnimationController(self._animation_config())
+        self._animation_controller.update_text_config(
+            self._overlay_has_visible_text(),
+            False,
+        )
+        self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
+
+    def _sync_overlay_config_for_current_media(self) -> None:
+        if not self._current_media:
+            self._overlay_config = self._build_overlay_config(text_string="")
+            return
+        text_strings = self._generate_text_strings(self._current_media)
+        text_string = text_strings[0] if text_strings else ""
+        self._overlay_config = self._build_overlay_config(
+            text_string=text_string,
+            text_strings=text_strings if len(text_strings) == 2 else (),
+        )
+
+    def _reset_pi3d_camera_singletons(self) -> None:
+        """Clear only Camera singleton state before rebuilding components."""
+        camera_owner = getattr(pi3d, "Camera", None)
+        if camera_owner is None:
+            return
+        for attr in ("INSTANCE", "_INSTANCE"):
+            if hasattr(camera_owner, attr):
+                try:
+                    setattr(camera_owner, attr, None)
+                except Exception as exc:
+                    self._logger.debug(
+                        "Could not clear pi3d Camera.%s singleton: %s",
+                        attr,
+                        exc,
+                    )
+        if hasattr(camera_owner, "_ALL_INSTANCES"):
+            try:
+                setattr(camera_owner, "_ALL_INSTANCES", set())
+            except Exception as exc:
+                self._logger.debug(
+                    "Could not clear pi3d Camera._ALL_INSTANCES: %s",
+                    exc,
+                )
+
+    def _rebuild_components_for_existing_display(self) -> None:
+        """Recreate render components for a new render rectangle without remapping SDL."""
+        if self._display is None:
+            self._pending_component_rebuild = False
+            return
+        self._logger.info("Rebuilding pi3d render components for updated geometry.")
+        self._render_rect = self._render_rect_for_config(self._config)
+        self._image_renderer = None
+        self._text_renderer = None
+        self._clock_renderer = None
+        self._sync_overlay_config_for_current_media()
+        self._reset_pi3d_camera_singletons()
+        self._reset_start_runtime_state()
+        self._create_render_components()
+        if self._text_renderer:
+            self._text_renderer.update_config(self._overlay_config)
+        if self._clock_renderer:
+            self._clock_renderer.update_config(self._overlay_config)
+        self._pending_component_rebuild = False
+
+    def _reset_pi3d_singletons(self) -> None:
+        """Clear pi3d singleton references that can point at a destroyed display."""
+        singleton_owners: list[tuple[str, Any]] = []
+        display_owner = getattr(pi3d, "Display", None)
+        if display_owner is not None:
+            singleton_owners.append(("Display", display_owner))
+            display_class = getattr(display_owner, "Display", None)
+            if isinstance(display_class, type):
+                singleton_owners.append(("Display.Display", display_class))
+        camera_owner = getattr(pi3d, "Camera", None)
+        if camera_owner is not None:
+            singleton_owners.append(("Camera", camera_owner))
+
+        for name, owner in singleton_owners:
+            if owner is None:
+                continue
+            for attr in ("INSTANCE", "_INSTANCE"):
+                if hasattr(owner, attr):
+                    try:
+                        setattr(owner, attr, None)
+                    except Exception as exc:
+                        self._logger.debug(
+                            "Could not clear pi3d %s.%s singleton: %s",
+                            name,
+                            attr,
+                            exc,
+                        )
+            if hasattr(owner, "_ALL_INSTANCES"):
+                try:
+                    setattr(owner, "_ALL_INSTANCES", set())
+                except Exception as exc:
+                    self._logger.debug(
+                        "Could not clear pi3d %s._ALL_INSTANCES: %s",
+                        name,
+                        exc,
+                    )
 
     def _overlay_has_visible_text(self) -> bool:
         if not self._overlay_config.show_text:
@@ -557,8 +794,13 @@ class Pi3dRenderer(IRenderer):
         """
         Load a new image and initiate a transition.
         """
-        if self._display is None or self._image_renderer is None:
+        if self._display is None:
             self._logger.warning("Renderer not started, ignoring command")
+            return
+        if self._pending_component_rebuild:
+            self._rebuild_components_for_existing_display()
+        if self._image_renderer is None:
+            self._logger.warning("Renderer image component not ready, ignoring command")
             return
             
         if command.overlay:
@@ -657,7 +899,11 @@ class Pi3dRenderer(IRenderer):
         """
         Draw the current frame and update transition state.
         """
-        if self._display is None or self._image_renderer is None:
+        if self._display is None:
+            return False
+        if self._pending_component_rebuild:
+            self._rebuild_components_for_existing_display()
+        if self._image_renderer is None:
             return False
             
         tm = time.time()

@@ -72,6 +72,7 @@ def mock_renderer() -> MagicMock:
     renderer = MagicMock()
     # Make render_frame return False after one call to avoid infinite loops in tests
     renderer.render_frame.side_effect = [True, False]
+    renderer.requires_restart_for_config.return_value = False
     return renderer
 
 
@@ -279,13 +280,14 @@ def test_engine_retries_renderer_start_after_config_update(
     assert engine._state == State.PLAYING
 
 
-def test_engine_restarts_renderer_after_display_geometry_config_update(
+def test_engine_does_not_restart_renderer_in_process_for_service_restart_geometry(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, Any],
 ) -> None:
+    mock_renderer.requires_restart_for_config.return_value = True
     engine = PlaybackEngine(
         mock_event_publisher,
         mock_event_subscriber,
@@ -300,6 +302,7 @@ def test_engine_restarts_renderer_after_display_geometry_config_update(
         ),
     )
     engine._renderer_started = True
+    engine._next_transition_time = float("inf")
 
     engine._handle_renderer_config_event(
         RendererConfigUpdatedEvent(
@@ -312,16 +315,111 @@ def test_engine_restarts_renderer_after_display_geometry_config_update(
         )
     )
 
-    assert engine._renderer_retry_requested is True
+    mock_renderer.requires_restart_for_config.assert_called_once()
+    assert engine._renderer_retry_requested is False
+    assert engine._next_transition_time == float("inf")
 
 
-def test_engine_restarts_renderer_after_display_backend_config_update(
+def test_engine_applies_live_renderer_geometry_update_without_restart(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, Any],
 ) -> None:
+    mock_renderer.requires_restart_for_config.return_value = False
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        renderer_config=RendererConfig(
+            display_x=0,
+            display_y=0,
+            display_w=1920,
+            display_h=1080,
+        ),
+        video_player=mock_video_player,
+    )
+    engine._renderer_started = True
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = MagicMock()
+    engine._active_video_media = MagicMock()
+    engine._active_video_uses_reveal_sandwich = True
+    engine._video_reveal_park_pending = True
+    engine._next_transition_time = float("inf")
+
+    updated = RendererConfig(
+        display_x=100,
+        display_y=80,
+        display_w=1000,
+        display_h=900,
+    )
+    engine._handle_renderer_config_event(RendererConfigUpdatedEvent(config=updated))
+
+    mock_renderer.requires_restart_for_config.assert_called_once()
+    assert engine._renderer_retry_requested is False
+    assert engine._renderer_config == updated
+    assert not hasattr(engine, "_pending_video_media")
+    assert not hasattr(engine, "_active_video_media")
+    assert not hasattr(engine, "_active_video_uses_reveal_sandwich")
+    assert engine._video_reveal_park_pending is False
+    assert engine._state == State.PLAYING
+    assert engine._next_transition_time == 0.0
+    mock_video_player.stop.assert_called_once()
+
+
+def test_engine_run_loop_restarts_renderer_after_retry_request(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._is_running = True
+    engine._renderer_started = True
+    engine._renderer_retry_requested = True
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = MagicMock()
+    engine._active_video_media = MagicMock()
+    engine._active_video_uses_reveal_sandwich = True
+    engine._video_reveal_park_pending = True
+    engine._next_transition_time = float("inf")
+    mock_renderer.render_frame.side_effect = [True, True, True, False]
+
+    engine._run_loop()
+
+    assert mock_video_player.stop.call_count >= 1
+    assert mock_renderer.start.call_count == 1
+    assert mock_renderer.stop.call_count == 2
+    assert mock_renderer.render_frame.call_count == 4
+    assert not hasattr(engine, "_pending_video_media")
+    assert not hasattr(engine, "_active_video_media")
+    assert not hasattr(engine, "_active_video_uses_reveal_sandwich")
+    assert engine._state == State.PLAYING
+    assert engine._video_reveal_park_pending is False
+    mock_playlist_manager.build_playlist.assert_called_once()
+
+
+def test_engine_does_not_restart_renderer_in_process_for_backend_config_update(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_renderer.requires_restart_for_config.return_value = True
     engine = PlaybackEngine(
         mock_event_publisher,
         mock_event_subscriber,
@@ -331,6 +429,7 @@ def test_engine_restarts_renderer_after_display_backend_config_update(
         renderer_config=RendererConfig(use_sdl2=True, use_glx=False),
     )
     engine._renderer_started = True
+    engine._next_transition_time = float("inf")
 
     engine._handle_renderer_config_event(
         RendererConfigUpdatedEvent(
@@ -338,31 +437,41 @@ def test_engine_restarts_renderer_after_display_backend_config_update(
         )
     )
 
-    assert engine._renderer_retry_requested is True
+    mock_renderer.requires_restart_for_config.assert_called_once()
+    assert engine._renderer_retry_requested is False
+    assert engine._next_transition_time == float("inf")
 
 
-def test_engine_does_not_restart_renderer_for_clock_toggle(
+def test_engine_schedules_fresh_render_for_live_visual_config_change(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, Any],
 ) -> None:
+    mock_video_player = MagicMock()
     engine = PlaybackEngine(
         mock_event_publisher,
         mock_event_subscriber,
         mock_playlist_manager,
         mock_renderer,
         config,
-        renderer_config=RendererConfig(show_clock=True),
+        renderer_config=RendererConfig(show_clock=True, fit=False),
+        video_player=mock_video_player,
     )
     engine._renderer_started = True
+    engine._state = State.PLAYING
+    engine._next_transition_time = float("inf")
 
     engine._handle_renderer_config_event(
-        RendererConfigUpdatedEvent(config=RendererConfig(show_clock=False))
+        RendererConfigUpdatedEvent(config=RendererConfig(show_clock=False, fit=True))
     )
 
+    mock_renderer.requires_restart_for_config.assert_called_once()
     assert engine._renderer_retry_requested is False
+    assert engine._state == State.PLAYING
+    assert engine._next_transition_time == 0.0
+    mock_video_player.stop.assert_called_once()
 
 
 def test_engine_refreshes_video_decode_ceiling_on_viewer_config_change(

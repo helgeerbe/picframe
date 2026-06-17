@@ -26,6 +26,7 @@ from picframe.core.renderers.pi3d_renderer import (
     TEXT_CLEAR_REDRAW_FRAMES,
     VIDEO_WINDOW_TITLE,
     Pi3dRenderer,
+    PrioritizedRenderTask,
 )
 from picframe.core.renderers.animation_controller import RenderState
 from picframe.core.models.media import DisplayItem, MediaItem, MediaType
@@ -122,6 +123,77 @@ def test_renderer_start_stop(
     renderer.stop()
     display_mock.destroy.assert_called_once()
     assert renderer._display is None
+    assert renderer._image_renderer is None
+    assert renderer._text_renderer is None
+    assert renderer._clock_renderer is None
+
+
+def test_renderer_stop_clears_pi3d_singletons(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    class FakeDisplayClass:
+        INSTANCE = object()
+
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    mock_pi3d.Display.INSTANCE = object()
+    mock_pi3d.Display.Display = FakeDisplayClass
+    mock_pi3d.Camera.INSTANCE = object()
+    mock_pi3d.Camera._INSTANCE = object()
+    mock_pi3d.Camera._ALL_INSTANCES = {object()}
+
+    renderer.stop()
+
+    assert mock_pi3d.Display.INSTANCE is None
+    assert FakeDisplayClass.INSTANCE is None
+    assert mock_pi3d.Camera.INSTANCE is None
+    assert mock_pi3d.Camera._INSTANCE is None
+    assert mock_pi3d.Camera._ALL_INSTANCES == set()
+
+
+def test_renderer_start_resets_stale_video_and_animation_state(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._video_reveal_parked = True
+    renderer._video_first_frame_transition = True
+    renderer._was_transitioning = True
+    renderer._animation_controller.suspend()
+    renderer._local_queue.put(PrioritizedRenderTask(priority=0, task="clock_tick"))
+
+    renderer.stop()
+    renderer.start()
+
+    assert renderer._video_reveal_parked is False
+    assert renderer._video_first_frame_transition is False
+    assert renderer._was_transitioning is False
+    assert renderer._animation_controller._state == RenderState.STATIC
+    assert renderer._local_queue.empty()
+
+
+def test_renderer_start_forces_initial_background_draw(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+
+    result = renderer.render_frame()
+
+    assert result is True
+    mock_image_renderer.draw.assert_called_once_with()
 
 
 def test_renderer_uses_fullscreen_host_for_custom_geometry_without_labwc(
@@ -547,6 +619,7 @@ def test_renderer_render_frame_video_reveal_parked(
     renderer = Pi3dRenderer(config)
     renderer.start()
     renderer._video_reveal_parked = True
+    renderer._animation_controller._frames_to_render = 0
 
     result = renderer.render_frame()
 
@@ -587,15 +660,12 @@ def test_renderer_config_event_updates_image_renderer(
     renderer = Pi3dRenderer(config)
     renderer.start()
 
-    updated = RendererConfig(
-        display_w=1920,
-        display_h=1080,
+    updated = replace(
+        config,
         fps=30,
         background=(0.1, 0.1, 0.1, 1.0),
-        blend_type="blend",
         time_delay=30.0,
         time_fade=1.0,
-        font_file="/path/to/font.ttf",
         fit=True,
         kenburns=True,
     )
@@ -603,9 +673,251 @@ def test_renderer_config_event_updates_image_renderer(
     renderer._handle_config_event(RendererConfigUpdatedEvent(config=updated))
 
     mock_image_renderer.update_config.assert_called_with(updated)
+    assert mock_pi3d.Display.create.return_value.frames_per_second == 30
     assert renderer._kenburns is True
     assert renderer._animation_controller._fps == 30
     assert renderer._animation_controller._time_delay == 30.0
+
+
+def test_renderer_config_event_defers_component_updates_for_display_geometry(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    updated = replace(
+        config,
+        display_x=100,
+        display_y=80,
+        display_w=1000,
+        display_h=900,
+        fit=True,
+    )
+
+    renderer._handle_config_event(RendererConfigUpdatedEvent(config=updated))
+
+    assert renderer._config == updated
+    assert renderer._display_x == 100
+    mock_image_renderer.update_config.assert_not_called()
+    mock_text_renderer.update_config.assert_not_called()
+    mock_clock_renderer.update_config.assert_not_called()
+
+
+def test_renderer_backend_flags_require_service_restart(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    updated = replace(config, use_glx=not config.use_glx, use_sdl2=not config.use_sdl2)
+
+    assert renderer.requires_restart_for_config(config, updated) is True
+
+    renderer._handle_config_event(RendererConfigUpdatedEvent(config=updated))
+
+    assert renderer._config == updated
+    assert renderer._pending_component_rebuild is False
+    mock_image_renderer.update_config.assert_not_called()
+    mock_text_renderer.update_config.assert_not_called()
+    mock_clock_renderer.update_config.assert_not_called()
+
+
+def test_renderer_mat_settings_do_not_require_service_restart(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    updated = replace(
+        config,
+        mat_images=0.2,
+        mat_resource_folder="/tmp/new-mats",
+    )
+
+    assert renderer.requires_restart_for_config(config, updated) is False
+
+    renderer._handle_config_event(RendererConfigUpdatedEvent(config=updated))
+
+    mock_image_renderer.update_config.assert_called_with(updated)
+    assert renderer._pending_component_rebuild is False
+
+
+def test_renderer_shader_and_font_changes_rebuild_components_without_restart(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    updated = replace(
+        config,
+        shader_path="/new/shader",
+        font_file="/new/font.ttf",
+    )
+
+    assert renderer.requires_restart_for_config(config, updated) is False
+
+    renderer._handle_config_event(RendererConfigUpdatedEvent(config=updated))
+
+    assert renderer._pending_component_rebuild is True
+    mock_image_renderer.update_config.assert_not_called()
+    mock_text_renderer.update_config.assert_not_called()
+    mock_clock_renderer.update_config.assert_not_called()
+
+
+def test_renderer_wayland_fullscreen_host_geometry_changes_do_not_require_restart(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+    monkeypatch.setattr(renderer, "_find_labwc_pid", lambda: None)
+    renderer.start()
+    updated = replace(
+        config,
+        display_x=100,
+        display_y=80,
+        display_w=1000,
+        display_h=900,
+    )
+
+    assert renderer.requires_restart_for_config(config, updated) is False
+
+
+def test_renderer_labwc_geometry_changes_require_restart(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+    monkeypatch.setattr(renderer, "_find_labwc_pid", lambda: 1234)
+    monkeypatch.setattr(renderer, "_prepare_labwc_geometry_rules", MagicMock())
+    renderer.start()
+    updated = replace(
+        config,
+        display_x=100,
+        display_y=80,
+        display_w=1000,
+        display_h=900,
+    )
+
+    assert renderer.requires_restart_for_config(config, updated) is True
+
+
+def test_renderer_config_event_marks_wayland_fullscreen_host_geometry_for_rebuild(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+    monkeypatch.setattr(renderer, "_find_labwc_pid", lambda: None)
+    renderer.start()
+    updated = replace(
+        config,
+        display_x=100,
+        display_y=80,
+        display_w=1000,
+        display_h=900,
+    )
+
+    renderer._handle_config_event(RendererConfigUpdatedEvent(config=updated))
+
+    assert renderer._config == updated
+    assert renderer._pending_component_rebuild is True
+    mock_image_renderer.update_config.assert_not_called()
+    mock_text_renderer.update_config.assert_not_called()
+    mock_clock_renderer.update_config.assert_not_called()
+
+
+def test_renderer_execute_rebuilds_wayland_fullscreen_host_components_before_command(
+    mock_pi3d: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = RendererConfig(
+        display_x=0,
+        display_y=0,
+        display_w=1920,
+        display_h=1080,
+        font_file="/path/to/font.ttf",
+    )
+    renderer = Pi3dRenderer(config)
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-1")
+    monkeypatch.setattr(renderer, "_find_labwc_pid", lambda: None)
+    with (
+        patch("picframe.core.renderers.pi3d_renderer.ImageRenderer") as image_renderer,
+        patch("picframe.core.renderers.pi3d_renderer.TextRenderer"),
+        patch("picframe.core.renderers.pi3d_renderer.ClockRenderer"),
+    ):
+        image_renderer.return_value.execute.return_value = (True, 0.0, 0.0)
+        renderer.start()
+        updated = replace(
+            config,
+            display_x=100,
+            display_y=80,
+            display_w=1000,
+            display_h=900,
+        )
+        renderer._handle_config_event(RendererConfigUpdatedEvent(config=updated))
+        command = RenderCommand(image_path="/tmp/image.jpg")
+
+        renderer.execute(command)
+
+    assert image_renderer.call_count == 2
+    assert image_renderer.call_args.kwargs["render_rect"] == (100, 80, 1000, 900)
+    image_renderer.return_value.execute.assert_called_once_with(command)
+    assert renderer._pending_component_rebuild is False
+
+
+def test_renderer_restart_uses_deferred_display_geometry_config(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    updated = replace(
+        config,
+        display_x=33,
+        display_y=44,
+        display_w=1000,
+        display_h=900,
+    )
+
+    renderer._handle_config_event(RendererConfigUpdatedEvent(config=updated))
+    mock_pi3d.Display.create.reset_mock()
+    renderer.stop()
+    renderer.start()
+
+    create_kwargs = mock_pi3d.Display.create.call_args.kwargs
+    assert create_kwargs["x"] == 33
+    assert create_kwargs["y"] == 44
+    assert create_kwargs["w"] == 1000
+    assert create_kwargs["h"] == 900
 
 
 def test_renderer_render_frame(
@@ -777,6 +1089,7 @@ def test_renderer_normal_transition_completion_ignores_text_hold(
     renderer._animation_controller._show_text = True
     renderer._animation_controller._text_alpha = 1.0
     renderer._animation_controller._text_timer = 200.0
+    renderer._animation_controller._frames_to_render = 0
     renderer._last_text_alpha = 1.0
     renderer._last_redraw_time = 100.0
     renderer._overlay_config = OverlayConfig(
@@ -814,6 +1127,7 @@ def test_renderer_video_first_frame_waits_while_text_is_visible(
     renderer._animation_controller._show_text = True
     renderer._animation_controller._text_alpha = 1.0
     renderer._animation_controller._text_timer = 200.0
+    renderer._animation_controller._frames_to_render = 0
     renderer._last_text_alpha = 1.0
     renderer._last_redraw_time = 100.0
     renderer._overlay_config = OverlayConfig(

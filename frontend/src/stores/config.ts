@@ -28,6 +28,13 @@ export interface BasicAuthConfig {
   password?: string
 }
 
+export interface PicframeServiceStatus {
+  status: 'active' | 'inactive' | 'unavailable'
+  active: boolean
+  restart_available: boolean
+  message?: string | null
+}
+
 export interface MediaSelectionCount {
   selected_count: number
   total_count: number
@@ -367,12 +374,42 @@ export const useSystemStore = defineStore('system', () => {
     }
   }
 
+  async function fetchPicframeServiceStatus(): Promise<PicframeServiceStatus> {
+    isLoading.value = true
+    error.value = null
+    try {
+      const response = await api.get('/system/service-status')
+      return response.data
+    } catch (e: any) {
+      error.value = e.message || 'Failed to inspect Picframe service'
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
+  async function restartPicframeService() {
+    isLoading.value = true
+    error.value = null
+    try {
+      const response = await api.post('/system/restart-service')
+      return response.data
+    } catch (e: any) {
+      error.value = e.message || 'Failed to restart Picframe service'
+      throw e
+    } finally {
+      isLoading.value = false
+    }
+  }
+
   return {
     isLoading,
     error,
     purgeDatabase,
     clearCache,
     reboot,
-    shutdown
+    shutdown,
+    fetchPicframeServiceStatus,
+    restartPicframeService
   }
 })

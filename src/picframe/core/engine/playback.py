@@ -184,6 +184,37 @@ class PlaybackEngine:
         self._renderer_retry_requested = False
         return True
 
+    def _restart_renderer(self) -> bool:
+        """Stop transient playback state and recreate pi3d on the main thread."""
+        self._logger.info("Restarting renderer after config update.")
+        self._cancel_video_reveal_parking()
+        self._clear_pending_video_preparation()
+        for attr in ("_active_video_media", "_active_video_uses_reveal_sandwich"):
+            if hasattr(self, attr):
+                delattr(self, attr)
+        if self._video_player:
+            self._video_player.stop()
+        self._renderer.stop()
+        self._renderer_started = False
+        if self._try_start_renderer():
+            self._prepare_playback_after_renderer_start()
+            return True
+        return False
+
+    def _refresh_playback_after_live_renderer_config(self) -> None:
+        """Prepare playback after renderer config changed without remapping the display."""
+        self._logger.info("Renderer config applied without display restart; scheduling fresh media render.")
+        self._cancel_video_reveal_parking()
+        self._clear_pending_video_preparation()
+        for attr in ("_active_video_media", "_active_video_uses_reveal_sandwich"):
+            if hasattr(self, attr):
+                delattr(self, attr)
+        if self._video_player:
+            self._video_player.stop()
+        if self._state in (State.PREPARING_VIDEO, State.TRANSITIONING, State.PLAYING):
+            self._change_state(State.PLAYING, payload=None)
+        self._next_transition_time = 0.0
+
     def stop(self) -> None:
         """Stop the playback engine and render loop."""
         self._logger.info("Stopping PlaybackEngine")
@@ -215,10 +246,7 @@ class PlaybackEngine:
                     continue
 
                 if self._renderer_retry_requested:
-                    self._renderer.stop()
-                    self._renderer_started = False
-                    if self._try_start_renderer():
-                        self._prepare_playback_after_renderer_start()
+                    self._restart_renderer()
                     continue
 
                 self._handle_video_first_frame_timeout(current_time)
@@ -377,15 +405,39 @@ class PlaybackEngine:
         if not isinstance(event, RendererConfigUpdatedEvent):
             return
 
-        old_signature = self._renderer_asset_signature(self._renderer_config)
-        new_signature = self._renderer_asset_signature(event.config)
+        old_config = self._renderer_config
+        old_live_signature = self._renderer_live_refresh_signature(old_config)
+        new_live_signature = self._renderer_live_refresh_signature(event.config)
+        old_geometry_signature = self._renderer_geometry_signature(old_config)
+        new_geometry_signature = self._renderer_geometry_signature(event.config)
         self._renderer_config = event.config
-        if not self._renderer_started or old_signature != new_signature:
+        if not self._renderer_started:
             self._renderer_retry_requested = True
+            return
+
+        restart_required = self._renderer.requires_restart_for_config(
+            old_config,
+            event.config,
+        )
+        if restart_required:
+            self._logger.info(
+                "Renderer config contains changes that require Picframe service restart; "
+                "skipping in-process renderer restart."
+            )
+            self._renderer_retry_requested = False
+            return
+
+        live_changed = old_live_signature != new_live_signature
+        geometry_changed = old_geometry_signature != new_geometry_signature
+        if live_changed or geometry_changed:
+            self._renderer_retry_requested = False
+            self._refresh_playback_after_live_renderer_config()
+            return
+        self._renderer_retry_requested = False
 
     @staticmethod
-    def _renderer_asset_signature(config: RendererConfig | None) -> tuple[Any, ...] | None:
-        """Return config fields that require rebuilding the pi3d display/window."""
+    def _renderer_geometry_signature(config: RendererConfig | None) -> tuple[Any, ...] | None:
+        """Return display rectangle fields from renderer config."""
         if config is None:
             return None
         return (
@@ -393,11 +445,56 @@ class PlaybackEngine:
             config.display_y,
             config.display_w,
             config.display_h,
-            config.use_glx,
-            config.use_sdl2,
+        )
+
+    @staticmethod
+    def _renderer_live_refresh_signature(config: RendererConfig | None) -> tuple[Any, ...] | None:
+        """Return config fields that should repaint current media without process restart."""
+        if config is None:
+            return None
+        return (
+            config.fps,
+            config.background,
             config.shader_path,
+            config.kenburns,
+            config.show_clock,
+            config.clock_format,
+            config.clock_justify,
+            config.clock_text_sz,
+            config.clock_opacity,
+            config.clock_top_bottom,
+            config.clock_wdt_offset_pct,
+            config.clock_hgt_offset_pct,
+            config.show_text_enabled,
+            config.text_overlay_format,
+            config.show_text_fm,
+            config.text_justify,
+            config.show_text_sz,
+            config.text_bkg_hgt,
+            config.text_opacity,
+            config.text_x_margin,
+            config.text_y_margin,
+            tuple(config.geo_suppress_list),
+            config.time_fade,
+            config.time_delay,
+            config.show_text_tm,
             config.font_file,
+            config.blend_type,
+            config.blur_amount,
+            config.blur_zoom,
+            config.blur_edges,
+            config.edge_alpha,
+            config.fit,
+            config.video_fit_display,
+            tuple(config.video_extensions),
             config.mat_images,
+            config.mat_type,
+            config.outer_mat_color,
+            config.inner_mat_color,
+            config.outer_mat_border,
+            config.inner_mat_border,
+            config.outer_mat_use_texture,
+            config.inner_mat_use_texture,
             config.mat_resource_folder,
         )
 

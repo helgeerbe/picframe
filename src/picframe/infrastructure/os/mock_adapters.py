@@ -118,3 +118,12 @@ class MockSystemManager(ISystemManager):
     def shutdown(self) -> None:
         """Simulate a system shutdown."""
         logger.warning("MockSystemManager: System shutdown requested (simulated).")
+
+    def picframe_service_status(self) -> str:
+        """Report no managed service in mock environments."""
+        return "unavailable"
+
+    def restart_picframe_service(self) -> bool:
+        """Simulate an unavailable service restart."""
+        logger.warning("MockSystemManager: Picframe service restart unavailable (simulated).")
+        return False

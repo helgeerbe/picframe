@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onErrorCaptured, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import { useConfigStore, useSystemStore, type AuthScope } from '../stores/config'
+import { useConfigStore, useSystemStore, type AuthScope, type PicframeServiceStatus } from '../stores/config'
 import { useI18n } from 'vue-i18n'
 import configSchema from '../configSchema.json'
 import HardwareInputsEditor from '../components/HardwareInputsEditor.vue'
@@ -46,7 +46,11 @@ const localAuthConfig = ref({
 })
 const activeTab = ref('viewer')
 const showConfirmModal = ref(false)
+const showServiceRestartModal = ref(false)
+const serviceRestartStatus = ref<PicframeServiceStatus | null>(null)
+const picframeServiceStatus = ref<PicframeServiceStatus | null>(null)
 const confirmAction = ref<(() => Promise<void>) | null>(null)
+const confirmActionHandlesSuccess = ref(false)
 const confirmMessage = ref('')
 const successMessage = ref('')
 const renderError = ref<any>(null)
@@ -108,6 +112,7 @@ const imageFileExtensions = imageExtensionChoices.map(choice => choice.value)
 const fontExtensions = ['.ttf', '.otf']
 const certificateExtensions = ['.pem', '.crt', '.cer', '.key']
 const logLevelOptions = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+const serviceRestartViewerKeys = ['use_glx', 'use_sdl2']
 const authScopeOptions = computed(() => [
   { value: 'none', label: t('settings.auth.scopeNone') },
   { value: 'settings', label: t('settings.auth.scopeSettings') },
@@ -125,6 +130,7 @@ onMounted(async () => {
   await configStore.fetchAuthConfig()
   await configStore.fetchLocales()
   await configStore.fetchFilterOptions()
+  await refreshPicframeServiceStatus()
 })
 
 watch(() => config.value, (newConfig) => {
@@ -142,6 +148,12 @@ watch(() => authConfig.value, (newAuthConfig) => {
     password: newAuthConfig.password || ''
   }
 }, { immediate: true, deep: true })
+
+watch(() => activeTab.value, (tab) => {
+  if (tab === 'danger') {
+    void refreshPicframeServiceStatus()
+  }
+})
 
 const sortColumns = computed(() => filterOptions.value.sort_columns || [])
 const localeOptions = computed(() => {
@@ -219,16 +231,125 @@ function normalizeAuthScope(value: unknown, enabled?: boolean): AuthScope {
   return enabled ? 'settings' : 'none'
 }
 
+function serviceRestartSettingsChanged() {
+  const savedViewer = config.value?.viewer || {}
+  const draftViewer = localConfig.value?.viewer || {}
+  return serviceRestartViewerKeys.some(key => Boolean(savedViewer[key]) !== Boolean(draftViewer[key]))
+}
+
+function restoreServiceRestartSettings() {
+  const savedViewer = config.value?.viewer || {}
+  const draftViewer = localConfig.value?.viewer
+  if (!draftViewer) return
+  for (const key of serviceRestartViewerKeys) {
+    draftViewer[key] = Boolean(savedViewer[key])
+  }
+}
+
+async function persistSettings(successText: string) {
+  await configStore.saveConfig(localConfig.value)
+  await configStore.saveAuthConfig({
+    ...localAuthConfig.value,
+    enabled: localAuthConfig.value.scope !== 'none'
+  })
+  showSuccess(successText)
+}
+
 async function saveConfig() {
+  if (serviceRestartSettingsChanged()) {
+    try {
+      serviceRestartStatus.value = await systemStore.fetchPicframeServiceStatus()
+    } catch (e) {
+      serviceRestartStatus.value = {
+        status: 'unavailable',
+        active: false,
+        restart_available: false,
+        message: systemError.value || t('settings.serviceRestartUnavailable')
+      }
+    }
+    showServiceRestartModal.value = true
+    return
+  }
+
   try {
-    await configStore.saveConfig(localConfig.value)
-    await configStore.saveAuthConfig({
-      ...localAuthConfig.value,
-      enabled: localAuthConfig.value.scope !== 'none'
-    })
-    showSuccess(t('settings.saved'))
+    await persistSettings(t('settings.saved'))
   } catch (e) {
     // Store exposes the error.
+  }
+}
+
+function cancelServiceRestartSave() {
+  restoreServiceRestartSettings()
+  showServiceRestartModal.value = false
+}
+
+async function saveServiceRestartLater() {
+  try {
+    await persistSettings(t('settings.savedRestartLater'))
+    showServiceRestartModal.value = false
+  } catch (e) {
+    // Store exposes the error.
+  }
+}
+
+async function saveAndRestartService() {
+  try {
+    await persistSettings(t('settings.savedRestarting'))
+  } catch (e) {
+    // Store exposes the error.
+    return
+  }
+  try {
+    const result = await systemStore.restartPicframeService()
+    showServiceRestartModal.value = false
+    if (result?.status === 'manual_required') {
+      showSuccess(result.message || t('settings.savedRestartLater'))
+      return
+    }
+    showSuccess(t('settings.savedRestarting'))
+  } catch (e) {
+    showServiceRestartModal.value = false
+    showSuccess(t('settings.savedRestartLater'))
+  }
+}
+
+function unavailablePicframeServiceStatus(message?: string | null): PicframeServiceStatus {
+  return {
+    status: 'unavailable',
+    active: false,
+    restart_available: false,
+    message: message || t('settings.serviceRestartUnavailable')
+  }
+}
+
+async function refreshPicframeServiceStatus(): Promise<PicframeServiceStatus> {
+  try {
+    const status = await systemStore.fetchPicframeServiceStatus()
+    picframeServiceStatus.value = status
+    return status
+  } catch (e) {
+    const status = unavailablePicframeServiceStatus(systemError.value)
+    picframeServiceStatus.value = status
+    return status
+  }
+}
+
+async function restartPicframeServiceFromDangerZone() {
+  const status = await refreshPicframeServiceStatus()
+  if (!status.restart_available) {
+    showSuccess(status.message || t('settings.picframeRestartManualRequired'))
+    return
+  }
+  try {
+    const result = await systemStore.restartPicframeService()
+    if (result?.status === 'manual_required') {
+      await refreshPicframeServiceStatus()
+      showSuccess(result.message || t('settings.picframeRestartManualRequired'))
+      return
+    }
+    showSuccess(t('settings.picframeRestartRequested'))
+  } catch (e) {
+    showSuccess(t('settings.picframeRestartRequested'))
   }
 }
 
@@ -239,8 +360,9 @@ function showSuccess(msg: string) {
   }, 3000)
 }
 
-function triggerConfirm(action: () => Promise<void>, message: string) {
+function triggerConfirm(action: () => Promise<void>, message: string, handlesSuccess = false) {
   confirmAction.value = action
+  confirmActionHandlesSuccess.value = handlesSuccess
   confirmMessage.value = message
   showConfirmModal.value = true
 }
@@ -250,9 +372,13 @@ async function executeConfirm() {
   try {
     await confirmAction.value()
     showConfirmModal.value = false
-    showSuccess(t('settings.actionCompleted'))
+    if (!confirmActionHandlesSuccess.value) {
+      showSuccess(t('settings.actionCompleted'))
+    }
   } catch (e) {
     showConfirmModal.value = false
+  } finally {
+    confirmActionHandlesSuccess.value = false
   }
 }
 
@@ -648,10 +774,16 @@ function setBackgroundColor(event: Event) {
                 <input v-model="localConfig.viewer.display_hdmi" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
               </FieldRow>
               <FieldRow :label="formatLabel('use_glx')" :help="sectionHelp('viewer', 'use_glx')">
-                <ToggleSwitch v-model="localConfig.viewer.use_glx" />
+                <div class="space-y-2">
+                  <ToggleSwitch v-model="localConfig.viewer.use_glx" />
+                  <p class="text-xs leading-relaxed text-amber-700 dark:text-amber-300">{{ t('settings.serviceRestartInline') }}</p>
+                </div>
               </FieldRow>
               <FieldRow :label="formatLabel('use_sdl2')" :help="sectionHelp('viewer', 'use_sdl2')">
-                <ToggleSwitch v-model="localConfig.viewer.use_sdl2" />
+                <div class="space-y-2">
+                  <ToggleSwitch v-model="localConfig.viewer.use_sdl2" />
+                  <p class="text-xs leading-relaxed text-amber-700 dark:text-amber-300">{{ t('settings.serviceRestartInline') }}</p>
+                </div>
               </FieldRow>
               <FieldRow :label="formatLabel('geo_suppress_list')" :help="sectionHelp('viewer', 'geo_suppress_list')">
                 <TokenListEditor v-model="localConfig.viewer.geo_suppress_list" placeholder="County" />
@@ -845,6 +977,23 @@ function setBackgroundColor(event: Event) {
               </div>
               <div class="flex flex-col justify-between gap-4 rounded-lg border border-red-100 bg-red-50 p-5 dark:border-red-500/20 dark:bg-red-500/5 sm:flex-row sm:items-center">
                 <div>
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.restartPicframeService') }}</h3>
+                  <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('settings.domain.restartPicframeServiceHelp') }}</p>
+                  <p class="mt-2 text-sm font-medium" :class="picframeServiceStatus?.restart_available ? 'text-green-700 dark:text-green-400' : 'text-amber-700 dark:text-amber-300'">
+                    {{ picframeServiceStatus?.restart_available ? t('settings.domain.restartPicframeServiceActive') : t('settings.domain.restartPicframeServiceUnavailable') }}
+                  </p>
+                </div>
+                <button
+                  :disabled="!picframeServiceStatus?.restart_available"
+                  class="inline-flex items-center justify-center rounded-lg bg-red-100 px-4 py-2 font-medium text-red-700 transition-colors hover:bg-red-200 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-600 dark:text-white dark:hover:bg-red-700"
+                  @click="triggerConfirm(restartPicframeServiceFromDangerZone, t('settings.restartPicframeService'), true)"
+                >
+                  <ArrowPathIcon class="mr-2 h-5 w-5" />
+                  {{ t('settings.domain.restartPicframeService') }}
+                </button>
+              </div>
+              <div class="flex flex-col justify-between gap-4 rounded-lg border border-red-100 bg-red-50 p-5 dark:border-red-500/20 dark:bg-red-500/5 sm:flex-row sm:items-center">
+                <div>
                   <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.reboot') }}</h3>
                   <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('settings.domain.rebootHelp') }}</p>
                 </div>
@@ -866,6 +1015,34 @@ function setBackgroundColor(event: Event) {
             </div>
           </section>
         </main>
+      </div>
+
+      <div v-if="showServiceRestartModal" class="relative z-50" role="dialog" aria-modal="true">
+        <div class="fixed inset-0 bg-gray-500/75 dark:bg-gray-900/80"></div>
+        <div class="fixed inset-0 z-50 flex min-h-full items-center justify-center p-4">
+          <div class="w-full max-w-xl overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl dark:border-gray-700 dark:bg-gray-800">
+            <div class="p-6">
+              <div class="flex gap-4">
+                <div class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
+                  <ExclamationTriangleIcon class="h-6 w-6 text-amber-600 dark:text-amber-400" />
+                </div>
+                <div>
+                  <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.serviceRestartTitle') }}</h3>
+                  <p class="mt-2 text-sm text-gray-500 dark:text-gray-400">{{ t('settings.serviceRestartBody') }}</p>
+                  <p class="mt-3 text-sm font-medium" :class="serviceRestartStatus?.restart_available ? 'text-green-700 dark:text-green-400' : 'text-amber-700 dark:text-amber-300'">
+                    {{ serviceRestartStatus?.restart_available ? t('settings.serviceRestartActive') : t('settings.serviceRestartInactive') }}
+                  </p>
+                  <p v-if="serviceRestartStatus?.message" class="mt-2 text-xs text-gray-500 dark:text-gray-400">{{ serviceRestartStatus.message }}</p>
+                </div>
+              </div>
+            </div>
+            <div class="flex flex-col-reverse gap-3 border-t border-gray-100 bg-gray-50 px-6 py-4 dark:border-gray-700 dark:bg-gray-800/50 sm:flex-row sm:justify-end">
+              <button type="button" class="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600 dark:hover:bg-gray-600" @click="cancelServiceRestartSave">{{ t('settings.cancel') }}</button>
+              <button type="button" class="rounded-lg bg-white px-3 py-2 text-sm font-semibold text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 hover:bg-gray-50 dark:bg-gray-700 dark:text-gray-200 dark:ring-gray-600 dark:hover:bg-gray-600" @click="saveServiceRestartLater">{{ t('settings.saveRestartLater') }}</button>
+              <button v-if="serviceRestartStatus?.restart_available" type="button" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500" @click="saveAndRestartService">{{ t('settings.saveAndRestart') }}</button>
+            </div>
+          </div>
+        </div>
       </div>
 
       <div v-if="showConfirmModal" class="relative z-50" role="dialog" aria-modal="true">

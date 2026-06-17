@@ -30,7 +30,6 @@ class ImageRenderer:
         self._shader = shader
         self._render_rect = render_rect
         self._render_width, self._render_height = self._resolve_render_size()
-        self.update_config(config)
         
         # State
         self._slide: Any | None = None
@@ -45,6 +44,7 @@ class ImageRenderer:
         self._ystep = 0.0
         self._next_tm = 0.0
         
+        self.update_config(config)
         self._init_slide()
 
     @staticmethod
@@ -60,6 +60,7 @@ class ImageRenderer:
         blend_type_str = str(self._config_value(config, "blend_type", "blend"))
         self._blend_type = {"blend": 0.0, "burn": 1.0, "bump": 2.0}.get(blend_type_str, 0.0)
         self._edge_alpha = float(self._config_value(config, "edge_alpha", 0.5))
+        self._background_rgb = self._background_rgb_from_config(config)
         self._fit = bool(self._config_value(config, "fit", False))
         self._kenburns = bool(self._config_value(config, "kenburns", False))
         if self._kenburns:
@@ -106,6 +107,22 @@ class ImageRenderer:
         self._slide.unif[54] = float(self._blend_type)
         self._slide.unif[55] = 1.0  # brightness
         self._position_slide()
+        self._set_background_texture()
+
+    def _set_background_texture(self) -> None:
+        """Seed a new pi3d display with a real texture before media is loaded."""
+        if self._slide is None:
+            return
+        try:
+            image = Image.new("RGB", (self._render_width, self._render_height), self._background_rgb)
+            texture = pi3d.Texture(image, blend=True, m_repeat=True, free_after_load=True)
+            self._sfg = texture
+            self._sbg = texture
+            self._slide.set_textures([self._sfg, self._sbg])
+            self._apply_texture_scale()
+            self.set_alpha(1.0)
+        except Exception as exc:
+            self._logger.debug("Could not initialize pi3d background texture: %s", exc)
 
     def _resolve_render_size(self) -> tuple[int, int]:
         if self._render_rect is not None:
@@ -113,6 +130,20 @@ class ImageRenderer:
             if width > 0 and height > 0:
                 return int(width), int(height)
         return int(self._display.width), int(self._display.height)
+
+    def _background_rgb_from_config(self, config: RendererConfig | dict[str, Any]) -> tuple[int, int, int]:
+        raw_background = self._config_value(config, "background", (0.0, 0.0, 0.0, 1.0))
+        if not isinstance(raw_background, (list, tuple)) or len(raw_background) < 3:
+            return (0, 0, 0)
+
+        channels: list[int] = []
+        for raw_channel in raw_background[:3]:
+            try:
+                value = max(0.0, min(float(raw_channel), 1.0))
+            except (TypeError, ValueError):
+                return (0, 0, 0)
+            channels.append(int(round(value * 255)))
+        return (channels[0], channels[1], channels[2])
 
     def _render_center(self) -> tuple[float, float]:
         if self._render_rect is None:

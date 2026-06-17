@@ -284,9 +284,11 @@ shown as live controls unless the running application consumes them.
 Display geometry is edited as either **Fullscreen** or **Custom**. Fullscreen
 saves `viewer.display_x=0`, `viewer.display_y=0`, and leaves
 `viewer.display_w`/`viewer.display_h` unset. Custom mode reveals x/y/width/height;
-x and y may be negative, while width and height must be positive. Applying a
-display geometry change restarts only the renderer/display component, not the
-entire `picframe.service`.
+x and y may be negative, while width and height must be positive. On Wayland
+fullscreen-host sessions, applying a display geometry change rebuilds the
+renderer components on the existing pi3d display surface. If a geometry or
+backend change would require remapping the actual pi3d/SDL host window, Settings
+saves the value but treats it as requiring a Picframe service restart.
 
 `model.locale` is selected from the locales installed on the host (`locale -a`).
 If the saved locale is not currently installed, Settings keeps it visible in the
@@ -298,10 +300,12 @@ in-process renderer config update; MQTT reconnects when `mqtt.*` changes; the
 media monitor reloads `pic_dir`, link-following, and media extensions; GPIO
 inputs reconfigure in place; `viewer.max_software_decode_resolution` and
 `viewer.video_fit_display` affect future GStreamer video starts; and
-`viewer.display_hdmi` retargets display-power commands. HTTP startup fields are
-managed through CLI arguments/environment variables rather than prompting for a
-service restart. Use `sudo systemctl restart picframe.service` only as manual
-troubleshooting or after changing external service/session setup.
+`viewer.display_hdmi` retargets display-power commands. Backend toggles
+`viewer.use_glx` and `viewer.use_sdl2` are not live Apply controls. When they
+change, Settings shows a restart-required dialog; if `picframe.service` is
+active and sudoers allows it, Picframe can save and restart the service, otherwise
+it saves for a manual restart later. HTTP startup fields are managed through CLI
+arguments/environment variables rather than prompting for a service restart.
 
 `model.log_level` and `model.log_file` are live logging controls. Changing the
 level updates Picframe loggers without restarting. Leaving `model.log_file`
@@ -686,13 +690,16 @@ sudo usermod -aG render $USER # For DRM/KMS access
 ```
 
 **Note on System Power Management (Critical):**
-To allow the application to reboot or shut down the host system without prompting for a password, you must configure `sudo` or `polkit` for the user running the application. The `LinuxSystemManager` relies on these permissions to function correctly without interactive prompts.
+To allow the application to reboot, shut down, or restart `picframe.service`
+without prompting for a password, you must configure `sudo` or `polkit` for the
+user running the application. The `LinuxSystemManager` relies on these
+permissions to function correctly without interactive prompts.
 
 For `sudo` (visudo):
 ```bash
 # Add the following lines to /etc/sudoers (using visudo)
 # Replace 'pi' with the actual username running the application
-Cmnd_Alias PICFRAME_POWER = /usr/sbin/reboot, /sbin/reboot, /usr/sbin/shutdown -h now, /sbin/shutdown -h now, /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
+Cmnd_Alias PICFRAME_POWER = /usr/sbin/reboot, /sbin/reboot, /usr/sbin/shutdown -h now, /sbin/shutdown -h now, /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl restart picframe.service, /bin/systemctl restart picframe.service
 pi ALL=(root) NOPASSWD: PICFRAME_POWER
 ```
 
@@ -700,7 +707,7 @@ Alternatively, you can dynamically create a drop-in file in `/etc/sudoers.d/` fo
 ```bash
 sudo tee /etc/sudoers.d/picframe-power >/dev/null <<EOF
 # Managed by Picframe installer.
-Cmnd_Alias PICFRAME_POWER = /usr/sbin/reboot, /sbin/reboot, /usr/sbin/shutdown -h now, /sbin/shutdown -h now, /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
+Cmnd_Alias PICFRAME_POWER = /usr/sbin/reboot, /sbin/reboot, /usr/sbin/shutdown -h now, /sbin/shutdown -h now, /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl restart picframe.service, /bin/systemctl restart picframe.service
 $USER ALL=(root) NOPASSWD: PICFRAME_POWER
 EOF
 sudo visudo -cf /etc/sudoers.d/picframe-power

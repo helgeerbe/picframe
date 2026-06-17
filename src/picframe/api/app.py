@@ -55,11 +55,13 @@ from picframe.api.models import (
     StatusMessageResponse,
     StatusResponse,
     SystemErrorWebSocketMessage,
+    SystemServiceStatusResponse,
     WebSocketCommandMessage,
 )
 from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.models.playlist import PlaylistCriteria
+from picframe.core.ports import ISystemManager
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 from picframe.core.services.basic_auth import AUTH_COOKIE_NAME, BasicAuthStore
 from picframe.core.services.logging_service import LogEvent, LogEventBuffer
@@ -127,6 +129,8 @@ AUTH_PROTECTED_API_PREFIXES = (
 )
 AUTH_PROTECTED_EXACT_PATHS = {
     "/api/system/reboot",
+    "/api/system/restart-service",
+    "/api/system/service-status",
     "/api/system/shutdown",
 }
 PUBLIC_WORKFLOW_KEYS = {
@@ -592,6 +596,7 @@ def create_app(
     resource_paths: ResourcePaths | None = None,
     log_event_buffer: LogEventBuffer | None = None,
     auth_store: BasicAuthStore | None = None,
+    system_manager: ISystemManager | None = None,
 ) -> FastAPI:
     """
     Create and configure the FastAPI application instance.
@@ -987,6 +992,53 @@ def create_app(
         if event_publisher:
             event_publisher.publish(CommandEvent(command=Command.SHUTDOWN_HOST))
         return {"status": "shutting down"}
+
+    @app.get(
+        "/api/system/service-status",
+        response_model=SystemServiceStatusResponse,
+        tags=["System"],
+        summary="Inspect Picframe service status",
+        description="Return whether the managed picframe.service is active and restartable.",
+    )
+    async def api_service_status() -> dict[str, Any]:
+        """Return active/inactive/unavailable for the managed Picframe service."""
+        if system_manager is None:
+            return {
+                "status": "unavailable",
+                "active": False,
+                "restart_available": False,
+                "message": "Picframe service manager is not available.",
+            }
+        status = system_manager.picframe_service_status()
+        status = status if status in {"active", "inactive", "unavailable"} else "unavailable"
+        return {
+            "status": status,
+            "active": status == "active",
+            "restart_available": status == "active",
+            "message": None if status == "active" else "Restart requires an active picframe.service.",
+        }
+
+    @app.post(
+        "/api/system/restart-service",
+        response_model=StatusMessageResponse,
+        response_model_exclude_none=True,
+        tags=["System"],
+        summary="Restart Picframe service",
+        description="Restart picframe.service when Picframe is running as an active systemd service.",
+    )
+    async def api_restart_service() -> dict[str, str]:
+        """Restart the managed Picframe service when available."""
+        if system_manager is None or system_manager.picframe_service_status() != "active":
+            return {
+                "status": "manual_required",
+                "message": "Picframe is not running as an active picframe.service.",
+            }
+        if system_manager.restart_picframe_service():
+            return {"status": "restarting"}
+        return {
+            "status": "manual_required",
+            "message": "Could not restart picframe.service automatically.",
+        }
 
     @app.post(
         "/api/maintenance/purge-db",

@@ -3,7 +3,7 @@ Interfaces for the Presentation Layer (Renderers).
 """
 from typing import Protocol
 
-from picframe.core.events.dto import RenderCommand
+from picframe.core.events.dto import RenderCommand, RendererConfig
 from picframe.core.models.media import MediaItem
 
 
@@ -85,6 +85,19 @@ class IRenderer(Protocol):
         """
         Get the actual (x, y, width, height) of the rendering display.
         Returns (0, 0, 0, 0) if the display is not yet initialized.
+        """
+        ...
+
+    def requires_restart_for_config(
+        self,
+        old_config: RendererConfig | None,
+        new_config: RendererConfig,
+    ) -> bool:
+        """
+        Return True when a config change cannot be applied safely in this process.
+
+        Callers should treat True as requiring an external Picframe restart, not
+        as permission to force an in-process display remap.
         """
         ...
 

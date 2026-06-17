@@ -497,14 +497,14 @@ usermod -aG render "$ACTUAL_USER" || true # Add to render group for DRM/KMS acce
 usermod -aG input "$ACTUAL_USER" || true # Hardware/event access on some Lite installs
 usermod -aG seat "$ACTUAL_USER" || true # seatd access for kiosk Wayland sessions if present
 
-# 5. Configure sudoers rules for reboot/shutdown
+# 5. Configure sudoers rules for reboot/shutdown and Picframe service restart
 echo "[5/7] Configuring passwordless sudo for reboot and shutdown..."
 SUDOERS_FILE="/etc/sudoers.d/picframe-power"
 SUDOERS_TMP=$(mktemp)
 cat > "$SUDOERS_TMP" <<EOF
 # Managed by Picframe installer.
 # Allows only Picframe host power commands without an interactive password prompt.
-Cmnd_Alias PICFRAME_POWER = /usr/sbin/reboot, /sbin/reboot, /usr/sbin/shutdown -h now, /sbin/shutdown -h now, /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff
+Cmnd_Alias PICFRAME_POWER = /usr/sbin/reboot, /sbin/reboot, /usr/sbin/shutdown -h now, /sbin/shutdown -h now, /usr/bin/systemctl reboot, /usr/bin/systemctl poweroff, /usr/bin/systemctl restart picframe.service, /bin/systemctl restart picframe.service
 $ACTUAL_USER ALL=(root) NOPASSWD: PICFRAME_POWER
 EOF
 
