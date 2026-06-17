@@ -10,6 +10,9 @@ from typing import Any, Generator
 
 from picframe.core.utils.video_frame_extractor import (
     VideoFrameExtractor,
+    VideoFrameEdgeConfig,
+    VideoFrameMattingConfig,
+    VideoTransitionFrameMetadata,
     _FrameExtractionTimeout,
 )
 
@@ -23,15 +26,43 @@ def mock_image_fromarray() -> Generator[MagicMock, None, None]:
     with patch("picframe.core.utils.video_frame_extractor.Image.fromarray") as mock_fromarray:
         yield mock_fromarray
 
-def test_get_first_frame_as_image_success() -> None:
-    mock_img = MagicMock(spec=Image.Image)
-    
-    with patch("picframe.core.utils.video_frame_extractor.os.path.exists", return_value=True):
-        with patch("picframe.core.utils.video_frame_extractor.Image.open", return_value=mock_img):
-            with patch("picframe.core.utils.video_frame_extractor._image_file_lock", create=True):
-                result = VideoFrameExtractor.get_first_frame_as_image("test.mp4")
-    
-    assert result is mock_img
+def test_get_first_frame_as_image_success(tmp_path: Path) -> None:
+    video_path = tmp_path / "test.mp4"
+    cache_dir = tmp_path / "cache"
+    video_path.write_bytes(b"video")
+    first_path = Path(
+        VideoFrameExtractor.get_cached_frame_path(
+            str(video_path),
+            10,
+            10,
+            False,
+            "first",
+            str(cache_dir),
+        )
+    )
+    last_path = Path(
+        VideoFrameExtractor.get_cached_frame_path(
+            str(video_path),
+            10,
+            10,
+            False,
+            "last",
+            str(cache_dir),
+        )
+    )
+    first_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (10, 10), "red").save(first_path, format="JPEG")
+    Image.new("RGB", (10, 10), "blue").save(last_path, format="JPEG")
+
+    result = VideoFrameExtractor.get_first_frame_as_image(
+        str(video_path),
+        10,
+        10,
+        cache_dir=str(cache_dir),
+    )
+
+    assert result is not None
+    assert result.size == (10, 10)
 
 def test_get_first_frame_as_image_not_found() -> None:
     with patch("picframe.core.utils.video_frame_extractor.os.path.exists", return_value=False):
@@ -39,8 +70,31 @@ def test_get_first_frame_as_image_not_found() -> None:
     
     assert result is None
 
+
+def test_get_first_frame_as_image_rejects_stale_legacy_sidecar(tmp_path: Path) -> None:
+    video_path = tmp_path / "test.mp4"
+    video_path.write_bytes(b"video")
+    Image.new("RGB", (10, 10), "red").save(tmp_path / "test.1.frame", format="JPEG")
+    Image.new("RGB", (10, 10), "blue").save(tmp_path / "test.2.frame", format="JPEG")
+
+    result = VideoFrameExtractor.get_first_frame_as_image(
+        str(video_path),
+        10,
+        10,
+        edge_config=VideoFrameEdgeConfig(edge_alpha=0.5),
+    )
+
+    assert result is None
+
 @patch("picframe.core.utils.video_frame_extractor.Image.open")
-def test_extract_and_save_frames_success(mock_image_open: MagicMock, mock_subprocess_run: MagicMock, mock_image_fromarray: MagicMock) -> None:
+def test_extract_and_save_frames_success(
+    mock_image_open: MagicMock,
+    mock_subprocess_run: MagicMock,
+    mock_image_fromarray: MagicMock,
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "test.mp4"
+    video_path.write_bytes(b"video")
     mock_subprocess_run.return_value = MagicMock(returncode=0, stdout=b"fake_jpeg_data_1")
     
     mock_img = Image.new("RGB", (1920, 1080), "black")
@@ -54,7 +108,12 @@ def test_extract_and_save_frames_success(mock_image_open: MagicMock, mock_subpro
                     "_get_final_decoded_frame_as_image",
                     return_value=mock_img,
                 ) as mock_final_frame:
-                    result = VideoFrameExtractor.extract_and_save_frames("test.mp4", 10.0, 1920, 1080)
+                    result = VideoFrameExtractor.extract_and_save_frames(
+                        str(video_path),
+                        10.0,
+                        1920,
+                        1080,
+                    )
             
     assert result is True
     assert mock_subprocess_run.call_count == 1
@@ -67,7 +126,13 @@ def test_extract_and_save_frames_already_exists() -> None:
             mock_img = MagicMock()
             mock_img.size = (1920, 1080)
             mock_open.return_value.__enter__.return_value = mock_img
-            result = VideoFrameExtractor.extract_and_save_frames("test.mp4", 10.0, 1920, 1080)
+            result = VideoFrameExtractor.extract_and_save_frames(
+                "test.mp4",
+                10.0,
+                1920,
+                1080,
+                cache_dir="/tmp/picframe-cache",
+            )
         
     assert result is True
 
@@ -102,6 +167,26 @@ def test_cached_frame_path_uses_managed_cache_and_media_freshness(tmp_path: Path
         str(cache_dir),
         background=(0.2, 0.2, 0.3, 1.0),
     )
+    matted_path = VideoFrameExtractor.get_cached_frame_path(
+        str(video_path),
+        1920,
+        1080,
+        False,
+        "first",
+        str(cache_dir),
+        background=(0.2, 0.2, 0.3, 1.0),
+        matting_config=VideoFrameMattingConfig(mat_images="on", mat_type="double_flat"),
+    )
+    edge_path = VideoFrameExtractor.get_cached_frame_path(
+        str(video_path),
+        1920,
+        1080,
+        False,
+        "first",
+        str(cache_dir),
+        background=(0.2, 0.2, 0.3, 1.0),
+        edge_config=VideoFrameEdgeConfig(edge_alpha=0.5),
+    )
 
     assert first_path == repeated_path
     assert Path(first_path).parent == cache_dir
@@ -112,6 +197,8 @@ def test_cached_frame_path_uses_managed_cache_and_media_freshness(tmp_path: Path
     assert first_path != fit_path
     assert first_path != resized_path
     assert first_path != background_path
+    assert background_path != matted_path
+    assert background_path != edge_path
     assert first_path != str(video_path.with_suffix(".1.frame"))
 
     video_path.write_bytes(b"second version")
@@ -131,7 +218,72 @@ def test_cached_frame_path_ignores_background_for_legacy_sidecar_path() -> None:
         False,
         "first",
         background=(0.2, 0.2, 0.3, 1.0),
+        matting_config=VideoFrameMattingConfig(mat_images="on"),
     ) == "test.1.frame"
+
+
+def test_matting_cache_signature_normalizes_mat_images_control() -> None:
+    disabled = VideoFrameExtractor._matting_cache_signature(
+        {
+            "mat_images": False,
+            "mat_type": "double_flat",
+            "mat_resource_folder": "/missing-one",
+        }
+    )
+    disabled_string = VideoFrameExtractor._matting_cache_signature(
+        {
+            "mat_images": "off",
+            "mat_type": "float",
+            "mat_resource_folder": "/missing-two",
+        }
+    )
+    disabled_zero = VideoFrameExtractor._matting_cache_signature(
+        {"mat_images": 0.0}
+    )
+    always = VideoFrameExtractor._matting_cache_signature({"mat_images": True})
+    always_string = VideoFrameExtractor._matting_cache_signature({"mat_images": "on"})
+
+    assert disabled == disabled_string == disabled_zero
+    assert always == always_string
+    assert disabled != always
+
+
+def test_extract_and_save_frames_regenerates_stale_legacy_sidecars(
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    first_path = tmp_path / "video.1.frame"
+    last_path = tmp_path / "video.2.frame"
+    Image.new("RGB", (10, 10), "purple").save(first_path, format="JPEG")
+    Image.new("RGB", (10, 10), "purple").save(last_path, format="JPEG")
+
+    with (
+        patch.object(
+            VideoFrameExtractor,
+            "_get_frame_as_image",
+            return_value=Image.new("RGB", (50, 100), "red"),
+        ) as mock_first,
+        patch.object(
+            VideoFrameExtractor,
+            "_get_final_decoded_frame_as_image",
+            return_value=Image.new("RGB", (50, 100), "blue"),
+        ),
+    ):
+        result = VideoFrameExtractor.extract_and_save_frames(
+            str(video_path),
+            10.0,
+            200,
+            100,
+            background=(0.0, 0.0, 0.0, 1.0),
+            edge_config=VideoFrameEdgeConfig(edge_alpha=0.5),
+        )
+
+    metadata_path = Path(f"{first_path}.meta.json")
+    assert result is True
+    mock_first.assert_called_once_with(0)
+    assert metadata_path.exists()
+    assert "processing_signature" in metadata_path.read_text(encoding="utf-8")
 
 
 def test_get_first_and_last_frames_cache_only_does_not_extract_missing_frames(
@@ -323,6 +475,72 @@ def test_scale_frame_uses_configured_background_color() -> None:
     assert scaled_img.getpixel((960, 540)) == (255, 0, 0)
 
 
+def test_process_transition_frame_pair_edge_alpha_zero_uses_background() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        200,
+        100,
+        fit_display=False,
+        background=(0.2, 0.2, 0.3, 1.0),
+        edge_config=VideoFrameEdgeConfig(edge_alpha=0.0),
+    )
+
+    first, _last, metadata = extractor._process_transition_frame_pair(
+        Image.new("RGB", (50, 100), "red"),
+        Image.new("RGB", (50, 100), "blue"),
+    )
+
+    assert first.size == (200, 100)
+    assert first.getpixel((10, 50)) == (51, 51, 76)
+    assert first.getpixel((100, 50)) == (255, 0, 0)
+    assert metadata.backdrop is False
+
+
+def test_process_transition_frame_pair_edge_alpha_blends_image_edges() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        200,
+        100,
+        fit_display=False,
+        background=(0.0, 0.0, 0.0, 1.0),
+        edge_config=VideoFrameEdgeConfig(edge_alpha=0.5),
+    )
+
+    first, _last, metadata = extractor._process_transition_frame_pair(
+        Image.new("RGB", (50, 100), "red"),
+        Image.new("RGB", (50, 100), "blue"),
+    )
+
+    assert first.size == (200, 100)
+    assert first.getpixel((10, 50)) in {(127, 0, 0), (128, 0, 0)}
+    assert first.getpixel((100, 50)) == (255, 0, 0)
+    assert metadata.backdrop is True
+
+
+def test_process_transition_frame_pair_blur_edges_uses_image_fill() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        200,
+        100,
+        fit_display=False,
+        background=(0.0, 0.0, 0.0, 1.0),
+        edge_config=VideoFrameEdgeConfig(
+            blur_edges=True,
+            blur_amount=0,
+            edge_alpha=0.0,
+        ),
+    )
+
+    first, _last, metadata = extractor._process_transition_frame_pair(
+        Image.new("RGB", (50, 100), "red"),
+        Image.new("RGB", (50, 100), "blue"),
+    )
+
+    assert first.size == (200, 100)
+    assert first.getpixel((10, 50)) == (255, 0, 0)
+    assert metadata.backdrop is True
+
+
 def test_scale_frame_defaults_invalid_background_to_black() -> None:
     extractor = VideoFrameExtractor(
         "test.mp4",
@@ -344,6 +562,73 @@ def test_normalize_background_rgb_clamps_channels() -> None:
         128,
         255,
     )
+
+
+@pytest.mark.parametrize("raw_value", [False, "false", "off", "0", "0.0", 0, 0.0])
+def test_video_matting_control_disables_zero_and_false(raw_value: Any) -> None:
+    assert VideoFrameExtractor._matting_control(raw_value) == (False, 0.01)
+
+
+@pytest.mark.parametrize("raw_value", [True, "true", "on"])
+def test_video_matting_control_always_mats_true_values(raw_value: Any) -> None:
+    assert VideoFrameExtractor._matting_control(raw_value) == (True, -1.0)
+
+
+def test_process_transition_frame_pair_applies_identical_matted_layout() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        400,
+        300,
+        fit_display=False,
+        matting_config=VideoFrameMattingConfig(
+            mat_images="on",
+            mat_type="double_flat",
+            outer_mat_color=(10, 20, 30),
+            inner_mat_color=(40, 50, 60),
+            outer_mat_border=40,
+            inner_mat_border=20,
+            outer_mat_use_texture=False,
+            inner_mat_use_texture=False,
+        ),
+    )
+
+    first, last, metadata = extractor._process_transition_frame_pair(
+        Image.new("RGB", (160, 90), "red"),
+        Image.new("RGB", (160, 90), "blue"),
+    )
+
+    assert metadata.matted is True
+    assert metadata.content_rect is not None
+    assert first.size == (400, 300)
+    assert last.size == (400, 300)
+    assert metadata.layout_spec is not None
+    assert metadata.layout_spec["content_rects"][0] == metadata.content_rect
+
+
+def test_transition_metadata_round_trips_with_backdrop_path(tmp_path: Path) -> None:
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    extractor = VideoFrameExtractor(
+        str(video_path),
+        400,
+        300,
+        cache_dir=str(tmp_path / "cache"),
+        matting_config=VideoFrameMattingConfig(mat_images="on"),
+    )
+    Path(extractor.get_metadata_path()).parent.mkdir(parents=True, exist_ok=True)
+    metadata = VideoTransitionFrameMetadata(
+        matted=True,
+        content_rect=(10, 20, 300, 200),
+        layout_spec={"mat_type": "double_flat"},
+    )
+
+    extractor._write_transition_metadata(metadata)
+
+    loaded = extractor._load_transition_metadata()
+    assert loaded is not None
+    assert loaded.matted is True
+    assert loaded.content_rect == (10, 20, 300, 200)
+    assert loaded.with_backdrop_path("first.frame").backdrop_path == "first.frame"
 
 def test_scale_frame_landscape() -> None:
     extractor = VideoFrameExtractor("test.mp4", 1920, 1080, fit_display=False)

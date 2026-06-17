@@ -64,7 +64,10 @@ class ImagePreparer:
             return MattingControl(enabled=False, threshold=0.01)
 
         try:
-            return MattingControl(enabled=True, threshold=float(value))
+            threshold = float(value)
+            if threshold == 0.0:
+                return MattingControl(enabled=False, threshold=0.01)
+            return MattingControl(enabled=True, threshold=threshold)
         except (TypeError, ValueError):
             logging.getLogger(__name__).warning(
                 "Invalid value for config option 'mat_images'. Using default."

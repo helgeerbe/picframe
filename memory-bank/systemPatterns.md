@@ -26,6 +26,8 @@
 ## Video Handoff
 - The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:
   - Extract/cache the first decoded video frame and a tail-decoded final EOS frame under the managed runtime cache directory.
+  - Generate cached transition frames with the same visual edge policy as still images: `viewer.blur_edges` creates blurred-edge composites, otherwise `viewer.edge_alpha` blends image-derived fill with `viewer.background`.
+  - Treat transition-frame cache freshness as a processing-signature concern. Managed cache paths include the signature hash; legacy sidecar frame names require matching `.meta.json` metadata.
   - Render the first frame with pi3d as a video title card. If overlay text is present, wait through text fade-in, `viewer.show_text_tm`, fade-out to zero alpha, and clean redraw drain before starting GStreamer.
   - Preload pi3d's hidden background with the last frame before playback starts.
   - Promote the hidden last-frame reveal only after the GStreamer worker reports that a real video frame has rendered when sink stats expose that count.

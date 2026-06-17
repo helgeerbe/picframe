@@ -28,6 +28,8 @@ class GstPipelineBuilder:
         *,
         fit_display: bool = False,
         host_background: list[float] | tuple[float, ...] | None = None,
+        host_backdrop_path: str | None = None,
+        host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> Any | None:
         self.last_failure = None
         Gtk = self._presenter._ensure_gtk()
@@ -74,6 +76,8 @@ class GstPipelineBuilder:
             set_sink_window_size=True,
             content_fit="fill" if fit_display else "contain",
             host_background=host_background,
+            host_backdrop_path=host_backdrop_path,
+            host_backdrop_rect=host_backdrop_rect,
         ):
             self.last_failure = (
                 self._presenter.last_failure or "GTK4 paintable window presentation failed"
@@ -112,6 +116,8 @@ class GstPipelineBuilder:
         force_software_decoders: bool,
         fit_display: bool = False,
         host_background: list[float] | tuple[float, ...] | None = None,
+        host_backdrop_path: str | None = None,
+        host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> Any | None:
         self.last_failure = None
         Gtk = self._presenter._ensure_gtk()
@@ -177,6 +183,8 @@ class GstPipelineBuilder:
             set_sink_window_size=True,
             content_fit="fill" if fit_display else "contain",
             host_background=host_background,
+            host_backdrop_path=host_backdrop_path,
+            host_backdrop_rect=host_backdrop_rect,
         ):
             self.last_failure = (
                 self._presenter.last_failure or "GTK4 paintable window presentation failed"

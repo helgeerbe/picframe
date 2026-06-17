@@ -56,6 +56,8 @@ class GstVideoRenderer(IVideoPlayer):
         self._current_media: MediaItem | None = None
         self._fit_display = False
         self._host_background: list[float] | tuple[float, ...] | None = None
+        self._host_backdrop_path: str | None = None
+        self._host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None
         self._volume: float = 1.0
         
         self._socket_path = f"/tmp/picframe_gst_{os.getpid()}.sock"
@@ -271,6 +273,8 @@ class GstVideoRenderer(IVideoPlayer):
         h: int = 0,
         fit_display: bool = False,
         host_background: list[float] | tuple[float, ...] | None = None,
+        host_backdrop_path: str | None = None,
+        host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> None:
         """Start playing the specified video media item."""
         if not self._running:
@@ -282,6 +286,8 @@ class GstVideoRenderer(IVideoPlayer):
         self._current_media = media_item
         self._fit_display = fit_display
         self._host_background = host_background
+        self._host_backdrop_path = host_backdrop_path
+        self._host_backdrop_rect = host_backdrop_rect
 
         uri = Path(media_item.filepath).absolute().as_uri()
         
@@ -296,6 +302,8 @@ class GstVideoRenderer(IVideoPlayer):
                 max_software_decode_resolution=self._max_software_decode_resolution,
                 fit_display=fit_display,
                 host_background=host_background,
+                host_backdrop_path=host_backdrop_path,
+                host_backdrop_rect=host_backdrop_rect,
             )
         )
         logger.info(f"Sent play command for: {media_item.filepath} at ({x},{y}) {w}x{h}")
@@ -321,6 +329,8 @@ class GstVideoRenderer(IVideoPlayer):
                     max_software_decode_resolution=self._max_software_decode_resolution,
                     fit_display=self._fit_display,
                     host_background=self._host_background,
+                    host_backdrop_path=self._host_backdrop_path,
+                    host_backdrop_rect=self._host_backdrop_rect,
                 )
             )
             logger.debug("Sent resume (play) command.")

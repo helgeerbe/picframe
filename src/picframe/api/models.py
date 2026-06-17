@@ -194,7 +194,7 @@ class ViewerConfig(BaseModel):
     display_hdmi: str = "HDMI-A-1"
     use_glx: bool = False
     use_sdl2: bool = True
-    mat_images: float = 0.01
+    mat_images: bool | float | str = 0.01
     mat_type: str | None = None
     outer_mat_color: str | None = None
     inner_mat_color: str | None = None

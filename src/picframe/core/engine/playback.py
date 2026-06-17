@@ -596,6 +596,95 @@ class PlaybackEngine:
             return None
         return tuple(self._renderer_config.background)
 
+    def _video_matting_config(self) -> Any:
+        return self._renderer_config
+
+    def _video_edge_config(self) -> Any:
+        return self._renderer_config
+
+    def _video_display_origin(self) -> tuple[int, int]:
+        x, y, w, h = self._video_display_rect()
+        if w > 0 and h > 0:
+            return x, y
+        renderer_x, renderer_y, renderer_w, renderer_h = self._renderer.get_display_rect()
+        if renderer_w > 0 and renderer_h > 0:
+            return renderer_x, renderer_y
+        configured_rect = self._configured_display_rect()
+        if configured_rect is not None:
+            return configured_rect[0], configured_rect[1]
+        return 0, 0
+
+    def _video_display_rect_for_metadata(self, metadata: Any | None) -> tuple[int, int, int, int]:
+        content_rect = getattr(metadata, "content_rect", None)
+        if not getattr(metadata, "matted", False) or content_rect is None:
+            return self._video_display_rect()
+        try:
+            content_x, content_y, content_w, content_h = (
+                int(content_rect[0]),
+                int(content_rect[1]),
+                int(content_rect[2]),
+                int(content_rect[3]),
+            )
+        except (TypeError, ValueError, IndexError):
+            return self._video_display_rect()
+        if content_w <= 0 or content_h <= 0:
+            return self._video_display_rect()
+        origin_x, origin_y = self._video_display_origin()
+        return (
+            origin_x + content_x,
+            origin_y + content_y,
+            content_w,
+            content_h,
+        )
+
+    def _video_backdrop_rect_for_metadata(
+        self,
+        metadata: Any | None,
+    ) -> tuple[int, int, int, int] | None:
+        if not getattr(metadata, "backdrop", getattr(metadata, "matted", False)):
+            return None
+        origin_x, origin_y = self._video_display_origin()
+        display_w, display_h = self._video_frame_dimensions()
+        if display_w <= 0 or display_h <= 0:
+            return None
+        return (origin_x, origin_y, display_w, display_h)
+
+    def _play_video(
+        self,
+        media_item: MediaItem,
+        x: int,
+        y: int,
+        w: int,
+        h: int,
+        *,
+        host_backdrop_path: str | None = None,
+        host_backdrop_rect: tuple[int, int, int, int] | None = None,
+    ) -> None:
+        if not self._video_player:
+            return
+        if host_backdrop_path:
+            self._video_player.play(
+                media_item,
+                x,
+                y,
+                w,
+                h,
+                self._video_fit_display(),
+                self._video_host_background(),
+                host_backdrop_path=host_backdrop_path,
+                host_backdrop_rect=host_backdrop_rect,
+            )
+            return
+        self._video_player.play(
+            media_item,
+            x,
+            y,
+            w,
+            h,
+            self._video_fit_display(),
+            self._video_host_background(),
+        )
+
     def _refresh_model_timing(self) -> None:
         """Refresh playback timing values from live configuration."""
         if self._config_repository:
@@ -894,6 +983,8 @@ class PlaybackEngine:
                             fit_display=self._video_fit_display(),
                             cache_dir=self._cache_dir,
                             background=self._video_host_background(),
+                            matting_config=self._video_matting_config(),
+                            edge_config=self._video_edge_config(),
                         )
                         first_frame_path = extractor.get_frame_path("first")
                         last_frame_path = extractor.get_frame_path("last")
@@ -912,6 +1003,9 @@ class PlaybackEngine:
                         )
                         if frames:
                             first_img, last_img = frames
+                            self._pending_video_transition_metadata = (
+                                extractor.last_transition_metadata
+                            )
                     except Exception as e:
                         self._logger.error(f"Failed to extract frames for {media_item.filepath}: {e}")
                 
@@ -922,6 +1016,19 @@ class PlaybackEngine:
                     self._pending_video_media = media_item
                     self._pending_last_img = last_img
                     self._pending_last_frame_path = last_frame_path
+                    metadata = getattr(
+                        self,
+                        "_pending_video_transition_metadata",
+                        None,
+                    )
+                    self._pending_video_backdrop_path = (
+                        getattr(metadata, "backdrop_path", None)
+                        if getattr(metadata, "backdrop", getattr(metadata, "matted", False))
+                        else None
+                    )
+                    self._pending_video_backdrop_rect = (
+                        self._video_backdrop_rect_for_metadata(metadata)
+                    )
                     self._next_transition_time = float('inf')
                     self._change_state(State.PREPARING_VIDEO)
 
@@ -941,15 +1048,7 @@ class PlaybackEngine:
                     )
                     self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
                     x, y, w, h = self._video_display_rect()
-                    self._video_player.play(
-                        media_item,
-                        x,
-                        y,
-                        w,
-                        h,
-                        self._video_fit_display(),
-                        self._video_host_background(),
-                    )
+                    self._play_video(media_item, x, y, w, h)
                     self._next_transition_time = float('inf')
                     self._change_state(State.PLAYING)
             else:
@@ -978,15 +1077,16 @@ class PlaybackEngine:
             self._logger.info("First frame transition completed, starting video playback.")
             if self._video_player:
                 self._preload_pending_video_reveal_frame()
-                x, y, w, h = self._video_display_rect()
-                self._video_player.play(
+                metadata = getattr(self, "_pending_video_transition_metadata", None)
+                x, y, w, h = self._video_display_rect_for_metadata(metadata)
+                self._play_video(
                     self._pending_video_media,
                     x,
                     y,
                     w,
                     h,
-                    self._video_fit_display(),
-                    self._video_host_background(),
+                    host_backdrop_path=getattr(self, "_pending_video_backdrop_path", None),
+                    host_backdrop_rect=getattr(self, "_pending_video_backdrop_rect", None),
                 )
                 self._video_first_frame_deadline = time.time() + self._video_first_frame_timeout
             # We don't change state to PLAYING yet. We wait for VideoFirstFrameRenderedEvent.
@@ -1039,9 +1139,16 @@ class PlaybackEngine:
         result: dict[str, Any] = {}
         first_path = extractor.get_frame_path("first")
         last_path = extractor.get_frame_path("last")
-        frames_missing = not (
-            os.path.exists(first_path) and os.path.exists(last_path)
-        )
+        cache_valid: Any = None
+        cache_validator = getattr(extractor, "cached_transition_frames_valid", None)
+        if callable(cache_validator):
+            cache_valid = cache_validator()
+        if isinstance(cache_valid, bool):
+            frames_missing = not cache_valid
+        else:
+            frames_missing = not (
+                os.path.exists(first_path) and os.path.exists(last_path)
+            )
         timeout_seconds = (
             VIDEO_TRANSITION_FRAME_GENERATE_TIMEOUT_SECONDS
             if frames_missing
@@ -1196,15 +1303,7 @@ class PlaybackEngine:
             if is_video and self._video_player:
                 self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
                 x, y, w, h = self._video_display_rect()
-                self._video_player.play(
-                    media_item,
-                    x,
-                    y,
-                    w,
-                    h,
-                    self._video_fit_display(),
-                    self._video_host_background(),
-                )
+                self._play_video(media_item, x, y, w, h)
                 self._next_transition_time = float('inf')
             else:
                 if self._video_player:
@@ -1233,6 +1332,9 @@ class PlaybackEngine:
             '_pending_last_img',
             '_pending_last_frame_path',
             '_video_first_frame_deadline',
+            '_pending_video_transition_metadata',
+            '_pending_video_backdrop_path',
+            '_pending_video_backdrop_rect',
         ):
             if hasattr(self, attr):
                 delattr(self, attr)

@@ -105,7 +105,12 @@
       "type": "boolean"
     },
     "mat_images": {
-      "type": "float"
+      "type": "float",
+      "acceptedTypes": [
+        "boolean",
+        "float",
+        "string"
+      ]
     },
     "mat_type": {
       "type": "string"

@@ -20,7 +20,7 @@ or stops.
 - Recent #618 work added clickable current-media tags in Remote, managed cache storage for generated video transition frames, Clear Image Cache API/service wiring, playback guards so videos continue after generated frames are cleared, image-only portrait-pair display items/rendering/Remote UX, pair delete target selection, internal monitor/indexer/processing lifecycle controls, and real-media Raspberry Pi validation.
 - Recent media-cache lifecycle cleanup keeps restart sync idempotent, preserves display counters across reindex, soft-inactivates temporarily missing media, and hard-removes cache rows only after explicit user delete or purge.
 - Recent #611 cleanup moved watchdog media monitoring behind a core `IMediaMonitor` port; watchdog now lives in infrastructure and differential sync emits core `FileChangeEvent`s directly.
-- Ticket #619 is now narrowed to next-gen matting parity: existing Settings fields drive renderer-only in-memory matting for single images and image-only portrait pairs, while videos remain unmatted and no persistent mat cache artifacts are created.
+- Ticket #619 is now narrowed to next-gen matting parity: existing Settings fields drive renderer-only in-memory matting for single images and image-only portrait pairs. Live video playback is not frame-by-frame matted; only cached video transition/backdrop frames can use matting/edge processing.
 - Ticket #666 adds persistent shuffle modes: `standard` remains default/fallback, `fewer_repeats` uses existing `last_displayed` history, and the Remote control is a split shuffle toggle plus mode menu.
 - Ticket #616 made next-gen the installed CLI path, removed VLC as a next-gen dependency, hardened `SystemErrorEvent` poison-pill behavior, and opened the cleanup path completed in #678.
 - Ticket #678 replaces legacy controller-based MQTT with a next-gen Home Assistant MQTT infrastructure adapter and removes unreachable legacy runtime modules/tests. MQTT exposes playback/display/config state, targeted current-media delete, reboot, and shutdown; purge and clear-cache remain UI/REST only.
@@ -39,6 +39,7 @@ or stops.
 - Video first-frame handoff now behaves like a title card: pi3d blends in the cached first frame, honors `viewer.show_text_tm`, fades text out, drains clean redraw frames, then starts GStreamer. The last-frame reveal is promoted only after worker sink stats confirm at least one rendered video frame when those stats are available.
 - Installer and user docs require GTK4 packages `gir1.2-gtk-4.0` and `gstreamer1.0-gtk4`; GTK3/`gtkwaylandsink` is no longer a production dependency.
 - Video transition caches now use the first decoded frame and a tail-decoded final EOS frame, with fixed duration-offset sampling only as the final fallback.
+- Video transition frames mirror still-image edge behavior: cached first/last frames honor matting, `blur_edges`, `edge_alpha`, and `background`, and cache freshness includes a processing signature in managed filename hashes or legacy sidecar `.meta.json`.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.

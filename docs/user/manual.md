@@ -501,7 +501,9 @@ different kinds of state:
 *   **Clear Image Cache** removes generated artifacts under the managed runtime
     cache directory, including video transition frames. The next playback or
     indexing pass can regenerate those files when needed. It never deletes
-    original media files.
+    original media files. Video transition-frame cache entries also regenerate
+    automatically when source video, display size, background, matting, or
+    edge-fill settings change.
 
 Deleting the current media item from the Remote remains separate from both
 maintenance actions; it moves the selected original media file to the
@@ -532,8 +534,10 @@ Viewer matting settings apply during image rendering only. When
 `viewer.mat_images` enables matting, Picframe loads the image with EXIF
 orientation applied, optionally wraps single images or image-only portrait
 pairs with the configured mat style, and then creates the pi3d texture. Videos
-are never matted, original media files are never modified, and the current
-next-gen matting path creates no persistent cache artifacts.
+are not processed frame-by-frame for matting during live playback. However,
+cached video first/last transition frames can use the same matting and edge
+settings to keep the image-to-video handoff visually consistent. Original
+media files are never modified.
 
 Video playback support depends on the host hardware, GStreamer plugins, and
 display session. Picframe targets Raspberry Pi 5, Pi 4, Pi 3, Zero 2 W, and
@@ -576,6 +580,16 @@ first-frame transition. The final transition frame is taken by seeking near the
 end of the video and decoding a short tail window through EOS, which makes the
 cached last frame match the actual video handoff more closely than sampling a
 fixed duration offset.
+
+Video transition frames honor the viewer edge-fill settings used by still
+images. With `viewer.blur_edges` enabled, the cached first/last frames are
+display-sized composites with blurred image fill behind the contained video
+frame. With blur disabled, `viewer.edge_alpha` blends image-derived edge fill
+with `viewer.background`; set `edge_alpha` to `0.0` for solid background bars.
+When a cached frame contains matting, blur, or image-derived edge fill,
+Picframe may also use that cached first frame as the GTK video backdrop so the
+bars around live video match the pi3d title-card handoff where the video host
+supports a backdrop.
 
 Hardware playback is selected only when the Raspberry Pi model is known to
 support the codec at the stream resolution/framerate and GStreamer exposes a

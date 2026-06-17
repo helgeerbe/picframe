@@ -320,6 +320,8 @@ def test_present_gtk_paintable_uses_fixed_host_for_custom_geometry(
         400,
         transparent=False,
         host_background=(0.2, 0.2, 0.3, 1.0),
+        host_backdrop_path=None,
+        host_backdrop_rect=None,
     )
     window.set_child.assert_called_once_with(host)
     apply_host_geometry.assert_called_once_with(window, 10, 20, 300, 400)
@@ -331,6 +333,52 @@ def test_present_gtk_paintable_uses_fixed_host_for_custom_geometry(
     assert presenter.window is window
     assert presenter.host is host
     assert presenter.video_sink is video_sink
+
+
+def test_create_gtk_fixed_video_host_places_backdrop_under_video(
+    monkeypatch,
+    tmp_path,
+) -> None:
+    presenter = make_presenter()
+    monkeypatch.setattr(
+        presenter,
+        "_gtk_primary_monitor_geometry",
+        lambda: (0, 0, 800, 600),
+    )
+    presenter._set_gtk_video_host_background = MagicMock()
+    backdrop_path = tmp_path / "first.frame"
+    backdrop_path.write_bytes(b"image")
+    host = MagicMock()
+    backdrop = MagicMock()
+
+    class FakeGtk:
+        ContentFit = SimpleNamespace(FILL="fill")
+        Fixed = MagicMock(return_value=host)
+        Picture = SimpleNamespace(new_for_filename=MagicMock(return_value=backdrop))
+
+    window = MagicMock()
+    widget = MagicMock()
+
+    result = presenter._create_gtk_fixed_video_host(
+        FakeGtk,
+        window,
+        widget,
+        100,
+        80,
+        320,
+        180,
+        transparent=False,
+        host_background=(0.2, 0.2, 0.3, 1.0),
+        host_backdrop_path=str(backdrop_path),
+        host_backdrop_rect=(10, 20, 400, 300),
+    )
+
+    assert result is host
+    FakeGtk.Picture.new_for_filename.assert_called_once_with(str(backdrop_path))
+    backdrop.set_size_request.assert_called_with(400, 300)
+    backdrop.set_content_fit.assert_called_once_with("fill")
+    assert host.put.call_args_list[0].args == (backdrop, 10, 20)
+    assert host.put.call_args_list[1].args == (widget, 100, 80)
 
 
 def test_create_gtk_video_picture_content_fit_modes() -> None:

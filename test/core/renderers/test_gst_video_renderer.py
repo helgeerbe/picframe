@@ -204,6 +204,32 @@ def test_play_video_sends_host_background(
     assert json.loads(play_json)["host_background"] == [0.2, 0.2, 0.3, 1.0]
 
 
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_play_video_sends_host_backdrop(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    media_item: MediaItem,
+) -> None:
+    mock_conn = MagicMock()
+    mock_client.return_value = mock_conn
+
+    renderer = GstVideoRenderer(mock_publisher)
+    renderer.play(
+        media_item,
+        host_backdrop_path="/cache/video.1.frame",
+        host_backdrop_rect=(10, 20, 1000, 800),
+    )
+
+    play_json = mock_conn.send.call_args_list[1][0][0]
+    play_dict = json.loads(play_json)
+    assert play_dict["host_backdrop_path"] == "/cache/video.1.frame"
+    assert play_dict["host_backdrop_rect"] == [10, 20, 1000, 800]
+
+
 def test_parse_play_command_preserves_host_background() -> None:
     command = parse_ipc_message(
         json.dumps(
@@ -211,12 +237,16 @@ def test_parse_play_command_preserves_host_background() -> None:
                 "type": "play",
                 "uri": "file:///path/to/video.mp4",
                 "host_background": [0.2, 0.2, 0.3, 1.0],
+                "host_backdrop_path": "/cache/video.1.frame",
+                "host_backdrop_rect": [10, 20, 1000, 800],
             }
         )
     )
 
     assert isinstance(command, PlayCommand)
     assert command.host_background == [0.2, 0.2, 0.3, 1.0]
+    assert command.host_backdrop_path == "/cache/video.1.frame"
+    assert command.host_backdrop_rect == [10, 20, 1000, 800]
 
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")

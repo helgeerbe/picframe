@@ -119,6 +119,8 @@ def test_build_gtk_compatible_pipeline_uses_widget_geometry_and_presenter() -> N
         force_software_decoders=True,
         fit_display=True,
         host_background=(0.2, 0.2, 0.3, 1.0),
+        host_backdrop_path="/cache/video.1.frame",
+        host_backdrop_rect=(10, 20, 1800, 1000),
     )
 
     assert result is pipeline
@@ -138,6 +140,15 @@ def test_build_gtk_compatible_pipeline_uses_widget_geometry_and_presenter() -> N
         0.2,
         0.3,
         1.0,
+    )
+    assert presenter.present_paintable.call_args.kwargs["host_backdrop_path"] == (
+        "/cache/video.1.frame"
+    )
+    assert presenter.present_paintable.call_args.kwargs["host_backdrop_rect"] == (
+        10,
+        20,
+        1800,
+        1000,
     )
 
 

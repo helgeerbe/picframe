@@ -193,6 +193,8 @@ class VideoMetadataStrategy(IMetadataStrategy):
                     target_h = self.display_h if self.display_h > 0 else height
                     fit_display = False
                     background = None
+                    matting_config = None
+                    edge_config = None
                     if self._config_repository is not None:
                         fit_display = self._config_repository.get_app_config_bool(
                             "viewer.video_fit_display", False
@@ -200,11 +202,58 @@ class VideoMetadataStrategy(IMetadataStrategy):
                         background = self._config_repository.get_app_config(
                             "viewer.background", None
                         )
+                        edge_config = {
+                            "blur_edges": self._config_repository.get_app_config_bool(
+                                "viewer.blur_edges", False
+                            ),
+                            "blur_amount": self._config_repository.get_app_config(
+                                "viewer.blur_amount", 12
+                            ),
+                            "blur_zoom": self._config_repository.get_app_config(
+                                "viewer.blur_zoom", 1.0
+                            ),
+                            "edge_alpha": self._config_repository.get_app_config(
+                                "viewer.edge_alpha", 0.5
+                            ),
+                        }
+                        matting_config = {
+                            "mat_images": self._config_repository.get_app_config(
+                                "viewer.mat_images", 0.01
+                            ),
+                            "mat_type": self._config_repository.get_app_config(
+                                "viewer.mat_type", None
+                            ),
+                            "outer_mat_color": self._config_repository.get_app_config(
+                                "viewer.outer_mat_color", None
+                            ),
+                            "inner_mat_color": self._config_repository.get_app_config(
+                                "viewer.inner_mat_color", None
+                            ),
+                            "outer_mat_border": self._config_repository.get_app_config(
+                                "viewer.outer_mat_border", 75
+                            ),
+                            "inner_mat_border": self._config_repository.get_app_config(
+                                "viewer.inner_mat_border", 40
+                            ),
+                            "outer_mat_use_texture": self._config_repository.get_app_config(
+                                "viewer.outer_mat_use_texture", True
+                            ),
+                            "inner_mat_use_texture": self._config_repository.get_app_config(
+                                "viewer.inner_mat_use_texture", False
+                            ),
+                            "mat_resource_folder": self._config_repository.get_app_config(
+                                "viewer.mat_resource_folder", "${PICFRAME_DATA}/mat"
+                            ),
+                        }
                     frame_cache_kwargs = {}
                     if fit_display:
                         frame_cache_kwargs["fit_display"] = fit_display
                     if background is not None:
                         frame_cache_kwargs["background"] = background
+                    if matting_config is not None:
+                        frame_cache_kwargs["matting_config"] = matting_config
+                    if edge_config is not None:
+                        frame_cache_kwargs["edge_config"] = edge_config
                     if self.cache_dir is not None:
                         frame_cache_kwargs["cache_dir"] = self.cache_dir
                     frames_cached = VideoFrameExtractor.extract_and_save_frames(

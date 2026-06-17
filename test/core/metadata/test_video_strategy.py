@@ -118,7 +118,25 @@ def test_extract_passes_cache_dir_and_fit_mode(
     mock_run.return_value = mock_run_result
     mock_config_repo = MagicMock()
     mock_config_repo.get_app_config_bool.return_value = True
-    mock_config_repo.get_app_config.return_value = [0.2, 0.2, 0.3, 1.0]
+    mock_config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.background": [0.2, 0.2, 0.3, 1.0],
+        "viewer.blur_amount": 8,
+        "viewer.blur_zoom": 1.2,
+        "viewer.edge_alpha": 0.5,
+        "viewer.mat_images": "on",
+        "viewer.mat_type": "double_flat",
+        "viewer.outer_mat_color": [10, 20, 30],
+        "viewer.inner_mat_color": [40, 50, 60],
+        "viewer.outer_mat_border": 75,
+        "viewer.inner_mat_border": 40,
+        "viewer.outer_mat_use_texture": False,
+        "viewer.inner_mat_use_texture": False,
+        "viewer.mat_resource_folder": "/tmp/mat",
+    }.get(key, default)
+    mock_config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "viewer.video_fit_display": True,
+        "viewer.blur_edges": True,
+    }.get(key, default)
     strategy = VideoMetadataStrategy(
         display_w=1280,
         display_h=720,
@@ -128,11 +146,9 @@ def test_extract_passes_cache_dir_and_fit_mode(
 
     strategy.extract("/path/to/video.mp4", 1)
 
-    mock_config_repo.get_app_config_bool.assert_called_with(
-        "viewer.video_fit_display",
-        False,
-    )
-    mock_config_repo.get_app_config.assert_called_with("viewer.background", None)
+    mock_config_repo.get_app_config_bool.assert_any_call("viewer.video_fit_display", False)
+    mock_config_repo.get_app_config_bool.assert_any_call("viewer.blur_edges", False)
+    mock_config_repo.get_app_config.assert_any_call("viewer.background", None)
     mock_extract.assert_called_once_with(
         "/path/to/video.mp4",
         10.0,
@@ -140,6 +156,23 @@ def test_extract_passes_cache_dir_and_fit_mode(
         720,
         fit_display=True,
         background=[0.2, 0.2, 0.3, 1.0],
+        matting_config={
+            "mat_images": "on",
+            "mat_type": "double_flat",
+            "outer_mat_color": [10, 20, 30],
+            "inner_mat_color": [40, 50, 60],
+            "outer_mat_border": 75,
+            "inner_mat_border": 40,
+            "outer_mat_use_texture": False,
+            "inner_mat_use_texture": False,
+            "mat_resource_folder": "/tmp/mat",
+        },
+        edge_config={
+            "blur_edges": True,
+            "blur_amount": 8,
+            "blur_zoom": 1.2,
+            "edge_alpha": 0.5,
+        },
         cache_dir="/tmp/picframe-cache",
     )
 

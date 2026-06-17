@@ -21,6 +21,8 @@ class IVideoPlayer(Protocol):
         h: int = 0,
         fit_display: bool = False,
         host_background: list[float] | tuple[float, ...] | None = None,
+        host_backdrop_path: str | None = None,
+        host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> None:
         """Start playing the specified video media item within the given screen rectangle."""
         ...

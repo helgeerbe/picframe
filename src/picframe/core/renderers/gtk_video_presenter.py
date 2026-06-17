@@ -120,6 +120,8 @@ class GtkVideoPresenter:
         set_sink_window_size: bool,
         content_fit: str,
         host_background: list[float] | tuple[float, ...] | None = None,
+        host_backdrop_path: str | None = None,
+        host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> bool:
         return self._present_gtk_paintable_sink(
             Gtk,
@@ -132,6 +134,8 @@ class GtkVideoPresenter:
             set_sink_window_size=set_sink_window_size,
             content_fit=content_fit,
             host_background=host_background,
+            host_backdrop_path=host_backdrop_path,
+            host_backdrop_rect=host_backdrop_rect,
         )
 
     def reveal(self) -> None:
@@ -221,6 +225,8 @@ class GtkVideoPresenter:
         set_sink_window_size: bool,
         content_fit: str,
         host_background: list[float] | tuple[float, ...] | None = None,
+        host_backdrop_path: str | None = None,
+        host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> bool:
         transparent_host = self._gtk_video_host_uses_transparency()
         fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
@@ -276,6 +282,8 @@ class GtkVideoPresenter:
                 host_h,
                 transparent=transparent_host,
                 host_background=host_background,
+                host_backdrop_path=host_backdrop_path,
+                host_backdrop_rect=host_backdrop_rect,
             )
             window.set_child(host)
             self._apply_gtk_host_window_geometry(window, x, y, w, h)
@@ -594,6 +602,8 @@ class GtkVideoPresenter:
         *,
         transparent: bool = True,
         host_background: list[float] | tuple[float, ...] | None = None,
+        host_backdrop_path: str | None = None,
+        host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> Any:
         host = Gtk.Fixed()
         widget_x, widget_y, widget_w, widget_h = self._gtk_video_widget_geometry(
@@ -618,6 +628,35 @@ class GtkVideoPresenter:
         except Exception:
             pass
         try:
+            _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
+            window.set_default_size(host_w, host_h)
+            host.set_size_request(host_w, host_h)
+        except Exception:
+            host_w, host_h = max(1, w), max(1, h)
+        if host_backdrop_path and not transparent:
+            backdrop = self._create_gtk_backdrop_picture(
+                Gtk,
+                host_backdrop_path,
+                host_backdrop_rect,
+                fallback_size=(host_w, host_h),
+            )
+            if backdrop is not None:
+                backdrop_x, backdrop_y, backdrop_w, backdrop_h = (
+                    self._normalize_gtk_rect(host_backdrop_rect, (0, 0, host_w, host_h))
+                )
+                try:
+                    backdrop.set_size_request(backdrop_w, backdrop_h)
+                except Exception:
+                    pass
+                try:
+                    host.put(backdrop, backdrop_x, backdrop_y)
+                except Exception:
+                    logger.debug(
+                        "Could not place GTK video backdrop at %s,%s.",
+                        backdrop_x,
+                        backdrop_y,
+                    )
+        try:
             host.put(widget, widget_x, widget_y)
         except Exception:
             logger.warning(
@@ -625,13 +664,65 @@ class GtkVideoPresenter:
                 widget_x,
                 widget_y,
             )
-        try:
-            _, _, host_w, host_h = self._gtk_video_host_geometry(x, y, w, h)
-            window.set_default_size(host_w, host_h)
-            host.set_size_request(host_w, host_h)
-        except Exception:
-            pass
         return host
+
+    def _create_gtk_backdrop_picture(
+        self,
+        Gtk: Any,
+        path: str,
+        rect: tuple[int, int, int, int] | list[int] | None,
+        *,
+        fallback_size: tuple[int, int],
+    ) -> Any | None:
+        if not os.path.exists(path):
+            logger.debug("GTK video backdrop does not exist: %s", path)
+            return None
+        try:
+            if hasattr(Gtk.Picture, "new_for_filename"):
+                picture = Gtk.Picture.new_for_filename(path)
+            else:
+                picture = Gtk.Picture()
+                set_filename = getattr(picture, "set_filename", None)
+                if not callable(set_filename):
+                    return None
+                set_filename(path)
+            _, _, width, height = self._normalize_gtk_rect(
+                rect,
+                (0, 0, fallback_size[0], fallback_size[1]),
+            )
+            try:
+                picture.set_size_request(width, height)
+            except Exception:
+                pass
+            if hasattr(Gtk, "ContentFit"):
+                try:
+                    picture.set_content_fit(Gtk.ContentFit.FILL)
+                except Exception:
+                    pass
+            else:
+                try:
+                    picture.set_keep_aspect_ratio(False)
+                except Exception:
+                    pass
+            return picture
+        except Exception as exc:
+            logger.debug("Could not create GTK video backdrop: %s", exc)
+            return None
+
+    @staticmethod
+    def _normalize_gtk_rect(
+        rect: tuple[int, int, int, int] | list[int] | None,
+        fallback: tuple[int, int, int, int],
+    ) -> tuple[int, int, int, int]:
+        try:
+            if rect is None or len(rect) != 4:
+                return fallback
+            x, y, w, h = (int(rect[0]), int(rect[1]), int(rect[2]), int(rect[3]))
+            if w <= 0 or h <= 0:
+                return fallback
+            return x, y, w, h
+        except (TypeError, ValueError, IndexError):
+            return fallback
 
     def _apply_gtk_eos_opacity_probe(self, pipeline: Any) -> None:
         if self._gtk_window is None:

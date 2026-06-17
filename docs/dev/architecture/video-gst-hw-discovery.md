@@ -90,6 +90,16 @@ is extracted by seeking near the end and decoding a short tail window through
 EOS, with larger tail windows and the older fixed duration-offset sampler used
 only as fallbacks.
 
+Cached first/last frames also carry the viewer edge-fill policy used for still
+images. `viewer.blur_edges` produces display-sized blurred-edge composites;
+otherwise `viewer.edge_alpha` blends image-derived edge fill with
+`viewer.background`. When the cached first frame contains matting, blur, or
+image-derived edge fill, the playback engine can pass it to the GTK video host
+as a backdrop so the visible bars behind live video match the pi3d title card.
+Managed cache filenames include a short processing-signature hash; legacy
+sidecar `.1.frame` / `.2.frame` files keep their names but require a matching
+`.meta.json` signature before reuse.
+
 ### Phase 1: Startup Capability Discovery (The Registry)
 During application initialization, the `GstVideoRenderer` spawns the `gst_worker.py` subprocess. The subprocess queries the `Gst.Registry`.
 1.  Iterate through all features in the registry.
