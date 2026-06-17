@@ -24,6 +24,7 @@ from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourceP
 from picframe.mat_image import MatImage
 
 _image_file_lock = threading.Lock()
+VIDEO_TRANSITION_FRAME_PROCESSING_VERSION = 2
 
 
 class _FrameExtractionTimeout(Exception):
@@ -104,7 +105,7 @@ class VideoFrameEdgeConfig:
 class VideoTransitionFrameMetadata:
     """Metadata persisted next to video first/last transition-frame cache files."""
 
-    version: int = 1
+    version: int = VIDEO_TRANSITION_FRAME_PROCESSING_VERSION
     matted: bool = False
     content_rect: tuple[int, int, int, int] | None = None
     layout_spec: dict[str, Any] | None = None
@@ -321,6 +322,7 @@ class VideoFrameExtractor:
             "path": os.path.abspath(os.path.expanduser(video_path)),
             "size": file_size,
             "mtime_ns": mtime_ns,
+            "processing_version": VIDEO_TRANSITION_FRAME_PROCESSING_VERSION,
             "display": [int(width), int(height)],
             "fit_display": bool(fit_display),
             "background": VideoFrameExtractor._normalize_background_rgb(background),

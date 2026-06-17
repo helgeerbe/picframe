@@ -1,20 +1,25 @@
+import json
 import os
 import subprocess
+from collections.abc import Generator
+from hashlib import sha256
 from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 from PIL import Image
-from typing import Any, Generator
 
 from picframe.core.utils.video_frame_extractor import (
-    VideoFrameExtractor,
+    VIDEO_TRANSITION_FRAME_PROCESSING_VERSION,
     VideoFrameEdgeConfig,
+    VideoFrameExtractor,
     VideoFrameMattingConfig,
     VideoTransitionFrameMetadata,
     _FrameExtractionTimeout,
 )
+
 
 @pytest.fixture
 def mock_subprocess_run() -> Generator[MagicMock, None, None]:
@@ -25,6 +30,26 @@ def mock_subprocess_run() -> Generator[MagicMock, None, None]:
 def mock_image_fromarray() -> Generator[MagicMock, None, None]:
     with patch("picframe.core.utils.video_frame_extractor.Image.fromarray") as mock_fromarray:
         yield mock_fromarray
+
+
+def _color_bbox(
+    image: Image.Image,
+    color: tuple[int, int, int],
+) -> tuple[int, int, int, int] | None:
+    pixels = np.asarray(image.convert("RGB"))
+    target = np.asarray(color, dtype=pixels.dtype)
+    mask = np.all(pixels == target, axis=2)
+    if not mask.any():
+        return None
+    ys, xs = np.where(mask)
+    x_min = int(xs.min())
+    y_min = int(ys.min())
+    return (
+        x_min,
+        y_min,
+        int(xs.max()) - x_min + 1,
+        int(ys.max()) - y_min + 1,
+    )
 
 def test_get_first_frame_as_image_success(tmp_path: Path) -> None:
     video_path = tmp_path / "test.mp4"
@@ -246,6 +271,61 @@ def test_matting_cache_signature_normalizes_mat_images_control() -> None:
     assert disabled == disabled_string == disabled_zero
     assert always == always_string
     assert disabled != always
+
+
+def test_transition_cache_signature_includes_processing_version() -> None:
+    payload = VideoFrameExtractor.processing_signature_payload(
+        "test.mp4",
+        1920,
+        1080,
+        False,
+        matting_config=VideoFrameMattingConfig(mat_images="on"),
+    )
+
+    assert payload["processing_version"] == VIDEO_TRANSITION_FRAME_PROCESSING_VERSION
+
+
+def test_cached_transition_frames_reject_old_processing_signature(tmp_path: Path) -> None:
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    extractor = VideoFrameExtractor(
+        str(video_path),
+        400,
+        300,
+        cache_dir=str(tmp_path / "cache"),
+        matting_config=VideoFrameMattingConfig(mat_images="on", mat_type="double_bevel"),
+    )
+    first_path = Path(extractor.get_frame_path("first"))
+    last_path = Path(extractor.get_frame_path("last"))
+    first_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (10, 10), "red").save(first_path, format="JPEG")
+    Image.new("RGB", (10, 10), "blue").save(last_path, format="JPEG")
+
+    old_payload = VideoFrameExtractor.processing_signature_payload(
+        str(video_path),
+        400,
+        300,
+        False,
+        matting_config=VideoFrameMattingConfig(mat_images="on", mat_type="double_bevel"),
+        role="pair",
+    )
+    old_payload.pop("processing_version")
+    old_signature = sha256(
+        json.dumps(old_payload, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()[:24]
+    Path(extractor.get_metadata_path()).write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "matted": True,
+                "content_rect": [10, 20, 300, 200],
+                "processing_signature": old_signature,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert not extractor.cached_transition_frames_valid()
 
 
 def test_extract_and_save_frames_regenerates_stale_legacy_sidecars(
@@ -603,6 +683,32 @@ def test_process_transition_frame_pair_applies_identical_matted_layout() -> None
     assert last.size == (400, 300)
     assert metadata.layout_spec is not None
     assert metadata.layout_spec["content_rects"][0] == metadata.content_rect
+
+
+def test_process_transition_frame_pair_uses_measured_bevel_content_rect() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        400,
+        300,
+        fit_display=False,
+        matting_config=VideoFrameMattingConfig(
+            mat_images="on",
+            mat_type="double_bevel",
+            outer_mat_color=(10, 20, 30),
+            inner_mat_color=(40, 50, 60),
+            outer_mat_border=40,
+            inner_mat_border=20,
+            outer_mat_use_texture=False,
+            inner_mat_use_texture=False,
+        ),
+    )
+
+    first, _last, metadata = extractor._process_transition_frame_pair(
+        Image.new("RGB", (160, 90), "red"),
+        Image.new("RGB", (160, 90), "blue"),
+    )
+
+    assert metadata.content_rect == _color_bbox(first, (255, 0, 0))
 
 
 def test_transition_metadata_round_trips_with_backdrop_path(tmp_path: Path) -> None:

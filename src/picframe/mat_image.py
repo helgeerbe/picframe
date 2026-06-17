@@ -1,10 +1,10 @@
+import logging
+import random
 from dataclasses import asdict, dataclass
 
-from PIL import Image, ImageOps, ImageDraw
-from ninepatch import Ninepatch
 import numpy as np
-import random
-import logging
+from ninepatch import Ninepatch
+from PIL import Image, ImageDraw, ImageOps
 
 
 @dataclass(frozen=True)
@@ -212,8 +212,13 @@ class MatImage:
                 else None
             )
 
-        image, content_rects = self.__render_with_rects(images, mat_type)
+        image, fallback_content_rects = self.__render_with_rects(images, mat_type)
         if layout_spec is None:
+            content_rects = self.__measure_content_rects(
+                images,
+                mat_type,
+                fallback_content_rects,
+            )
             layout_spec = MatLayoutSpec(
                 display_size=tuple(self.display_size),
                 mat_type=mat_type,
@@ -230,7 +235,9 @@ class MatImage:
                 content_rects=tuple(content_rects),
             )
         else:
-            content_rects = tuple(layout_spec.content_rects) or tuple(content_rects)
+            content_rects = tuple(layout_spec.content_rects) or tuple(
+                fallback_content_rects
+            )
 
         return MatImageResult(
             image=image,
@@ -625,6 +632,90 @@ class MatImage:
             xloc += image.width
 
         return mat_image, tuple(final_rects)
+
+    def __measure_content_rects(self, images, mat_type, fallback_rects):
+        fallback_rects = tuple(fallback_rects)
+        try:
+            sentinel_colors = tuple(
+                self.__sentinel_color(index) for index, _image in enumerate(images)
+            )
+            sentinel_images = tuple(
+                Image.new("RGB", image.size, sentinel_colors[index])
+                for index, image in enumerate(images)
+            )
+            sentinel_render, _fallback_rects = self.__render_with_rects(
+                sentinel_images,
+                mat_type,
+            )
+            measured_rects = []
+            for color, fallback_rect in zip(sentinel_colors, fallback_rects):
+                rect = self.__color_bbox(sentinel_render, color)
+                if rect is None:
+                    raise ValueError(f"sentinel color {color} was not visible")
+                if not self.__rect_within(rect, fallback_rect):
+                    raise ValueError(
+                        f"measured rect {rect} exceeded computed rect {fallback_rect}"
+                    )
+                measured_rects.append(rect)
+            if len(measured_rects) != len(fallback_rects):
+                raise ValueError(
+                    f"measured {len(measured_rects)} rects for {len(fallback_rects)} images"
+                )
+            return tuple(measured_rects)
+        except Exception as exc:
+            self.__logger.warning(
+                "Could not measure mat content rects; using computed rects: %s",
+                exc,
+            )
+            return fallback_rects
+
+    @staticmethod
+    def __sentinel_color(index):
+        palette = (
+            (253, 5, 121),
+            (7, 251, 199),
+            (241, 229, 3),
+            (83, 19, 251),
+            (251, 137, 11),
+            (23, 191, 17),
+        )
+        if index < len(palette):
+            return palette[index]
+        return (
+            (37 + index * 73) % 256,
+            (97 + index * 151) % 256,
+            (193 + index * 199) % 256,
+        )
+
+    @staticmethod
+    def __color_bbox(image, color):
+        pixels = np.asarray(image.convert("RGB"))
+        target = np.asarray(color, dtype=pixels.dtype)
+        mask = np.all(pixels == target, axis=2)
+        if not mask.any():
+            return None
+        ys, xs = np.where(mask)
+        x_min = int(xs.min())
+        y_min = int(ys.min())
+        return (
+            x_min,
+            y_min,
+            int(xs.max()) - x_min + 1,
+            int(ys.max()) - y_min + 1,
+        )
+
+    @staticmethod
+    def __rect_within(inner, outer):
+        inner_x, inner_y, inner_w, inner_h = inner
+        outer_x, outer_y, outer_w, outer_h = outer
+        return (
+            inner_w > 0
+            and inner_h > 0
+            and inner_x >= outer_x
+            and inner_y >= outer_y
+            and inner_x + inner_w <= outer_x + outer_w
+            and inner_y + inner_h <= outer_y + outer_h
+        )
 
 
 class KmeansNp:
