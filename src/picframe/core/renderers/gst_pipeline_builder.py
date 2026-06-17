@@ -74,7 +74,10 @@ class GstPipelineBuilder:
             w,
             h,
             set_sink_window_size=True,
-            content_fit="fill" if fit_display else "contain",
+            content_fit=self._content_fit(
+                fit_display,
+                host_backdrop_path=host_backdrop_path,
+            ),
             host_background=host_background,
             host_backdrop_path=host_backdrop_path,
             host_backdrop_rect=host_backdrop_rect,
@@ -181,7 +184,10 @@ class GstPipelineBuilder:
             w,
             h,
             set_sink_window_size=True,
-            content_fit="fill" if fit_display else "contain",
+            content_fit=self._content_fit(
+                fit_display,
+                host_backdrop_path=host_backdrop_path,
+            ),
             host_background=host_background,
             host_backdrop_path=host_backdrop_path,
             host_backdrop_rect=host_backdrop_rect,
@@ -191,6 +197,12 @@ class GstPipelineBuilder:
             )
             return None
         return pipeline
+
+    @staticmethod
+    def _content_fit(fit_display: bool, *, host_backdrop_path: str | None) -> str:
+        if fit_display or host_backdrop_path:
+            return "fill"
+        return "contain"
 
     def _sink_paintable(self, video_sink: Any) -> Any | None:
         try:

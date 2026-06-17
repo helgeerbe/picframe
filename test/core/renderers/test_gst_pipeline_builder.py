@@ -101,6 +101,36 @@ def test_build_gtk_playbin_pipeline_fills_fit_display_video() -> None:
     assert presenter.present_paintable.call_args.kwargs["content_fit"] == "fill"
 
 
+def test_build_gtk_playbin_pipeline_fills_video_with_host_backdrop() -> None:
+    builder, gst, presenter = make_builder()
+    playbin = MagicMock()
+    video_sink = MagicMock()
+    audio_sink = MagicMock()
+    video_sink.get_property.return_value = MagicMock()
+
+    gst.ElementFactory = SimpleNamespace(
+        make=lambda _factory_name, name: {
+            "player": playbin,
+            "sink": video_sink,
+            "audiosink": audio_sink,
+        }[name]
+    )
+
+    assert (
+        builder.build_gtk_playbin_pipeline(
+            "file:///movie.mp4",
+            0,
+            0,
+            960,
+            540,
+            fit_display=False,
+            host_backdrop_path="/cache/video.1.frame",
+        )
+        is playbin
+    )
+    assert presenter.present_paintable.call_args.kwargs["content_fit"] == "fill"
+
+
 def test_build_gtk_compatible_pipeline_uses_widget_geometry_and_presenter() -> None:
     builder, gst, presenter = make_builder()
     pipeline = MagicMock()
@@ -150,6 +180,30 @@ def test_build_gtk_compatible_pipeline_uses_widget_geometry_and_presenter() -> N
         1800,
         1000,
     )
+
+
+def test_build_gtk_compatible_pipeline_fills_video_with_host_backdrop() -> None:
+    builder, gst, presenter = make_builder()
+    pipeline = MagicMock()
+    video_sink = MagicMock()
+    video_sink.get_property.return_value = MagicMock()
+    pipeline.get_by_name.return_value = video_sink
+    gst.parse_launch = MagicMock(return_value=pipeline)
+
+    assert (
+        builder.build_gtk_compatible_pipeline(
+            "file:///movie.mp4",
+            0,
+            0,
+            960,
+            540,
+            force_software_decoders=False,
+            fit_display=False,
+            host_backdrop_path="/cache/video.1.frame",
+        )
+        is pipeline
+    )
+    assert presenter.present_paintable.call_args.kwargs["content_fit"] == "fill"
 
 
 def test_build_gtk_compatible_pipeline_records_paintable_failure() -> None:
