@@ -47,7 +47,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - #687 implementation is in verification/closeout: Settings coverage, live reloads, Remote enlargement/filtering, `model.image_attr` compatibility docs, live logging, Logs tab, three-scope Basic Auth with cookie-backed WebSocket auth plus documented password recovery, and legacy peripherals documentation are being verified before commit/issue closeout.
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
-- #691 remains open for Raspberry Pi validation after the code cleanup commit; local focused verification is green.
+- #691 is locally merged into `v2-dev` and ready for remote closeout once `origin/v2-dev` can be pushed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
 
 ## Next
@@ -59,8 +59,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Keep legacy import documentation aligned with the explicit UI/API import path rather than adding a separate `picframe migrate` command unless a new tracked requirement asks for headless migration.
 
 ## Known Verification State
-- Frontend build is green with `npm run build`.
-- Backend pytest is green in the local Python 3.14.4 `.venv`: 338 passed, 1 GI deprecation warning with `.venv/bin/python -m pytest -q`.
+- Latest local merge verification on `v2-dev` (2026-06-18): `.venv/bin/python -m pytest` passed with 617 tests and 1 GI deprecation warning; `npm run build` passed, with only sandbox stream-fd warnings before Vite completed.
 - Latest video hardening verification on this workspace: touched-file Ruff passed, and `.venv/bin/python -m pytest test/core/metadata/test_video_strategy.py test/core/services/test_media_indexer.py test/core/renderers test/core/engine/test_playback.py` passed with 123 tests.
 - Latest #691 cleanup verification: `.venv/bin/python -m pytest test/core/utils/test_video_frame_extractor.py test/core/engine/test_playback.py test/core/renderers/test_gst_pipeline_builder.py test/core/renderers/test_gst_video_renderer.py test/core/renderers/test_gst_worker.py test/core/renderers/test_gtk_video_presenter.py` passed with 190 tests; targeted Ruff correctness check passed.
 - Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.

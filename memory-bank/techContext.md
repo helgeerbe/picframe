@@ -28,6 +28,6 @@
 - Software decode fallback is capped by `viewer.max_software_decode_resolution`.
 
 ## Verification Notes
-- Frontend type checking has passed with `npm exec vue-tsc -- -b --noEmit`.
-- Backend pytest now passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest -q` reported 301 passed, 1 GI deprecation warning on 2026-06-05.
+- Frontend build passes with `npm run build`; the 2026-06-18 merge check emitted sandbox stream-fd warnings before Vite completed successfully.
+- Backend pytest passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest` reported 617 passed, 1 GI deprecation warning on 2026-06-18.
 - Current tests include Python 3.14 compatibility shims for Starlette/AnyIO test hangs and avoid real socket binding in API server unit tests.
