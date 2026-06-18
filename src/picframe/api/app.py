@@ -144,6 +144,7 @@ PUBLIC_WORKFLOW_KEYS = {
         "tags_filter",
         "time_delay",
         "fade_time",
+        "portrait_pairs",
     },
     "viewer": {
         "show_clock",
@@ -1228,13 +1229,13 @@ def create_app(
         tags=["Configuration"],
         summary="Get public Remote workflow configuration",
         description=(
-            "Return only the playback workflow settings needed by Remote and Filters. "
+            "Return only the playback and appearance workflow settings needed by Remote and Appearance. "
             "This endpoint stays public in Settings-only auth mode and is protected in "
             "complete-site auth mode."
         ),
     )
     async def api_get_workflow_config() -> dict[str, Any]:
-        """Get public workflow config used by Remote and Filters."""
+        """Get public workflow config used by Remote and Appearance."""
         if not config_repository:
             return _workflow_config_from_app_config(AppConfig())
 
@@ -1257,7 +1258,7 @@ def create_app(
         tags=["Configuration"],
         summary="Update public Remote workflow configuration",
         description=(
-            "Persist only the allowlisted workflow settings used by Remote and Filters. "
+            "Persist only the allowlisted workflow settings used by Remote and Appearance. "
             "Full configuration writes remain protected in Settings-only auth mode."
         ),
         responses={**BAD_REQUEST_RESPONSE, **FORBIDDEN_RESPONSE},
@@ -1265,7 +1266,7 @@ def create_app(
     async def api_put_workflow_config(
         payload: dict[str, Any] = Body(...),
     ) -> dict[str, str]:
-        """Update public Remote/Filters workflow config."""
+        """Update public Remote/Appearance workflow config."""
         if not config_repository:
             return {"status": "error", "message": "Config repository not available"}
         config_dict = _filter_public_workflow_config(payload)

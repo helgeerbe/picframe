@@ -5,7 +5,6 @@ import { useConfigStore, useSystemStore, type AuthScope, type PicframeServiceSta
 import { useI18n } from 'vue-i18n'
 import configSchema from '../configSchema.json'
 import HardwareInputsEditor from '../components/HardwareInputsEditor.vue'
-import AdvancedDisclosure from '../components/settings/AdvancedDisclosure.vue'
 import ColorField from '../components/settings/ColorField.vue'
 import FieldRow from '../components/settings/FieldRow.vue'
 import FixedChoiceListEditor from '../components/settings/FixedChoiceListEditor.vue'
@@ -14,10 +13,15 @@ import NumberField from '../components/settings/NumberField.vue'
 import PathPicker from '../components/settings/PathPicker.vue'
 import PasswordField from '../components/settings/PasswordField.vue'
 import SegmentedControl from '../components/settings/SegmentedControl.vue'
+import SettingsSection from '../components/settings/SettingsSection.vue'
 import ShaderPicker from '../components/settings/ShaderPicker.vue'
 import SortRulesEditor from '../components/settings/SortRulesEditor.vue'
 import ToggleSwitch from '../components/settings/ToggleSwitch.vue'
 import TokenListEditor from '../components/settings/TokenListEditor.vue'
+import ActionBar from '../components/ui/ActionBar.vue'
+import EmptyState from '../components/ui/EmptyState.vue'
+import PageHeader from '../components/ui/PageHeader.vue'
+import StatusBanner from '../components/ui/StatusBanner.vue'
 import {
   ArrowDownTrayIcon,
   ArrowPathIcon,
@@ -313,6 +317,13 @@ async function saveAndRestartService() {
   }
 }
 
+async function retryLoadSettings() {
+  await configStore.fetchConfig()
+  await configStore.fetchAuthConfig()
+  await configStore.fetchLocales()
+  await configStore.fetchFilterOptions()
+}
+
 function unavailablePicframeServiceStatus(message?: string | null): PicframeServiceStatus {
   return {
     status: 'unavailable',
@@ -524,22 +535,21 @@ function setBackgroundColor(event: Event) {
 <template>
   <div class="mx-auto max-w-7xl space-y-6 p-4 sm:p-6 lg:p-8">
     <div v-if="renderError" class="rounded border-l-4 border-red-500 bg-red-100 p-4 text-red-700 shadow-sm">
-      <h3 class="text-lg font-bold">Component Crash Detected</h3>
+      <h3 class="text-lg font-bold">{{ t('settings.renderErrorTitle') }}</h3>
       <p class="mt-2 font-mono text-sm">{{ renderError.message }}</p>
-      <p class="mt-1 text-xs text-red-500">Context: {{ renderError.info }}</p>
-      <button class="mt-4 rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700" @click="renderError = null">Dismiss</button>
+      <p class="mt-1 text-xs text-red-500">{{ t('settings.renderErrorContext', { context: renderError.info }) }}</p>
+      <button class="mt-4 rounded bg-red-600 px-4 py-2 text-sm text-white hover:bg-red-700" @click="renderError = null">{{ t('common.dismiss') }}</button>
     </div>
 
     <template v-else>
-      <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-        <div class="flex items-center gap-3">
+      <PageHeader :title="t('settings.title')">
+        <template #icon>
           <div class="rounded-lg bg-indigo-50 p-3 dark:bg-indigo-500/10">
             <Cog6ToothIcon class="h-7 w-7 text-indigo-600 dark:text-indigo-400" />
           </div>
-          <h1 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">{{ t('settings.title') }}</h1>
-        </div>
-
-        <div class="flex flex-wrap items-center gap-3">
+        </template>
+        <template #actions>
+        <ActionBar>
           <button class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm transition-colors hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700" @click="exportConfig">
             <ArrowDownTrayIcon class="mr-2 h-4 w-4" />
             {{ t('settings.export') }}
@@ -554,15 +564,23 @@ function setBackgroundColor(event: Event) {
             <CheckCircleIcon v-else class="mr-2 h-4 w-4" />
             {{ isConfigLoading ? t('settings.saving') : t('settings.save') }}
           </button>
-        </div>
-      </div>
+        </ActionBar>
+        </template>
+      </PageHeader>
 
-      <div v-if="configError || systemError" class="rounded-r-lg border-l-4 border-red-500 bg-red-50 p-4 dark:bg-red-900/20">
-        <p class="text-sm text-red-700 dark:text-red-400">{{ configError || systemError }}</p>
-      </div>
-      <div v-if="successMessage" class="rounded-r-lg border-l-4 border-green-500 bg-green-50 p-4 dark:bg-green-900/20">
-        <p class="text-sm font-medium text-green-700 dark:text-green-400">{{ successMessage }}</p>
-      </div>
+      <StatusBanner
+        v-if="configError"
+        tone="danger"
+        :title="t('settings.configUnavailableTitle')"
+        :message="t('settings.configUnavailable')"
+      />
+      <StatusBanner
+        v-if="systemError"
+        tone="danger"
+        :title="t('common.systemError')"
+        :message="systemError"
+      />
+      <StatusBanner v-if="successMessage" tone="success" :message="successMessage" />
 
       <div class="grid grid-cols-1 gap-8 lg:grid-cols-[16rem_minmax(0,1fr)]">
         <nav class="h-fit rounded-lg border border-gray-200 bg-white p-2 shadow-sm dark:border-gray-700 dark:bg-gray-800/90 lg:sticky lg:top-6">
@@ -586,10 +604,31 @@ function setBackgroundColor(event: Event) {
         </nav>
 
         <main class="min-h-[600px] rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800/90">
-          <section v-if="activeTab === 'viewer' && localConfig.viewer" class="space-y-8 p-6 sm:p-8">
+          <div v-if="configError && activeTab !== 'danger' && !localConfig[activeTab]" class="p-6 sm:p-8">
+            <EmptyState :title="t('settings.configUnavailableTitle')" :message="t('settings.configUnavailable')">
+              <template #icon>
+                <ExclamationTriangleIcon class="h-10 w-10" />
+              </template>
+              <template #actions>
+                <button
+                  type="button"
+                  class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/60"
+                  @click="retryLoadSettings"
+                >
+                  {{ t('common.retry') }}
+                </button>
+              </template>
+            </EmptyState>
+          </div>
+          <section v-else-if="activeTab === 'viewer' && localConfig.viewer" class="space-y-8 p-6 sm:p-8">
             <h2 class="border-b border-gray-100 pb-4 text-2xl font-bold text-gray-900 dark:border-gray-700 dark:text-white">{{ t('config.viewer._title') }}</h2>
 
-            <div class="space-y-5">
+            <SettingsSection
+              id="settings-viewer-image-surface"
+              :title="t('settings.domain.imageSurface')"
+              :description="t('settings.domain.imageSurfaceDescription')"
+              default-open
+            >
               <FieldRow :label="formatLabel('fit')" :help="sectionHelp('viewer', 'fit')">
                 <ToggleSwitch v-model="localConfig.viewer.fit" />
               </FieldRow>
@@ -620,10 +659,13 @@ function setBackgroundColor(event: Event) {
                   <span class="text-sm font-mono text-gray-600 dark:text-gray-300">{{ backgroundHex() }}</span>
                 </div>
               </FieldRow>
-            </div>
+            </SettingsSection>
 
-            <section class="space-y-5">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.domain.display') }}</h3>
+            <SettingsSection
+              id="settings-viewer-display"
+              :title="t('settings.domain.display')"
+              :description="t('settings.domain.displayDescription')"
+            >
               <FieldRow :label="t('settings.displayMode')" :help="sectionHelp('viewer', 'display_w')">
                 <SegmentedControl v-model="displayMode" :options="[{ value: 'fullscreen', label: t('settings.fullscreen') }, { value: 'custom', label: t('settings.custom') }]" />
               </FieldRow>
@@ -649,10 +691,16 @@ function setBackgroundColor(event: Event) {
                   <span v-if="sectionHelp('viewer', 'display_h')" class="block text-xs leading-relaxed text-gray-500 dark:text-gray-400">{{ sectionHelp('viewer', 'display_h') }}</span>
                 </label>
               </div>
-            </section>
+              <FieldRow :label="formatLabel('display_hdmi')" :help="sectionHelp('viewer', 'display_hdmi')">
+                <input v-model="localConfig.viewer.display_hdmi" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+              </FieldRow>
+            </SettingsSection>
 
-            <section class="space-y-5">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.domain.textAndClock') }}</h3>
+            <SettingsSection
+              id="settings-viewer-text-clock"
+              :title="t('settings.domain.textAndClock')"
+              :description="t('settings.domain.textAndClockDescription')"
+            >
               <FieldRow :label="formatLabel('text_justify')" :help="sectionHelp('viewer', 'text_justify')">
                 <SegmentedControl v-model="localConfig.viewer.text_justify" :options="[{ value: 'L', label: 'Left' }, { value: 'C', label: 'Center' }, { value: 'R', label: 'Right' }]" />
               </FieldRow>
@@ -703,10 +751,13 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="formatLabel('clock_hgt_offset_pct')" :help="sectionHelp('viewer', 'clock_hgt_offset_pct')">
                 <NumberField v-model="localConfig.viewer.clock_hgt_offset_pct" :step="0.5" unit="%" />
               </FieldRow>
-            </section>
+            </SettingsSection>
 
-            <section class="space-y-5">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.domain.matting') }}</h3>
+            <SettingsSection
+              id="settings-viewer-matting-edges"
+              :title="t('settings.domain.mattingEdges')"
+              :description="t('settings.domain.mattingEdgesDescription')"
+            >
               <FieldRow :label="formatLabel('mat_images')" :help="sectionHelp('viewer', 'mat_images')">
                 <div class="space-y-3">
                   <SegmentedControl :model-value="matImagesMode()" :options="[{ value: 'disabled', label: 'Disabled' }, { value: 'always', label: 'Always' }, { value: 'threshold', label: 'Aspect threshold' }]" @update:model-value="setMatImagesMode" />
@@ -738,15 +789,6 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="formatLabel('inner_mat_border')" :help="sectionHelp('viewer', 'inner_mat_border')">
                 <NumberField v-model="localConfig.viewer.inner_mat_border" :min="0" :step="1" />
               </FieldRow>
-            </section>
-
-            <AdvancedDisclosure :title="t('settings.domain.advanced')" :description="t('settings.domain.advancedDescription')">
-              <FieldRow :label="formatLabel('font_file')" :help="sectionHelp('viewer', 'font_file')">
-                <PathPicker v-model="localConfig.viewer.font_file" kind="file" :extensions="fontExtensions" />
-              </FieldRow>
-              <FieldRow :label="formatLabel('shader')" :help="sectionHelp('viewer', 'shader')">
-                <ShaderPicker v-model="localConfig.viewer.shader" />
-              </FieldRow>
               <FieldRow :label="formatLabel('blur_amount')" :help="sectionHelp('viewer', 'blur_amount')">
                 <NumberField v-model="localConfig.viewer.blur_amount" :min="0" :step="1" />
               </FieldRow>
@@ -762,6 +804,19 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="formatLabel('mat_resource_folder')" :help="sectionHelp('viewer', 'mat_resource_folder')">
                 <PathPicker v-model="localConfig.viewer.mat_resource_folder" kind="directory" />
               </FieldRow>
+            </SettingsSection>
+
+            <SettingsSection
+              id="settings-viewer-renderer-backend"
+              :title="t('settings.domain.rendererBackend')"
+              :description="t('settings.domain.rendererBackendDescription')"
+            >
+              <FieldRow :label="formatLabel('font_file')" :help="sectionHelp('viewer', 'font_file')">
+                <PathPicker v-model="localConfig.viewer.font_file" kind="file" :extensions="fontExtensions" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('shader')" :help="sectionHelp('viewer', 'shader')">
+                <ShaderPicker v-model="localConfig.viewer.shader" />
+              </FieldRow>
               <FieldRow :label="formatLabel('max_software_decode_resolution')" :help="sectionHelp('viewer', 'max_software_decode_resolution')">
                 <select v-model="localConfig.viewer.max_software_decode_resolution" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                   <option value="640x480">640x480</option>
@@ -769,9 +824,6 @@ function setBackgroundColor(event: Event) {
                   <option value="1920x1080">1920x1080</option>
                   <option :value="localConfig.viewer.max_software_decode_resolution">Custom: {{ localConfig.viewer.max_software_decode_resolution }}</option>
                 </select>
-              </FieldRow>
-              <FieldRow :label="formatLabel('display_hdmi')" :help="sectionHelp('viewer', 'display_hdmi')">
-                <input v-model="localConfig.viewer.display_hdmi" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
               </FieldRow>
               <FieldRow :label="formatLabel('use_glx')" :help="sectionHelp('viewer', 'use_glx')">
                 <div class="space-y-2">
@@ -785,15 +837,17 @@ function setBackgroundColor(event: Event) {
                   <p class="text-xs leading-relaxed text-amber-700 dark:text-amber-300">{{ t('settings.serviceRestartInline') }}</p>
                 </div>
               </FieldRow>
-              <FieldRow :label="formatLabel('geo_suppress_list')" :help="sectionHelp('viewer', 'geo_suppress_list')">
-                <TokenListEditor v-model="localConfig.viewer.geo_suppress_list" placeholder="County" />
-              </FieldRow>
-            </AdvancedDisclosure>
+            </SettingsSection>
           </section>
 
           <section v-else-if="activeTab === 'model' && localConfig.model" class="space-y-8 p-6 sm:p-8">
             <h2 class="border-b border-gray-100 pb-4 text-2xl font-bold text-gray-900 dark:border-gray-700 dark:text-white">{{ t('config.model._title') }}</h2>
-            <div class="space-y-5">
+            <SettingsSection
+              id="settings-model-media-roots"
+              :title="t('settings.domain.mediaRoots')"
+              :description="t('settings.domain.mediaRootsDescription')"
+              default-open
+            >
               <FieldRow :label="formatLabel('pic_dir')" :help="sectionHelp('model', 'pic_dir')">
                 <PathPicker v-model="localConfig.model.pic_dir" kind="directory" allow-missing />
               </FieldRow>
@@ -806,24 +860,13 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="formatLabel('follow_links')" :help="sectionHelp('model', 'follow_links')">
                 <ToggleSwitch v-model="localConfig.model.follow_links" />
               </FieldRow>
-              <FieldRow :label="formatLabel('portrait_pairs')" :help="sectionHelp('model', 'portrait_pairs')">
-                <ToggleSwitch v-model="localConfig.model.portrait_pairs" />
-              </FieldRow>
-              <FieldRow :label="formatLabel('locale')" :help="sectionHelp('model', 'locale')">
-                <select v-model="localConfig.model.locale" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-                  <option v-for="locale in localeOptions" :key="locale" :value="locale">{{ locale }}</option>
-                </select>
-              </FieldRow>
-            </div>
+            </SettingsSection>
 
-            <section class="space-y-5">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.domain.playlist') }}</h3>
-              <FieldRow :label="formatLabel('time_delay')" :help="sectionHelp('model', 'time_delay')">
-                <NumberField v-model="localConfig.model.time_delay" :min="1" :step="1" unit="s" />
-              </FieldRow>
-              <FieldRow :label="formatLabel('fade_time')" :help="sectionHelp('model', 'fade_time')">
-                <NumberField v-model="localConfig.model.fade_time" :min="0" :step="0.5" unit="s" />
-              </FieldRow>
+            <SettingsSection
+              id="settings-model-playlist"
+              :title="t('settings.domain.playlist')"
+              :description="t('settings.domain.playlistDescription')"
+            >
               <FieldRow :label="formatLabel('recent_n')" :help="sectionHelp('model', 'recent_n')">
                 <NumberField v-model="localConfig.model.recent_n" :min="0" :step="1" />
               </FieldRow>
@@ -833,10 +876,24 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="formatLabel('sort_cols')" :help="sectionHelp('model', 'sort_cols')">
                 <SortRulesEditor v-model="localConfig.model.sort_cols" :columns="sortColumns" />
               </FieldRow>
-            </section>
+              <FieldRow :label="formatLabel('image_extensions')" :help="sectionHelp('model', 'image_extensions')">
+                <FixedChoiceListEditor v-model="localConfig.model.image_extensions" :choices="imageExtensionChoices" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('video_extensions')" :help="sectionHelp('model', 'video_extensions')">
+                <FixedChoiceListEditor v-model="localConfig.model.video_extensions" :choices="videoExtensionChoices" />
+              </FieldRow>
+            </SettingsSection>
 
-            <section class="space-y-5">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.domain.geocoding') }}</h3>
+            <SettingsSection
+              id="settings-model-geocoding-locale"
+              :title="t('settings.domain.geocodingLocale')"
+              :description="t('settings.domain.geocodingLocaleDescription')"
+            >
+              <FieldRow :label="formatLabel('locale')" :help="sectionHelp('model', 'locale')">
+                <select v-model="localConfig.model.locale" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                  <option v-for="locale in localeOptions" :key="locale" :value="locale">{{ locale }}</option>
+                </select>
+              </FieldRow>
               <FieldRow :label="formatLabel('load_geoloc')" :help="sectionHelp('model', 'load_geoloc')">
                 <ToggleSwitch v-model="localConfig.model.load_geoloc" />
               </FieldRow>
@@ -846,15 +903,16 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="t('settings.geocoding.locationFormat')" :help="sectionHelp('model', 'key_list')">
                 <GeocodeKeyListEditor v-model="localConfig.model.key_list" :choices="geocodeKeyChoices" />
               </FieldRow>
-            </section>
+              <FieldRow v-if="localConfig.viewer" :label="formatLabel('geo_suppress_list')" :help="sectionHelp('viewer', 'geo_suppress_list')">
+                <TokenListEditor v-model="localConfig.viewer.geo_suppress_list" placeholder="County" />
+              </FieldRow>
+            </SettingsSection>
 
-            <AdvancedDisclosure :title="t('settings.domain.advanced')" :description="t('settings.domain.advancedDescription')">
-              <FieldRow :label="formatLabel('image_extensions')" :help="sectionHelp('model', 'image_extensions')">
-                <FixedChoiceListEditor v-model="localConfig.model.image_extensions" :choices="imageExtensionChoices" />
-              </FieldRow>
-              <FieldRow :label="formatLabel('video_extensions')" :help="sectionHelp('model', 'video_extensions')">
-                <FixedChoiceListEditor v-model="localConfig.model.video_extensions" :choices="videoExtensionChoices" />
-              </FieldRow>
+            <SettingsSection
+              id="settings-model-logging"
+              :title="t('settings.domain.logging')"
+              :description="t('settings.domain.loggingDescription')"
+            >
               <FieldRow :label="formatLabel('log_level')" :help="sectionHelp('model', 'log_level')">
                 <select v-model="localConfig.model.log_level" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
                   <option v-for="level in logLevelOptions" :key="level" :value="level">{{ level }}</option>
@@ -863,43 +921,58 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="formatLabel('log_file')" :help="sectionHelp('model', 'log_file')">
                 <PathPicker v-model="localConfig.model.log_file" kind="file" allow-missing />
               </FieldRow>
-            </AdvancedDisclosure>
+            </SettingsSection>
           </section>
 
-          <section v-else-if="activeTab === 'mqtt' && localConfig.mqtt" class="space-y-5 p-6 sm:p-8">
+          <section v-else-if="activeTab === 'mqtt' && localConfig.mqtt" class="space-y-8 p-6 sm:p-8">
             <h2 class="border-b border-gray-100 pb-4 text-2xl font-bold text-gray-900 dark:border-gray-700 dark:text-white">{{ t('config.mqtt._title') }}</h2>
-            <FieldRow :label="formatLabel('use_mqtt')" :help="sectionHelp('mqtt', 'use_mqtt')">
-              <ToggleSwitch v-model="localConfig.mqtt.use_mqtt" />
-            </FieldRow>
-            <FieldRow :label="formatLabel('server')" :help="sectionHelp('mqtt', 'server')">
-              <input v-model="localConfig.mqtt.server" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-            </FieldRow>
-            <FieldRow :label="formatLabel('port')" :help="sectionHelp('mqtt', 'port')">
-              <NumberField v-model="localConfig.mqtt.port" :min="1" :max="65535" :step="1" />
-            </FieldRow>
-            <FieldRow :label="formatLabel('login')" :help="sectionHelp('mqtt', 'login')">
-              <input v-model="localConfig.mqtt.login" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
-            </FieldRow>
-            <FieldRow :label="formatLabel('password')" :help="sectionHelp('mqtt', 'password')">
-              <PasswordField v-model="localConfig.mqtt.password" />
-            </FieldRow>
-            <FieldRow :label="formatLabel('tls')" :help="sectionHelp('mqtt', 'tls')">
-              <PathPicker v-model="localConfig.mqtt.tls" kind="file" :extensions="certificateExtensions" allow-missing />
-            </FieldRow>
-            <AdvancedDisclosure :title="t('settings.domain.advanced')" :description="t('settings.domain.advancedDescription')">
+            <SettingsSection
+              id="settings-mqtt-broker"
+              :title="t('settings.domain.mqttBroker')"
+              :description="t('settings.domain.mqttBrokerDescription')"
+              default-open
+            >
+              <FieldRow :label="formatLabel('use_mqtt')" :help="sectionHelp('mqtt', 'use_mqtt')">
+                <ToggleSwitch v-model="localConfig.mqtt.use_mqtt" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('server')" :help="sectionHelp('mqtt', 'server')">
+                <input v-model="localConfig.mqtt.server" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+              </FieldRow>
+              <FieldRow :label="formatLabel('port')" :help="sectionHelp('mqtt', 'port')">
+                <NumberField v-model="localConfig.mqtt.port" :min="1" :max="65535" :step="1" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('login')" :help="sectionHelp('mqtt', 'login')">
+                <input v-model="localConfig.mqtt.login" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+              </FieldRow>
+              <FieldRow :label="formatLabel('password')" :help="sectionHelp('mqtt', 'password')">
+                <PasswordField v-model="localConfig.mqtt.password" />
+              </FieldRow>
+              <FieldRow :label="formatLabel('tls')" :help="sectionHelp('mqtt', 'tls')">
+                <PathPicker v-model="localConfig.mqtt.tls" kind="file" :extensions="certificateExtensions" allow-missing />
+              </FieldRow>
+            </SettingsSection>
+            <SettingsSection
+              id="settings-mqtt-device"
+              :title="t('settings.domain.mqttDevice')"
+              :description="t('settings.domain.mqttDeviceDescription')"
+            >
               <FieldRow :label="formatLabel('device_id')" :help="sectionHelp('mqtt', 'device_id')">
                 <input v-model="localConfig.mqtt.device_id" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
               </FieldRow>
               <FieldRow :label="formatLabel('device_url')" :help="sectionHelp('mqtt', 'device_url')">
                 <input v-model="localConfig.mqtt.device_url" type="url" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
               </FieldRow>
-            </AdvancedDisclosure>
+            </SettingsSection>
           </section>
 
-          <section v-else-if="activeTab === 'http' && localConfig.http" class="space-y-5 p-6 sm:p-8">
+          <section v-else-if="activeTab === 'http' && localConfig.http" class="space-y-8 p-6 sm:p-8">
             <h2 class="border-b border-gray-100 pb-4 text-2xl font-bold text-gray-900 dark:border-gray-700 dark:text-white">{{ t('config.http._title') }}</h2>
-            <section class="space-y-5">
-              <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.auth.title') }}</h3>
+            <SettingsSection
+              id="settings-http-access"
+              :title="t('settings.domain.httpAccess')"
+              :description="t('settings.domain.httpAccessDescription')"
+              default-open
+            >
               <FieldRow :label="t('settings.auth.scope')" :help="t('settings.auth.scopeHelp')">
                 <div class="space-y-2" role="radiogroup" :aria-label="t('settings.auth.scope')">
                   <label
@@ -927,11 +1000,21 @@ function setBackgroundColor(event: Event) {
                   <PasswordField v-model="localAuthConfig.password" />
                 </FieldRow>
               </template>
-            </section>
-            <FieldRow :label="formatLabel('cors_allowed_origins')" :help="sectionHelp('http', 'cors_allowed_origins')">
-              <TokenListEditor v-model="localConfig.http.cors_allowed_origins" placeholder="http://localhost:5173" />
-            </FieldRow>
-            <AdvancedDisclosure :title="t('settings.domain.advanced')" :description="t('settings.domain.advancedDescription')">
+            </SettingsSection>
+            <SettingsSection
+              id="settings-http-browser-api"
+              :title="t('settings.domain.httpBrowserApi')"
+              :description="t('settings.domain.httpBrowserApiDescription')"
+            >
+              <FieldRow :label="formatLabel('cors_allowed_origins')" :help="sectionHelp('http', 'cors_allowed_origins')">
+                <TokenListEditor v-model="localConfig.http.cors_allowed_origins" placeholder="http://localhost:5173" />
+              </FieldRow>
+            </SettingsSection>
+            <SettingsSection
+              id="settings-http-realtime"
+              :title="t('settings.domain.httpRealtime')"
+              :description="t('settings.domain.httpRealtimeDescription')"
+            >
               <FieldRow :label="formatLabel('websocket_broadcast_rate_limit')" :help="sectionHelp('http', 'websocket_broadcast_rate_limit')">
                 <NumberField v-model="localConfig.http.websocket_broadcast_rate_limit" :min="1" :step="1" />
               </FieldRow>
@@ -941,12 +1024,19 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="formatLabel('command_debounce_ms')" :help="sectionHelp('http', 'command_debounce_ms')">
                 <NumberField v-model="localConfig.http.command_debounce_ms" :min="0" :step="10" />
               </FieldRow>
-            </AdvancedDisclosure>
+            </SettingsSection>
           </section>
 
-          <section v-else-if="activeTab === 'hardware_inputs' && localConfig.hardware_inputs" class="space-y-5 p-6 sm:p-8">
+          <section v-else-if="activeTab === 'hardware_inputs' && localConfig.hardware_inputs" class="space-y-8 p-6 sm:p-8">
             <h2 class="border-b border-gray-100 pb-4 text-2xl font-bold text-gray-900 dark:border-gray-700 dark:text-white">{{ t('config.hardware_inputs._title') }}</h2>
-            <HardwareInputsEditor v-model="localConfig.hardware_inputs" />
+            <SettingsSection
+              id="settings-hardware-inputs"
+              :title="t('config.hardware_inputs._title')"
+              :description="t('settings.domain.hardwareInputsDescription')"
+              default-open
+            >
+              <HardwareInputsEditor v-model="localConfig.hardware_inputs" />
+            </SettingsSection>
           </section>
 
           <section v-else-if="activeTab === 'danger'" class="space-y-6 p-6 sm:p-8">
@@ -954,7 +1044,13 @@ function setBackgroundColor(event: Event) {
               <ExclamationTriangleIcon class="h-8 w-8 text-red-600 dark:text-red-500" />
               <h2 class="text-2xl font-bold text-red-600 dark:text-red-500">{{ t('settings.dangerZone') }}</h2>
             </div>
-            <div class="space-y-4">
+            <SettingsSection
+              id="settings-danger-maintenance"
+              :title="t('settings.domain.maintenance')"
+              :description="t('settings.domain.maintenanceDescription')"
+              tone="danger"
+              default-open
+            >
               <div class="flex flex-col justify-between gap-4 rounded-lg border border-red-100 bg-red-50 p-5 dark:border-red-500/20 dark:bg-red-500/5 sm:flex-row sm:items-center">
                 <div>
                   <h3 class="text-lg font-semibold text-gray-900 dark:text-white">{{ t('settings.purgeDb') }}</h3>
@@ -1012,7 +1108,7 @@ function setBackgroundColor(event: Event) {
                   {{ t('settings.shutdown') }}
                 </button>
               </div>
-            </div>
+            </SettingsSection>
           </section>
         </main>
       </div>

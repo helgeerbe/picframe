@@ -2,6 +2,8 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 import axios from 'axios'
+import ActionBar from '../components/ui/ActionBar.vue'
+import PageHeader from '../components/ui/PageHeader.vue'
 import {
   ArrowDownTrayIcon,
   ArrowsPointingInIcon,
@@ -272,14 +274,9 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="mx-auto max-w-7xl space-y-5 p-4 sm:p-6 lg:p-8">
-    <div class="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
-      <div>
-        <h1 class="text-3xl font-bold tracking-tight text-gray-900 dark:text-white">{{ t('logs.title') }}</h1>
-        <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {{ isConnected ? t('logs.connected') : t('logs.disconnected') }}
-        </p>
-      </div>
-      <div class="flex flex-wrap gap-2">
+    <PageHeader :title="t('logs.title')" :description="isConnected ? t('logs.connected') : t('logs.disconnected')">
+      <template #actions>
+      <ActionBar>
         <button type="button" class="inline-flex items-center rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-800 dark:text-gray-200 dark:hover:bg-gray-700" @click="togglePause">
           <PlayIcon v-if="isPaused" class="mr-2 h-4 w-4" />
           <PauseIcon v-else class="mr-2 h-4 w-4" />
@@ -297,8 +294,9 @@ onBeforeUnmount(() => {
           <TrashIcon class="mr-2 h-4 w-4" />
           {{ t('logs.clear') }}
         </button>
-      </div>
-    </div>
+      </ActionBar>
+      </template>
+    </PageHeader>
 
     <section :class="panelClass">
       <div v-if="isExpanded" class="flex flex-col justify-between gap-3 border-b border-gray-200 pb-4 dark:border-gray-700 sm:flex-row sm:items-center">

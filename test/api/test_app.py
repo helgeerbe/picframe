@@ -784,6 +784,7 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
         "model.tags_filter": "",
         "model.time_delay": 20.0,
         "model.fade_time": 2.0,
+        "model.portrait_pairs": True,
         "viewer.show_clock": False,
         "viewer.show_text_enabled": True,
         "viewer.text_overlay_format": "title location",
@@ -801,14 +802,19 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     assert response.status_code == 200
     data = response.json()
     assert data["model"]["subdirectory"] == "holiday"
+    assert data["model"]["portrait_pairs"] is True
     assert "log_level" not in data["model"]
     assert data["viewer"]["text_overlay_format"] == "title location"
 
-    update = {"model": {"shuffle": False}, "viewer": {"show_clock": True}}
+    update = {
+        "model": {"shuffle": False, "portrait_pairs": False},
+        "viewer": {"show_clock": True},
+    }
     response = client.put("/api/workflow-config", json=update)
 
     assert response.status_code == 200
     mock_repo.set_app_config.assert_any_call("model.shuffle", False)
+    mock_repo.set_app_config.assert_any_call("model.portrait_pairs", False)
     mock_repo.set_app_config.assert_any_call("viewer.show_clock", True)
     event = mock_publisher.publish.call_args[0][0]
     assert event.command is Command.SET_CONFIG

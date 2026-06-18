@@ -28,13 +28,10 @@ import {
   BackwardIcon,
   SunIcon,
   PhotoIcon,
-  InformationCircleIcon,
-  DocumentTextIcon,
   FunnelIcon,
   CalendarDaysIcon,
   TagIcon,
   MapPinIcon,
-  ClockIcon,
   CheckIcon,
   XMarkIcon,
   ChevronDownIcon,
@@ -49,6 +46,10 @@ import {
 } from '@heroicons/vue/24/solid'
 import MapComponent from '../components/MapComponent.vue'
 import HelperText from '../components/HelperText.vue'
+import MediaInfoSheet from '../components/remote/MediaInfoSheet.vue'
+import InfoButton from '../components/ui/InfoButton.vue'
+import AppDialog from '../components/ui/AppDialog.vue'
+import StatusBanner from '../components/ui/StatusBanner.vue'
 
 const { t } = useI18n()
 const playerStore = usePlayerStore()
@@ -69,9 +70,7 @@ const mediaSelection = reactive({
   date_from: '',
   date_to: '',
   location_filter: '',
-  tags_filter: '',
-  time_delay: 200,
-  fade_time: 10
+  tags_filter: ''
 })
 
 const selectionMessage = ref('')
@@ -82,6 +81,7 @@ const shuffleModeMenuRef = ref<HTMLElement | null>(null)
 const selectedPairIndex = ref(0)
 const showPairDeleteDialog = ref(false)
 const expandedPanel = ref<'media' | 'map' | null>(null)
+const isMediaInfoOpen = ref(false)
 const imageLoadFailures = ref<Record<string, number>>({})
 const locationSearch = ref('')
 const locationSearchResults = ref<LocationOption[]>([])
@@ -138,26 +138,20 @@ watch(
     () => appConfig.value?.model?.date_from || '',
     () => appConfig.value?.model?.date_to || '',
     () => appConfig.value?.model?.location_filter || '',
-    () => appConfig.value?.model?.tags_filter || '',
-    () => Number(appConfig.value?.model?.time_delay ?? 200),
-    () => Number(appConfig.value?.model?.fade_time ?? 10)
+    () => appConfig.value?.model?.tags_filter || ''
   ],
   ([
     subdirectory,
     dateFrom,
     dateTo,
     locationFilter,
-    tagsFilter,
-    timeDelay,
-    fadeTime
+    tagsFilter
   ]) => {
     mediaSelection.subdirectory = subdirectory
     mediaSelection.date_from = dateFrom
     mediaSelection.date_to = dateTo
     mediaSelection.location_filter = locationFilter
     mediaSelection.tags_filter = tagsFilter
-    mediaSelection.time_delay = timeDelay
-    mediaSelection.fade_time = fadeTime
   },
   { immediate: true }
 )
@@ -211,6 +205,7 @@ watch(
   (media) => {
     selectedPairIndex.value = media?.primary_index ?? 0
     showPairDeleteDialog.value = false
+    isMediaInfoOpen.value = false
     imageLoadFailures.value = {}
   }
 )
@@ -393,9 +388,7 @@ const applyMediaSelection = async () => {
       date_from: mediaSelection.date_from,
       date_to: mediaSelection.date_to,
       location_filter: mediaSelection.location_filter,
-      tags_filter: mediaSelection.tags_filter,
-      time_delay: Number(mediaSelection.time_delay),
-      fade_time: Number(mediaSelection.fade_time)
+      tags_filter: mediaSelection.tags_filter
     }
     await configStore.saveWorkflowConfig({
       model: nextModelConfig
@@ -670,6 +663,10 @@ const displayFileName = computed(() => {
   return fileNameFor(selectedMediaItem.value)
 })
 
+const mediaInfoTitle = computed(() => {
+  return selectedMediaItem.value?.exif?.title || displayFileName.value
+})
+
 const currentMediaTags = computed(() => {
   const tags = selectedMediaItem.value?.exif?.tags
   return String(tags || '')
@@ -855,14 +852,14 @@ const metadataFields = computed(() => {
 </script>
 
 <template>
-  <div class="max-w-7xl mx-auto space-y-6 p-4 sm:p-6 lg:p-8">
-    <div class="grid grid-cols-1 xl:grid-cols-12 gap-8 items-start">
+  <div class="space-y-6">
+    <div class="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:items-start">
       
       <!-- Left Column: Media & Controls -->
       <div class="xl:col-span-7 flex flex-col space-y-6">
         
         <!-- Media Player Card -->
-        <div class="bg-white dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-2xl overflow-hidden border border-gray-200/50 dark:border-gray-700/50 flex-grow flex flex-col">
+        <div class="flex flex-grow flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
           
           <!-- Image Preview Area -->
           <div class="relative w-full bg-black/5 dark:bg-black/40 flex items-center justify-center overflow-hidden group aspect-video">
@@ -922,22 +919,25 @@ const metadataFields = computed(() => {
                 {{ t('remote.retryPreview') }}
               </button>
             </div>
-            <button
-              v-if="selectedMediaItem?.file_path"
-              type="button"
-              class="absolute right-4 top-4 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white shadow-lg backdrop-blur-sm transition-colors hover:bg-black/75 focus:outline-none focus:ring-2 focus:ring-white/80"
-              :aria-label="t('remote.expand')"
-              :title="t('remote.expand')"
-              @click="openExpandedPanel('media')"
-            >
-              <ArrowsPointingOutIcon class="h-5 w-5" />
-            </button>
+            <div v-if="selectedMediaItem" class="absolute right-4 top-4 z-10 flex items-center gap-2">
+              <InfoButton :label="t('remote.mediaInfo.open')" @click="isMediaInfoOpen = true" />
+              <button
+                v-if="selectedMediaItem?.file_path"
+                type="button"
+                class="inline-flex h-10 w-10 items-center justify-center rounded-lg border border-white/20 bg-black/55 text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-black/75 focus:outline-none focus:ring-2 focus:ring-white/80"
+                :aria-label="t('remote.expand')"
+                :title="t('remote.expand')"
+                @click="openExpandedPanel('media')"
+              >
+                <ArrowsPointingOutIcon class="h-5 w-5" />
+              </button>
+            </div>
             
             <!-- Adaptive Cinematic Gradient Overlay -->
-            <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-40 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+            <div v-if="selectedMediaItem?.file_path" class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-40 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
             
             <!-- Narrative Metadata Overlay (Progressive Disclosure) -->
-            <div class="absolute bottom-0 left-0 right-0 p-6 transition-all duration-500 flex justify-between items-end group-hover:backdrop-blur-sm">
+            <div v-if="selectedMediaItem?.file_path" class="absolute bottom-0 left-0 right-0 p-6 transition-all duration-500 flex justify-between items-end group-hover:backdrop-blur-sm">
               <div class="flex-1 min-w-0 pr-4 pointer-events-none">
                 <!-- Title (Always visible) -->
                 <h2 class="text-2xl font-bold text-white truncate drop-shadow-md transition-transform duration-500 group-hover:-translate-y-1">
@@ -974,6 +974,7 @@ const metadataFields = computed(() => {
               </div>
               
               <button
+                v-if="selectedMediaItem?.file_path"
                 type="button"
                 @click="handleDeleteClick"
                 class="pointer-events-auto inline-flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-600/85 text-white opacity-90 shadow-lg backdrop-blur-sm transition-all hover:scale-105 hover:bg-red-500 focus:scale-105 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500/50 active:scale-95 lg:opacity-0 lg:group-hover:opacity-100"
@@ -1147,7 +1148,7 @@ const metadataFields = computed(() => {
       <div class="xl:col-span-5 flex flex-col space-y-6">
 
         <!-- Media Selection Card -->
-        <div class="bg-white dark:bg-gray-800/90 backdrop-blur-xl rounded-2xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden">
+        <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
           <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
             <div class="flex items-center space-x-3 min-w-0">
               <div class="p-2 bg-sky-50 dark:bg-sky-500/10 rounded-lg">
@@ -1335,36 +1336,6 @@ const metadataFields = computed(() => {
               </div>
             </div>
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label class="space-y-2">
-                <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  <ClockIcon class="w-4 h-4" />
-                  {{ t('remote.mediaSelection.delay') }}
-                </span>
-                <input
-                  v-model.number="mediaSelection.time_delay"
-                  type="number"
-                  min="1"
-                  step="1"
-                  class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-                >
-              </label>
-
-              <label class="space-y-2">
-                <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                  <ClockIcon class="w-4 h-4" />
-                  {{ t('remote.mediaSelection.fade') }}
-                </span>
-                <input
-                  v-model.number="mediaSelection.fade_time"
-                  type="number"
-                  min="0"
-                  step="0.5"
-                  class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-                >
-              </label>
-            </div>
-
             <div class="flex flex-col sm:flex-row sm:items-center gap-3">
               <button
                 type="button"
@@ -1377,64 +1348,33 @@ const metadataFields = computed(() => {
               </button>
             </div>
 
-            <p v-if="selectionMessage || configError" class="text-sm font-medium" :class="configError ? 'text-red-600 dark:text-red-400' : 'text-emerald-600 dark:text-emerald-400'">
-              {{ configError || selectionMessage }}
-            </p>
-          </div>
-        </div>
-
-        <!-- Metadata Card -->
-        <div class="bg-white dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 overflow-hidden flex-grow">
-          <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
-            <div class="flex items-center space-x-3">
-              <div class="p-2 bg-indigo-50 dark:bg-indigo-500/10 rounded-lg">
-                <InformationCircleIcon class="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
-              </div>
-              <h3 class="text-lg font-bold text-gray-900 dark:text-white tracking-tight">{{ t('remote.mediaDetails') }}</h3>
-            </div>
-            <div
-              v-if="isPortraitPair"
-              class="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-1 dark:border-gray-700 dark:bg-gray-900/50"
-            >
-              <button
-                v-for="(_, index) in currentMediaItems.slice(0, 2)"
-                :key="index"
-                type="button"
-                @click="selectedPairIndex = index"
-                :aria-pressed="selectedPairIndex === index"
-                :class="[
-                  'rounded-md px-3 py-1.5 text-xs font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500/50',
-                  selectedPairIndex === index
-                    ? 'bg-white text-indigo-700 shadow-sm dark:bg-gray-700 dark:text-indigo-200'
-                    : 'text-gray-500 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-100'
-                ]"
-              >
-                {{ pairSideLabel(index) }}
-              </button>
-            </div>
-          </div>
-          
-          <div class="p-6 max-h-[400px] overflow-y-auto custom-scrollbar">
-            <div v-if="metadataFields.length > 0" class="space-y-4">
-              <div v-for="field in metadataFields" :key="field.key" class="flex items-center justify-between p-3 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors group">
-                <div class="flex items-center space-x-3 overflow-hidden">
-                  <svg class="w-5 h-5 text-gray-400 dark:text-gray-500 group-hover:text-indigo-500 transition-colors flex-shrink-0" viewBox="0 0 24 24">
-                    <path :d="field.icon" fill="currentColor" />
-                  </svg>
-                  <span class="text-sm font-medium text-gray-500 dark:text-gray-400 truncate">{{ field.label }}</span>
-                </div>
-                <span class="text-sm font-semibold text-gray-900 dark:text-gray-200 text-right pl-4 truncate max-w-[60%]" :title="String(field.value)">{{ field.value }}</span>
-              </div>
-            </div>
-            <div v-else class="flex flex-col items-center justify-center py-12 text-gray-400 dark:text-gray-500">
-              <DocumentTextIcon class="w-12 h-12 mb-3 opacity-20" />
-              <p class="text-sm font-medium">{{ $t('remote.noMetadata') }}</p>
-            </div>
+            <StatusBanner
+              v-if="configError"
+              tone="danger"
+              :title="t('remote.mediaSelection.unavailableTitle')"
+              :message="t('remote.mediaSelection.unavailable')"
+            />
+            <StatusBanner
+              v-else-if="selectionMessage"
+              :tone="selectionMessage === t('remote.mediaSelection.failed') ? 'danger' : 'success'"
+              :message="selectionMessage"
+            />
           </div>
         </div>
 
       </div>
     </div>
+
+    <MediaInfoSheet
+      :open="isMediaInfoOpen"
+      :title="mediaInfoTitle"
+      :file-name="displayFileName"
+      :caption="selectedMediaItem?.exif?.caption"
+      :location-name="selectedMediaItem?.exif?.location_name"
+      :tags="currentMediaTags"
+      :fields="metadataFields"
+      @close="isMediaInfoOpen = false"
+    />
 
     <div
       v-if="expandedPanel"
@@ -1522,29 +1462,13 @@ const metadataFields = computed(() => {
       </div>
     </div>
 
-    <div
-      v-if="showPairDeleteDialog"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/70 p-4 backdrop-blur-sm"
-      role="dialog"
-      aria-modal="true"
-      :aria-label="t('remote.pair.deleteTitle')"
+    <AppDialog
+      :open="showPairDeleteDialog"
+      :title="t('remote.pair.deleteTitle')"
+      :description="t('remote.pair.deletePrompt')"
+      max-width="lg"
+      @close="showPairDeleteDialog = false"
     >
-      <div class="w-full max-w-xl rounded-2xl bg-white p-6 shadow-2xl dark:bg-gray-800">
-        <div class="flex items-start justify-between gap-4">
-          <div>
-            <h3 class="text-lg font-bold text-gray-900 dark:text-white">{{ t('remote.pair.deleteTitle') }}</h3>
-            <p class="mt-1 text-sm text-gray-500 dark:text-gray-400">{{ t('remote.pair.deletePrompt') }}</p>
-          </div>
-          <button
-            type="button"
-            @click="showPairDeleteDialog = false"
-            class="rounded-lg p-2 text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-2 focus:ring-red-500/50 dark:hover:bg-gray-700 dark:hover:text-gray-100"
-            :aria-label="t('settings.cancel')"
-          >
-            <XMarkIcon class="h-5 w-5" />
-          </button>
-        </div>
-
         <div class="mt-5 grid grid-cols-2 gap-3">
           <div
             v-for="(item, index) in currentMediaItems.slice(0, 2)"
@@ -1591,8 +1515,7 @@ const metadataFields = computed(() => {
             {{ t('remote.pair.deleteBoth') }}
           </button>
         </div>
-      </div>
-    </div>
+    </AppDialog>
   </div>
 </template>
 

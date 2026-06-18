@@ -1,13 +1,19 @@
 {
   "common": {
     "help": "Help",
-    "close": "Close"
+    "close": "Close",
+    "dismiss": "Dismiss",
+    "systemError": "System error",
+    "retry": "Retry"
   },
   "nav": {
+    "primary": "Primary navigation",
     "remote": "Remote",
-    "filters": "Settings & Filters",
+    "appearance": "Appearance",
+    "appearanceShort": "Look",
     "settings": "Settings",
-    "logs": "Logs"
+    "logs": "Logs",
+    "toggleLanguage": "Switch language"
   },
   "connection": {
     "live": "Live",
@@ -30,6 +36,12 @@
     "expand": "Expand",
     "previewLoadFailed": "Preview could not be loaded.",
     "retryPreview": "Retry preview",
+    "mediaInfo": {
+      "title": "Media info",
+      "open": "Show media info",
+      "technical": "Technical details",
+      "empty": "Details will appear here when the current media provides metadata."
+    },
     "metadata": {
       "fileName": "File Name",
       "date": "Date",
@@ -59,8 +71,6 @@
       "dateTo": "To",
       "location": "Location",
       "tags": "Tags",
-      "delay": "Delay (s)",
-      "fade": "Fade (s)",
       "countBadge": "{selected} / {total}",
       "countLoading": "Counting...",
       "countError": "Count unavailable",
@@ -78,7 +88,9 @@
       "applying": "Applying...",
       "clear": "Clear filters",
       "applied": "Media selection updated.",
-      "failed": "Could not update media selection."
+      "failed": "Could not update media selection.",
+      "unavailableTitle": "Media selection unavailable",
+      "unavailable": "The backend did not return media selection data. Check that Picframe is running and try again."
     },
     "pair": {
       "left": "Left",
@@ -107,6 +119,7 @@
     },
     "overlays": {
       "title": "Text Overlays",
+      "loading": "Loading overlay settings",
       "clock": "Clock",
       "clockHelper": "Toggle the clock display on the screen.",
       "textTitle": "Title",
@@ -120,7 +133,36 @@
       "textFolder": "Folder",
       "textFolderHelper": "Show the folder name where the media is located.",
       "textLocation": "Location",
-      "textLocationHelper": "Show the location where the media was taken."
+      "textLocationHelper": "Show the location where the media was taken.",
+      "saved": "Overlay settings saved.",
+      "failed": "Could not save overlay settings."
+    }
+  },
+  "appearance": {
+    "title": "Appearance",
+    "description": "Visual overlays, slide timing, and portrait pairing.",
+    "save": "Save appearance",
+    "saving": "Saving...",
+    "saved": "Appearance settings saved.",
+    "failed": "Could not save appearance settings.",
+    "unavailableTitle": "Appearance unavailable",
+    "unavailable": "The backend did not return appearance settings. Check that Picframe is running and try again.",
+    "unavailableWithDetail": "The backend did not return appearance settings. Check that Picframe is running and try again. Details: {detail}",
+    "slideshow": {
+      "title": "Slideshow",
+      "description": "Timing and pairing for the media shown on the frame."
+    },
+    "timeDelay": {
+      "label": "Delay",
+      "help": "Seconds between the start of one media item and the next."
+    },
+    "fadeTime": {
+      "label": "Fade",
+      "help": "Seconds used for the transition overlap."
+    },
+    "portraitPairs": {
+      "label": "Portrait pairs",
+      "help": "Show compatible portrait photos side by side."
     }
   },
   "logs": {
@@ -150,6 +192,10 @@
     "importedNeedsSave": "Configuration imported. Save to apply it.",
     "importFailed": "Failed to import configuration.",
     "invalidJson": "Invalid JSON configuration file.",
+    "configUnavailableTitle": "Configuration unavailable",
+    "configUnavailable": "The backend did not return configuration data. Check that Picframe is running and try again.",
+    "renderErrorTitle": "Component crash detected",
+    "renderErrorContext": "Context: {context}",
     "export": "Export",
     "import": "Import",
     "dangerZone": "Danger Zone",
@@ -210,6 +256,25 @@
         "no_motion": "No motion"
       }
     },
+    "pathPicker": {
+      "browse": "Browse",
+      "notAllowed": "Path is not allowed",
+      "browseFailed": "Could not browse path",
+      "exists": "Path exists",
+      "later": "Path will be created or mounted later",
+      "selectPath": "Select path",
+      "shortcuts": "Shortcuts",
+      "up": "Up",
+      "useFolder": "Use this folder",
+      "select": "Select"
+    },
+    "shaderPicker": {
+      "validateFailed": "Could not validate shader",
+      "browseFailed": "Could not browse shaders",
+      "storedWithoutExtension": "Stored without .fs/.vs: {value}",
+      "incompletePair": "Shader pair incomplete for {name}.",
+      "selectShader": "Select shader"
+    },
     "sections": {
       "viewer": "Viewer Settings",
       "model": "Model Settings",
@@ -219,11 +284,39 @@
       "hardware_inputs": "GPIO Inputs"
     },
     "domain": {
+      "imageSurface": "Image & surface",
+      "imageSurfaceDescription": "How media is fitted, animated, blended, and rendered against the display background.",
       "display": "Display",
+      "displayDescription": "Window geometry and display target settings.",
       "textAndClock": "Text and Clock",
+      "textAndClockDescription": "Durable text and clock layout settings. Quick overlay toggles stay in Appearance.",
       "matting": "Matting",
+      "mattingEdges": "Matting & edges",
+      "mattingEdgesDescription": "Mat styles, colors, textures, borders, blur backdrops, and edge blending.",
+      "rendererBackend": "Renderer backend",
+      "rendererBackendDescription": "Low-level renderer files and backend options. Some changes require a Picframe service restart.",
+      "mediaRoots": "Media roots",
+      "mediaRootsDescription": "Folders and fallback files used by the media library.",
       "playlist": "Playlist",
+      "playlistDescription": "Durable playlist ordering, reshuffle, and supported media extension settings.",
       "geocoding": "Geocoding",
+      "geocodingLocale": "Geocoding & locale",
+      "geocodingLocaleDescription": "Reverse-geocoding language, lookup behavior, and location text cleanup.",
+      "logging": "Logging",
+      "loggingDescription": "Runtime log level and log file destination.",
+      "mqttBroker": "Broker connection",
+      "mqttBrokerDescription": "MQTT server, credentials, TLS, and enablement.",
+      "mqttDevice": "Device identity",
+      "mqttDeviceDescription": "How Picframe is identified by MQTT integrations.",
+      "httpAccess": "Access protection",
+      "httpAccessDescription": "Password protection for the web control plane.",
+      "httpBrowserApi": "Browser/API access",
+      "httpBrowserApiDescription": "Origins allowed to call the Picframe API from a browser.",
+      "httpRealtime": "Realtime tuning",
+      "httpRealtimeDescription": "WebSocket broadcast and command debounce limits.",
+      "hardwareInputsDescription": "GPIO input mappings for physical buttons and motion sensors.",
+      "maintenance": "Maintenance actions",
+      "maintenanceDescription": "Destructive and host-level operations. These actions ask for confirmation.",
       "advanced": "Advanced",
       "advancedDescription": "Low-level settings that are useful for troubleshooting and custom installations.",
       "purge": "Purge",
@@ -321,8 +414,8 @@
       "date_to": "default=\"\", latest media date to include, YYYY-MM-DD",
       "recent_n": "default=7 (days), when shuffling file change date more recent than this number of days play before the rest",
       "reshuffle_num": "default=1, times through before reshuffling",
-      "time_delay": "default=200.0, time between consecutive slide starts - can be changed by Remote or MQTT/Home Assistant",
-      "fade_time": "default=10.0, change time during which slides overlap - can be changed by Remote or MQTT/Home Assistant",
+      "time_delay": "default=200.0, time between consecutive slide starts - can be changed by Appearance or MQTT/Home Assistant",
+      "fade_time": "default=10.0, change time during which slides overlap - can be changed by Appearance or MQTT/Home Assistant",
       "update_interval": "default=2.0, time in seconds to wait between two consecutive scans for new files",
       "shuffle": "default=True, shuffle on reloading image files - can be changed by Remote or MQTT/Home Assistant",
       "shuffle_mode": "default=standard, shuffle mode used when shuffle is enabled. Choices: standard, fewer_repeats.",

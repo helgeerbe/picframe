@@ -53,7 +53,7 @@ const map = ref<any | null>(null)
 const containerClass = computed(() => {
   return props.expanded
     ? 'h-full rounded-none border-0 shadow-none'
-    : 'h-[350px] rounded-3xl border border-gray-200/50 shadow-xl dark:border-gray-700/50'
+    : 'h-[350px] rounded-lg border border-gray-200 shadow-sm dark:border-gray-700'
 })
 
 function invalidateMapSize() {
@@ -69,13 +69,13 @@ watch(mapCenter, invalidateMapSize)
 </script>
 
 <template>
-  <div v-if="hasLocation" :class="['bg-white dark:bg-gray-800/90 backdrop-blur-xl overflow-hidden flex flex-col', containerClass]">
+  <div v-if="hasLocation" :class="['flex flex-col overflow-hidden bg-white dark:bg-gray-800', containerClass]">
     <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between z-10 bg-white dark:bg-gray-800/90">
       <div class="flex items-center space-x-3 overflow-hidden">
         <div class="p-2 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg flex-shrink-0">
           <MapPinIcon class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
         </div>
-        <h3 class="text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
+        <h3 class="truncate text-lg font-bold tracking-normal text-gray-900 dark:text-white">
           {{ locationName || formatCoordinates(props.latitude, props.longitude) || t('remote.location') }}
         </h3>
       </div>

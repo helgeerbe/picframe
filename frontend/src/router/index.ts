@@ -10,9 +10,9 @@ const router = createRouter({
       component: RemoteView
     },
     {
-      path: '/filters',
-      name: 'filters',
-      component: () => import('../views/FiltersView.vue')
+      path: '/appearance',
+      name: 'appearance',
+      component: () => import('../views/AppearanceView.vue')
     },
     {
       path: '/settings',

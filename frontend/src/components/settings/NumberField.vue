@@ -1,10 +1,13 @@
 <script setup lang="ts">
+import { inject, type ComputedRef } from 'vue'
+
 const props = withDefaults(defineProps<{
   modelValue: number | string | null | undefined
   min?: number
   max?: number
   step?: number
   unit?: string
+  label?: string
 }>(), {
   step: 1
 })
@@ -31,6 +34,9 @@ function updateValue(value: number) {
 function handleInput(event: Event) {
   updateValue(Number((event.target as HTMLInputElement).value))
 }
+
+const fieldLabelId = inject<ComputedRef<string> | undefined>('fieldLabelId', undefined)
+const fieldHelpId = inject<ComputedRef<string | undefined> | undefined>('fieldHelpId', undefined)
 </script>
 
 <template>
@@ -41,6 +47,9 @@ function handleInput(event: Event) {
       :min="props.min"
       :max="props.max"
       :step="props.step"
+      :aria-label="props.label"
+      :aria-labelledby="props.label ? undefined : fieldLabelId"
+      :aria-describedby="fieldHelpId"
       class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
       @input="handleInput"
     >

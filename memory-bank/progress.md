@@ -12,10 +12,10 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Playlist/media processing foundation.
 - FastAPI control plane with config endpoints, WebSocket state, SPA serving, media serving, and system/maintenance commands.
 - Ticket #637 control-plane hardening: Vite builds the Vue SPA into packaged FastAPI assets, `picframe init` copies the compiled UI into the runtime directory, FastAPI serves SPA routes/assets, and WebSocket media DTO location enrichment uses the injected media repository instead of hardcoded cache DB paths.
-- Vue 3 SPA foundation with Remote, Filters, and Settings views.
+- Vue 3 SPA foundation with Remote, Appearance, Settings, and Logs views.
 - Settings UI fail-safe redesign: Settings now uses dedicated domain editors, safe host path browsing/validation rooted at the Picframe user's home directory, token/chip editors, sort-rule rows, a geocoding location-format builder, color controls, shortcut capture, fixed metadata/extension lists, shader basename selection, password reveal controls, and collapsed Advanced sections.
 - Ticket #635 hardware-input configuration: Settings now has a dedicated GPIO Inputs editor, `hardware_inputs` is validated through backend/core config paths, and `HardwareInputService` is wired into the runtime with adapter reconfiguration on Settings changes. PIR `no_motion_delay_seconds` delays no-motion commands and is cancelled by renewed motion.
-- Remote Media Selection block for playlist runtime filters and timing controls.
+- Remote Media Selection block for playlist runtime filters; Appearance owns timing controls.
 - Remote filter option chips toggle selected terms; normal click appends/toggles with `OR`, Shift-click appends with `AND`, and long tag/location option lists scroll in-place.
 - Remote Shuffle moved from Media Selection to an immediate split transport control: the main segment saves `model.shuffle`, the menu persists `model.shuffle_mode`, and missing/invalid modes fall back to `standard`.
 - Remote transport controls use a balanced touch-first deck, and helper text icons are clickable/tappable with dialog fallback.

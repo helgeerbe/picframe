@@ -10,7 +10,7 @@
 - Vue 3 SPA in `frontend/`.
 - Stack: Vite, TypeScript, Pinia, Vue Router, vue-i18n, Tailwind CSS, Heroicons, Material Design Icons, Leaflet / Vue Leaflet, axios, native WebSocket.
 - Vite builds directly into `src/picframe/html` so FastAPI can serve the compiled SPA.
-- Primary routes: Remote, Filters, Settings.
+- Primary routes: Remote, Appearance, Settings, Logs.
 
 ## Runtime Components
 - The installed `picframe` console script points to the next-gen CLI in `picframe.main`.

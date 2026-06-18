@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from 'vue'
 import { DocumentIcon, FolderIcon } from '@heroicons/vue/24/outline'
+import { useI18n } from 'vue-i18n'
 import { useConfigStore, type FilesystemBrowseResponse } from '../../stores/config'
 
 const props = defineProps<{
@@ -12,6 +13,7 @@ const emit = defineEmits<{
 }>()
 
 const configStore = useConfigStore()
+const { t } = useI18n()
 const browseOpen = ref(false)
 const browseState = ref<FilesystemBrowseResponse | null>(null)
 const browseError = ref('')
@@ -68,7 +70,7 @@ async function validateShader() {
         return
       }
     } catch (error: any) {
-      validationError.value = error?.response?.data?.detail || error?.message || 'Could not validate shader'
+      validationError.value = error?.response?.data?.detail || error?.message || t('settings.shaderPicker.validateFailed')
       return
     }
   }
@@ -83,7 +85,7 @@ async function browse(path = dirname(normalizedValue.value || '${PICFRAME_DATA}/
       extensions: ['.fs', '.vs']
     })
   } catch (error: any) {
-    browseError.value = error?.response?.data?.detail || error?.message || 'Could not browse shaders'
+    browseError.value = error?.response?.data?.detail || error?.message || t('settings.shaderPicker.browseFailed')
     browseState.value = await configStore.browseFilesystem({
       path: '~',
       kind: 'file',
@@ -132,23 +134,23 @@ onMounted(() => {
         @click="browse()"
       >
         <FolderIcon class="mr-2 h-4 w-4" />
-        Browse
+        {{ t('settings.pathPicker.browse') }}
       </button>
     </div>
-    <p class="text-xs text-gray-500 dark:text-gray-400">Stored without .fs/.vs: {{ normalizedValue }}</p>
+    <p class="text-xs text-gray-500 dark:text-gray-400">{{ t('settings.shaderPicker.storedWithoutExtension', { value: normalizedValue }) }}</p>
     <p v-if="validationError" class="text-xs font-medium text-red-600 dark:text-red-400">{{ validationError }}</p>
     <p v-if="browseState && (!counterpartState.hasFs || !counterpartState.hasVs)" class="text-xs font-medium text-amber-600 dark:text-amber-400">
-      Shader pair incomplete for {{ basename(normalizedValue) }}.
+      {{ t('settings.shaderPicker.incompletePair', { name: basename(normalizedValue) }) }}
     </p>
 
     <div v-if="browseOpen" class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/60 p-4">
       <div class="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl dark:bg-gray-800">
         <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
           <div>
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Select shader</h3>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('settings.shaderPicker.selectShader') }}</h3>
             <p class="text-xs text-gray-500 dark:text-gray-400">{{ browseState?.path }}</p>
           </div>
-          <button type="button" class="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700" @click="browseOpen = false">Close</button>
+          <button type="button" class="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700" @click="browseOpen = false">{{ t('common.close') }}</button>
         </div>
         <div class="p-3">
           <p v-if="browseError" class="mb-2 text-xs font-medium text-amber-600">{{ browseError }}</p>
@@ -158,7 +160,7 @@ onMounted(() => {
             class="mb-3 rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
             @click="browse(browseState.parent)"
           >
-            Up
+            {{ t('settings.pathPicker.up') }}
           </button>
           <div class="max-h-[60vh] divide-y divide-gray-100 overflow-y-auto rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
             <button

@@ -1,13 +1,19 @@
 {
   "common": {
     "help": "Hilfe",
-    "close": "Schließen"
+    "close": "Schließen",
+    "dismiss": "Ausblenden",
+    "systemError": "Systemfehler",
+    "retry": "Erneut versuchen"
   },
   "nav": {
+    "primary": "Hauptnavigation",
     "remote": "Fernbedienung",
-    "filters": "Einstellungen & Filter",
+    "appearance": "Darstellung",
+    "appearanceShort": "Optik",
     "settings": "Einstellungen",
-    "logs": "Logs"
+    "logs": "Logs",
+    "toggleLanguage": "Sprache wechseln"
   },
   "connection": {
     "live": "Live",
@@ -30,6 +36,12 @@
     "expand": "Vergrößern",
     "previewLoadFailed": "Vorschau konnte nicht geladen werden.",
     "retryPreview": "Vorschau erneut laden",
+    "mediaInfo": {
+      "title": "Medieninfo",
+      "open": "Medieninfo anzeigen",
+      "technical": "Technische Details",
+      "empty": "Details erscheinen hier, sobald das aktuelle Medium Metadaten bereitstellt."
+    },
     "metadata": {
       "fileName": "Datei",
       "date": "Datum",
@@ -59,8 +71,6 @@
       "dateTo": "Bis",
       "location": "Ort",
       "tags": "Tags",
-      "delay": "Dauer (s)",
-      "fade": "Blende (s)",
       "countBadge": "{selected} / {total}",
       "countLoading": "Zähle...",
       "countError": "Anzahl nicht verfügbar",
@@ -78,7 +88,9 @@
       "applying": "Wende an...",
       "clear": "Filter leeren",
       "applied": "Medienauswahl aktualisiert.",
-      "failed": "Medienauswahl konnte nicht aktualisiert werden."
+      "failed": "Medienauswahl konnte nicht aktualisiert werden.",
+      "unavailableTitle": "Medienauswahl nicht verfügbar",
+      "unavailable": "Das Backend hat keine Medienauswahl-Daten geliefert. Prüfen Sie, ob Picframe läuft, und versuchen Sie es erneut."
     },
     "pair": {
       "left": "Links",
@@ -107,6 +119,7 @@
     },
     "overlays": {
       "title": "Text-Overlays",
+      "loading": "Overlay-Einstellungen werden geladen",
       "clock": "Uhr",
       "clockHelper": "Schaltet die Uhrzeitanzeige auf dem Bildschirm um.",
       "textTitle": "Titel",
@@ -120,7 +133,36 @@
       "textFolder": "Ordner",
       "textFolderHelper": "Zeigt den Ordnernamen an, in dem sich das Medium befindet.",
       "textLocation": "Ort",
-      "textLocationHelper": "Zeigt den Ort an, an dem das Medium aufgenommen wurde."
+      "textLocationHelper": "Zeigt den Ort an, an dem das Medium aufgenommen wurde.",
+      "saved": "Overlay-Einstellungen gespeichert.",
+      "failed": "Overlay-Einstellungen konnten nicht gespeichert werden."
+    }
+  },
+  "appearance": {
+    "title": "Darstellung",
+    "description": "Visuelle Overlays, Bildwechsel und Portrait-Paare.",
+    "save": "Darstellung speichern",
+    "saving": "Speichere...",
+    "saved": "Darstellungs-Einstellungen gespeichert.",
+    "failed": "Darstellungs-Einstellungen konnten nicht gespeichert werden.",
+    "unavailableTitle": "Darstellung nicht verfügbar",
+    "unavailable": "Das Backend hat keine Darstellungs-Einstellungen geliefert. Prüfen Sie, ob Picframe läuft, und versuchen Sie es erneut.",
+    "unavailableWithDetail": "Das Backend hat keine Darstellungs-Einstellungen geliefert. Prüfen Sie, ob Picframe läuft, und versuchen Sie es erneut. Details: {detail}",
+    "slideshow": {
+      "title": "Diashow",
+      "description": "Timing und Paarbildung für die Medien auf dem Bilderrahmen."
+    },
+    "timeDelay": {
+      "label": "Dauer",
+      "help": "Sekunden vom Start eines Mediums bis zum nächsten."
+    },
+    "fadeTime": {
+      "label": "Überblendung",
+      "help": "Sekunden für die Überlappung während des Übergangs."
+    },
+    "portraitPairs": {
+      "label": "Portrait-Paare",
+      "help": "Passende Hochformatfotos nebeneinander anzeigen."
     }
   },
   "logs": {
@@ -150,6 +192,10 @@
     "importedNeedsSave": "Konfiguration importiert. Speichern, um sie anzuwenden.",
     "importFailed": "Konfiguration konnte nicht importiert werden.",
     "invalidJson": "Ungültige JSON-Konfigurationsdatei.",
+    "configUnavailableTitle": "Konfiguration nicht verfügbar",
+    "configUnavailable": "Das Backend hat keine Konfigurationsdaten geliefert. Prüfen Sie, ob Picframe läuft, und versuchen Sie es erneut.",
+    "renderErrorTitle": "Komponentenabsturz erkannt",
+    "renderErrorContext": "Kontext: {context}",
     "export": "Exportieren",
     "import": "Importieren",
     "dangerZone": "Gefahrenzone",
@@ -210,6 +256,25 @@
         "no_motion": "Keine Bewegung"
       }
     },
+    "pathPicker": {
+      "browse": "Durchsuchen",
+      "notAllowed": "Pfad ist nicht erlaubt",
+      "browseFailed": "Pfad konnte nicht durchsucht werden",
+      "exists": "Pfad existiert",
+      "later": "Pfad wird später erstellt oder eingebunden",
+      "selectPath": "Pfad auswählen",
+      "shortcuts": "Kurzbefehle",
+      "up": "Nach oben",
+      "useFolder": "Diesen Ordner verwenden",
+      "select": "Auswählen"
+    },
+    "shaderPicker": {
+      "validateFailed": "Shader konnte nicht geprüft werden",
+      "browseFailed": "Shader konnten nicht durchsucht werden",
+      "storedWithoutExtension": "Gespeichert ohne .fs/.vs: {value}",
+      "incompletePair": "Shader-Paar für {name} ist unvollständig.",
+      "selectShader": "Shader auswählen"
+    },
     "sections": {
       "viewer": "Viewer-Einstellungen",
       "model": "Modell-Einstellungen",
@@ -219,11 +284,39 @@
       "hardware_inputs": "GPIO-Eingänge"
     },
     "domain": {
+      "imageSurface": "Bild und Oberfläche",
+      "imageSurfaceDescription": "Wie Medien eingepasst, animiert, überblendet und vor dem Anzeigehintergrund gerendert werden.",
       "display": "Anzeige",
+      "displayDescription": "Fenstergeometrie und Zielanzeige.",
       "textAndClock": "Text und Uhr",
+      "textAndClockDescription": "Dauerhafte Layout-Einstellungen für Text und Uhr. Schnelle Overlay-Schalter bleiben in Darstellung.",
       "matting": "Matting",
+      "mattingEdges": "Matting und Ränder",
+      "mattingEdgesDescription": "Matting-Stile, Farben, Texturen, Rahmen, Weichzeichner-Hintergründe und Randüberblendung.",
+      "rendererBackend": "Renderer-Backend",
+      "rendererBackendDescription": "Niedrige Renderer-Dateien und Backend-Optionen. Einige Änderungen benötigen einen Neustart des Picframe-Dienstes.",
+      "mediaRoots": "Medienquellen",
+      "mediaRootsDescription": "Ordner und Fallback-Dateien, die von der Medienbibliothek verwendet werden.",
       "playlist": "Playlist",
+      "playlistDescription": "Dauerhafte Playlist-Sortierung, Neu-Mischung und unterstützte Medienerweiterungen.",
       "geocoding": "Geocoding",
+      "geocodingLocale": "Geocoding und Locale",
+      "geocodingLocaleDescription": "Sprache für Reverse-Geocoding, Suchverhalten und Bereinigung von Ortstexten.",
+      "logging": "Protokollierung",
+      "loggingDescription": "Laufzeit-Loglevel und Ziel der Logdatei.",
+      "mqttBroker": "Broker-Verbindung",
+      "mqttBrokerDescription": "MQTT-Server, Zugangsdaten, TLS und Aktivierung.",
+      "mqttDevice": "Geräteidentität",
+      "mqttDeviceDescription": "Wie Picframe von MQTT-Integrationen identifiziert wird.",
+      "httpAccess": "Zugriffsschutz",
+      "httpAccessDescription": "Passwortschutz für die Weboberfläche.",
+      "httpBrowserApi": "Browser/API-Zugriff",
+      "httpBrowserApiDescription": "Origins, die die Picframe-API aus einem Browser aufrufen dürfen.",
+      "httpRealtime": "Echtzeitabstimmung",
+      "httpRealtimeDescription": "WebSocket-Broadcast- und Kommando-Debounce-Grenzen.",
+      "hardwareInputsDescription": "GPIO-Zuordnungen für physische Taster und Bewegungssensoren.",
+      "maintenance": "Wartungsaktionen",
+      "maintenanceDescription": "Destruktive und hostweite Aktionen. Diese Aktionen fragen nach Bestätigung.",
       "advanced": "Erweitert",
       "advancedDescription": "Niedrige Einstellungen für Fehlersuche und benutzerdefinierte Installationen.",
       "purge": "Bereinigen",
@@ -321,8 +414,8 @@
       "date_to": "default=\"\", spätestes Mediendatum, YYYY-MM-DD",
       "recent_n": "default=7 (days), when shuffling file change date more recent than this number of days play before the rest",
       "reshuffle_num": "default=1, times through before reshuffling",
-      "time_delay": "default=200.0, Zeit zwischen zwei Medienstarts - kann per Remote oder MQTT/Home Assistant geändert werden",
-      "fade_time": "default=10.0, Überblendzeit - kann per Remote oder MQTT/Home Assistant geändert werden",
+      "time_delay": "default=200.0, Zeit zwischen zwei Medienstarts - kann per Darstellung oder MQTT/Home Assistant geändert werden",
+      "fade_time": "default=10.0, Überblendzeit - kann per Darstellung oder MQTT/Home Assistant geändert werden",
       "update_interval": "default=2.0, time in seconds to wait between two consecutive scans for new files",
       "shuffle": "default=True, Zufallswiedergabe - kann per Remote oder MQTT/Home Assistant geändert werden",
       "shuffle_mode": "default=standard, shuffle mode used when shuffle is enabled. Choices: standard, fewer_repeats.",

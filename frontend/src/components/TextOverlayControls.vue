@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, type Ref } from 'vue'
 import { useConfigStore } from '../stores/config'
 import { usePlayerStore } from '../stores/player'
 import { useI18n } from 'vue-i18n'
 import HelperText from './HelperText.vue'
+import ToggleSwitch from './settings/ToggleSwitch.vue'
+import StatusBanner from './ui/StatusBanner.vue'
 import { AdjustmentsHorizontalIcon } from '@heroicons/vue/24/outline'
 
 const configStore = useConfigStore()
@@ -11,6 +13,9 @@ const playerStore = usePlayerStore()
 const { t } = useI18n()
 
 const isLoading = ref(true)
+const isSaving = ref(false)
+const statusMessage = ref('')
+const statusTone = ref<'success' | 'danger'>('success')
 
 const showClock = ref(false)
 const showTitle = ref(false)
@@ -46,7 +51,7 @@ onMounted(async () => {
   isLoading.value = false
 })
 
-const handleChange = () => {
+const overlayPayload = () => {
   const textElements = []
   if (showTitle.value) textElements.push('title')
   if (showCaption.value) textElements.push('caption')
@@ -57,29 +62,47 @@ const handleChange = () => {
   
   const showTextStr = textElements.join(' ')
   
-  const payload = {
+  return {
     viewer: {
       show_clock: showClock.value,
       show_text_enabled: showTextStr.length > 0,
       text_overlay_format: showTextStr
     }
   }
-  
-  const sent = playerStore.sendCommand('SET_CONFIG', payload)
-  if (!sent) {
+}
+
+const handleChange = async () => {
+  if (isSaving.value) return
+  isSaving.value = true
+  statusMessage.value = ''
+
+  try {
+    const payload = overlayPayload()
+    await configStore.saveWorkflowConfig(payload)
+    playerStore.sendCommand('REQUEST_STATE')
+    statusTone.value = 'success'
+    statusMessage.value = t('remote.overlays.saved')
+  } catch (error) {
+    console.error(error)
+    statusTone.value = 'danger'
+    statusMessage.value = t('remote.overlays.failed')
     syncControlsFromConfig()
     return
   }
-  
-  // Update local config store to stay in sync
-  if (configStore.config && configStore.config.viewer) {
-    configStore.config.viewer.show_clock = showClock.value
-    configStore.config.viewer.show_text_enabled = showTextStr.length > 0
-    configStore.config.viewer.text_overlay_format = showTextStr
+  finally {
+    isSaving.value = false
+    window.setTimeout(() => {
+      statusMessage.value = ''
+    }, 3000)
   }
 }
 
-const controls = [
+const updateControl = (control: { ref: Ref<boolean> }, value: boolean) => {
+  control.ref.value = value
+  void handleChange()
+}
+
+const controls: Array<{ id: string, ref: Ref<boolean>, labelKey: string, helperKey: string }> = [
   { id: 'clock', ref: showClock, labelKey: 'remote.overlays.clock', helperKey: 'remote.overlays.clockHelper' },
   { id: 'title', ref: showTitle, labelKey: 'remote.overlays.textTitle', helperKey: 'remote.overlays.textTitleHelper' },
   { id: 'caption', ref: showCaption, labelKey: 'remote.overlays.textCaption', helperKey: 'remote.overlays.textCaptionHelper' },
@@ -91,21 +114,21 @@ const controls = [
 </script>
 
 <template>
-  <div class="bg-white dark:bg-gray-800/90 backdrop-blur-xl rounded-3xl shadow-xl border border-gray-200/50 dark:border-gray-700/50 flex flex-col relative z-10">
-    <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between z-20 bg-white dark:bg-gray-800/90 rounded-t-3xl">
+  <div class="relative z-10 flex flex-col rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
+    <div class="z-20 flex items-center justify-between border-b border-gray-100 bg-white px-6 py-5 dark:border-gray-700/50 dark:bg-gray-800">
       <div class="flex items-center space-x-3 overflow-hidden">
         <div class="p-2 bg-blue-50 dark:bg-blue-500/10 rounded-lg flex-shrink-0">
           <AdjustmentsHorizontalIcon class="w-5 h-5 text-blue-600 dark:text-blue-400" />
         </div>
-        <h3 class="text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
+        <h3 class="truncate text-lg font-bold tracking-normal text-gray-900 dark:text-white">
           {{ t('remote.overlays.title') }}
         </h3>
       </div>
     </div>
     
     <div class="p-6 relative z-10">
-      <div v-if="isLoading" class="flex justify-center py-4">
-        <div class="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+      <div v-if="isLoading" class="flex justify-center py-4" role="status" :aria-label="t('remote.overlays.loading')">
+        <div class="h-8 w-8 animate-spin rounded-full border-b-2 border-indigo-600"></div>
       </div>
       <div v-else class="space-y-4">
         <div v-for="ctrl in controls" :key="ctrl.id" class="flex items-center justify-between">
@@ -113,20 +136,18 @@ const controls = [
             <span class="text-sm font-medium text-gray-700 dark:text-gray-300">{{ t(ctrl.labelKey) }}</span>
             <HelperText :text="t(ctrl.helperKey)" />
           </div>
-          <label
-            class="relative inline-flex items-center"
-            :class="playerStore.isConnected ? 'cursor-pointer' : 'cursor-not-allowed opacity-50'"
-          >
-            <input
-              v-model="ctrl.ref.value"
-              type="checkbox"
-              class="sr-only peer"
-              :disabled="!playerStore.isConnected"
-              @change="handleChange"
-            >
-            <div class="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-indigo-300 dark:peer-focus:ring-indigo-800 rounded-full peer dark:bg-gray-700 peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all dark:border-gray-600 peer-checked:bg-indigo-600"></div>
-          </label>
+          <ToggleSwitch
+            :model-value="ctrl.ref.value"
+            :disabled="isSaving"
+            :label="t(ctrl.labelKey)"
+            @update:model-value="(value) => updateControl(ctrl, value)"
+          />
         </div>
+        <StatusBanner
+          v-if="statusMessage"
+          :tone="statusTone"
+          :message="statusMessage"
+        />
       </div>
     </div>
   </div>

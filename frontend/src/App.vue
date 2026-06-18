@@ -2,7 +2,9 @@
 import { computed, onMounted } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
 import { useI18n } from 'vue-i18n'
+import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { usePlayerStore } from './stores/player'
+import StatusBanner from './components/ui/StatusBanner.vue'
 
 const { t, locale } = useI18n()
 const playerStore = usePlayerStore()
@@ -10,6 +12,13 @@ const playerStore = usePlayerStore()
 const toggleLocale = () => {
   locale.value = locale.value === 'en' ? 'de' : 'en'
 }
+
+const navItems = computed(() => [
+  { to: '/', label: t('nav.remote'), shortLabel: t('nav.remote') },
+  { to: '/appearance', label: t('nav.appearance'), shortLabel: t('nav.appearanceShort') },
+  { to: '/settings', label: t('nav.settings'), shortLabel: t('nav.settings') },
+  { to: '/logs', label: t('nav.logs'), shortLabel: t('nav.logs') }
+])
 
 onMounted(() => {
   playerStore.connect()
@@ -54,18 +63,24 @@ const connectionIndicator = computed(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
-    <header class="bg-white dark:bg-gray-800 shadow">
-      <nav class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
-        <div class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto sm:gap-2">
-          <RouterLink to="/" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700" active-class="bg-gray-200 dark:bg-gray-700">{{ t('nav.remote') }}</RouterLink>
-          <RouterLink to="/filters" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700" active-class="bg-gray-200 dark:bg-gray-700">{{ t('nav.filters') }}</RouterLink>
-          <RouterLink to="/settings" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700" active-class="bg-gray-200 dark:bg-gray-700">{{ t('nav.settings') }}</RouterLink>
-          <RouterLink to="/logs" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700" active-class="bg-gray-200 dark:bg-gray-700">{{ t('nav.logs') }}</RouterLink>
+  <div class="min-h-screen bg-gray-100 text-gray-950 dark:bg-gray-900 dark:text-gray-100">
+    <header class="sticky top-0 z-40 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+      <nav class="mx-auto flex max-w-7xl items-center gap-1.5 px-2 py-2 sm:gap-2 sm:px-6 lg:px-8">
+        <div class="hide-scrollbar flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto sm:gap-1" :aria-label="t('nav.primary')">
+          <RouterLink
+            v-for="item in navItems"
+            :key="item.to"
+            :to="item.to"
+            class="inline-flex h-9 flex-shrink-0 items-center whitespace-nowrap rounded-lg px-2 text-xs font-medium text-gray-700 transition-colors hover:bg-gray-100 hover:text-gray-950 focus:outline-none focus:ring-2 focus:ring-sky-500/60 dark:text-gray-200 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:px-3 sm:text-sm"
+            active-class="bg-gray-200 text-gray-950 dark:bg-gray-800 dark:text-white"
+          >
+            <span class="sm:hidden">{{ item.shortLabel }}</span>
+            <span class="hidden sm:inline">{{ item.label }}</span>
+          </RouterLink>
         </div>
-        <div class="ml-2 flex shrink-0 items-center gap-2">
+        <div class="flex shrink-0 items-center gap-1.5 sm:gap-2">
           <div
-            class="inline-flex h-9 min-w-9 items-center justify-center gap-2 rounded-full border px-2 text-xs font-semibold transition-colors sm:min-w-0 sm:px-3"
+            class="inline-flex h-8 min-w-8 items-center justify-center gap-2 rounded-full border px-2 text-xs font-semibold transition-colors sm:h-9 sm:min-w-9 sm:px-3"
             :class="connectionIndicator.containerClass"
             :title="connectionIndicator.title"
             :aria-label="connectionIndicator.title"
@@ -77,27 +92,38 @@ const connectionIndicator = computed(() => {
             ></span>
             <span class="hidden sm:inline">{{ connectionIndicator.label }}</span>
           </div>
-          <button @click="toggleLocale" class="px-3 py-2 rounded-md text-sm font-medium hover:bg-gray-200 dark:hover:bg-gray-700 uppercase">
+          <button
+            type="button"
+            :aria-label="t('nav.toggleLanguage')"
+            @click="toggleLocale"
+            class="inline-flex h-9 items-center rounded-lg px-1 text-xs font-medium uppercase text-gray-700 hover:bg-gray-100 hover:text-gray-950 focus:outline-none focus:ring-2 focus:ring-sky-500/60 dark:text-gray-200 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:px-3 sm:text-sm"
+          >
             {{ locale }}
           </button>
         </div>
       </nav>
     </header>
 
-    <!-- Global Error Banner -->
-    <div v-if="playerStore.systemError" class="bg-red-600 text-white px-4 py-3 shadow-md flex justify-between items-center">
-      <div>
-        <strong class="font-bold">System Error: </strong>
-        <span class="block sm:inline">{{ playerStore.systemError.message }}</span>
-      </div>
-      <button @click="playerStore.systemError = null" class="text-white hover:text-gray-200 focus:outline-none">
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-        </svg>
-      </button>
+    <div v-if="playerStore.systemError" class="mx-auto max-w-7xl px-3 pt-4 sm:px-6 lg:px-8">
+      <StatusBanner
+        tone="danger"
+        :title="t('common.systemError')"
+        :message="playerStore.systemError.message"
+      >
+        <template #actions>
+          <button
+            type="button"
+            class="inline-flex items-center gap-2 rounded-lg border border-red-200 bg-white px-3 py-2 text-sm font-semibold text-red-700 shadow-sm hover:bg-red-50 focus:outline-none focus:ring-2 focus:ring-red-500/60 dark:border-red-500/30 dark:bg-gray-900 dark:text-red-200 dark:hover:bg-red-500/10"
+            @click="playerStore.clearError()"
+          >
+            <XMarkIcon class="h-4 w-4" />
+            {{ t('common.dismiss') }}
+          </button>
+        </template>
+      </StatusBanner>
     </div>
 
-    <main class="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <main class="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6 lg:px-8">
       <RouterView />
     </main>
   </div>

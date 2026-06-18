@@ -77,9 +77,10 @@ The `MapComponent` is a standalone Vue component responsible for rendering an in
     *   Provides an expand action that opens the same Leaflet map in a fullscreen modal and invalidates the Leaflet size after resize so tiles and marker positions remain correct.
 *   **Separation of Concerns:** This component operates entirely independently of the backend pi3d rendering pipeline and text overlay features. It is a purely frontend UI element.
 
-### 4.4 Media Selection And Large Filters
-Remote owns live slideshow workflow controls such as subdirectory, date range,
-location/tag filters, shuffle, timing, and overlay content toggles. Settings
+### 4.4 Media Selection, Appearance, And Large Filters
+Remote owns live media-selection workflow controls such as subdirectory, date
+range, location/tag filters, and shuffle. Appearance owns presentation controls
+such as slideshow timing, portrait pairs, and overlay content toggles. Settings
 keeps durable configuration controls and should not duplicate these workflow
 rows.
 
@@ -120,7 +121,7 @@ A comprehensive form interface mapping to the supported live portions of the
 *   **Visible Means Works:** Compatibility-only legacy fields remain accepted by import/API models but are hidden from live Settings until runtime support exists. Hidden compatibility keys include `viewer.display_power`, old pi3d menu fields, `model.update_interval`, legacy HTTP auth fields, HTTP SSL fields, and legacy `peripherals.*`. `model.image_attr` is also hidden because next-gen MQTT publishes the complete normalized current-media attributes instead of applying a legacy selected-attribute list. `model.log_level` and `model.log_file` are visible again because runtime logging now applies them live.
 *   **Display Geometry:** `viewer.display_x/y/w/h` is edited as Fullscreen or Custom. Fullscreen persists x/y as `0` and width/height as `null`; Custom exposes signed x/y and positive width/height.
 *   **Locale:** `model.locale` is selected from `GET /api/system/locales`, preserving the saved value if it is not installed, and is passed to reverse geocoding for language selection.
-*   **Settings Auth:** Basic Auth is configured from the HTTP tab but stored outside the config DB in `${PICFRAME_DATA}/basic_auth.json`. The scope selector supports no password, Settings/Logs/admin protection with Remote and Filters still using the allowlisted workflow config API, or complete-site protection for the SPA, REST APIs, static assets, and live web sockets. Credentials are plaintext by design for alpha; after authentication the Settings UI receives the saved password for inspection/editing, and deleting `basic_auth.json` is the recovery path. HTTP Basic Auth also sets an HttpOnly `picframe_auth` cookie so protected WebSocket handshakes can authenticate reliably.
+*   **Settings Auth:** Basic Auth is configured from the HTTP tab but stored outside the config DB in `${PICFRAME_DATA}/basic_auth.json`. The scope selector supports no password, Settings/Logs/admin protection with Remote and Appearance still using the allowlisted workflow config API, or complete-site protection for the SPA, REST APIs, static assets, and live web sockets. Credentials are plaintext by design for alpha; after authentication the Settings UI receives the saved password for inspection/editing, and deleting `basic_auth.json` is the recovery path. HTTP Basic Auth also sets an HttpOnly `picframe_auth` cookie so protected WebSocket handshakes can authenticate reliably.
 *   **Logs:** `/logs` is a separate top-level view that connects to `/ws/logs`, renders the recent in-memory log snapshot plus live events, and provides search, level filtering, pause/resume, clear, copy, download, and autoscroll.
 *   **Apply Semantics:** Settings Apply uses component-level reloads wherever possible: renderer config updates, MQTT reconnect, media-monitor reconfiguration, GPIO reload, GStreamer video setting updates, and display-power output retargeting. Renderer backend toggles (`viewer.use_glx`, `viewer.use_sdl2`) are explicitly restart-required: Settings checks whether `picframe.service` is active, offers save-and-restart only when the managed service is available, otherwise saves for a manual restart. Runtime display geometry that stays on the Wayland fullscreen host rebuilds renderer components on the existing pi3d surface; geometry that would remap the pi3d/SDL host is treated like a restart-required boundary.
 *   **Actions:**

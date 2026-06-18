@@ -205,8 +205,10 @@ http://<picframe-host>:9000/
 The Vue SPA is served by the FastAPI backend from `~/.picframe/html` by
 default. The main views are:
 
-*   **Remote:** playback controls, current media details, selected filters,
-    shuffle/timing controls, display controls, and current-media delete actions.
+*   **Remote:** playback controls, current media details, selected media
+    filters, shuffle controls, display controls, and current-media delete actions.
+*   **Appearance:** text overlays, slideshow delay/fade timing, and portrait
+    pair presentation.
 *   **Settings:** runtime configuration stored in `config.db3`, media/library
     paths, renderer options, MQTT, GPIO inputs, legacy YAML import, and
     maintenance actions.
@@ -321,9 +323,9 @@ the configured log file path on disk for longer history.
 Optional Basic Auth is configured in **HTTP Settings** as one of three access
 scopes: **None**, **Settings, Logs and admin actions**, or **Complete website**.
 The Settings/admin scope protects configuration, logs, and maintenance actions
-while leaving Remote, Filters, media APIs, and playback controls available on
-the local network. Complete website also protects the main UI, Remote, Filters,
-static assets, media APIs, and live web sockets. Credentials are stored as
+while leaving Remote, Appearance, media APIs, and playback controls available on
+the local network. Complete website also protects the main UI, Remote,
+Appearance, static assets, media APIs, and live web sockets. Credentials are stored as
 plaintext JSON at `${PICFRAME_DATA}/basic_auth.json`; after you authenticate,
 Settings shows the saved password so it can be inspected or changed. SSL and
 bearer-token based REST automation are deferred; MQTT security remains the broker
@@ -360,12 +362,14 @@ that payload.
 
 ### Remote Media Selection
 
-The Remote page owns live workflow controls: shuffle, shuffle mode, date range,
-location/tag filters, text-overlay toggles/content, delay, and fade. Applying
-these controls persists the related model/viewer values and rebuilds playback
-without a full service restart. These controls use a public allowlisted workflow
-configuration API so Remote and Filters continue to work when Settings Basic
-Auth is enabled.
+The Remote page owns live media-selection controls: shuffle, shuffle mode, date
+range, and location/tag filters. Applying these controls persists the related
+model values and rebuilds playback without a full service restart.
+
+The Appearance page owns presentation controls: text-overlay toggles, slideshow
+delay/fade timing, and portrait-pair presentation. Remote and Appearance use a
+public allowlisted workflow configuration API so they continue to work when
+Settings Basic Auth is enabled.
 
 Location filtering is search-first so large libraries do not render thousands
 of chips. Type at least two characters in the location search box, choose from
@@ -457,7 +461,7 @@ and `model.shuffle_mode` selects how shuffled playback is ordered.
     `media_cache.db3` to prefer items that have not been shown recently near
     the front of the next shuffled order.
 
-Changing either setting through the Remote rebuilds playback immediately. The
+Changing either setting through Remote rebuilds playback immediately. The
 selected mode is persisted, but it only affects playback while shuffle is
 enabled. If `model.shuffle_mode` is missing or invalid, Picframe falls back to
 `standard`.
@@ -522,11 +526,11 @@ Display statistics (`displayed_count` and `last_displayed`) are stored in
 or changed files are reindexed. Manually deleting `media_cache.db3` rebuilds
 the media cache from scratch and resets those statistics.
 
-When `model.portrait_pairs` is enabled, portrait image pairs are displayed as
-one slideshow slot with two original image files. Videos are never paired and
-always remain fullscreen. In Remote, pair metadata can be switched between the
-left and right image. Deleting a portrait pair opens a choice to delete the
-left image, the right image, or both.
+When `model.portrait_pairs` is enabled from Appearance, portrait image pairs
+are displayed as one slideshow slot with two original image files. Videos are
+never paired and always remain fullscreen. In Remote, pair metadata can be
+switched between the left and right image. Deleting a portrait pair opens a
+choice to delete the left image, the right image, or both.
 Portrait-pair detection uses indexed image orientation metadata. During
 unpublished next-gen development, deleting and rebuilding `media_cache.db3` is
 acceptable after changing portrait-detection behavior.
