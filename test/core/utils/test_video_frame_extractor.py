@@ -12,6 +12,7 @@ import pytest
 from PIL import Image
 
 from picframe.core.utils.video_frame_extractor import (
+    VIDEO_TRANSITION_FRAME_COORDINATE_SPACE,
     VIDEO_TRANSITION_FRAME_PROCESSING_VERSION,
     VideoFrameEdgeConfig,
     VideoFrameExtractor,
@@ -55,29 +56,18 @@ def test_get_first_frame_as_image_success(tmp_path: Path) -> None:
     video_path = tmp_path / "test.mp4"
     cache_dir = tmp_path / "cache"
     video_path.write_bytes(b"video")
-    first_path = Path(
-        VideoFrameExtractor.get_cached_frame_path(
-            str(video_path),
-            10,
-            10,
-            False,
-            "first",
-            str(cache_dir),
-        )
-    )
-    last_path = Path(
-        VideoFrameExtractor.get_cached_frame_path(
-            str(video_path),
-            10,
-            10,
-            False,
-            "last",
-            str(cache_dir),
-        )
-    )
+    extractor = VideoFrameExtractor(str(video_path), 10, 10, cache_dir=str(cache_dir))
+    first_path = Path(extractor.get_frame_path("first"))
+    last_path = Path(extractor.get_frame_path("last"))
     first_path.parent.mkdir(parents=True, exist_ok=True)
     Image.new("RGB", (10, 10), "red").save(first_path, format="JPEG")
     Image.new("RGB", (10, 10), "blue").save(last_path, format="JPEG")
+    extractor._write_transition_metadata(
+        VideoTransitionFrameMetadata(
+            frame_size=(10, 10),
+            content_rect=(0, 0, 10, 10),
+        )
+    )
 
     result = VideoFrameExtractor.get_first_frame_as_image(
         str(video_path),
@@ -146,18 +136,18 @@ def test_extract_and_save_frames_success(
     assert mock_save.call_count == 2
 
 def test_extract_and_save_frames_already_exists() -> None:
-    with patch("picframe.core.utils.video_frame_extractor.os.path.exists", return_value=True):
-        with patch("picframe.core.utils.video_frame_extractor.Image.open") as mock_open:
-            mock_img = MagicMock()
-            mock_img.size = (1920, 1080)
-            mock_open.return_value.__enter__.return_value = mock_img
-            result = VideoFrameExtractor.extract_and_save_frames(
-                "test.mp4",
-                10.0,
-                1920,
-                1080,
-                cache_dir="/tmp/picframe-cache",
-            )
+    with patch.object(
+        VideoFrameExtractor,
+        "cached_transition_frames_valid",
+        return_value=True,
+    ):
+        result = VideoFrameExtractor.extract_and_save_frames(
+            "test.mp4",
+            10.0,
+            1920,
+            1080,
+            cache_dir="/tmp/picframe-cache",
+        )
         
     assert result is True
 
@@ -328,6 +318,35 @@ def test_cached_transition_frames_reject_old_processing_signature(tmp_path: Path
     assert not extractor.cached_transition_frames_valid()
 
 
+def test_cached_transition_frames_reject_current_signature_without_geometry(
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    extractor = VideoFrameExtractor(
+        str(video_path),
+        400,
+        300,
+        cache_dir=str(tmp_path / "cache"),
+    )
+    first_path = Path(extractor.get_frame_path("first"))
+    last_path = Path(extractor.get_frame_path("last"))
+    first_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (400, 300), "red").save(first_path, format="JPEG")
+    Image.new("RGB", (400, 300), "blue").save(last_path, format="JPEG")
+    Path(extractor.get_metadata_path()).write_text(
+        json.dumps(
+            {
+                "version": VIDEO_TRANSITION_FRAME_PROCESSING_VERSION,
+                "processing_signature": extractor._processing_signature(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert not extractor.cached_transition_frames_valid()
+
+
 def test_extract_and_save_frames_regenerates_stale_legacy_sidecars(
     tmp_path: Path,
 ) -> None:
@@ -386,6 +405,48 @@ def test_get_first_and_last_frames_cache_only_does_not_extract_missing_frames(
 
     assert frames is None
     mock_extract.assert_not_called()
+
+
+def test_get_first_and_last_frames_loads_cached_generated_frames_without_reprocessing(
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    extractor = VideoFrameExtractor(
+        str(video_path),
+        200,
+        100,
+        cache_dir=str(tmp_path / "cache"),
+        edge_config=VideoFrameEdgeConfig(edge_alpha=0.5),
+    )
+    first_path = Path(extractor.get_frame_path("first"))
+    last_path = Path(extractor.get_frame_path("last"))
+    first_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (200, 100), "red").save(first_path, format="JPEG")
+    Image.new("RGB", (200, 100), "blue").save(last_path, format="JPEG")
+    extractor._write_transition_metadata(
+        VideoTransitionFrameMetadata(
+            frame_size=(200, 100),
+            content_rect=(75, 0, 50, 100),
+            backdrop=True,
+        )
+    )
+
+    with patch.object(extractor, "_process_video_frame") as mock_process:
+        frames = extractor.get_first_and_last_frames(
+            10.0,
+            50,
+            100,
+            extract_missing=False,
+        )
+
+    assert frames is not None
+    assert frames[0].size == (200, 100)
+    assert frames[1].size == (200, 100)
+    assert extractor.last_transition_metadata is not None
+    assert extractor.last_transition_metadata.content_rect == (75, 0, 50, 100)
+    assert extractor.last_transition_metadata.backdrop_path == str(first_path)
+    mock_process.assert_not_called()
 
 
 @patch("picframe.core.utils.video_frame_extractor.Image.open")
@@ -573,6 +634,32 @@ def test_process_transition_frame_pair_edge_alpha_zero_uses_background() -> None
     assert first.size == (200, 100)
     assert first.getpixel((10, 50)) == (51, 51, 76)
     assert first.getpixel((100, 50)) == (255, 0, 0)
+    assert metadata.frame_size == (200, 100)
+    assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
+    assert metadata.content_rect == (75, 0, 50, 100)
+    assert metadata.backdrop is False
+
+
+def test_process_transition_frame_pair_solid_bars_records_foreground_rect() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        200,
+        100,
+        fit_display=False,
+        background=(0.2, 0.2, 0.3, 1.0),
+    )
+
+    first, _last, metadata = extractor._process_transition_frame_pair(
+        Image.new("RGB", (50, 100), "red"),
+        Image.new("RGB", (50, 100), "blue"),
+    )
+
+    assert first.size == (200, 100)
+    assert first.getpixel((10, 50)) == (51, 51, 76)
+    assert first.getpixel((100, 50)) == (255, 0, 0)
+    assert metadata.frame_size == (200, 100)
+    assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
+    assert metadata.content_rect == (75, 0, 50, 100)
     assert metadata.backdrop is False
 
 
@@ -594,6 +681,9 @@ def test_process_transition_frame_pair_edge_alpha_blends_image_edges() -> None:
     assert first.size == (200, 100)
     assert first.getpixel((10, 50)) in {(127, 0, 0), (128, 0, 0)}
     assert first.getpixel((100, 50)) == (255, 0, 0)
+    assert metadata.frame_size == (200, 100)
+    assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
+    assert metadata.content_rect == (75, 0, 50, 100)
     assert metadata.backdrop is True
 
 
@@ -618,7 +708,31 @@ def test_process_transition_frame_pair_blur_edges_uses_image_fill() -> None:
 
     assert first.size == (200, 100)
     assert first.getpixel((10, 50)) == (255, 0, 0)
+    assert metadata.frame_size == (200, 100)
+    assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
+    assert metadata.content_rect == (75, 0, 50, 100)
     assert metadata.backdrop is True
+
+
+def test_process_transition_frame_pair_fit_display_records_full_frame_rect() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        200,
+        100,
+        fit_display=True,
+        edge_config=VideoFrameEdgeConfig(edge_alpha=0.5),
+    )
+
+    first, _last, metadata = extractor._process_transition_frame_pair(
+        Image.new("RGB", (50, 100), "red"),
+        Image.new("RGB", (50, 100), "blue"),
+    )
+
+    assert first.size == (200, 100)
+    assert metadata.frame_size == (200, 100)
+    assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
+    assert metadata.content_rect == (0, 0, 200, 100)
+    assert metadata.backdrop is False
 
 
 def test_scale_frame_defaults_invalid_background_to_black() -> None:
@@ -679,6 +793,8 @@ def test_process_transition_frame_pair_applies_identical_matted_layout() -> None
 
     assert metadata.matted is True
     assert metadata.content_rect is not None
+    assert metadata.frame_size == (400, 300)
+    assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
     assert first.size == (400, 300)
     assert last.size == (400, 300)
     assert metadata.layout_spec is not None
@@ -709,6 +825,8 @@ def test_process_transition_frame_pair_uses_measured_bevel_content_rect() -> Non
     )
 
     assert metadata.content_rect == _color_bbox(first, (255, 0, 0))
+    assert metadata.frame_size == (400, 300)
+    assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
 
 
 def test_transition_metadata_round_trips_with_backdrop_path(tmp_path: Path) -> None:
@@ -723,6 +841,7 @@ def test_transition_metadata_round_trips_with_backdrop_path(tmp_path: Path) -> N
     )
     Path(extractor.get_metadata_path()).parent.mkdir(parents=True, exist_ok=True)
     metadata = VideoTransitionFrameMetadata(
+        frame_size=(400, 300),
         matted=True,
         content_rect=(10, 20, 300, 200),
         layout_spec={"mat_type": "double_flat"},
@@ -733,6 +852,8 @@ def test_transition_metadata_round_trips_with_backdrop_path(tmp_path: Path) -> N
     loaded = extractor._load_transition_metadata()
     assert loaded is not None
     assert loaded.matted is True
+    assert loaded.frame_size == (400, 300)
+    assert loaded.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
     assert loaded.content_rect == (10, 20, 300, 200)
     assert loaded.with_backdrop_path("first.frame").backdrop_path == "first.frame"
 
@@ -768,13 +889,12 @@ def test_process_video_frame_scaling() -> None:
     assert processed is not frame
     assert processed.size == (1920, 1080)
 
-def test_process_video_frame_no_scaling() -> None:
-    """Test that _process_video_frame does not scale the image when fit_display is True."""
+def test_process_video_frame_fit_display_scales_to_display() -> None:
+    """Test that fit_display frame processing produces display-sized pixels."""
     extractor = VideoFrameExtractor("test.mp4", 1920, 1080, fit_display=True)
     frame = Image.new("RGB", (800, 600))
 
     processed = extractor._process_video_frame(frame)
 
-    # Should return the original frame without scaling
-    assert processed is frame
-    assert processed.size == (800, 600)
+    assert processed is not frame
+    assert processed.size == (1920, 1080)

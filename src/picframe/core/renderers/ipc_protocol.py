@@ -41,6 +41,7 @@ class PlayCommand(IpcMessage):
     host_background: list[float] | tuple[float, ...] | None = None
     host_backdrop_path: str | None = None
     host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None
+    content_fit: str | None = None
     type: str = field(default="play", init=False)
 
 @dataclass(frozen=True)

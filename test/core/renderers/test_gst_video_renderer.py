@@ -222,12 +222,14 @@ def test_play_video_sends_host_backdrop(
         media_item,
         host_backdrop_path="/cache/video.1.frame",
         host_backdrop_rect=(10, 20, 1000, 800),
+        content_fit="fill",
     )
 
     play_json = mock_conn.send.call_args_list[1][0][0]
     play_dict = json.loads(play_json)
     assert play_dict["host_backdrop_path"] == "/cache/video.1.frame"
     assert play_dict["host_backdrop_rect"] == [10, 20, 1000, 800]
+    assert play_dict["content_fit"] == "fill"
 
 
 def test_parse_play_command_preserves_host_background() -> None:
@@ -239,6 +241,7 @@ def test_parse_play_command_preserves_host_background() -> None:
                 "host_background": [0.2, 0.2, 0.3, 1.0],
                 "host_backdrop_path": "/cache/video.1.frame",
                 "host_backdrop_rect": [10, 20, 1000, 800],
+                "content_fit": "fill",
             }
         )
     )
@@ -247,6 +250,7 @@ def test_parse_play_command_preserves_host_background() -> None:
     assert command.host_background == [0.2, 0.2, 0.3, 1.0]
     assert command.host_backdrop_path == "/cache/video.1.frame"
     assert command.host_backdrop_rect == [10, 20, 1000, 800]
+    assert command.content_fit == "fill"
 
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")

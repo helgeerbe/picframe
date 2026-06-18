@@ -1,13 +1,13 @@
 # Active Context
 
 ## Current Focus
-The active branch is `gtk4`, focused on the next-gen GTK4/GStreamer Wayland
-video handoff: avoid EOS flicker, preserve fullscreen and custom display
-geometry, and keep text overlays out of the surface revealed when video starts
-or stops.
+The active branch is `feature/691-video-matted-handoff`, focused on the
+next-gen GTK4/GStreamer Wayland video handoff: keep cached video
+first/last-frame pixels, sidecar geometry, and the live GTK video window aligned
+for matted, solid-bar, edge-filled, and blurred transition frames.
 
 ## Current Repo State
-- Branch: `gtk4`.
+- Branch: `feature/691-video-matted-handoff`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -39,7 +39,7 @@ or stops.
 - Video first-frame handoff now behaves like a title card: pi3d blends in the cached first frame, honors `viewer.show_text_tm`, fades text out, drains clean redraw frames, then starts GStreamer. The last-frame reveal is promoted only after worker sink stats confirm at least one rendered video frame when those stats are available.
 - Installer and user docs require GTK4 packages `gir1.2-gtk-4.0` and `gstreamer1.0-gtk4`; GTK3/`gtkwaylandsink` is no longer a production dependency.
 - Video transition caches now use the first decoded frame and a tail-decoded final EOS frame, with fixed duration-offset sampling only as the final fallback.
-- Video transition frames mirror still-image edge behavior: cached first/last frames honor matting, `blur_edges`, `edge_alpha`, and `background`, and cache freshness includes a processing signature in managed filename hashes or legacy sidecar `.meta.json`.
+- Video transition frames mirror still-image edge behavior: cached first/last frames honor matting, `blur_edges`, `edge_alpha`, and `background`; sidecars store `frame_size`, `coordinate_space=frame_pixels`, and the visible source-image `content_rect`; playback uses that rect for the live video window for every generated frame type. Cache freshness includes both processing signatures and current geometry metadata in managed filename hashes or legacy sidecar `.meta.json`.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -55,6 +55,7 @@ or stops.
 - Preserve Pi worker V4L2 probing and caps-driven GStreamer discovery while keeping unsupported-media skips as warnings/completions rather than generic system errors.
 - Preserve the GTK4-backed Wayland handoff boundary: require `gtk4paintablesink`, use the 99% GTK4 window opacity redraw handshake at EOS, keep GStreamer alpha handoff tricks and legacy sink fallbacks out of production, and report GTK presentation infrastructure failures explicitly.
 - Keep final-frame extraction at indexing/cache time using tail decoding, not at video EOS runtime.
+- Preserve the #691 geometry contract: the generated first/last transition frame defines the live video rectangle through sidecar `content_rect`; `host_backdrop_path` is only a visual backdrop, while explicit `content_fit` carries the fill intent through IPC/GTK pipeline construction.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

@@ -24,7 +24,7 @@ from picframe.core.renderers.gst_playback_policy import (
     PIPELINE_GTK_PLAYBIN,
     PIPELINE_HARDWARE_DIRECT,
     PIPELINE_HARDWARE_PLAYBIN,
-    PIPELINE_SKIPPED,
+    PIPELINE_SKIPPED as PIPELINE_SKIPPED,
     RPI_HARDWARE_DECODE_LIMITS as RPI_HARDWARE_DECODE_LIMITS,
     UNSUPPORTED_MEDIA_CODE,
     DecodeHardwareLimit,
@@ -78,6 +78,7 @@ class PlayRequest:
     host_background: list[float] | tuple[float, ...] | None = None
     host_backdrop_path: str | None = None
     host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None
+    content_fit: str | None = None
 
 
 try:
@@ -376,6 +377,7 @@ class GstWorker:
                 cmd.host_background,
                 cmd.host_backdrop_path,
                 cmd.host_backdrop_rect,
+                cmd.content_fit,
             )
         elif isinstance(cmd, PauseCommand):
             self._handle_pause()
@@ -398,6 +400,7 @@ class GstWorker:
         host_background: list[float] | tuple[float, ...] | None = None,
         host_backdrop_path: str | None = None,
         host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
+        content_fit: str | None = None,
     ) -> None:
         try:
             stream_facts, reason = self._discover_video_stream_facts(uri)
@@ -417,6 +420,7 @@ class GstWorker:
                 host_background=host_background,
                 host_backdrop_path=host_backdrop_path,
                 host_backdrop_rect=host_backdrop_rect,
+                content_fit=content_fit,
             )
             self._current_stream_facts = stream_facts
             self._current_max_software_decode_resolution = max_software_decode_resolution
@@ -435,6 +439,7 @@ class GstWorker:
                 host_background=host_background,
                 host_backdrop_path=host_backdrop_path,
                 host_backdrop_rect=host_backdrop_rect,
+                content_fit=content_fit,
             )
         except Exception as e:
             logger.error(f"Exception during playback setup: {e}")
@@ -458,6 +463,7 @@ class GstWorker:
         host_background: list[float] | tuple[float, ...] | None = None,
         host_backdrop_path: str | None = None,
         host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
+        content_fit: str | None = None,
     ) -> None:
         self._handle_stop()
 
@@ -569,6 +575,7 @@ class GstWorker:
                     host_background=host_background,
                     host_backdrop_path=host_backdrop_path,
                     host_backdrop_rect=host_backdrop_rect,
+                    content_fit=content_fit,
                 )
                 if gtk_pipeline is not None:
                     pipeline_variant = PIPELINE_GTK_PLAYBIN
@@ -600,6 +607,7 @@ class GstWorker:
                     host_background=host_background,
                     host_backdrop_path=host_backdrop_path,
                     host_backdrop_rect=host_backdrop_rect,
+                    content_fit=content_fit,
                 )
                 if gtk_pipeline is not None:
                     pipeline_variant = PIPELINE_GTK_COMPATIBLE
@@ -828,6 +836,7 @@ class GstWorker:
         host_background: list[float] | tuple[float, ...] | None = None,
         host_backdrop_path: str | None = None,
         host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
+        content_fit: str | None = None,
     ) -> Any | None:
         pipeline = self._pipeline_builder.build_gtk_playbin_pipeline(
             uri,
@@ -839,6 +848,7 @@ class GstWorker:
             host_background=host_background,
             host_backdrop_path=host_backdrop_path,
             host_backdrop_rect=host_backdrop_rect,
+            content_fit=content_fit,
         )
         self._gtk_presentation_failure = self._pipeline_builder.last_failure
         return pipeline
@@ -873,6 +883,7 @@ class GstWorker:
         host_background: list[float] | tuple[float, ...] | None = None,
         host_backdrop_path: str | None = None,
         host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
+        content_fit: str | None = None,
     ) -> Any | None:
         pipeline = self._pipeline_builder.build_gtk_compatible_pipeline(
             uri,
@@ -885,6 +896,7 @@ class GstWorker:
             host_background=host_background,
             host_backdrop_path=host_backdrop_path,
             host_backdrop_rect=host_backdrop_rect,
+            content_fit=content_fit,
         )
         self._gtk_presentation_failure = self._pipeline_builder.last_failure
         return pipeline
@@ -1846,6 +1858,7 @@ class GstWorker:
             host_background=request.host_background,
             host_backdrop_path=request.host_backdrop_path,
             host_backdrop_rect=request.host_backdrop_rect,
+            content_fit=request.content_fit,
         )
 
     def _should_retry_with_software_decode(self, message: str, debug: str) -> bool:
@@ -1897,6 +1910,7 @@ class GstWorker:
             host_background=request.host_background,
             host_backdrop_path=request.host_backdrop_path,
             host_backdrop_rect=request.host_backdrop_rect,
+            content_fit=request.content_fit,
         )
 
     def _on_async_done(self, bus: Any, msg: Any) -> None:

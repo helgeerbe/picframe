@@ -614,10 +614,11 @@ class PlaybackEngine:
             return configured_rect[0], configured_rect[1]
         return 0, 0
 
-    def _video_display_rect_for_metadata(self, metadata: Any | None) -> tuple[int, int, int, int]:
+    def _video_content_rect_from_metadata(
+        self,
+        metadata: Any | None,
+    ) -> tuple[int, int, int, int] | None:
         content_rect = getattr(metadata, "content_rect", None)
-        if not getattr(metadata, "matted", False) or content_rect is None:
-            return self._video_display_rect()
         try:
             content_x, content_y, content_w, content_h = (
                 int(content_rect[0]),
@@ -626,9 +627,37 @@ class PlaybackEngine:
                 int(content_rect[3]),
             )
         except (TypeError, ValueError, IndexError):
-            return self._video_display_rect()
+            return None
         if content_w <= 0 or content_h <= 0:
+            return None
+
+        coordinate_space = getattr(metadata, "coordinate_space", "frame_pixels")
+        if coordinate_space != "frame_pixels":
+            return None
+
+        frame_size = getattr(metadata, "frame_size", None)
+        if frame_size is not None:
+            try:
+                frame_w, frame_h = int(frame_size[0]), int(frame_size[1])
+            except (TypeError, ValueError, IndexError):
+                return None
+            if (
+                frame_w <= 0
+                or frame_h <= 0
+                or content_x < 0
+                or content_y < 0
+                or content_x + content_w > frame_w
+                or content_y + content_h > frame_h
+            ):
+                return None
+
+        return content_x, content_y, content_w, content_h
+
+    def _video_display_rect_for_metadata(self, metadata: Any | None) -> tuple[int, int, int, int]:
+        content_rect = self._video_content_rect_from_metadata(metadata)
+        if content_rect is None:
             return self._video_display_rect()
+        content_x, content_y, content_w, content_h = content_rect
         origin_x, origin_y = self._video_display_origin()
         return (
             origin_x + content_x,
@@ -659,22 +688,16 @@ class PlaybackEngine:
         *,
         host_backdrop_path: str | None = None,
         host_backdrop_rect: tuple[int, int, int, int] | None = None,
+        content_fit: str | None = None,
     ) -> None:
         if not self._video_player:
             return
+        kwargs: dict[str, Any] = {}
         if host_backdrop_path:
-            self._video_player.play(
-                media_item,
-                x,
-                y,
-                w,
-                h,
-                self._video_fit_display(),
-                self._video_host_background(),
-                host_backdrop_path=host_backdrop_path,
-                host_backdrop_rect=host_backdrop_rect,
-            )
-            return
+            kwargs["host_backdrop_path"] = host_backdrop_path
+            kwargs["host_backdrop_rect"] = host_backdrop_rect
+        if content_fit is not None:
+            kwargs["content_fit"] = content_fit
         self._video_player.play(
             media_item,
             x,
@@ -683,6 +706,7 @@ class PlaybackEngine:
             h,
             self._video_fit_display(),
             self._video_host_background(),
+            **kwargs,
         )
 
     def _refresh_model_timing(self) -> None:
@@ -1087,6 +1111,11 @@ class PlaybackEngine:
                     h,
                     host_backdrop_path=getattr(self, "_pending_video_backdrop_path", None),
                     host_backdrop_rect=getattr(self, "_pending_video_backdrop_rect", None),
+                    content_fit=(
+                        "fill"
+                        if self._video_content_rect_from_metadata(metadata) is not None
+                        else None
+                    ),
                 )
                 self._video_first_frame_deadline = time.time() + self._video_first_frame_timeout
             # We don't change state to PLAYING yet. We wait for VideoFirstFrameRenderedEvent.

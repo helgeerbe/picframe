@@ -430,6 +430,7 @@ def test_start_pipeline_uses_gtk_compatible_for_ubuntu_vm_software(
         1080,
         force_software_decoders=False,
         stream_facts=h264_facts(1920, 1080),
+        content_fit="fill",
     )
 
     gtk_playbin.assert_not_called()
@@ -444,6 +445,7 @@ def test_start_pipeline_uses_gtk_compatible_for_ubuntu_vm_software(
         host_background=None,
         host_backdrop_path=None,
         host_backdrop_rect=None,
+        content_fit="fill",
     )
     assert worker.pipeline is fake_pipeline
     assert worker._current_pipeline_variant == PIPELINE_GTK_COMPATIBLE
@@ -501,6 +503,7 @@ def test_start_pipeline_tries_gtk_compatible_when_gtk_playbin_fails(
         host_background=None,
         host_backdrop_path=None,
         host_backdrop_rect=None,
+        content_fit=None,
     )
 
 
@@ -1278,6 +1281,7 @@ def test_not_negotiated_error_retries_once_with_software_decoders() -> None:
         host_background=None,
         host_backdrop_path=None,
         host_backdrop_rect=None,
+        content_fit=None,
     )
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "warning"
@@ -1343,6 +1347,7 @@ def test_hardware_direct_error_retries_compatible_pipeline_first() -> None:
         host_background=None,
         host_backdrop_path=None,
         host_backdrop_rect=None,
+        content_fit=None,
     )
 
 

@@ -27,13 +27,15 @@
 - The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:
   - Extract/cache the first decoded video frame and a tail-decoded final EOS frame under the managed runtime cache directory.
   - Generate cached transition frames with the same visual edge policy as still images: `viewer.blur_edges` creates blurred-edge composites, otherwise `viewer.edge_alpha` blends image-derived fill with `viewer.background`.
-  - Treat transition-frame cache freshness as a processing-signature concern. Managed cache paths include the signature hash; legacy sidecar frame names require matching `.meta.json` metadata.
+  - Store transition-frame geometry in the sidecar: `frame_size`, `coordinate_space=frame_pixels`, and the visible source-image `content_rect`.
+  - Use that sidecar `content_rect` for live video placement for every generated frame type: matted, solid-bar, edge-filled, blurred, and `viewer.video_fit_display`.
+  - Treat transition-frame cache freshness as a processing-signature and geometry-metadata concern. Managed cache paths include the signature hash; legacy sidecar frame names require matching `.meta.json` metadata.
   - Render the first frame with pi3d as a video title card. If overlay text is present, wait through text fade-in, `viewer.show_text_tm`, fade-out to zero alpha, and clean redraw drain before starting GStreamer.
   - Preload pi3d's hidden background with the last frame before playback starts.
   - Promote the hidden last-frame reveal only after the GStreamer worker reports that a real video frame has rendered when sink stats expose that count.
   - At EOS, dim the GTK4 video window to 99% opacity, wake pi3d to redraw behind it, then close the video window.
   - Transition out from the last frame when GStreamer reaches EOS.
-- On Wayland, require the GTK4 `playbin`/GTK-compatible `gtk4paintablesink` presentation path inside a borderless fullscreen GTK4 host. Raspberry Pi/labwc uses a transparent host; GNOME/VM uses an opaque host colored from `viewer.background`. Fullscreen rectangles fill the host; custom non-fullscreen rectangles place the paintable at the renderer-reported `viewer.display_x/y/w/h` rectangle. The GTK4 video surface hides the cursor during playback.
+- On Wayland, require the GTK4 `playbin`/GTK-compatible `gtk4paintablesink` presentation path inside a borderless fullscreen GTK4 host. Raspberry Pi/labwc uses a transparent host; GNOME/VM uses an opaque host colored from `viewer.background`. The host/backdrop covers the display rectangle; the live paintable uses sidecar `content_rect` when transition-frame metadata is valid, and explicit `content_fit` controls fill/contain behavior. The GTK4 video surface hides the cursor during playback.
 - If GTK4 or `gtk4paintablesink` is unavailable, publish a GTK presentation system error instead of falling back to legacy sinks.
 - Only one renderer should actively own visible display output at a time.
 - Clear Image Cache removes generated cache artifacts such as video transition frames, but original media files and media database rows are handled by separate operations.

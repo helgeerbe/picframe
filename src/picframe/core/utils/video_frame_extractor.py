@@ -16,7 +16,7 @@ import threading
 from dataclasses import asdict, dataclass, replace
 from hashlib import sha256
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 from PIL import Image, ImageFilter, ImageOps
 
@@ -24,7 +24,8 @@ from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourceP
 from picframe.mat_image import MatImage
 
 _image_file_lock = threading.Lock()
-VIDEO_TRANSITION_FRAME_PROCESSING_VERSION = 2
+VIDEO_TRANSITION_FRAME_PROCESSING_VERSION = 3
+VIDEO_TRANSITION_FRAME_COORDINATE_SPACE = "frame_pixels"
 
 
 class _FrameExtractionTimeout(Exception):
@@ -106,6 +107,8 @@ class VideoTransitionFrameMetadata:
     """Metadata persisted next to video first/last transition-frame cache files."""
 
     version: int = VIDEO_TRANSITION_FRAME_PROCESSING_VERSION
+    frame_size: tuple[int, int] | None = None
+    coordinate_space: str = VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
     matted: bool = False
     content_rect: tuple[int, int, int, int] | None = None
     layout_spec: dict[str, Any] | None = None
@@ -116,6 +119,8 @@ class VideoTransitionFrameMetadata:
     def with_backdrop_path(self, backdrop_path: str | None) -> "VideoTransitionFrameMetadata":
         return VideoTransitionFrameMetadata(
             version=self.version,
+            frame_size=self.frame_size,
+            coordinate_space=self.coordinate_space,
             matted=self.matted,
             content_rect=self.content_rect,
             layout_spec=self.layout_spec,
@@ -123,6 +128,12 @@ class VideoTransitionFrameMetadata:
             processing_signature=self.processing_signature,
             backdrop_path=backdrop_path,
         )
+
+
+@dataclass(frozen=True)
+class _ProcessedVideoFrame:
+    image: Image.Image
+    content_rect: tuple[int, int, int, int]
 
 
 class VideoFrameExtractor:
@@ -541,11 +552,16 @@ class VideoFrameExtractor:
         last_image: Image.Image,
     ) -> tuple[Image.Image, Image.Image, VideoTransitionFrameMetadata]:
         """Process first/last frames together so video matting can share one layout."""
-        if self.edge_config is not None and self.edge_config.blur_edges and not self.fit_display:
-            metadata = VideoTransitionFrameMetadata(backdrop=True)
+        if self.fit_display:
+            first_frame = self._fit_display_frame(first_image)
+            last_frame = self._fit_display_frame(last_image)
+            metadata = VideoTransitionFrameMetadata(
+                frame_size=first_frame.image.size,
+                content_rect=first_frame.content_rect,
+            )
             return (
-                self._process_video_frame(first_image),
-                self._process_video_frame(last_image),
+                first_frame.image,
+                last_frame.image,
                 metadata,
             )
 
@@ -562,14 +578,17 @@ class VideoFrameExtractor:
                     if first_result.content_rects
                     else None
                 )
+                first_frame = first_result.image.convert("RGB")
+                content_rect = content_rect or self._full_frame_rect(first_frame)
                 metadata = VideoTransitionFrameMetadata(
+                    frame_size=first_frame.size,
                     matted=True,
                     content_rect=content_rect,
                     layout_spec=first_result.layout_spec.to_dict(),
                     backdrop=True,
                 )
                 return (
-                    first_result.image.convert("RGB"),
+                    first_frame,
                     last_result.image.convert("RGB"),
                     metadata,
                 )
@@ -579,15 +598,17 @@ class VideoFrameExtractor:
                     exc,
                 )
 
-        first_frame = self._process_video_frame(first_image)
-        last_frame = self._process_video_frame(last_image)
+        first_frame = self._process_video_frame_with_rect(first_image)
+        last_frame = self._process_video_frame_with_rect(last_image)
         metadata = VideoTransitionFrameMetadata(
+            frame_size=first_frame.image.size,
+            content_rect=first_frame.content_rect,
             matted=False,
             backdrop=self._edge_backdrop_enabled(),
         )
         return (
-            first_frame,
-            last_frame,
+            first_frame.image,
+            last_frame.image,
             metadata,
         )
 
@@ -612,13 +633,17 @@ class VideoFrameExtractor:
         try:
             with open(path, encoding="utf-8") as metadata_file:
                 data = json.load(metadata_file)
-            content_rect = data.get("content_rect")
-            if content_rect is not None:
-                content_rect = tuple(int(value) for value in content_rect)
-                if len(content_rect) != 4:
-                    content_rect = None
+            content_rect = self._int_tuple(data.get("content_rect"), 4)
+            frame_size = self._int_tuple(data.get("frame_size"), 2)
             return VideoTransitionFrameMetadata(
                 version=int(data.get("version", 1)),
+                frame_size=frame_size,
+                coordinate_space=str(
+                    data.get(
+                        "coordinate_space",
+                        VIDEO_TRANSITION_FRAME_COORDINATE_SPACE,
+                    )
+                ),
                 matted=bool(data.get("matted", False)),
                 content_rect=content_rect,
                 layout_spec=data.get("layout_spec"),
@@ -627,6 +652,15 @@ class VideoFrameExtractor:
             )
         except (OSError, ValueError, TypeError, json.JSONDecodeError) as exc:
             self.logger.debug("Could not load video transition metadata: %s", exc)
+            return None
+
+    @staticmethod
+    def _int_tuple(value: Any, length: int) -> tuple[int, ...] | None:
+        try:
+            if value is None or len(value) != length:
+                return None
+            return tuple(int(item) for item in value)
+        except (TypeError, ValueError):
             return None
 
     def _processing_signature(self) -> str:
@@ -647,14 +681,45 @@ class VideoFrameExtractor:
     ) -> bool:
         if metadata is None:
             return False
-        return metadata.processing_signature == self._processing_signature()
+        return (
+            metadata.processing_signature == self._processing_signature()
+            and self._metadata_has_current_geometry(metadata)
+        )
+
+    def _metadata_has_current_geometry(
+        self,
+        metadata: VideoTransitionFrameMetadata,
+    ) -> bool:
+        if metadata.version != VIDEO_TRANSITION_FRAME_PROCESSING_VERSION:
+            return False
+        if metadata.coordinate_space != VIDEO_TRANSITION_FRAME_COORDINATE_SPACE:
+            return False
+        if metadata.frame_size != (self.display_width, self.display_height):
+            return False
+        return self._rect_within_frame(metadata.content_rect, metadata.frame_size)
+
+    @staticmethod
+    def _rect_within_frame(
+        rect: tuple[int, int, int, int] | None,
+        frame_size: tuple[int, int] | None,
+    ) -> bool:
+        if rect is None or frame_size is None:
+            return False
+        x, y, w, h = rect
+        frame_w, frame_h = frame_size
+        return (
+            frame_w > 0
+            and frame_h > 0
+            and w > 0
+            and h > 0
+            and x >= 0
+            and y >= 0
+            and x + w <= frame_w
+            and y + h <= frame_h
+        )
 
     def _metadata_required_for_cache_validation(self) -> bool:
-        return (
-            self.cache_dir is None
-            or self.matting_config is not None
-            or self.edge_config is not None
-        )
+        return True
 
     def cached_transition_frames_valid(self) -> bool:
         """Return whether cached first/last frames match current processing inputs."""
@@ -669,7 +734,24 @@ class VideoFrameExtractor:
             self._load_transition_metadata()
         )
 
-    def _scale_frame(self, frame: Image.Image) -> Image.Image:
+    @staticmethod
+    def _full_frame_rect(frame: Image.Image) -> tuple[int, int, int, int]:
+        return (0, 0, frame.width, frame.height)
+
+    def _fit_display_frame(self, frame: Image.Image) -> _ProcessedVideoFrame:
+        frame = self._as_rgb(frame)
+        if self.display_width <= 0 or self.display_height <= 0:
+            return _ProcessedVideoFrame(frame, self._full_frame_rect(frame))
+        resized = frame.resize(
+            (self.display_width, self.display_height),
+            resample=Image.Resampling.BICUBIC,
+        )
+        return _ProcessedVideoFrame(
+            resized,
+            (0, 0, self.display_width, self.display_height),
+        )
+
+    def _scale_frame_with_rect(self, frame: Image.Image) -> _ProcessedVideoFrame:
         """
         Scale a frame to fit or fill the display dimensions.
 
@@ -697,22 +779,31 @@ class VideoFrameExtractor:
         y_offset = (self.display_height - new_height) // 2
         canvas.paste(resized_frame, (x_offset, y_offset))
 
-        return canvas
+        return _ProcessedVideoFrame(
+            canvas,
+            (x_offset, y_offset, new_width, new_height),
+        )
+
+    def _scale_frame(self, frame: Image.Image) -> Image.Image:
+        return self._scale_frame_with_rect(frame).image
 
     def _edge_backdrop_enabled(self) -> bool:
         if self.fit_display or self.edge_config is None:
             return False
         return self.edge_config.blur_edges or self.edge_config.edge_alpha > 0.0
 
-    def _process_edge_frame(self, frame: Image.Image) -> Image.Image:
+    def _process_edge_frame_with_rect(self, frame: Image.Image) -> _ProcessedVideoFrame:
         frame = self._as_rgb(frame)
         if self.display_width <= 0 or self.display_height <= 0:
-            return frame
+            return _ProcessedVideoFrame(frame, self._full_frame_rect(frame))
         if self.edge_config is not None and self.edge_config.blur_edges:
-            return self._blur_fill_frame(frame)
-        return self._edge_alpha_frame(frame)
+            return self._blur_fill_frame_with_rect(frame)
+        return self._edge_alpha_frame_with_rect(frame)
 
-    def _blur_fill_frame(self, frame: Image.Image) -> Image.Image:
+    def _process_edge_frame(self, frame: Image.Image) -> Image.Image:
+        return self._process_edge_frame_with_rect(frame).image
+
+    def _blur_fill_frame_with_rect(self, frame: Image.Image) -> _ProcessedVideoFrame:
         edge_config = self.edge_config or VideoFrameEdgeConfig()
         display_size = (self.display_width, self.display_height)
         background_size = (
@@ -733,10 +824,13 @@ class VideoFrameExtractor:
             method=Image.Resampling.BICUBIC,
             centering=(0.5, 0.5),
         )
-        self._paste_contained_frame(background, frame)
-        return background
+        content_rect = self._paste_contained_frame(background, frame)
+        return _ProcessedVideoFrame(background, content_rect)
 
-    def _edge_alpha_frame(self, frame: Image.Image) -> Image.Image:
+    def _blur_fill_frame(self, frame: Image.Image) -> Image.Image:
+        return self._blur_fill_frame_with_rect(frame).image
+
+    def _edge_alpha_frame_with_rect(self, frame: Image.Image) -> _ProcessedVideoFrame:
         display_size = (self.display_width, self.display_height)
         background = Image.new("RGB", display_size, self._background_rgb)
         edge_alpha = self.edge_config.edge_alpha if self.edge_config is not None else 0.0
@@ -748,10 +842,17 @@ class VideoFrameExtractor:
                 centering=(0.5, 0.5),
             )
             background = Image.blend(background, edge_fill, edge_alpha)
-        self._paste_contained_frame(background, frame)
-        return background
+        content_rect = self._paste_contained_frame(background, frame)
+        return _ProcessedVideoFrame(background, content_rect)
 
-    def _paste_contained_frame(self, background: Image.Image, frame: Image.Image) -> None:
+    def _edge_alpha_frame(self, frame: Image.Image) -> Image.Image:
+        return self._edge_alpha_frame_with_rect(frame).image
+
+    def _paste_contained_frame(
+        self,
+        background: Image.Image,
+        frame: Image.Image,
+    ) -> tuple[int, int, int, int]:
         foreground = frame.copy()
         foreground.thumbnail(
             (self.display_width, self.display_height),
@@ -760,6 +861,7 @@ class VideoFrameExtractor:
         x_offset = (self.display_width - foreground.width) // 2
         y_offset = (self.display_height - foreground.height) // 2
         background.paste(foreground, (x_offset, y_offset))
+        return (x_offset, y_offset, foreground.width, foreground.height)
 
     @staticmethod
     def _as_rgb(frame: Image.Image) -> Image.Image:
@@ -767,7 +869,7 @@ class VideoFrameExtractor:
             return frame.copy()
         return frame.convert("RGB")
 
-    def _process_video_frame(self, frame: Image.Image) -> Image.Image:
+    def _process_video_frame_with_rect(self, frame: Image.Image) -> _ProcessedVideoFrame:
         """
         Process a video frame according to the display configuration.
 
@@ -777,13 +879,14 @@ class VideoFrameExtractor:
         Returns:
             The processed Pillow Image object.
         """
-        if not self.fit_display:
-            if self.edge_config is not None:
-                return self._process_edge_frame(frame)
-            return self._scale_frame(frame)
-        if frame.mode == "RGB":
-            return frame
-        return frame.convert("RGB")
+        if self.fit_display:
+            return self._fit_display_frame(frame)
+        if self.edge_config is not None:
+            return self._process_edge_frame_with_rect(frame)
+        return self._scale_frame_with_rect(frame)
+
+    def _process_video_frame(self, frame: Image.Image) -> Image.Image:
+        return self._process_video_frame_with_rect(frame).image
 
     def _get_frame_as_image(self, seek_time: float) -> Image.Image | None:
         """
@@ -1112,10 +1215,10 @@ class VideoFrameExtractor:
         if self.cached_transition_frames_valid():
             try:
                 with _image_file_lock:
-                    first_image = cast(Image.Image, Image.open(first_path))
-                    last_image = cast(Image.Image, Image.open(last_path))
-                first_image = self._process_video_frame(first_image)
-                last_image = self._process_video_frame(last_image)
+                    with Image.open(first_path) as first_file:
+                        first_image = self._as_rgb(first_file)
+                    with Image.open(last_path) as last_file:
+                        last_image = self._as_rgb(last_file)
                 metadata = self._load_transition_metadata()
                 self.last_transition_metadata = (
                     metadata.with_backdrop_path(first_path) if metadata else None
@@ -1175,8 +1278,8 @@ class VideoFrameExtractor:
         if os.path.exists(path):
             try:
                 with _image_file_lock:
-                    image = cast(Image.Image, Image.open(path))
-                return image
+                    with Image.open(path) as image:
+                        return extractor._as_rgb(image)
             except (OSError, ValueError) as e:
                 logger = logging.getLogger("VideoFrameExtractor")
                 logger.warning("Could not load cached frame: %s", e)

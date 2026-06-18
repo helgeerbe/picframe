@@ -30,6 +30,7 @@ class GstPipelineBuilder:
         host_background: list[float] | tuple[float, ...] | None = None,
         host_backdrop_path: str | None = None,
         host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
+        content_fit: str | None = None,
     ) -> Any | None:
         self.last_failure = None
         Gtk = self._presenter._ensure_gtk()
@@ -74,10 +75,7 @@ class GstPipelineBuilder:
             w,
             h,
             set_sink_window_size=True,
-            content_fit=self._content_fit(
-                fit_display,
-                host_backdrop_path=host_backdrop_path,
-            ),
+            content_fit=self._content_fit(fit_display, content_fit=content_fit),
             host_background=host_background,
             host_backdrop_path=host_backdrop_path,
             host_backdrop_rect=host_backdrop_rect,
@@ -121,6 +119,7 @@ class GstPipelineBuilder:
         host_background: list[float] | tuple[float, ...] | None = None,
         host_backdrop_path: str | None = None,
         host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
+        content_fit: str | None = None,
     ) -> Any | None:
         self.last_failure = None
         Gtk = self._presenter._ensure_gtk()
@@ -184,10 +183,7 @@ class GstPipelineBuilder:
             w,
             h,
             set_sink_window_size=True,
-            content_fit=self._content_fit(
-                fit_display,
-                host_backdrop_path=host_backdrop_path,
-            ),
+            content_fit=self._content_fit(fit_display, content_fit=content_fit),
             host_background=host_background,
             host_backdrop_path=host_backdrop_path,
             host_backdrop_rect=host_backdrop_rect,
@@ -199,8 +195,10 @@ class GstPipelineBuilder:
         return pipeline
 
     @staticmethod
-    def _content_fit(fit_display: bool, *, host_backdrop_path: str | None) -> str:
-        if fit_display or host_backdrop_path:
+    def _content_fit(fit_display: bool, *, content_fit: str | None) -> str:
+        if content_fit in {"contain", "fill"}:
+            return content_fit
+        if fit_display:
             return "fill"
         return "contain"
 

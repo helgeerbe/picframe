@@ -1115,6 +1115,8 @@ def test_engine_video_metadata_rect_offsets_from_renderer_display_origin(
     metadata = MagicMock()
     metadata.matted = True
     metadata.backdrop = True
+    metadata.frame_size = (1000, 800)
+    metadata.coordinate_space = "frame_pixels"
     metadata.content_rect = (100, 50, 640, 360)
 
     assert engine._video_display_rect_for_metadata(metadata) == (
@@ -1162,6 +1164,8 @@ def test_engine_video_handoff_uses_matted_content_rect_and_backdrop(
     metadata = MagicMock()
     metadata.matted = True
     metadata.backdrop = True
+    metadata.frame_size = (1000, 800)
+    metadata.coordinate_space = "frame_pixels"
     metadata.content_rect = (100, 50, 640, 360)
     metadata.backdrop_path = "/cache/video.1.frame"
     fake_extractor = MagicMock()
@@ -1193,10 +1197,11 @@ def test_engine_video_handoff_uses_matted_content_rect_and_backdrop(
         None,
         host_backdrop_path="/cache/video.1.frame",
         host_backdrop_rect=(10, 20, 1000, 800),
+        content_fit="fill",
     )
 
 
-def test_engine_video_handoff_uses_edge_backdrop_without_shrinking_video_rect(
+def test_engine_video_handoff_uses_edge_content_rect_and_backdrop(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
@@ -1227,6 +1232,8 @@ def test_engine_video_handoff_uses_edge_backdrop_without_shrinking_video_rect(
     metadata = MagicMock()
     metadata.matted = False
     metadata.backdrop = True
+    metadata.frame_size = (1000, 800)
+    metadata.coordinate_space = "frame_pixels"
     metadata.content_rect = (100, 50, 640, 360)
     metadata.backdrop_path = "/cache/video.1.frame"
     fake_extractor = MagicMock()
@@ -1250,14 +1257,15 @@ def test_engine_video_handoff_uses_edge_backdrop_without_shrinking_video_rect(
 
     mock_video_player.play.assert_called_once_with(
         media_item,
-        10,
-        20,
-        1000,
-        800,
+        110,
+        70,
+        640,
+        360,
         False,
         None,
         host_backdrop_path="/cache/video.1.frame",
         host_backdrop_rect=(10, 20, 1000, 800),
+        content_fit="fill",
     )
 
 
