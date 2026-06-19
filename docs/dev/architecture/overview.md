@@ -146,7 +146,7 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 
 ### 2.6 Dual-Database Strategy (Repository Pattern)
 *   **Concept:** Configuration and media metadata are strictly separated into `config.db3` (persistent user settings) and `media_cache.db3` (ephemeral media metadata).
-*   **Reasoning & Benefits:** Prevents lifecycle conflicts. Rebuilding the media cache (which happens frequently) will never risk corrupting user configuration. The Repository Pattern abstracts the SQLite implementation, allowing the business logic to interact with simple Python objects rather than SQL queries.
+*   **Reasoning & Benefits:** Prevents lifecycle conflicts. Rebuilding the media cache (which happens frequently) will never risk corrupting user configuration. The Repository Pattern abstracts the SQLite implementation, allowing the business logic to interact with simple Python objects rather than SQL queries. The media repository serializes access to its shared SQLite connection because API, playback, indexing, and geocoding can touch `media_cache.db3` from different threads.
 
 ### 2.7 Database Schema Versioning & Migrations
 *   **Concept:** Strict versioning is enforced for all database schemas (`config.db3` and `media_cache.db3`). A standardized, code-based migration mechanism (`MigrationManager`) handles schema changes sequentially. Migrations are defined as immutable objects containing a target version and an SQL `up_script`.

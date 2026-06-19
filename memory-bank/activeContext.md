@@ -1,15 +1,15 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #695 is implemented, pushed, and closed:
-Settings now presents explicit 24-hour, 12-hour, and Custom clock format modes
-while continuing to persist `viewer.clock_format`; `model.locale` does not drive
-clock hour mode.
+The active branch is `v2-dev`. Issue #696 is implemented and verified locally:
+`SQLiteMediaRepository` serializes access to its shared SQLite connection so
+API location enrichment, playback, indexing, and geocoding do not race the same
+`media_cache.db3` connection and trigger SQLite API misuse errors.
 
 ## Current Repo State
 - Branch: `v2-dev`.
-- `v2-dev` is aligned with `origin/v2-dev` after the #695 implementation and
-  closeout were pushed.
+- `v2-dev` has pending local #696 media repository locking changes until
+  committed and pushed.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -45,6 +45,7 @@ clock hour mode.
 - Ticket #693 makes reverse-geocoded location text locale-aware: cache and queue keys include the normalized language from `model.locale`, old cache rows migrate to a `legacy` language bucket, playlist/API lookups request the active language, GPS media without an active-locale address re-enqueue lookups during overlay generation, and overlay date strings use the configured locale.
 - Ticket #694 hardens brightness control: HDMI/DDC brightness is capability-probed before write, DSI/eDP/LVDS outputs use `brightnessctl`, command stderr/stdout is surfaced in `brightness_unavailable` errors, repeated identical brightness failures are suppressed, and the Remote slider sends only committed brightness values to hardware.
 - Ticket #695 adds an explicit Settings clock hour mode: 24-hour writes `%H:%M`, 12-hour writes `%-I:%M %p`, Custom preserves and edits the raw `viewer.clock_format`, and the renderer/backend contract remains unchanged.
+- Ticket #696 hardens media-cache repository threading: all `SQLiteMediaRepository` connection use is serialized with an `RLock`, including location lookups used by API media DTO enrichment.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -64,6 +65,7 @@ clock hour mode.
 - Preserve the #693 locale contract: reverse-geocoded addresses must be keyed or refreshed per active language, and overlay date formatting must explicitly use `model.locale` rather than relying on whichever process locale is already active.
 - Preserve the #694 brightness boundary: Remote may preview slider movement locally, but hardware brightness commands should be sent only on commit/debounce; HDMI/DDC brightness should be attempted only after capability checks, and display power remains the route for a fully black screen when a monitor enforces a brightness floor.
 - Preserve the #695 clock boundary: clock hour mode is an explicit display preference backed by `viewer.clock_format`; do not infer or mutate it from `model.locale`.
+- Preserve the #696 repository boundary: shared SQLite connection access in `SQLiteMediaRepository` must stay serialized across API, playback, indexer, and geocoding threads.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

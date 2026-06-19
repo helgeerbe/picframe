@@ -5,6 +5,7 @@ This module verifies the CRUD operations for media metadata management
 using an in-memory SQLite database.
 """
 
+import threading
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -555,6 +556,30 @@ def test_location_cache_is_language_aware(
 
     assert english[0]["location"] == "Berlin, Germany"
     assert german[0]["location"] == "Berlin, Deutschland"
+
+
+def test_location_lookup_waits_for_repository_connection_lock(
+    media_repo: SQLiteMediaRepository,
+) -> None:
+    media_repo.save_location(52.5, 13.4, "Berlin, Germany", language="en")
+    started = threading.Event()
+    completed = threading.Event()
+    result: list[str | None] = []
+
+    def lookup_location() -> None:
+        started.set()
+        result.append(media_repo.get_location(52.5, 13.4, language="en"))
+        completed.set()
+
+    with media_repo._lock:
+        thread = threading.Thread(target=lookup_location)
+        thread.start()
+        assert started.wait(timeout=1.0)
+        assert not completed.wait(timeout=0.05)
+
+    assert completed.wait(timeout=1.0)
+    thread.join(timeout=1.0)
+    assert result == ["Berlin, Germany"]
 
 
 def test_location_search_and_counts_use_requested_language(

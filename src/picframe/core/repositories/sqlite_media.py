@@ -8,6 +8,7 @@ media metadata using a SQLite database (`media_cache.db3`).
 import logging
 import re
 import sqlite3
+import threading
 import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
@@ -15,8 +16,8 @@ from pathlib import Path
 from typing import Any
 
 from picframe.core.models.playlist import (
-    PlaylistCriteria,
     SHUFFLE_MODE_STANDARD,
+    PlaylistCriteria,
     normalize_shuffle_mode,
 )
 from picframe.core.repositories.interfaces import IMediaRepository
@@ -299,6 +300,7 @@ class SQLiteMediaRepository(IMediaRepository):
             db_path: The file path to the SQLite database.
         """
         self._db_path = db_path
+        self._lock = threading.RLock()
         self._conn = sqlite3.connect(
             self._db_path, check_same_thread=False, isolation_level=None
         )
@@ -312,8 +314,9 @@ class SQLiteMediaRepository(IMediaRepository):
 
     def _run_migrations(self) -> None:
         """Execute database migrations to ensure the schema is up-to-date."""
-        manager = MigrationManager(self._conn, MEDIA_MIGRATIONS)
-        manager.migrate()
+        with self._lock:
+            manager = MigrationManager(self._conn, MEDIA_MIGRATIONS)
+            manager.migrate()
 
     @staticmethod
     def _location_language(language: str | None) -> str:
@@ -364,7 +367,7 @@ class SQLiteMediaRepository(IMediaRepository):
         # Use INSERT OR REPLACE to handle unique constraint on filepath
         query = f"INSERT OR REPLACE INTO media ({columns}) VALUES ({placeholders})"
         
-        with self._conn:
+        with self._lock, self._conn:
             cursor = self._conn.execute(query, tuple(media_data.values()))
             return cursor.lastrowid or 0
 
@@ -379,16 +382,17 @@ class SQLiteMediaRepository(IMediaRepository):
             A dictionary containing the media metadata, or None if not found.
         """
         location_join, location_params = self._location_join_sql(None)
-        cursor = self._conn.execute(
-            """
-            SELECT m.*, COALESCE(l.address, m.location) as resolved_location
-            FROM media m
-            """ + location_join + """
-            WHERE m.filepath = ?
-            """,
-            (*location_params, filepath,)
-        )
-        row = cursor.fetchone()
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                SELECT m.*, COALESCE(l.address, m.location) as resolved_location
+                FROM media m
+                """ + location_join + """
+                WHERE m.filepath = ?
+                """,
+                (*location_params, filepath,)
+            )
+            row = cursor.fetchone()
         return self._media_row_to_dict(row) if row else None
 
     def delete_media_by_path(self, filepath: str) -> None:
@@ -398,7 +402,7 @@ class SQLiteMediaRepository(IMediaRepository):
         Args:
             filepath: The filepath of the media item to mark inactive.
         """
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 "UPDATE media SET is_deleted = 1, updated_at = julianday('now') "
                 "WHERE filepath = ?",
@@ -418,16 +422,17 @@ class SQLiteMediaRepository(IMediaRepository):
             A dictionary containing the media metadata, or None if not found.
         """
         location_join, location_params = self._location_join_sql(location_language)
-        cursor = self._conn.execute(
-            """
-            SELECT m.*, COALESCE(l.address, m.location) as resolved_location
-            FROM media m
-            """ + location_join + """
-            WHERE m.id = ?
-            """,
-            (*location_params, media_id,)
-        )
-        row = cursor.fetchone()
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                SELECT m.*, COALESCE(l.address, m.location) as resolved_location
+                FROM media m
+                """ + location_join + """
+                WHERE m.id = ?
+                """,
+                (*location_params, media_id,)
+            )
+            row = cursor.fetchone()
         return self._media_row_to_dict(row) if row else None
 
     def update_media_item(self, media_id: int, updates: dict[str, Any]) -> None:
@@ -455,7 +460,7 @@ class SQLiteMediaRepository(IMediaRepository):
         
         query = f"UPDATE media SET {set_clause} WHERE id = ?"
         
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(query, params)
 
     def delete_media_item(self, media_id: int) -> None:
@@ -465,7 +470,7 @@ class SQLiteMediaRepository(IMediaRepository):
         Args:
             media_id: The ID of the media item to mark inactive.
         """
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 "UPDATE media SET is_deleted = 1, updated_at = julianday('now') "
                 "WHERE id = ?",
@@ -479,7 +484,7 @@ class SQLiteMediaRepository(IMediaRepository):
         Args:
             media_id: The ID of the media item to remove.
         """
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute("DELETE FROM media WHERE id = ?", (media_id,))
 
     def get_all_media(self) -> list[dict[str, Any]]:
@@ -490,16 +495,17 @@ class SQLiteMediaRepository(IMediaRepository):
             A list of dictionaries containing media metadata.
         """
         location_join, location_params = self._location_join_sql(None)
-        cursor = self._conn.execute(
-            """
-            SELECT m.*, COALESCE(l.address, m.location) as resolved_location
-            FROM media m
-            """ + location_join + """
-            WHERE m.is_deleted = 0
-            """,
-            location_params,
-        )
-        return [self._media_row_to_dict(row) for row in cursor.fetchall()]
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                SELECT m.*, COALESCE(l.address, m.location) as resolved_location
+                FROM media m
+                """ + location_join + """
+                WHERE m.is_deleted = 0
+                """,
+                location_params,
+            )
+            return [self._media_row_to_dict(row) for row in cursor.fetchall()]
 
     def query_media(self, criteria: PlaylistCriteria) -> list[dict[str, Any]]:
         """
@@ -509,17 +515,18 @@ class SQLiteMediaRepository(IMediaRepository):
         order_clause = self._build_order_clause(criteria)
 
         location_join, location_params = self._location_join_sql(criteria.location_language)
-        cursor = self._conn.execute(
-            f"""
-            SELECT m.*, COALESCE(l.address, m.location) as resolved_location
-            FROM media m
-            {location_join}
-            WHERE {" AND ".join(where_clauses)}
-            ORDER BY {order_clause}
-            """,
-            [*location_params, *params],
-        )
-        return [self._media_row_to_dict(row) for row in cursor.fetchall()]
+        with self._lock:
+            cursor = self._conn.execute(
+                f"""
+                SELECT m.*, COALESCE(l.address, m.location) as resolved_location
+                FROM media m
+                {location_join}
+                WHERE {" AND ".join(where_clauses)}
+                ORDER BY {order_clause}
+                """,
+                [*location_params, *params],
+            )
+            return [self._media_row_to_dict(row) for row in cursor.fetchall()]
 
     def count_media(self, criteria: PlaylistCriteria) -> dict[str, Any]:
         """
@@ -551,7 +558,7 @@ class SQLiteMediaRepository(IMediaRepository):
         self, media_id: int, location_language: str | None = None
     ) -> dict[str, Any] | None:
         """Increment display statistics and return the updated media item."""
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """
                 UPDATE media
@@ -566,18 +573,20 @@ class SQLiteMediaRepository(IMediaRepository):
 
     def get_filter_options(self, pic_dir: str | None = None) -> dict[str, Any]:
         """Return distinct values for Remote filter controls."""
-        cursor = self._conn.execute(
-            """
-            SELECT m.filepath, m.tags
-            FROM media m
-            WHERE m.is_deleted = 0
-            """
-        )
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                SELECT m.filepath, m.tags
+                FROM media m
+                WHERE m.is_deleted = 0
+                """
+            )
+            rows = cursor.fetchall()
         subdirectories: set[str] = set()
         tags: set[str] = set()
         root = Path(pic_dir).expanduser() if pic_dir else None
 
-        for row in cursor.fetchall():
+        for row in rows:
             filepath = row["filepath"]
             if filepath:
                 parent = Path(filepath).expanduser().parent
@@ -612,26 +621,27 @@ class SQLiteMediaRepository(IMediaRepository):
             where += " AND LOWER(location) LIKE ? ESCAPE '\\'"
             params.append(f"%{_FilterParser._escape_like(query)}%")
         params.append(limit)
-        cursor = self._conn.execute(
-            f"""
-            SELECT location AS value, COUNT(*) AS count
-            FROM (
-                SELECT COALESCE(l.address, m.location) AS location
-                FROM media m
-                {location_join}
-                WHERE m.is_deleted = 0
+        with self._lock:
+            cursor = self._conn.execute(
+                f"""
+                SELECT location AS value, COUNT(*) AS count
+                FROM (
+                    SELECT COALESCE(l.address, m.location) AS location
+                    FROM media m
+                    {location_join}
+                    WHERE m.is_deleted = 0
+                )
+                WHERE {where}
+                GROUP BY location
+                ORDER BY count DESC, LOWER(location) ASC
+                LIMIT ?
+                """,
+                [*location_params, *params],
             )
-            WHERE {where}
-            GROUP BY location
-            ORDER BY count DESC, LOWER(location) ASC
-            LIMIT ?
-            """,
-            [*location_params, *params],
-        )
-        return [
-            {"value": str(row["value"]), "count": int(row["count"])}
-            for row in cursor.fetchall()
-        ]
+            return [
+                {"value": str(row["value"]), "count": int(row["count"])}
+                for row in cursor.fetchall()
+            ]
 
     def _build_media_where(
         self,
@@ -678,16 +688,17 @@ class SQLiteMediaRepository(IMediaRepository):
         location_language: str | None,
     ) -> int:
         location_join, location_params = self._location_join_sql(location_language)
-        cursor = self._conn.execute(
-            f"""
-            SELECT COUNT(DISTINCT m.id)
-            FROM media m
-            {location_join}
-            WHERE {" AND ".join(where_clauses)}
-            """,
-            [*location_params, *params],
-        )
-        return int(cursor.fetchone()[0])
+        with self._lock:
+            cursor = self._conn.execute(
+                f"""
+                SELECT COUNT(DISTINCT m.id)
+                FROM media m
+                {location_join}
+                WHERE {" AND ".join(where_clauses)}
+                """,
+                [*location_params, *params],
+            )
+            return int(cursor.fetchone()[0])
 
     @staticmethod
     def _path_prefix(pic_dir: str, subdirectory: str) -> str:
@@ -801,15 +812,16 @@ class SQLiteMediaRepository(IMediaRepository):
         Returns:
             The cached address string, or None if not found.
         """
-        cursor = self._conn.execute(
-            """
-            SELECT address
-            FROM locations
-            WHERE latitude = ? AND longitude = ? AND language = ?
-            """,
-            (latitude, longitude, self._location_language(language)),
-        )
-        row = cursor.fetchone()
+        with self._lock:
+            cursor = self._conn.execute(
+                """
+                SELECT address
+                FROM locations
+                WHERE latitude = ? AND longitude = ? AND language = ?
+                """,
+                (latitude, longitude, self._location_language(language)),
+            )
+            row = cursor.fetchone()
         return row["address"] if row else None
 
     def save_location(
@@ -823,7 +835,7 @@ class SQLiteMediaRepository(IMediaRepository):
             longitude: The longitude coordinate.
             address: The resolved address string.
         """
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """
                 INSERT OR REPLACE INTO locations (latitude, longitude, language, address)
@@ -842,7 +854,7 @@ class SQLiteMediaRepository(IMediaRepository):
             latitude: The latitude coordinate.
             longitude: The longitude coordinate.
         """
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """
                 INSERT OR IGNORE INTO geocoding_queue (latitude, longitude, language)
@@ -858,7 +870,7 @@ class SQLiteMediaRepository(IMediaRepository):
         Returns:
             A tuple of (latitude, longitude), or None if the queue is empty.
         """
-        with self._conn:
+        with self._lock, self._conn:
             cursor = self._conn.execute(
                 """
                 SELECT id, latitude, longitude, language
@@ -882,8 +894,9 @@ class SQLiteMediaRepository(IMediaRepository):
         """
         import os
         
-        cursor = self._conn.execute("SELECT id, filepath FROM media")
-        rows = cursor.fetchall()
+        with self._lock:
+            cursor = self._conn.execute("SELECT id, filepath FROM media")
+            rows = cursor.fetchall()
         
         missing_ids = []
         for row in rows:
@@ -897,7 +910,7 @@ class SQLiteMediaRepository(IMediaRepository):
         batch_size = 999
         purged_count = 0
         
-        with self._conn:
+        with self._lock, self._conn:
             for i in range(0, len(missing_ids), batch_size):
                 batch = missing_ids[i:i + batch_size]
                 placeholders = ",".join("?" * len(batch))
@@ -911,4 +924,5 @@ class SQLiteMediaRepository(IMediaRepository):
 
     def close(self) -> None:
         """Close the database connection."""
-        self._conn.close()
+        with self._lock:
+            self._conn.close()
