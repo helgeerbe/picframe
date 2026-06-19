@@ -236,6 +236,7 @@ class RenderCommand(Event):
         image_paths: Optional all image paths for multi-image layouts.
         image_objs: Optional preloaded image objects matching image_paths.
         render_action: Optional internal renderer action for non-transition operations.
+        transition_token: Optional identity for matching transition completion events.
     """
 
     image_path: str
@@ -246,6 +247,7 @@ class RenderCommand(Event):
     image_paths: tuple[str, ...] | None = None
     image_objs: tuple[Any, ...] | None = None
     render_action: str | None = None
+    transition_token: int | None = None
 
     @property
     def priority(self) -> int:
@@ -295,6 +297,8 @@ class TransitionCompletedEvent(Event):
     """
     An event notifying that a visual transition (e.g., crossfade) has completed.
     """
+
+    transition_token: int | None = None
 
     @property
     def priority(self) -> int:

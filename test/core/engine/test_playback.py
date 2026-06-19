@@ -652,6 +652,107 @@ def test_engine_handle_command_prev_video_uses_handoff_content_rect(
     )
 
 
+def test_engine_ignores_stale_video_transition_completion_after_fast_next(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    mock_renderer.get_display_rect.return_value = (10, 20, 1000, 800)
+    first_video = MediaItem(
+        id=1,
+        filepath="/path/to/first.mp4",
+        media_type=MediaType.VIDEO,
+        filename="first.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    second_video = MediaItem(
+        id=2,
+        filepath="/path/to/second.mp4",
+        media_type=MediaType.VIDEO,
+        filename="second.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567891.0,
+        duration=10.0,
+    )
+    mock_playlist_manager.get_next.side_effect = [first_video, second_video]
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+
+    def metadata_for(rect: tuple[int, int, int, int]) -> MagicMock:
+        metadata = MagicMock()
+        metadata.matted = True
+        metadata.backdrop = False
+        metadata.frame_size = (1000, 800)
+        metadata.coordinate_space = "frame_pixels"
+        metadata.content_rect = rect
+        return metadata
+
+    def extractor_for(metadata: MagicMock) -> MagicMock:
+        extractor = MagicMock()
+        extractor.cached_transition_frames_valid.return_value = True
+        extractor.get_frame_path.side_effect = lambda role: {
+            "first": f"/cache/{metadata.content_rect[0]}.1.frame",
+            "last": f"/cache/{metadata.content_rect[0]}.2.frame",
+        }[role]
+        extractor.get_first_and_last_frames.return_value = (
+            MagicMock(),
+            MagicMock(),
+        )
+        extractor.last_transition_metadata = metadata
+        return extractor
+
+    first_metadata = metadata_for((100, 50, 640, 360))
+    second_metadata = metadata_for((200, 60, 320, 180))
+
+    with patch("os.path.exists", return_value=True), patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+        side_effect=[
+            extractor_for(first_metadata),
+            extractor_for(second_metadata),
+        ],
+    ):
+        engine._handle_command(CommandEvent(command=Command.NEXT))
+        stale_token = engine._pending_video_transition_token
+        engine._handle_command(CommandEvent(command=Command.NEXT))
+        current_token = engine._pending_video_transition_token
+
+    assert stale_token != current_token
+
+    engine._handle_transition_completed(
+        TransitionCompletedEvent(transition_token=stale_token)
+    )
+    mock_video_player.play.assert_not_called()
+    assert engine._state == State.PREPARING_VIDEO
+
+    engine._handle_transition_completed(
+        TransitionCompletedEvent(transition_token=current_token)
+    )
+
+    mock_video_player.play.assert_called_once_with(
+        second_video,
+        210,
+        80,
+        320,
+        180,
+        False,
+        None,
+        content_fit="fill",
+    )
+
+
 def test_engine_handle_command_pause_play(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,

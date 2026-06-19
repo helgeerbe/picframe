@@ -1,25 +1,27 @@
 """Unit tests for the Pi3dRenderer."""
-from dataclasses import replace
 import os
-import queue
 import signal
-from typing import Any, Generator
+from collections.abc import Generator
+from dataclasses import replace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from picframe.core.events.dto import (
-    CurrentMediaChangedEvent,
-    OverlayConfig,
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
     RENDER_VIDEO_FIRST_FRAME,
     RENDER_WAKE_VIDEO_REVEAL,
+    CurrentMediaChangedEvent,
+    OverlayConfig,
     RenderCommand,
+    RendererConfig,
     RendererConfigUpdatedEvent,
     TransitionCompletedEvent,
 )
+from picframe.core.models.media import DisplayItem, MediaItem, MediaType
+from picframe.core.renderers.animation_controller import RenderState
 from picframe.core.renderers.pi3d_renderer import (
     PI3D_LABWC_IDENTIFIER,
     RESUME_REDRAW_FRAMES,
@@ -28,8 +30,6 @@ from picframe.core.renderers.pi3d_renderer import (
     Pi3dRenderer,
     PrioritizedRenderTask,
 )
-from picframe.core.renderers.animation_controller import RenderState
-from picframe.core.models.media import DisplayItem, MediaItem, MediaType
 
 
 @pytest.fixture
@@ -73,8 +73,6 @@ def mock_clock_renderer() -> Generator[MagicMock, None, None]:
     with patch("picframe.core.renderers.pi3d_renderer.ClockRenderer") as mock:
         yield mock.return_value
 
-
-from picframe.core.events.dto import RendererConfig
 
 @pytest.fixture
 def config() -> RendererConfig:
@@ -497,6 +495,48 @@ def test_renderer_execute_video_first_frame_marks_delayed_handoff(
     assert renderer._video_first_frame_transition is True
     assert renderer._was_transitioning is True
     assert renderer._animation_controller._state == RenderState.TRANSITIONING
+
+
+@patch("time.sleep")
+def test_renderer_video_first_frame_completion_publishes_transition_token(
+    mock_sleep: MagicMock,
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    publisher = MagicMock()
+    renderer = Pi3dRenderer(config, event_publisher=publisher)
+    renderer.start()
+    mock_image_renderer.execute.return_value = (True, 0.0, 0.0)
+
+    renderer.execute(
+        RenderCommand(
+            image_path="/cache/video.1.frame",
+            overlay=OverlayConfig(show_text=False),
+            render_action=RENDER_VIDEO_FIRST_FRAME,
+            transition_token=42,
+        )
+    )
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._image_alpha = 1.0
+    renderer._animation_controller._show_text = False
+    renderer._animation_controller._text_alpha = 0.0
+    renderer._animation_controller._frames_to_render = 0
+    renderer._last_text_alpha = 0.0
+    renderer._last_redraw_time = 100.0
+    mock_clock_renderer.has_changed.return_value = False
+
+    with patch("time.time", return_value=101.0):
+        result = renderer.render_frame()
+
+    assert result is True
+    event = publisher.publish.call_args.args[0]
+    assert isinstance(event, TransitionCompletedEvent)
+    assert event.transition_token == 42
+    assert renderer._transition_token is None
+    mock_sleep.assert_called_once_with(0.05)
 
 
 def test_renderer_current_media_event_does_not_restart_same_single_overlay_text(

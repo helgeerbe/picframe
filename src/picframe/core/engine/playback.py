@@ -107,6 +107,7 @@ class PlaybackEngine:
         self._video_reveal_park_pending = False
         self._video_reveal_park_frames = 0
         self._video_reveal_park_started_at = 0.0
+        self._video_handoff_sequence = 0
         
         # Circuit breaker state
         self._consecutive_errors = 0
@@ -1097,10 +1098,13 @@ class PlaybackEngine:
                 )
 
         if first_img is not None:
+            self._video_handoff_sequence += 1
+            transition_token = self._video_handoff_sequence
             self._pending_video_media = media_item
             self._pending_last_img = last_img
             self._pending_last_frame_path = last_frame_path
             self._pending_video_transition_metadata = metadata
+            self._pending_video_transition_token = transition_token
             self._pending_video_backdrop_path = (
                 self._video_backdrop_path_for_metadata(metadata)
             )
@@ -1117,6 +1121,7 @@ class PlaybackEngine:
                     overlay=overlay_config,
                     image_obj=first_img,
                     render_action=RENDER_VIDEO_FIRST_FRAME,
+                    transition_token=transition_token,
                 )
             )
             return True
@@ -1197,6 +1202,19 @@ class PlaybackEngine:
     def _handle_transition_completed(self, event: Any) -> None:
         """Handle the completion of a visual transition."""
         if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
+            event_token = getattr(event, "transition_token", None)
+            pending_token = getattr(self, "_pending_video_transition_token", None)
+            if (
+                event_token is not None
+                and pending_token is not None
+                and event_token != pending_token
+            ):
+                self._logger.debug(
+                    "Ignoring stale video transition completion token %s; pending token is %s.",
+                    event_token,
+                    pending_token,
+                )
+                return
             self._logger.info("First frame transition completed, starting video playback.")
             if self._video_player:
                 self._preload_pending_video_reveal_frame()
@@ -1458,6 +1476,7 @@ class PlaybackEngine:
             '_pending_last_frame_path',
             '_video_first_frame_deadline',
             '_pending_video_transition_metadata',
+            '_pending_video_transition_token',
             '_pending_video_backdrop_path',
             '_pending_video_backdrop_rect',
         ):

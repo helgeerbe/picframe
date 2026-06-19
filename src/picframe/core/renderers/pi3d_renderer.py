@@ -13,18 +13,16 @@ from typing import Any
 import pi3d
 
 from picframe.core.events.dto import (
-    CurrentMediaChangedEvent,
-    OverlayConfig,
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
     RENDER_VIDEO_FIRST_FRAME,
     RENDER_WAKE_VIDEO_REVEAL,
+    CurrentMediaChangedEvent,
+    OverlayConfig,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
-    State,
-    StateEvent,
     TransitionCompletedEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
@@ -34,7 +32,6 @@ from picframe.core.renderers.components.clock_renderer import ClockRenderer
 from picframe.core.renderers.components.image_renderer import ImageRenderer
 from picframe.core.renderers.components.text_renderer import TextRenderer
 from picframe.core.renderers.interfaces import IRenderer
-from picframe.core.repositories.interfaces import IConfigRepository
 from picframe.core.services.locale_utils import format_datetime_for_locale
 from picframe.core.services.overlay_text import apply_geo_suppress_list
 
@@ -153,6 +150,7 @@ class Pi3dRenderer(IRenderer):
         self._pending_component_rebuild = False
         self._video_reveal_parked = False
         self._video_first_frame_transition = False
+        self._transition_token: int | None = None
         
         # Text Overlay State
         self._overlay_config = self._build_overlay_config(text_string="")
@@ -467,7 +465,9 @@ class Pi3dRenderer(IRenderer):
         if self._display is None:
             return False
         old_config = old_config or self._config
-        if self._component_rebuild_signature(old_config) != self._component_rebuild_signature(new_config):
+        if self._component_rebuild_signature(
+            old_config
+        ) != self._component_rebuild_signature(new_config):
             return True
         if self._geometry_signature(old_config) == self._geometry_signature(new_config):
             return False
@@ -485,7 +485,9 @@ class Pi3dRenderer(IRenderer):
         if self._display is None:
             return False
         old_config = old_config or self._config
-        if self._service_restart_signature(old_config) != self._service_restart_signature(new_config):
+        if self._service_restart_signature(
+            old_config
+        ) != self._service_restart_signature(new_config):
             return True
         if self._geometry_signature(old_config) == self._geometry_signature(new_config):
             return False
@@ -793,9 +795,12 @@ class Pi3dRenderer(IRenderer):
         if not self._transition_completed_ready(anim_state):
             return
         if self._event_publisher is not None:
-            self._event_publisher.publish(TransitionCompletedEvent())
+            self._event_publisher.publish(
+                TransitionCompletedEvent(transition_token=self._transition_token)
+            )
         self._was_transitioning = False
         self._video_first_frame_transition = False
+        self._transition_token = None
 
     def execute(self, command: RenderCommand) -> None:
         """
@@ -859,6 +864,7 @@ class Pi3dRenderer(IRenderer):
                 self._video_reveal_parked = False
                 if getattr(command, "background_only", False):
                     self._video_first_frame_transition = False
+                    self._transition_token = None
                     self._logger.debug("Loaded image into background buffer only.")
                     self._animation_controller.force_redraw(2)
                     # Ensure we wake up from SUSPENDED state to process the redraw
@@ -870,6 +876,7 @@ class Pi3dRenderer(IRenderer):
                         threading.Timer(0.5, self._animation_controller.suspend).start()
                 else:
                     self._video_first_frame_transition = is_video_first_frame
+                    self._transition_token = command.transition_token
                     self._animation_controller.start_transition(time.time(), kb_xstep, kb_ystep)
                     self._was_transitioning = True
                     self._animation_controller.update_text_config(
@@ -883,6 +890,7 @@ class Pi3dRenderer(IRenderer):
                         self._clock_renderer.update_config(self._overlay_config)
             else:
                 self._video_first_frame_transition = False
+                self._transition_token = None
                 
         except Exception as e:
             self._logger.error(f"Failed to execute RenderCommand: {e}")
