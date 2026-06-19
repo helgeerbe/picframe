@@ -229,10 +229,12 @@ class GtkVideoPresenter:
         host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> bool:
         has_backdrop = bool(host_backdrop_path)
-        transparent_host = (
-            self._gtk_video_host_uses_transparency() and not has_backdrop
-        )
         fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
+        transparent_host = (
+            self._gtk_video_host_uses_transparency()
+            and fullscreen_video
+            and not has_backdrop
+        )
         fixed_host = has_backdrop or not fullscreen_video or not transparent_host
         _, _, widget_w, widget_h = self._gtk_video_widget_geometry(
             x,

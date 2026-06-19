@@ -1028,10 +1028,11 @@ class PlaybackEngine:
     def _video_backdrop_path_for_metadata(
         self,
         metadata: Any | None,
+        fallback_path: str | None = None,
     ) -> str | None:
         if not getattr(metadata, "backdrop", getattr(metadata, "matted", False)):
             return None
-        return getattr(metadata, "backdrop_path", None)
+        return getattr(metadata, "backdrop_path", None) or fallback_path
 
     def _start_video_handoff(
         self,
@@ -1101,12 +1102,13 @@ class PlaybackEngine:
             self._video_handoff_sequence += 1
             transition_token = self._video_handoff_sequence
             self._pending_video_media = media_item
+            self._pending_first_frame_path = first_frame_path
             self._pending_last_img = last_img
             self._pending_last_frame_path = last_frame_path
             self._pending_video_transition_metadata = metadata
             self._pending_video_transition_token = transition_token
             self._pending_video_backdrop_path = (
-                self._video_backdrop_path_for_metadata(metadata)
+                self._video_backdrop_path_for_metadata(metadata, first_frame_path)
             )
             self._pending_video_backdrop_rect = (
                 self._video_backdrop_rect_for_metadata(metadata)
@@ -1138,7 +1140,10 @@ class PlaybackEngine:
             y,
             w,
             h,
-            host_backdrop_path=self._video_backdrop_path_for_metadata(metadata),
+            host_backdrop_path=self._video_backdrop_path_for_metadata(
+                metadata,
+                first_frame_path,
+            ),
             host_backdrop_rect=self._video_backdrop_rect_for_metadata(metadata),
             content_fit=(
                 "fill"
@@ -1472,6 +1477,7 @@ class PlaybackEngine:
         """Clear cached first-frame handoff state for an unstarted video."""
         for attr in (
             '_pending_video_media',
+            '_pending_first_frame_path',
             '_pending_last_img',
             '_pending_last_frame_path',
             '_video_first_frame_deadline',

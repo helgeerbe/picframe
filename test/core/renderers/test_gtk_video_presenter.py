@@ -398,6 +398,74 @@ def test_present_gtk_paintable_keeps_transparent_fullscreen_without_backdrop(
     )
 
 
+def test_present_gtk_paintable_uses_opaque_fixed_host_for_inset_without_backdrop(
+    monkeypatch,
+) -> None:
+    presenter = make_presenter("Raspberry Pi 4 Model B Rev 1.2")
+    window = MagicMock()
+    widget = MagicMock()
+    host = MagicMock()
+    video_sink = MagicMock()
+
+    class FakeGtk:
+        Window = MagicMock(return_value=window)
+
+    monkeypatch.setattr(presenter, "_gtk_geometry_is_fullscreen", lambda *args: False)
+    monkeypatch.setattr(presenter, "_gtk_video_host_uses_transparency", lambda: True)
+    monkeypatch.setattr(presenter, "_create_gtk_video_picture", MagicMock(return_value=widget))
+    fixed_host = MagicMock(return_value=host)
+    monkeypatch.setattr(presenter, "_create_gtk_fixed_video_host", fixed_host)
+    apply_host_geometry = MagicMock()
+    monkeypatch.setattr(presenter, "_apply_gtk_host_window_geometry", apply_host_geometry)
+    monkeypatch.setattr(presenter, "_configure_gtk_video_window", MagicMock())
+    configure_background = MagicMock()
+    monkeypatch.setattr(presenter, "_configure_gtk_video_host_background", configure_background)
+    monkeypatch.setattr(presenter, "_present_gtk_video_window", MagicMock())
+    monkeypatch.setattr(presenter, "_log_gtk_window_diagnostics", MagicMock())
+    monkeypatch.setattr(presenter, "_hide_gtk_cursor", MagicMock())
+    monkeypatch.setattr(presenter, "_gtk_window_matches_geometry", lambda *args, **kwargs: True)
+    monkeypatch.setattr(presenter, "_start_gtk_pump", MagicMock())
+
+    result = presenter.present_paintable(
+        FakeGtk,
+        video_sink,
+        MagicMock(),
+        100,
+        80,
+        640,
+        360,
+        set_sink_window_size=False,
+        content_fit="fill",
+        host_background=(0.2, 0.2, 0.3, 1.0),
+    )
+
+    assert result is True
+    presenter._configure_gtk_video_window.assert_called_once_with(
+        window,
+        transparent=False,
+    )
+    configure_background.assert_called_once_with(
+        window,
+        transparent=False,
+        host_background=(0.2, 0.2, 0.3, 1.0),
+    )
+    fixed_host.assert_called_once_with(
+        FakeGtk,
+        window,
+        widget,
+        100,
+        80,
+        640,
+        360,
+        transparent=False,
+        host_background=(0.2, 0.2, 0.3, 1.0),
+        host_backdrop_path=None,
+        host_backdrop_rect=None,
+    )
+    window.set_child.assert_called_once_with(host)
+    apply_host_geometry.assert_called_once_with(window, 100, 80, 640, 360)
+
+
 def test_present_gtk_paintable_uses_opaque_fixed_host_for_backdrop(
     monkeypatch,
 ) -> None:

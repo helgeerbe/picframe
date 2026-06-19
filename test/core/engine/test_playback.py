@@ -4,6 +4,7 @@ Unit tests for the PlaybackEngine.
 import threading
 import time
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -1509,6 +1510,76 @@ def test_engine_video_handoff_uses_regenerated_metadata_after_cache_miss(
     fake_extractor.get_first_and_last_frames.assert_called_once()
 
     engine._handle_transition_completed(TransitionCompletedEvent())
+
+    mock_video_player.play.assert_called_once_with(
+        media_item,
+        110,
+        70,
+        640,
+        360,
+        False,
+        None,
+        host_backdrop_path="/cache/video.1.frame",
+        host_backdrop_rect=(10, 20, 1000, 800),
+        content_fit="fill",
+    )
+
+
+def test_engine_video_handoff_uses_first_frame_path_for_backdrop_metadata_without_path(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    mock_playlist_manager.get_next.return_value = media_item
+    mock_renderer.get_display_rect.return_value = (10, 20, 1000, 800)
+    metadata = SimpleNamespace(
+        matted=True,
+        backdrop=True,
+        frame_size=(1000, 800),
+        coordinate_space="frame_pixels",
+        content_rect=(100, 50, 640, 360),
+    )
+    fake_extractor = MagicMock()
+    fake_extractor.cached_transition_frames_valid.return_value = False
+    fake_extractor.get_frame_path.side_effect = lambda role: {
+        "first": "/cache/video.1.frame",
+        "last": "/cache/video.2.frame",
+    }[role]
+    fake_extractor.last_transition_metadata = None
+
+    def generate_frames(*args: Any, **kwargs: Any) -> tuple[MagicMock, MagicMock]:
+        fake_extractor.last_transition_metadata = metadata
+        return MagicMock(), MagicMock()
+
+    fake_extractor.get_first_and_last_frames.side_effect = generate_frames
+
+    with patch("os.path.exists", return_value=False), patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+        return_value=fake_extractor,
+    ):
+        engine._trigger_next_media()
+        engine._handle_transition_completed(TransitionCompletedEvent())
 
     mock_video_player.play.assert_called_once_with(
         media_item,

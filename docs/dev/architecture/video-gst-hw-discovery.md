@@ -98,7 +98,8 @@ image-derived edge fill, the playback engine can pass it to the GTK video host
 as a backdrop so the visible bars behind live video match the pi3d title card.
 The GTK presenter treats a supplied backdrop as an opaque fixed-host request,
 including on Raspberry Pi/labwc, so transparent host regions do not reveal stale
-pi3d pixels.
+pi3d pixels. Inset or custom video rectangles without a backdrop also use an
+opaque fixed host, with `viewer.background` filling non-video regions.
 The transition-frame sidecar stores `frame_size`, `coordinate_space`, and the
 visible video-opening `content_rect`; playback uses that rect for live video
 placement for every generated frame type, not only matted videos. Beveled mat
