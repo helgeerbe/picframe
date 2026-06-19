@@ -1,15 +1,15 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #695 is implemented and verified locally:
+The active branch is `v2-dev`. Issue #695 is implemented, pushed, and closed:
 Settings now presents explicit 24-hour, 12-hour, and Custom clock format modes
 while continuing to persist `viewer.clock_format`; `model.locale` does not drive
 clock hour mode.
 
 ## Current Repo State
 - Branch: `v2-dev`.
-- Local `v2-dev` is ahead of `origin/v2-dev` by the #694 memory-bank closeout
-  commit and the pending #695 clock-hour-mode implementation until pushed.
+- `v2-dev` is aligned with `origin/v2-dev` after the #695 implementation and
+  closeout were pushed.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
