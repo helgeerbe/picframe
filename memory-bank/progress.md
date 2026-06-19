@@ -47,7 +47,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - #687 implementation is in verification/closeout: Settings coverage, live reloads, Remote enlargement/filtering, `model.image_attr` compatibility docs, live logging, Logs tab, three-scope Basic Auth with cookie-backed WebSocket auth plus documented password recovery, and legacy peripherals documentation are being verified before commit/issue closeout.
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
-- #691 is locally merged into `v2-dev` and ready for remote closeout once `origin/v2-dev` can be pushed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
+- #691 is merged into `v2-dev`, pushed to `origin/v2-dev`, and closed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
 
 ## Next

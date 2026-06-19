@@ -2,16 +2,14 @@
 
 ## Current Focus
 The active branch is `v2-dev`. The #691 video matted-handoff feature branch has
-been fast-forwarded locally into `v2-dev`; remote push and GitHub ticket
-closeout are still pending. Current focus is closeout for the next-gen
-GTK4/GStreamer Wayland video handoff: keep cached video first/last-frame
-pixels, sidecar geometry, and the live GTK video window aligned for matted,
-solid-bar, edge-filled, and blurred transition frames.
+been fast-forwarded into `v2-dev`, pushed to `origin/v2-dev`, and GitHub issue
+#691 is closed. The merged GTK4/GStreamer Wayland video handoff keeps cached
+video first/last-frame pixels, sidecar geometry, and the live GTK video window
+aligned for matted, solid-bar, edge-filled, and blurred transition frames.
 
 ## Current Repo State
 - Branch: `v2-dev`.
-- Local `v2-dev` is ahead of `origin/v2-dev` by the five #691/#692 commits until
-  the verified merge is pushed.
+- Local `v2-dev` is aligned with `origin/v2-dev` after the #691 merge closeout.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -46,8 +44,6 @@ solid-bar, edge-filled, and blurred transition frames.
 - Video transition frames mirror still-image edge behavior: cached first/last frames honor matting, `blur_edges`, `edge_alpha`, and `background`; sidecars store `frame_size`, `coordinate_space=frame_pixels`, and the visible source-image `content_rect`; playback uses that rect for the live video window for every generated frame type. Cache freshness includes both processing signatures and current geometry metadata in managed filename hashes or legacy sidecar `.meta.json`.
 
 ## Immediate Next Steps
-- Push the fast-forwarded `v2-dev` branch to `origin` and close #691 after the
-  GitHub-side update is allowed. The merged head is `1e9c366`.
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
 - Keep filesystem watchers and other OS-specific adapters outside core; use ports such as `IMediaMonitor` for core service dependencies.
 - Preserve the #619 matting boundary: matting lives in renderer image preparation, not playlist, DB, REST/WebSocket, or `ImageProcessingService`.
