@@ -1,7 +1,7 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #697 is implemented and verified locally:
+The active branch is `v2-dev`. Issue #697 is implemented, pushed, and closed:
 media selection now uses indexable filepath ranges, active-media/date indexes,
 a rounded-coordinate location expression index, Python-side standard shuffle,
 and count queries that skip resolved-location joins unless a location filter
@@ -9,9 +9,8 @@ requires them.
 
 ## Current Repo State
 - Branch: `v2-dev`.
-- Local `v2-dev` is ahead of `origin/v2-dev` by the #696 media repository
-  locking commit plus pending #697 media selection performance changes until
-  pushed.
+- `v2-dev` is aligned with `origin/v2-dev` after the #696 and #697 closeouts
+  were pushed.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 

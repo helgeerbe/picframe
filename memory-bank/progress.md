@@ -45,8 +45,8 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Ticket #693 geolocation/locale fix is closed: reverse-geocoded locations and the persistent lookup queue are keyed by normalized language, existing unknown-language cached rows migrate to a `legacy` bucket, GPS media without active-locale address text retry lookup during overlay generation, playlist/API location metadata resolve for `model.locale`, and playback/pi3d overlay dates format through explicit locale handling.
 - Ticket #694 brightness hardening is closed: internal display outputs use `brightnessctl`, HDMI/DDC brightness probes VCP 0x10 before writing, command output is included in `brightness_unavailable` errors, repeated identical failures are suppressed, Remote brightness drags preview locally and commits one hardware command on release/change, and docs explain DDC prerequisites plus monitor brightness floors.
 - Ticket #695 clock hour mode is closed: Settings exposes 24-hour, 12-hour, and Custom clock choices while persisting only `viewer.clock_format`; locale does not drive clock hour mode.
-- Ticket #696 media repository locking is implemented locally: `SQLiteMediaRepository` serializes shared SQLite connection use so API location enrichment no longer races geocoding/indexer/playback access to `media_cache.db3`.
-- Ticket #697 media selection performance is implemented locally: indexed filepath/date/location query paths speed playlist rebuilds and selected-count checks while preserving existing Remote/API behavior.
+- Ticket #696 media repository locking is closed: `SQLiteMediaRepository` serializes shared SQLite connection use so API location enrichment no longer races geocoding/indexer/playback access to `media_cache.db3`.
+- Ticket #697 media selection performance is closed: indexed filepath/date/location query paths speed playlist rebuilds and selected-count checks while preserving existing Remote/API behavior.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
