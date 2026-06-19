@@ -228,9 +228,12 @@ class GtkVideoPresenter:
         host_backdrop_path: str | None = None,
         host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> bool:
-        transparent_host = self._gtk_video_host_uses_transparency()
+        has_backdrop = bool(host_backdrop_path)
+        transparent_host = (
+            self._gtk_video_host_uses_transparency() and not has_backdrop
+        )
         fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
-        fixed_host = not fullscreen_video or not transparent_host
+        fixed_host = has_backdrop or not fullscreen_video or not transparent_host
         _, _, widget_w, widget_h = self._gtk_video_widget_geometry(
             x,
             y,
@@ -557,7 +560,7 @@ class GtkVideoPresenter:
                 .{GTK_OPAQUE_HOST_CLASS} {{
                     background-color: {opaque_background};
                 }}
-                """.encode("utf-8")
+                """.encode()
             )
             Gtk.StyleContext.add_provider_for_display(
                 display,
@@ -633,7 +636,7 @@ class GtkVideoPresenter:
             host.set_size_request(host_w, host_h)
         except Exception:
             host_w, host_h = max(1, w), max(1, h)
-        if host_backdrop_path and not transparent:
+        if host_backdrop_path:
             backdrop = self._create_gtk_backdrop_picture(
                 Gtk,
                 host_backdrop_path,

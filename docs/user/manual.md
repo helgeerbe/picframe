@@ -566,15 +566,19 @@ GStreamer.
 
 On Wayland, Picframe hosts video playback in a borderless GTK4 window using
 `gtk4paintablesink`; GTK4 presentation is required. Raspberry Pi/labwc uses a
-transparent fullscreen GTK4 host. GNOME/VM uses an opaque fullscreen GTK4 host
-colored from `viewer.background` so desktop shell UI cannot show through. The
-GTK host covers the configured pi3d display rectangle (`viewer.display_x`,
-`viewer.display_y`, `viewer.display_w`, and `viewer.display_h`) or fullscreen
-window. When Picframe has a valid cached transition-frame sidecar, the live
-video paintable is placed at the sidecar's visible video-opening rectangle so
-the video matches the intended opening inside mats, solid bars, edge fill, or
-blurred backdrops. If GTK4 or `gtk4paintablesink` is unavailable, Picframe reports a
-video presentation system error instead of using a legacy sink fallback.
+transparent fullscreen GTK4 host for plain videos. GNOME/VM uses an opaque
+fullscreen GTK4 host colored from `viewer.background` so desktop shell UI
+cannot show through. The GTK host covers the configured pi3d display rectangle
+(`viewer.display_x`, `viewer.display_y`, `viewer.display_w`, and
+`viewer.display_h`) or fullscreen window. When Picframe has a valid cached
+transition-frame sidecar, the live video paintable is placed at the sidecar's
+visible video-opening rectangle so the video matches the intended opening
+inside mats, solid bars, edge fill, or blurred backdrops. Matted or edge-filled
+videos use the cached first frame as an opaque GTK backdrop on Raspberry
+Pi/labwc, so the non-video regions show the intended mats and bars instead of
+stale pi3d pixels. If GTK4 or `gtk4paintablesink` is unavailable, Picframe
+reports a video presentation system error instead of using a legacy sink
+fallback.
 
 When the display rectangle is effectively fullscreen, Picframe makes the GTK
 video window fullscreen as well; this is the preferred path for both Cage and
@@ -611,9 +615,9 @@ content. Beveled mat artwork can visually overlap the cached transition frame,
 so Picframe intentionally insets the live video window to keep those shadows
 visible.
 When a cached frame contains matting, blur, or image-derived edge fill,
-Picframe may also use that cached first frame as the GTK video backdrop so the
-bars around live video match the pi3d title-card handoff where the video host
-supports a backdrop.
+Picframe uses that cached first frame as the GTK video backdrop so the
+bars around live video match the pi3d title-card handoff, including on
+Raspberry Pi/labwc where the plain video host would otherwise be transparent.
 
 Hardware playback is selected only when the Raspberry Pi model is known to
 support the codec at the stream resolution/framerate and GStreamer exposes a
