@@ -11,14 +11,14 @@ import pytest
 
 from picframe.core.engine.playback import PlaybackEngine
 from picframe.core.events.dto import (
-    Command,
-    CommandEvent,
-    PlaybackCompletedEvent,
     RENDER_PARK_VIDEO_REVEAL,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
-    RENDER_WAKE_VIDEO_REVEAL,
     RENDER_VIDEO_FIRST_FRAME,
+    RENDER_WAKE_VIDEO_REVEAL,
+    Command,
+    CommandEvent,
+    PlaybackCompletedEvent,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
@@ -104,9 +104,18 @@ def test_engine_initialization(
     # Verify it subscribed to commands
     mock_event_subscriber.subscribe.assert_any_call(CommandEvent, engine._handle_command)
     mock_event_subscriber.subscribe.assert_any_call(StateEvent, engine._handle_state_event)
-    mock_event_subscriber.subscribe.assert_any_call(PlaybackCompletedEvent, engine._handle_playback_completed)
-    mock_event_subscriber.subscribe.assert_any_call(TransitionCompletedEvent, engine._handle_transition_completed)
-    mock_event_subscriber.subscribe.assert_any_call(VideoFirstFrameRenderedEvent, engine._handle_video_first_frame_rendered)
+    mock_event_subscriber.subscribe.assert_any_call(
+        PlaybackCompletedEvent,
+        engine._handle_playback_completed,
+    )
+    mock_event_subscriber.subscribe.assert_any_call(
+        TransitionCompletedEvent,
+        engine._handle_transition_completed,
+    )
+    mock_event_subscriber.subscribe.assert_any_call(
+        VideoFirstFrameRenderedEvent,
+        engine._handle_video_first_frame_rendered,
+    )
 
 
 def test_engine_playback_completed_stops_video_and_advances_immediately(
@@ -568,16 +577,15 @@ def test_engine_handle_command_prev(
     
 
 
-def test_engine_handle_command_prev_video_uses_display_geometry(
+def test_engine_handle_command_prev_video_uses_handoff_content_rect(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, Any],
 ) -> None:
-    """Test handling PREV for video uses the same display rect as normal playback."""
     mock_video_player = MagicMock()
-    mock_renderer.get_display_rect.return_value = (10, 20, 300, 400)
+    mock_renderer.get_display_rect.return_value = (10, 20, 1000, 800)
     media_item = MediaItem(
         id=1,
         filepath="/path/to/video.mp4",
@@ -597,11 +605,50 @@ def test_engine_handle_command_prev_video_uses_display_geometry(
         config,
         video_player=mock_video_player,
     )
+    metadata = MagicMock()
+    metadata.matted = True
+    metadata.backdrop = True
+    metadata.frame_size = (1000, 800)
+    metadata.coordinate_space = "frame_pixels"
+    metadata.content_rect = (100, 50, 640, 360)
+    metadata.backdrop_path = "/cache/video.1.frame"
+    metadata.with_backdrop_path.return_value = metadata
+    fake_extractor = MagicMock()
+    fake_extractor.cached_transition_frames_valid.return_value = True
+    fake_extractor.get_frame_path.side_effect = lambda role: {
+        "first": "/cache/video.1.frame",
+        "last": "/cache/video.2.frame",
+    }[role]
+    fake_extractor.get_first_and_last_frames.return_value = (
+        MagicMock(),
+        MagicMock(),
+    )
+    fake_extractor.last_transition_metadata = metadata
 
-    engine._handle_command(CommandEvent(command=Command.PREV))
+    with patch("os.path.exists", return_value=True), patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+        return_value=fake_extractor,
+    ):
+        engine._handle_command(CommandEvent(command=Command.PREV))
+
+    mock_video_player.play.assert_not_called()
+    assert engine._state == State.PREPARING_VIDEO
+    first_render_call = mock_renderer.execute.call_args.args[0]
+    assert first_render_call.render_action == RENDER_VIDEO_FIRST_FRAME
+
+    engine._handle_transition_completed(TransitionCompletedEvent())
 
     mock_video_player.play.assert_called_once_with(
-        media_item, 10, 20, 300, 400, False, None
+        media_item,
+        110,
+        70,
+        640,
+        360,
+        False,
+        None,
+        host_backdrop_path="/cache/video.1.frame",
+        host_backdrop_rect=(10, 20, 1000, 800),
+        content_fit="fill",
     )
 
 
@@ -1047,7 +1094,12 @@ def test_engine_trigger_next_media_video(
     config["video_extensions"] = [".mp4", ".mov", ".mkv", ".avi", ".webm"]
     
     engine = PlaybackEngine(
-        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config, video_player=mock_video_player
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
     )
     
     # Setup a .mov media item
@@ -1166,8 +1218,10 @@ def test_engine_trigger_next_media_video_uses_cache_dir(
     mock_playlist_manager.get_next.return_value = media_item
     mock_renderer.get_display_rect.return_value = (0, 0, 1920, 1080)
 
-    with patch("os.path.exists", return_value=True), \
-         patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames", return_value=(MagicMock(), MagicMock())):
+    with patch("os.path.exists", return_value=True), patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+        return_value=(MagicMock(), MagicMock()),
+    ):
         engine._trigger_next_media()
 
     from picframe.core.events.dto import RenderCommand
@@ -1260,6 +1314,7 @@ def test_engine_video_handoff_uses_matted_content_rect_and_backdrop(
     metadata.coordinate_space = "frame_pixels"
     metadata.content_rect = (100, 50, 640, 360)
     metadata.backdrop_path = "/cache/video.1.frame"
+    metadata.with_backdrop_path.return_value = metadata
     fake_extractor = MagicMock()
     fake_extractor.cached_transition_frames_valid.return_value = True
     fake_extractor.get_frame_path.side_effect = lambda role: {
@@ -1278,6 +1333,81 @@ def test_engine_video_handoff_uses_matted_content_rect_and_backdrop(
     ):
         engine._trigger_next_media()
         engine._handle_transition_completed(TransitionCompletedEvent())
+
+    mock_video_player.play.assert_called_once_with(
+        media_item,
+        110,
+        70,
+        640,
+        360,
+        False,
+        None,
+        host_backdrop_path="/cache/video.1.frame",
+        host_backdrop_rect=(10, 20, 1000, 800),
+        content_fit="fill",
+    )
+
+
+def test_engine_video_handoff_uses_regenerated_metadata_after_cache_miss(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    mock_playlist_manager.get_next.return_value = media_item
+    mock_renderer.get_display_rect.return_value = (10, 20, 1000, 800)
+    metadata = MagicMock()
+    metadata.matted = True
+    metadata.backdrop = True
+    metadata.frame_size = (1000, 800)
+    metadata.coordinate_space = "frame_pixels"
+    metadata.content_rect = (100, 50, 640, 360)
+    metadata.backdrop_path = "/cache/video.1.frame"
+    fake_extractor = MagicMock()
+    fake_extractor.cached_transition_frames_valid.return_value = False
+    fake_extractor.get_frame_path.side_effect = lambda role: {
+        "first": "/cache/video.1.frame",
+        "last": "/cache/video.2.frame",
+    }[role]
+    fake_extractor.last_transition_metadata = None
+
+    def generate_frames(*args: Any, **kwargs: Any) -> tuple[MagicMock, MagicMock]:
+        fake_extractor.last_transition_metadata = metadata
+        return MagicMock(), MagicMock()
+
+    fake_extractor.get_first_and_last_frames.side_effect = generate_frames
+
+    with patch("os.path.exists", return_value=False), patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+        return_value=fake_extractor,
+    ):
+        engine._trigger_next_media()
+
+    assert engine._state == State.PREPARING_VIDEO
+    assert engine._pending_video_transition_metadata is metadata
+    fake_extractor.get_first_and_last_frames.assert_called_once()
+
+    engine._handle_transition_completed(TransitionCompletedEvent())
 
     mock_video_player.play.assert_called_once_with(
         media_item,
@@ -1328,6 +1458,7 @@ def test_engine_video_handoff_uses_edge_content_rect_and_backdrop(
     metadata.coordinate_space = "frame_pixels"
     metadata.content_rect = (100, 50, 640, 360)
     metadata.backdrop_path = "/cache/video.1.frame"
+    metadata.with_backdrop_path.return_value = metadata
     fake_extractor = MagicMock()
     fake_extractor.cached_transition_frames_valid.return_value = True
     fake_extractor.get_frame_path.side_effect = lambda role: {
@@ -1403,6 +1534,78 @@ def test_engine_trigger_next_media_video_plays_directly_without_frames(
     assert render_cmd.image_path == "RESUME"
     mock_video_player.play.assert_called_once_with(
         media_item, 10, 20, 1920, 1080, False, None
+    )
+    assert engine._state == State.PLAYING
+    assert engine._next_transition_time == float("inf")
+
+
+def test_engine_direct_video_fallback_uses_cached_content_rect(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    mock_playlist_manager.get_next.return_value = media_item
+    mock_renderer.get_display_rect.return_value = (10, 20, 1000, 800)
+    metadata = MagicMock()
+    metadata.matted = True
+    metadata.backdrop = True
+    metadata.frame_size = (1000, 800)
+    metadata.coordinate_space = "frame_pixels"
+    metadata.content_rect = (100, 50, 640, 360)
+    metadata.backdrop_path = "/cache/video.1.frame"
+    metadata.with_backdrop_path.return_value = metadata
+    fake_extractor = MagicMock()
+    fake_extractor.cached_transition_frames_valid.return_value = True
+    fake_extractor.get_frame_path.side_effect = lambda role: {
+        "first": "/cache/video.1.frame",
+        "last": "/cache/video.2.frame",
+    }[role]
+    fake_extractor.get_first_and_last_frames.return_value = None
+    fake_extractor.last_transition_metadata = metadata
+
+    with patch("os.path.exists", return_value=True), patch(
+        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+        return_value=fake_extractor,
+    ):
+        engine._trigger_next_media()
+
+    from picframe.core.events.dto import RenderCommand
+
+    render_cmd = mock_renderer.execute.call_args[0][0]
+    assert isinstance(render_cmd, RenderCommand)
+    assert render_cmd.image_path == "RESUME"
+    mock_video_player.play.assert_called_once_with(
+        media_item,
+        110,
+        70,
+        640,
+        360,
+        False,
+        None,
+        host_backdrop_path="/cache/video.1.frame",
+        host_backdrop_rect=(10, 20, 1000, 800),
+        content_fit="fill",
     )
     assert engine._state == State.PLAYING
     assert engine._next_transition_time == float("inf")
@@ -2235,7 +2438,7 @@ def test_engine_circuit_breaker(
     # Mock renderer to raise MediaProcessingError
     mock_renderer.render_frame.side_effect = MediaProcessingError("Test error")
     
-    # Run the loop. It should catch the error, increment the counter, and eventually trip the breaker.
+    # The loop should catch the error and eventually trip the breaker.
     # We need to patch time.sleep to avoid waiting during the test
     with patch("time.sleep"):
         engine._run_loop()

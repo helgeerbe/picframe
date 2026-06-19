@@ -9,15 +9,15 @@ from collections.abc import Callable
 from typing import Any
 
 from picframe.core.events.dto import (
+    RENDER_PARK_VIDEO_REVEAL,
+    RENDER_PRELOAD_VIDEO_REVEAL,
+    RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_VIDEO_FIRST_FRAME,
+    RENDER_WAKE_VIDEO_REVEAL,
     Command,
     CommandEvent,
     CurrentMediaChangedEvent,
     PlaybackCompletedEvent,
-    RENDER_PARK_VIDEO_REVEAL,
-    RENDER_PRELOAD_VIDEO_REVEAL,
-    RENDER_PROMOTE_VIDEO_REVEAL,
-    RENDER_WAKE_VIDEO_REVEAL,
-    RENDER_VIDEO_FIRST_FRAME,
     RenderCommand,
     RendererConfig,
     RendererConfigUpdatedEvent,
@@ -39,7 +39,6 @@ from picframe.core.services.locale_utils import (
 from picframe.core.services.overlay_text import apply_geo_suppress_list
 from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.renderer_assets import format_renderer_asset_issues
-
 
 VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS = 0.5
 VIDEO_TRANSITION_FRAME_GENERATE_TIMEOUT_SECONDS = 20.0
@@ -119,11 +118,26 @@ class PlaybackEngine:
         
         # Playback events are handled directly by the EventBus worker, matching the
         # stable baseline behavior.
-        self._event_subscriber.subscribe(PlaybackCompletedEvent, self._handle_playback_completed)
-        self._event_subscriber.subscribe(TransitionCompletedEvent, self._handle_transition_completed)
-        self._event_subscriber.subscribe(VideoFirstFrameRenderedEvent, self._handle_video_first_frame_rendered)
-        self._event_subscriber.subscribe(VideoPlaybackWarningEvent, self._handle_video_playback_warning)
-        self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_renderer_config_event)
+        self._event_subscriber.subscribe(
+            PlaybackCompletedEvent,
+            self._handle_playback_completed,
+        )
+        self._event_subscriber.subscribe(
+            TransitionCompletedEvent,
+            self._handle_transition_completed,
+        )
+        self._event_subscriber.subscribe(
+            VideoFirstFrameRenderedEvent,
+            self._handle_video_first_frame_rendered,
+        )
+        self._event_subscriber.subscribe(
+            VideoPlaybackWarningEvent,
+            self._handle_video_playback_warning,
+        )
+        self._event_subscriber.subscribe(
+            RendererConfigUpdatedEvent,
+            self._handle_renderer_config_event,
+        )
 
     def start(self) -> None:
         """Start the playback engine and render loop."""
@@ -207,7 +221,9 @@ class PlaybackEngine:
 
     def _refresh_playback_after_live_renderer_config(self) -> None:
         """Prepare playback after renderer config changed without remapping the display."""
-        self._logger.info("Renderer config applied without display restart; scheduling fresh media render.")
+        self._logger.info(
+            "Renderer config applied without display restart; scheduling fresh media render."
+        )
         self._cancel_video_reveal_parking()
         self._clear_pending_video_preparation()
         for attr in ("_active_video_media", "_active_video_uses_reveal_sandwich"):
@@ -333,7 +349,10 @@ class PlaybackEngine:
             return
         
         # If we are preparing a video, we need to handle interruptions gracefully
-        if self._state == State.PREPARING_VIDEO and event.command in (Command.NEXT, Command.PREV, Command.STOP):
+        if (
+            self._state == State.PREPARING_VIDEO
+            and event.command in (Command.NEXT, Command.PREV, Command.STOP)
+        ):
             self._logger.info(f"Interrupting video preparation with command: {event.command}")
             self._cancel_video_reveal_parking()
             self._clear_pending_video_preparation()
@@ -865,8 +884,12 @@ class PlaybackEngine:
             # We don't trigger a full transition here, just fetch the data.
             if self._playlist_manager._display_playlist:
                 # Peek at the first item without advancing the index
-                if self._playlist_manager._current_index < len(self._playlist_manager._display_playlist):
-                    slot_data = self._playlist_manager._display_playlist[self._playlist_manager._current_index]
+                if self._playlist_manager._current_index < len(
+                    self._playlist_manager._display_playlist
+                ):
+                    slot_data = self._playlist_manager._display_playlist[
+                        self._playlist_manager._current_index
+                    ]
                     display_item = self._playlist_manager._slot_to_display_item(slot_data)
                     self._event_publisher.publish(CurrentMediaChangedEvent(media_item=display_item))
             else:
@@ -887,7 +910,11 @@ class PlaybackEngine:
         delete_payload = payload if isinstance(payload, dict) else {}
         target = str(delete_payload.get("target", "left"))
         raw_media_ids = delete_payload.get("media_ids")
-        media_ids = [int(media_id) for media_id in raw_media_ids] if isinstance(raw_media_ids, list) else None
+        media_ids = (
+            [int(media_id) for media_id in raw_media_ids]
+            if isinstance(raw_media_ids, list)
+            else None
+        )
 
         delete_ids = self._playlist_manager.resolve_current_delete_ids(target, media_ids)
         if not delete_ids:
@@ -906,7 +933,10 @@ class PlaybackEngine:
             
         # Determine deleted directory
         if self._config_repository:
-            deleted_dir_config = self._config_repository.get_app_config("model.deleted_pictures", self._config.get("deleted_pictures", "~/DeletedPictures"))
+            deleted_dir_config = self._config_repository.get_app_config(
+                "model.deleted_pictures",
+                self._config.get("deleted_pictures", "~/DeletedPictures"),
+            )
         else:
             deleted_dir_config = self._config.get("deleted_pictures", "~/DeletedPictures")
             
@@ -918,7 +948,10 @@ class PlaybackEngine:
             for media_id in delete_ids:
                 media_item = items_by_id.get(media_id)
                 if media_item is None:
-                    self._logger.warning("Delete target is no longer in the current display item: %s", media_id)
+                    self._logger.warning(
+                        "Delete target is no longer in the current display item: %s",
+                        media_id,
+                    )
                     continue
 
                 filepath = media_item.filepath
@@ -958,6 +991,160 @@ class PlaybackEngine:
         else:
             self._playlist_ready = False
 
+    def _video_extensions(self) -> tuple[str, ...]:
+        return tuple(
+            ext.lower()
+            for ext in self._config.get(
+                "video_extensions",
+                [".mp4", ".mov", ".mkv", ".avi", ".webm"],
+            )
+        )
+
+    def _cached_video_transition_metadata(
+        self,
+        extractor: Any,
+        first_frame_path: str,
+    ) -> Any | None:
+        cache_validator = getattr(extractor, "cached_transition_frames_valid", None)
+        if callable(cache_validator):
+            cache_valid = cache_validator()
+            if isinstance(cache_valid, bool) and not cache_valid:
+                return None
+
+        metadata = getattr(extractor, "last_transition_metadata", None)
+        if metadata is None:
+            metadata_loader = getattr(extractor, "_load_transition_metadata", None)
+            if callable(metadata_loader):
+                metadata = metadata_loader()
+        if metadata is None:
+            return None
+
+        with_backdrop_path = getattr(metadata, "with_backdrop_path", None)
+        if callable(with_backdrop_path):
+            return with_backdrop_path(first_frame_path)
+        return metadata
+
+    def _video_backdrop_path_for_metadata(
+        self,
+        metadata: Any | None,
+    ) -> str | None:
+        if not getattr(metadata, "backdrop", getattr(metadata, "matted", False)):
+            return None
+        return getattr(metadata, "backdrop_path", None)
+
+    def _start_video_handoff(
+        self,
+        media_item: MediaItem,
+        overlay_config: dict[str, Any] | None,
+    ) -> bool:
+        if not self._video_player or not self._is_video_media(
+            media_item,
+            self._video_extensions(),
+        ):
+            return False
+
+        from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
+
+        base, _ = os.path.splitext(media_item.filepath)
+        first_frame_path = base + ".1.frame"
+        last_frame_path = base + ".2.frame"
+        duration = getattr(media_item, "duration", 0.0) or 0.0
+        display_w, display_h = self._video_frame_dimensions()
+        first_img = None
+        last_img = None
+        metadata = None
+
+        if duration > 0 and display_w > 0 and display_h > 0:
+            try:
+                extractor = VideoFrameExtractor(
+                    media_item.filepath,
+                    display_w,
+                    display_h,
+                    fit_display=self._video_fit_display(),
+                    cache_dir=self._cache_dir,
+                    background=self._video_host_background(),
+                    matting_config=self._video_matting_config(),
+                    edge_config=self._video_edge_config(),
+                )
+                first_frame_path = extractor.get_frame_path("first")
+                last_frame_path = extractor.get_frame_path("last")
+                metadata = self._cached_video_transition_metadata(
+                    extractor,
+                    first_frame_path,
+                )
+                self._logger.info(
+                    "Loading or generating video transition frames for %s at "
+                    "%sx%s with %.2fs budget.",
+                    media_item.filepath,
+                    display_w,
+                    display_h,
+                    VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS,
+                )
+                frames = self._load_video_transition_frames_with_deadline(
+                    extractor,
+                    duration,
+                    display_w,
+                    display_h,
+                )
+                if frames:
+                    first_img, last_img = frames
+                    metadata = extractor.last_transition_metadata or metadata
+            except Exception as e:
+                self._logger.error(
+                    "Failed to extract frames for %s: %s",
+                    media_item.filepath,
+                    e,
+                )
+
+        if first_img is not None:
+            self._pending_video_media = media_item
+            self._pending_last_img = last_img
+            self._pending_last_frame_path = last_frame_path
+            self._pending_video_transition_metadata = metadata
+            self._pending_video_backdrop_path = (
+                self._video_backdrop_path_for_metadata(metadata)
+            )
+            self._pending_video_backdrop_rect = (
+                self._video_backdrop_rect_for_metadata(metadata)
+            )
+            self._next_transition_time = float("inf")
+            self._change_state(State.PREPARING_VIDEO)
+
+            self._logger.debug("Sending first frame to renderer: %s", first_frame_path)
+            self._renderer.execute(
+                RenderCommand(
+                    image_path=first_frame_path,
+                    overlay=overlay_config,
+                    image_obj=first_img,
+                    render_action=RENDER_VIDEO_FIRST_FRAME,
+                )
+            )
+            return True
+
+        self._logger.warning(
+            "Could not generate first frame for %s; playing video directly.",
+            media_item.filepath,
+        )
+        self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
+        x, y, w, h = self._video_display_rect_for_metadata(metadata)
+        self._play_video(
+            media_item,
+            x,
+            y,
+            w,
+            h,
+            host_backdrop_path=self._video_backdrop_path_for_metadata(metadata),
+            host_backdrop_rect=self._video_backdrop_rect_for_metadata(metadata),
+            content_fit=(
+                "fill"
+                if self._video_content_rect_from_metadata(metadata) is not None
+                else None
+            ),
+        )
+        self._next_transition_time = float("inf")
+        self._change_state(State.PLAYING)
+        return True
+
     def _trigger_next_media(self) -> None:
         """Fetch the next media item and send a render command."""
         if not self._renderer_started and self._state == State.ERROR:
@@ -982,111 +1169,18 @@ class PlaybackEngine:
             
             overlay_config = self._build_overlay_config(display_item)
             
-            # Check if it's a video
-            video_extensions = tuple(ext.lower() for ext in self._config.get("video_extensions", ['.mp4', '.mov', '.mkv', '.avi', '.webm']))
-            is_video = self._is_video_media(media_item, video_extensions)
-            
-            if is_video and self._video_player:
-                # 1. On-demand fallback for missing frames
-                import os
-
-                from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
-                base, _ = os.path.splitext(media_item.filepath)
-                first_frame_path = base + ".1.frame"
-                last_frame_path = base + ".2.frame"
-                
-                duration = getattr(media_item, 'duration', 0.0)
-                if duration is None:
-                    duration = 0.0
-                display_w, display_h = self._video_frame_dimensions()
-                
-                first_img = None
-                last_img = None
-                
-                if duration > 0 and display_w is not None and display_h is not None and display_w > 0 and display_h > 0:
-                    try:
-                        extractor = VideoFrameExtractor(
-                            media_item.filepath,
-                            display_w,
-                            display_h,
-                            fit_display=self._video_fit_display(),
-                            cache_dir=self._cache_dir,
-                            background=self._video_host_background(),
-                            matting_config=self._video_matting_config(),
-                            edge_config=self._video_edge_config(),
-                        )
-                        first_frame_path = extractor.get_frame_path("first")
-                        last_frame_path = extractor.get_frame_path("last")
-                        self._logger.info(
-                            "Loading or generating video transition frames for %s at %sx%s with %.2fs budget.",
-                            media_item.filepath,
-                            display_w,
-                            display_h,
-                            VIDEO_TRANSITION_FRAME_LOAD_TIMEOUT_SECONDS,
-                        )
-                        frames = self._load_video_transition_frames_with_deadline(
-                            extractor,
-                            duration,
-                            display_w,
-                            display_h,
-                        )
-                        if frames:
-                            first_img, last_img = frames
-                            self._pending_video_transition_metadata = (
-                                extractor.last_transition_metadata
-                            )
-                    except Exception as e:
-                        self._logger.error(f"Failed to extract frames for {media_item.filepath}: {e}")
-                
-                # 2. Send RenderCommand for the first frame
-                if first_img is not None:
-                    # Arm the pending video before pi3d starts the title-card
-                    # transition so an immediate completion event cannot be lost.
-                    self._pending_video_media = media_item
-                    self._pending_last_img = last_img
-                    self._pending_last_frame_path = last_frame_path
-                    metadata = getattr(
-                        self,
-                        "_pending_video_transition_metadata",
-                        None,
-                    )
-                    self._pending_video_backdrop_path = (
-                        getattr(metadata, "backdrop_path", None)
-                        if getattr(metadata, "backdrop", getattr(metadata, "matted", False))
-                        else None
-                    )
-                    self._pending_video_backdrop_rect = (
-                        self._video_backdrop_rect_for_metadata(metadata)
-                    )
-                    self._next_transition_time = float('inf')
-                    self._change_state(State.PREPARING_VIDEO)
-
-                    self._logger.debug(f"Sending first frame to renderer: {first_frame_path}")
-                    self._renderer.execute(
-                        RenderCommand(
-                            image_path=first_frame_path,
-                            overlay=overlay_config,
-                            image_obj=first_img,
-                            render_action=RENDER_VIDEO_FIRST_FRAME,
-                        )
-                    )
-                else:
-                    self._logger.warning(
-                        "Could not generate first frame for %s; playing video directly.",
-                        media_item.filepath,
-                    )
-                    self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
-                    x, y, w, h = self._video_display_rect()
-                    self._play_video(media_item, x, y, w, h)
-                    self._next_transition_time = float('inf')
-                    self._change_state(State.PLAYING)
+            if self._start_video_handoff(media_item, overlay_config):
+                pass
             else:
                 if self._video_player:
                     self._video_player.stop()
                 if display_item.layout == DisplayLayout.PORTRAIT_PAIR:
                     render_cmd = self._pair_render_command(display_item, overlay_config)
                 else:
-                    render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
+                    render_cmd = RenderCommand(
+                        image_path=media_item.filepath,
+                        overlay=overlay_config,
+                    )
                 try:
                     self._renderer.execute(render_cmd)
                     # Update timer for images
@@ -1331,31 +1425,28 @@ class PlaybackEngine:
             
             overlay_config = self._build_overlay_config(display_item)
             
-            video_extensions = tuple(ext.lower() for ext in self._config.get("video_extensions", ['.mp4', '.mov', '.mkv', '.avi', '.webm']))
-            is_video = self._is_video_media(media_item, video_extensions)
-            
-            if is_video and self._video_player:
-                self._renderer.execute(RenderCommand(image_path="RESUME", overlay=overlay_config))
-                x, y, w, h = self._video_display_rect()
-                self._play_video(media_item, x, y, w, h)
-                self._next_transition_time = float('inf')
+            if self._start_video_handoff(media_item, overlay_config):
+                pass
             else:
                 if self._video_player:
                     self._video_player.stop()
                 if display_item.layout == DisplayLayout.PORTRAIT_PAIR:
                     render_cmd = self._pair_render_command(display_item, overlay_config)
                 else:
-                    render_cmd = RenderCommand(image_path=media_item.filepath, overlay=overlay_config)
+                    render_cmd = RenderCommand(
+                        image_path=media_item.filepath,
+                        overlay=overlay_config,
+                    )
                 try:
                     self._renderer.execute(render_cmd)
                     self._next_transition_time = time.time() + self._time_delay
                 except MediaProcessingError as e:
                     self._handle_media_error(e)
+                else:
+                    self._change_state(State.PLAYING)
             
             # Publish media changed event
             self._event_publisher.publish(CurrentMediaChangedEvent(media_item=display_item))
-            
-            self._change_state(State.PLAYING)
         else:
             self._logger.warning("No previous media available")
 
@@ -1379,7 +1470,7 @@ class PlaybackEngine:
         if media_item.filepath.endswith("no_pictures.jpg"):
             return ""
             
-        # Fetch the live configuration from the repository if available, otherwise use the initial config
+        # Fetch live configuration from the repository, or use the initial config.
         if self._config_repository:
             show_text_enabled = self._config_repository.get_app_config_bool(
                 "viewer.show_text_enabled",
