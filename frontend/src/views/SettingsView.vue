@@ -58,6 +58,10 @@ const confirmActionHandlesSuccess = ref(false)
 const confirmMessage = ref('')
 const successMessage = ref('')
 const renderError = ref<any>(null)
+const CLOCK_FORMAT_24 = '%H:%M'
+const CLOCK_FORMAT_12 = '%-I:%M %p'
+type ClockFormatMode = '24' | '12' | 'custom'
+const clockFormatModeOverride = ref<ClockFormatMode | null>(null)
 
 const tabs = [
   { id: 'viewer', labelKey: 'config.viewer._title' },
@@ -139,6 +143,7 @@ onMounted(async () => {
 
 watch(() => config.value, (newConfig) => {
   if (!newConfig || Object.keys(newConfig).length === 0) return
+  clockFormatModeOverride.value = null
   localConfig.value = initializeConfig(newConfig)
 }, { immediate: true, deep: true })
 
@@ -167,6 +172,35 @@ const localeOptions = computed(() => {
     return [savedLocale, ...installedLocales]
   }
   return installedLocales
+})
+
+function detectedClockFormatMode(value: unknown): ClockFormatMode {
+  if (value === CLOCK_FORMAT_24) return '24'
+  if (value === CLOCK_FORMAT_12) return '12'
+  return 'custom'
+}
+
+const clockFormatMode = computed<ClockFormatMode>({
+  get() {
+    if (clockFormatModeOverride.value === 'custom') {
+      return 'custom'
+    }
+    return detectedClockFormatMode(localConfig.value.viewer?.clock_format)
+  },
+  set(mode) {
+    if (!localConfig.value.viewer) return
+    if (mode === '24') {
+      localConfig.value.viewer.clock_format = CLOCK_FORMAT_24
+      clockFormatModeOverride.value = null
+      return
+    }
+    if (mode === '12') {
+      localConfig.value.viewer.clock_format = CLOCK_FORMAT_12
+      clockFormatModeOverride.value = null
+      return
+    }
+    clockFormatModeOverride.value = 'custom'
+  }
 })
 
 const displayMode = computed({
@@ -730,8 +764,24 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="formatLabel('text_y_margin')" :help="sectionHelp('viewer', 'text_y_margin')">
                 <NumberField v-model="localConfig.viewer.text_y_margin" :step="1" />
               </FieldRow>
-              <FieldRow :label="formatLabel('clock_format')" :help="sectionHelp('viewer', 'clock_format')">
-                <input v-model="localConfig.viewer.clock_format" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+              <FieldRow :label="t('settings.clockHourMode')" :help="t('settings.clockHourModeHelp')">
+                <div class="space-y-3">
+                  <SegmentedControl
+                    v-model="clockFormatMode"
+                    :options="[
+                      { value: '24', label: t('settings.clock24Hour') },
+                      { value: '12', label: t('settings.clock12Hour') },
+                      { value: 'custom', label: t('settings.clockCustom') }
+                    ]"
+                  />
+                  <input
+                    v-if="clockFormatMode === 'custom'"
+                    v-model="localConfig.viewer.clock_format"
+                    type="text"
+                    :aria-label="t('settings.clockCustomFormat')"
+                    class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                  >
+                </div>
               </FieldRow>
               <FieldRow :label="formatLabel('clock_top_bottom')" :help="sectionHelp('viewer', 'clock_top_bottom')">
                 <SegmentedControl v-model="localConfig.viewer.clock_top_bottom" :options="[{ value: 'T', label: 'Top' }, { value: 'B', label: 'Bottom' }]" />

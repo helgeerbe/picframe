@@ -297,6 +297,11 @@ If the saved locale is not currently installed, Settings keeps it visible in the
 dropdown so it is not silently lost. Reverse geocoding uses this value as the
 preferred language for location lookup responses.
 
+The clock hour mode is an explicit Settings choice, independent of
+`model.locale`. The 24-hour preset stores `viewer.clock_format=%H:%M`, the
+12-hour preset stores `viewer.clock_format=%-I:%M %p`, and Custom keeps the raw
+strftime pattern editable for advanced layouts.
+
 Settings Apply prefers live component reloads. Renderer settings publish an
 in-process renderer config update; MQTT reconnects when `mqtt.*` changes; the
 media monitor reloads `pic_dir`, link-following, and media extensions; GPIO
