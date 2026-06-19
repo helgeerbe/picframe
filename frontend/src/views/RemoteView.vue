@@ -218,9 +218,17 @@ const togglePlayPause = () => {
   }
 }
 
-const handleBrightnessChange = (event: Event) => {
+const readBrightnessEventValue = (event: Event) => {
   const target = event.target as HTMLInputElement
-  playerStore.setBrightness(parseFloat(target.value))
+  return parseFloat(target.value)
+}
+
+const handleBrightnessPreview = (event: Event) => {
+  playerStore.previewBrightness(readBrightnessEventValue(event))
+}
+
+const handleBrightnessCommit = (event: Event) => {
+  playerStore.setBrightness(readBrightnessEventValue(event))
 }
 
 const isShuffleEnabled = computed(() => appConfig.value?.model?.shuffle ?? true)
@@ -1125,7 +1133,8 @@ const metadataFields = computed(() => {
                   step="0.01"
                   :value="brightness"
                   :aria-label="t('remote.controls.brightness')"
-                  @input="handleBrightnessChange"
+                  @input="handleBrightnessPreview"
+                  @change="handleBrightnessCommit"
                   class="h-6 w-full cursor-pointer accent-indigo-600 transition-all hover:accent-indigo-500"
                 >
                 <span class="w-14 flex-shrink-0 text-right text-sm font-bold tabular-nums text-gray-600 dark:text-gray-300">{{ Math.round(brightness * 100) }}%</span>

@@ -1,17 +1,17 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #693 is implemented and verified: reverse
-geocoding cache/queue rows are locale-aware, GPS media missing active-locale
-address text retry lookup during display, playlist/API location strings resolve
-for `model.locale`, and pi3d/playback overlay dates format with `model.locale`.
-The #691 video matted-handoff feature remains merged into `origin/v2-dev`.
-GitHub issues #691 and #693 are closed.
+The active branch is `v2-dev`. Issue #694 is implemented and verified locally:
+Wayland brightness now infers internal DSI/eDP/LVDS outputs for
+`brightnessctl`, probes HDMI/DDC VCP 0x10 before `ddcutil setvcp`, reports
+captured command output in brightness failures, suppresses repeated identical
+brightness errors, and Remote brightness slider drags preview locally while
+only committed values send `SET_BRIGHTNESS`.
 
 ## Current Repo State
 - Branch: `v2-dev`.
-- `v2-dev` is aligned with `origin/v2-dev` after the #693 implementation and
-  memory-bank closeout commits were pushed.
+- `v2-dev` contains local #694 implementation changes pending commit/push and
+  GitHub closeout.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -45,6 +45,7 @@ GitHub issues #691 and #693 are closed.
 - Video transition caches now use the first decoded frame and a tail-decoded final EOS frame, with fixed duration-offset sampling only as the final fallback.
 - Video transition frames mirror still-image edge behavior: cached first/last frames honor matting, `blur_edges`, `edge_alpha`, and `background`; sidecars store `frame_size`, `coordinate_space=frame_pixels`, and the visible source-image `content_rect`; playback uses that rect for the live video window for every generated frame type. Cache freshness includes both processing signatures and current geometry metadata in managed filename hashes or legacy sidecar `.meta.json`.
 - Ticket #693 makes reverse-geocoded location text locale-aware: cache and queue keys include the normalized language from `model.locale`, old cache rows migrate to a `legacy` language bucket, playlist/API lookups request the active language, GPS media without an active-locale address re-enqueue lookups during overlay generation, and overlay date strings use the configured locale.
+- Ticket #694 hardens brightness control: HDMI/DDC brightness is capability-probed before write, DSI/eDP/LVDS outputs use `brightnessctl`, command stderr/stdout is surfaced in `brightness_unavailable` errors, repeated identical brightness failures are suppressed, and the Remote slider sends only committed brightness values to hardware.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -62,6 +63,7 @@ GitHub issues #691 and #693 are closed.
 - Keep final-frame extraction at indexing/cache time using tail decoding, not at video EOS runtime.
 - Preserve the #691 geometry contract: the generated first/last transition frame defines the live video rectangle through sidecar `content_rect`; `host_backdrop_path` is only a visual backdrop, while explicit `content_fit` carries the fill intent through IPC/GTK pipeline construction.
 - Preserve the #693 locale contract: reverse-geocoded addresses must be keyed or refreshed per active language, and overlay date formatting must explicitly use `model.locale` rather than relying on whichever process locale is already active.
+- Preserve the #694 brightness boundary: Remote may preview slider movement locally, but hardware brightness commands should be sent only on commit/debounce; HDMI/DDC brightness should be attempted only after capability checks, and display power remains the route for a fully black screen when a monitor enforces a brightness floor.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

@@ -713,6 +713,15 @@ sudo usermod -aG video $USER  # For brightnessctl (internal DSI/eDP displays)
 sudo usermod -aG render $USER # For DRM/KMS access
 ```
 
+Picframe uses `brightnessctl` automatically for internal display outputs such
+as `DSI-1` or `eDP-1`. HDMI/DP outputs use `ddcutil` only after Picframe can
+verify that VCP brightness control (`ddcutil getvcp 10`) works. If the monitor,
+cable, I2C permissions, or DDC/CI settings do not support brightness, Picframe
+reports the captured command output in the Logs tab and does not keep sending
+the same failing hardware command. Some external monitors expose only a limited
+brightness range; setting brightness to 0% may not make the panel black. Use
+the display power button when you need the display to go fully dark.
+
 **Note on System Power Management (Critical):**
 To allow the application to reboot, shut down, or restart `picframe.service`
 without prompting for a password, you must configure `sudo` or `polkit` for the

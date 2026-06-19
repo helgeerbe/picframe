@@ -222,9 +222,19 @@ export const usePlayerStore = defineStore('player', () => {
     sendCommand('PREV')
   }
 
+  function normalizeBrightness(value: number) {
+    if (!Number.isFinite(value)) return brightness.value
+    return Math.max(0, Math.min(1, value))
+  }
+
+  function previewBrightness(value: number) {
+    brightness.value = normalizeBrightness(value)
+  }
+
   function setBrightness(value: number) {
-    brightness.value = value
-    sendCommand('SET_BRIGHTNESS', { value })
+    const nextValue = normalizeBrightness(value)
+    brightness.value = nextValue
+    sendCommand('SET_BRIGHTNESS', { value: nextValue })
   }
 
   function toggleDisplayPower() {
@@ -249,6 +259,7 @@ export const usePlayerStore = defineStore('player', () => {
     pause,
     next,
     previous,
+    previewBrightness,
     setBrightness,
     isDisplayOn,
     toggleDisplayPower,

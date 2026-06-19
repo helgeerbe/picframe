@@ -40,7 +40,7 @@ This view acts as the real-time remote control and information display for the c
     *   `Previous` (Skip to previous media)
     *   `Play/Pause` (Toggle playback state, icon changes dynamically based on WebSocket state)
     *   `Next` (Skip to next media)
-*   **Display Brightness:** A horizontal slider component bound to the backend brightness state. Dragging the slider emits a `CommandEvent(SET_BRIGHTNESS)` via WebSocket or REST.
+*   **Display Brightness:** A horizontal slider component bound to the backend brightness state. Dragging the slider updates the local value shown in the UI; the final `CommandEvent(SET_BRIGHTNESS)` is emitted when the slider value is committed so hardware backends such as `ddcutil` are not flooded with intermediate values.
 
 ### 4.2 Metadata Display Strategy (Bifurcated Approach)
 To balance the primary visual content with secondary context, metadata presentation follows a bifurcated strategy, strictly separating technical data from narrative context.
