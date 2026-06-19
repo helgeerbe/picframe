@@ -18,13 +18,14 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
+import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
 from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourcePaths
 from picframe.mat_image import MatImage
 
 _image_file_lock = threading.Lock()
-VIDEO_TRANSITION_FRAME_PROCESSING_VERSION = 5
+VIDEO_TRANSITION_FRAME_PROCESSING_VERSION = 6
 VIDEO_TRANSITION_FRAME_COORDINATE_SPACE = "frame_pixels"
 
 
@@ -580,6 +581,15 @@ class VideoFrameExtractor:
                 )
                 first_frame = first_result.image.convert("RGB")
                 content_rect = content_rect or self._full_frame_rect(first_frame)
+                last_frame = last_result.image.convert("RGB")
+                first_frame, last_frame = self._black_matted_gap_pixels(
+                    matter,
+                    first_image,
+                    first_result,
+                    first_frame,
+                    last_frame,
+                    content_rect,
+                )
                 metadata = VideoTransitionFrameMetadata(
                     frame_size=first_frame.size,
                     matted=True,
@@ -589,7 +599,7 @@ class VideoFrameExtractor:
                 )
                 return (
                     first_frame,
-                    last_result.image.convert("RGB"),
+                    last_frame,
                     metadata,
                 )
             except Exception as exc:
@@ -887,6 +897,81 @@ class VideoFrameExtractor:
 
     def _process_video_frame(self, frame: Image.Image) -> Image.Image:
         return self._process_video_frame_with_rect(frame).image
+
+    def _black_matted_gap_pixels(
+        self,
+        matter: MatImage,
+        source_image: Image.Image,
+        first_result: Any,
+        first_frame: Image.Image,
+        last_frame: Image.Image,
+        content_rect: tuple[int, int, int, int],
+    ) -> tuple[Image.Image, Image.Image]:
+        """Replace source-influenced mat gap pixels outside content_rect with black."""
+        try:
+            black_source = Image.new("RGB", source_image.size, (0, 0, 0))
+            white_source = Image.new("RGB", source_image.size, (255, 255, 255))
+            black_frame = matter.mat_image_with_layout(
+                (black_source,),
+                layout_spec=first_result.layout_spec,
+            ).image.convert("RGB")
+            white_frame = matter.mat_image_with_layout(
+                (white_source,),
+                layout_spec=first_result.layout_spec,
+            ).image.convert("RGB")
+            first_frame = self._replace_source_gap_with_black(
+                first_frame,
+                black_frame,
+                white_frame,
+                content_rect,
+            )
+            last_frame = self._replace_source_gap_with_black(
+                last_frame,
+                black_frame,
+                white_frame,
+                content_rect,
+            )
+            return (
+                first_frame,
+                last_frame,
+            )
+        except Exception as exc:
+            self.logger.debug("Could not black matted video gap pixels: %s", exc)
+            return first_frame, last_frame
+
+    @staticmethod
+    def _replace_source_gap_with_black(
+        frame: Image.Image,
+        black_frame: Image.Image,
+        white_frame: Image.Image,
+        content_rect: tuple[int, int, int, int],
+    ) -> Image.Image:
+        if frame.size != black_frame.size or frame.size != white_frame.size:
+            return frame
+
+        frame_pixels = np.asarray(frame.convert("RGB")).copy()
+        black_pixels = np.asarray(black_frame.convert("RGB"))
+        white_pixels = np.asarray(white_frame.convert("RGB"))
+        source_mask = np.any(black_pixels != white_pixels, axis=2)
+        if not source_mask.any():
+            return frame
+
+        frame_w, frame_h = frame.size
+        rect_x, rect_y, rect_w, rect_h = content_rect
+        x0 = max(0, int(rect_x))
+        y0 = max(0, int(rect_y))
+        x1 = min(frame_w, x0 + max(0, int(rect_w)))
+        y1 = min(frame_h, y0 + max(0, int(rect_h)))
+        content_mask = np.zeros(source_mask.shape, dtype=bool)
+        if x1 > x0 and y1 > y0:
+            content_mask[y0:y1, x0:x1] = True
+
+        gap_mask = source_mask & ~content_mask
+        if not gap_mask.any():
+            return frame
+
+        frame_pixels[gap_mask] = black_pixels[gap_mask]
+        return Image.fromarray(frame_pixels)
 
     def _get_frame_as_image(self, seek_time: float) -> Image.Image | None:
         """

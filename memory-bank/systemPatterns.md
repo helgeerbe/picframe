@@ -29,6 +29,7 @@
   - Generate cached transition frames with the same visual edge policy as still images: `viewer.blur_edges` creates blurred-edge composites, otherwise `viewer.edge_alpha` blends image-derived fill with `viewer.background`.
   - Store transition-frame geometry in the sidecar: `frame_size`, `coordinate_space=frame_pixels`, and the visible video-opening `content_rect`.
   - Use that sidecar `content_rect` for live video placement for every generated frame type: matted, solid-bar, edge-filled, blurred, and `viewer.video_fit_display`.
+  - Keep the black-gap treatment video-only: generated matted video transition frames replace source-influenced pixels outside `content_rect` with a black-source render, but normal still-image matting keeps the original frame/shadow behavior.
   - Keep beveled mat shadows in the geometry contract: bevel/highlight/shadow pixels can cover cached frame edges, and they intentionally inset the live video rectangle so the video does not cover frame shadows.
   - Use the cached first frame as an opaque GTK host backdrop when sidecar metadata marks matted or edge-filled frames, including on Raspberry Pi/labwc, so non-video regions show the intended mats/bars instead of stale pi3d pixels. If the backdrop image path is missing, keep the fixed host opaque and fill with `viewer.background`.
   - Route manual next/previous video navigation through the same tokened first-frame handoff path as timed playback, ignore stale transition completions, and keep direct fallback constrained by cached sidecar metadata when it exists.

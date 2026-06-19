@@ -104,7 +104,10 @@ The transition-frame sidecar stores `frame_size`, `coordinate_space`, and the
 visible video-opening `content_rect`; playback uses that rect for live video
 placement for every generated frame type, not only matted videos. Beveled mat
 effects can overlap cached frame pixels, so this rect is intentionally inset to
-keep frame shadows visible. Managed
+keep frame shadows visible. This black-gap treatment is video-only: generated
+matted transition frames replace source-influenced pixels outside `content_rect`
+with a black-source render, while normal still-image matting keeps its original
+frame/shadow behavior. Managed
 cache filenames include a short processing-signature hash; legacy sidecar
 `.1.frame` / `.2.frame` files keep their names but require a matching
 `.meta.json` signature and current geometry metadata before reuse.

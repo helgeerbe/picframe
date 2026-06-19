@@ -613,7 +613,9 @@ frame, and live playback uses the same rectangle for the video window so
 shadows, mats, bars, blurred fill, and edge fill remain outside the live video
 content. Beveled mat artwork can visually overlap the cached transition frame,
 so Picframe intentionally insets the live video window to keep those shadows
-visible.
+visible. In video cached first/last frames only, source-influenced pixels
+outside that live video opening are rendered from a black source so the gap does
+not show a frozen video edge. Still images keep their normal matting behavior.
 When a cached frame contains matting, blur, or image-derived edge fill,
 Picframe uses that cached first frame as the GTK video backdrop so the
 bars around live video match the pi3d title-card handoff, including on

@@ -867,6 +867,44 @@ def test_process_transition_frame_pair_uses_visible_bevel_opening_rect() -> None
     assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
 
 
+def test_process_transition_frame_pair_blacks_source_pixels_outside_bevel_opening() -> None:
+    extractor = VideoFrameExtractor(
+        "test.mp4",
+        400,
+        300,
+        fit_display=False,
+        matting_config=VideoFrameMattingConfig(
+            mat_images="on",
+            mat_type="double_bevel",
+            outer_mat_color=(10, 20, 30),
+            inner_mat_color=(40, 50, 60),
+            outer_mat_border=40,
+            inner_mat_border=20,
+            outer_mat_use_texture=False,
+            inner_mat_use_texture=False,
+        ),
+    )
+
+    first, last, metadata = extractor._process_transition_frame_pair(
+        Image.new("RGB", (160, 90), "red"),
+        Image.new("RGB", (160, 90), "blue"),
+    )
+    black_reference, _white_reference, _metadata = extractor._process_transition_frame_pair(
+        Image.new("RGB", (160, 90), "black"),
+        Image.new("RGB", (160, 90), "white"),
+    )
+
+    assert metadata.content_rect is not None
+    content_x, content_y, _content_w, _content_h = metadata.content_rect
+    gap_point = (content_x - 1, content_y - 1)
+    content_point = (content_x, content_y)
+
+    assert first.getpixel(gap_point) == black_reference.getpixel(gap_point)
+    assert last.getpixel(gap_point) == black_reference.getpixel(gap_point)
+    assert first.getpixel(content_point) == (255, 0, 0)
+    assert last.getpixel(content_point) == (0, 0, 255)
+
+
 def test_transition_metadata_round_trips_with_backdrop_path(tmp_path: Path) -> None:
     video_path = tmp_path / "video.mp4"
     video_path.write_bytes(b"video")
