@@ -689,7 +689,26 @@ def test_media_event_dto_uses_injected_repository_for_location_fallback() -> Non
 
     assert dto.location == {"lat": 52.5, "lon": 13.4}
     assert dto.exif["location_name"] == "Repository Berlin"
-    mock_media_repo.get_location.assert_called_once_with(52.5, 13.4)
+    mock_media_repo.get_location.assert_called_once_with(52.5, 13.4, language=None)
+
+
+def test_media_event_dto_uses_location_language_for_repository_fallback() -> None:
+    mock_media_repo = MagicMock()
+    mock_media_repo.get_location.return_value = "Repository Berlin"
+
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "exif": {"title": "A"},
+        },
+        media_repository=mock_media_repo,
+        location_language="de",
+    )
+
+    assert dto.exif["location_name"] == "Repository Berlin"
+    mock_media_repo.get_location.assert_called_once_with(52.5, 13.4, language="de")
 
 
 def test_media_event_dto_without_repository_does_not_guess_location_path() -> None:
@@ -945,7 +964,11 @@ def test_api_media_location_options_searches_repository() -> None:
             {"value": "Bern", "count": 1},
         ]
     }
-    mock_media_repo.search_location_options.assert_called_once_with("ber", 10)
+    mock_media_repo.search_location_options.assert_called_once_with(
+        "ber",
+        10,
+        location_language="en",
+    )
 
 
 def test_api_media_selection_count_uses_config_pic_dir() -> None:

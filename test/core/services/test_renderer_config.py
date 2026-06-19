@@ -35,6 +35,7 @@ def test_build_renderer_config_maps_matting_values() -> None:
             "viewer.video_fit_display": True,
             "viewer.show_text_fm": "%Y",
             "viewer.show_text_sz": 52,
+            "model.locale": "de_DE.utf8",
             "viewer.text_justify": "C",
             "viewer.text_bkg_hgt": 0.3,
             "viewer.text_opacity": 0.6,
@@ -70,6 +71,7 @@ def test_build_renderer_config_maps_matting_values() -> None:
     assert config.video_fit_display is True
     assert config.show_text_fm == "%Y"
     assert config.show_text_sz == 52
+    assert config.model_locale == "de_DE.utf8"
     assert config.text_justify == "C"
     assert config.text_bkg_hgt == 0.3
     assert config.text_opacity == 0.6

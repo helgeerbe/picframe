@@ -759,6 +759,98 @@ def test_engine_pair_overlay_uses_next_gen_text_config(
     assert render_cmd.overlay.text_strings == ("left.jpg", "right.jpg")
 
 
+def test_engine_formats_overlay_date_with_model_locale(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    config_repo = MagicMock()
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "viewer.show_text_enabled": True,
+    }.get(key, default)
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.text_overlay_format": "date",
+        "viewer.show_text_fm": "%B %d, %Y",
+        "model.locale": "de_DE.utf8",
+    }.get(key, default)
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/image.jpg",
+        media_type=MediaType.IMAGE,
+        filename="image.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1.0,
+        exif_datetime=1_710_000_000.0,
+    )
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    with patch(
+        "picframe.core.engine.playback.format_datetime_for_locale",
+        return_value="März 09, 2024",
+    ) as format_datetime:
+        assert engine._generate_text_string(media_item) == "März 09, 2024"
+
+    format_datetime.assert_called_once()
+    _, date_format, locale_value = format_datetime.call_args.args
+    assert date_format == "%B %d, %Y"
+    assert locale_value == "de_DE.utf8"
+
+
+def test_engine_enqueues_missing_gps_location_with_model_locale(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    media_repo = MagicMock()
+    media_repo.get_location.return_value = None
+    mock_playlist_manager._media_repo = media_repo
+    config_repo = MagicMock()
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "viewer.show_text_enabled": True,
+    }.get(key, default)
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.text_overlay_format": "location",
+        "viewer.show_text_fm": "%B %d, %Y",
+        "model.locale": "de_DE.utf8",
+        "viewer.geo_suppress_list": [],
+    }.get(key, default)
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/image.jpg",
+        media_type=MediaType.IMAGE,
+        filename="image.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1.0,
+        latitude=52.5,
+        longitude=13.4,
+    )
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    assert engine._generate_text_string(media_item) == ""
+    media_repo.get_location.assert_called_once_with(52.5, 13.4, language="de")
+    media_repo.enqueue_location_lookup.assert_called_once_with(52.5, 13.4, language="de")
+
+
 def test_engine_delete_pair_right_uses_payload(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,

@@ -76,6 +76,16 @@ def test_repository_initialization_runs_migrations(
     ]
     assert "displayed_count" in columns
     assert "last_displayed" in columns
+    location_columns = [
+        row["name"]
+        for row in media_repo._conn.execute("PRAGMA table_info(locations)").fetchall()
+    ]
+    queue_columns = [
+        row["name"]
+        for row in media_repo._conn.execute("PRAGMA table_info(geocoding_queue)").fetchall()
+    ]
+    assert "language" in location_columns
+    assert "language" in queue_columns
 
 
 def test_add_and_get_media_item(
@@ -518,3 +528,78 @@ def test_search_location_options_escapes_like_wildcards(
     assert media_repo.search_location_options("%", limit=10) == [
         {"value": "100% City", "count": 1}
     ]
+
+
+def test_location_cache_is_language_aware(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    root.mkdir()
+    media_repo.add_media_item(
+        _media_record(root / "gps.jpg", location="", last_modified=100.0)
+        | {"latitude": 52.5, "longitude": 13.4}
+    )
+    media_repo.save_location(52.5, 13.4, "Berlin, Germany", language="en")
+    media_repo.save_location(52.5, 13.4, "Berlin, Deutschland", language="de")
+
+    assert media_repo.get_location(52.5, 13.4, language="en") == "Berlin, Germany"
+    assert media_repo.get_location(52.5, 13.4, language="de") == "Berlin, Deutschland"
+    assert media_repo.get_location(52.5, 13.4, language="fr") is None
+
+    english = media_repo.query_media(
+        PlaylistCriteria(pic_dir=str(root), shuffle=False, location_language="en")
+    )
+    german = media_repo.query_media(
+        PlaylistCriteria(pic_dir=str(root), shuffle=False, location_language="de")
+    )
+
+    assert english[0]["location"] == "Berlin, Germany"
+    assert german[0]["location"] == "Berlin, Deutschland"
+
+
+def test_location_search_and_counts_use_requested_language(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    root.mkdir()
+    media_repo.add_media_item(
+        _media_record(root / "gps.jpg", location="", last_modified=100.0)
+        | {"latitude": 52.5, "longitude": 13.4}
+    )
+    media_repo.save_location(52.5, 13.4, "Berlin, Germany", language="en")
+    media_repo.save_location(52.5, 13.4, "Berlin, Deutschland", language="de")
+
+    assert media_repo.search_location_options(
+        "deutsch",
+        limit=10,
+        location_language="de",
+    ) == [{"value": "Berlin, Deutschland", "count": 1}]
+    assert media_repo.search_location_options(
+        "deutsch",
+        limit=10,
+        location_language="en",
+    ) == []
+    assert media_repo.count_media(
+        PlaylistCriteria(
+            pic_dir=str(root),
+            location_filter="Deutschland",
+            location_language="de",
+        )
+    )["selected_count"] == 1
+    assert media_repo.count_media(
+        PlaylistCriteria(
+            pic_dir=str(root),
+            location_filter="Deutschland",
+            location_language="en",
+        )
+    )["selected_count"] == 0
+
+
+def test_geocoding_queue_is_language_aware(media_repo: SQLiteMediaRepository) -> None:
+    media_repo.enqueue_location_lookup(52.5, 13.4, language="en")
+    media_repo.enqueue_location_lookup(52.5, 13.4, language="de")
+    media_repo.enqueue_location_lookup(52.5, 13.4, language="de")
+
+    assert media_repo.dequeue_location_lookup() == (52.5, 13.4, "en")
+    assert media_repo.dequeue_location_lookup() == (52.5, 13.4, "de")
+    assert media_repo.dequeue_location_lookup() is None

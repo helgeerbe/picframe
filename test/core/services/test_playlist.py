@@ -69,11 +69,11 @@ def mock_media_repo() -> Mock:
             "is_deleted": 0,
         },
     ]
-    repo.record_media_displayed.side_effect = lambda media_id: next(
+    repo.record_media_displayed.side_effect = lambda media_id, **_: next(
         (item for item in repo.get_all_media.return_value if item["id"] == media_id),
         None,
     )
-    repo.get_media_item.side_effect = lambda media_id: next(
+    repo.get_media_item.side_effect = lambda media_id, **_: next(
         (item for item in repo.get_all_media.return_value if item["id"] == media_id),
         None,
     )
@@ -111,7 +111,10 @@ def test_get_next(mock_isfile: Mock, mock_media_repo: Mock) -> None:
         assert item1.layout == DisplayLayout.SINGLE
         assert item1.id == 1
         assert item1.media_type == MediaType.IMAGE
-        mock_media_repo.record_media_displayed.assert_called_once_with(1)
+        mock_media_repo.record_media_displayed.assert_called_once_with(
+            1,
+            location_language="en",
+        )
 
         item2 = manager.get_next()
         assert item2 is not None
@@ -420,11 +423,11 @@ def test_portrait_pairs_pair_only_images_and_exclude_videos(
             "is_portrait": 1,
         },
     ]
-    mock_media_repo.record_media_displayed.side_effect = lambda media_id: next(
+    mock_media_repo.record_media_displayed.side_effect = lambda media_id, **_: next(
         (item for item in mock_media_repo.get_all_media.return_value if item["id"] == media_id),
         None,
     )
-    mock_media_repo.get_media_item.side_effect = lambda media_id: next(
+    mock_media_repo.get_media_item.side_effect = lambda media_id, **_: next(
         (item for item in mock_media_repo.get_all_media.return_value if item["id"] == media_id),
         None,
     )
@@ -495,11 +498,11 @@ def test_delete_current_pair_validates_target_ids(
             "is_portrait": 1,
         },
     ]
-    mock_media_repo.record_media_displayed.side_effect = lambda media_id: next(
+    mock_media_repo.record_media_displayed.side_effect = lambda media_id, **_: next(
         (item for item in mock_media_repo.get_all_media.return_value if item["id"] == media_id),
         None,
     )
-    mock_media_repo.get_media_item.side_effect = lambda media_id: next(
+    mock_media_repo.get_media_item.side_effect = lambda media_id, **_: next(
         (item for item in mock_media_repo.get_all_media.return_value if item["id"] == media_id),
         None,
     )
@@ -596,11 +599,11 @@ def test_portrait_pair_with_missing_side_displays_remaining_image(
         },
     ]
     mock_media_repo.query_media.return_value = mock_media_repo.get_all_media.return_value
-    mock_media_repo.get_media_item.side_effect = lambda media_id: next(
+    mock_media_repo.get_media_item.side_effect = lambda media_id, **_: next(
         (item for item in mock_media_repo.get_all_media.return_value if item["id"] == media_id),
         None,
     )
-    mock_media_repo.record_media_displayed.side_effect = lambda media_id: next(
+    mock_media_repo.record_media_displayed.side_effect = lambda media_id, **_: next(
         (item for item in mock_media_repo.get_all_media.return_value if item["id"] == media_id),
         None,
     )
@@ -625,4 +628,7 @@ def test_portrait_pair_with_missing_side_displays_remaining_image(
     assert item.layout == DisplayLayout.SINGLE
     assert item.id == 1
     mock_media_repo.delete_media_item.assert_called_once_with(2)
-    mock_media_repo.record_media_displayed.assert_called_once_with(1)
+    mock_media_repo.record_media_displayed.assert_called_once_with(
+        1,
+        location_language="en",
+    )

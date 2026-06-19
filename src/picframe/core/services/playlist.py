@@ -21,6 +21,7 @@ from picframe.core.models.playlist import (
     normalize_shuffle_mode,
 )
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
+from picframe.core.services.locale_utils import language_from_locale
 from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourcePaths
 
 logger = logging.getLogger(__name__)
@@ -154,10 +155,14 @@ class PlaylistManager:
         # Fetch latest data so geocoding and display stats stay fresh.
         current_slot = self._history[-1]
         fresh_slot: list[dict[str, Any]] = []
+        location_language = self._location_language()
         for item_data in current_slot:
             media_id = item_data.get("id")
             if media_id:
-                latest_data = self._media_repo.get_media_item(media_id)
+                latest_data = self._media_repo.get_media_item(
+                    media_id,
+                    location_language=location_language,
+                )
                 if latest_data and isinstance(latest_data, dict):
                     fresh_slot.append(latest_data)
                     continue
@@ -345,10 +350,20 @@ class PlaylistManager:
             date_to=config_value("model.date_to", ""),
             location_filter=str(config_value("model.location_filter", "")),
             tags_filter=str(config_value("model.tags_filter", "")),
+            location_language=language_from_locale(
+                config_value("model.locale", "en_US.utf8")
+            ),
             shuffle=shuffle,
             shuffle_mode=shuffle_mode,
             sort_cols=str(config_value("model.sort_cols", "fname ASC")),
             recent_n=int(config_value("model.recent_n", 0) or 0),
+        )
+
+    def _location_language(self) -> str:
+        if self._config_repo is None:
+            return "en"
+        return language_from_locale(
+            self._config_repo.get_app_config("model.locale", "en_US.utf8")
         )
 
     def _build_display_playlist(
@@ -460,11 +475,15 @@ class PlaylistManager:
     ) -> list[dict[str, Any]]:
         """Drop unavailable/stale files, refresh metadata, and record display stats."""
         prepared_slot: list[dict[str, Any]] = []
+        location_language = self._location_language()
 
         for item_data in slot_data:
             media_id = item_data.get("id")
             if media_id:
-                latest_data = self._media_repo.get_media_item(media_id)
+                latest_data = self._media_repo.get_media_item(
+                    media_id,
+                    location_language=location_language,
+                )
                 if latest_data and isinstance(latest_data, dict):
                     item_data = latest_data
 
@@ -486,7 +505,10 @@ class PlaylistManager:
                 continue
 
             if media_id:
-                updated_data = self._media_repo.record_media_displayed(media_id)
+                updated_data = self._media_repo.record_media_displayed(
+                    media_id,
+                    location_language=location_language,
+                )
                 if updated_data and isinstance(updated_data, dict):
                     item_data = updated_data
 

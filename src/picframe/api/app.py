@@ -64,6 +64,7 @@ from picframe.core.models.playlist import PlaylistCriteria
 from picframe.core.ports import ISystemManager
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 from picframe.core.services.basic_auth import AUTH_COOKIE_NAME, BasicAuthStore
+from picframe.core.services.locale_utils import language_from_locale
 from picframe.core.services.logging_service import LogEvent, LogEventBuffer
 from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourcePaths
 
@@ -411,6 +412,7 @@ def _coerce_media_item_dict(media_item: Any) -> dict[str, Any]:
 def _media_item_to_dto(
     item_dict: dict[str, Any],
     media_repository: IMediaRepository | None,
+    location_language: str | None = None,
 ) -> MediaResponseDTO:
     """Build a frontend media DTO without depending on a concrete cache database."""
     file_path = item_dict.get("file_path") or item_dict.get("filepath")
@@ -442,7 +444,11 @@ def _media_item_to_dto(
 
     if "location_name" not in exif_data and location is not None and media_repository:
         try:
-            location_name = media_repository.get_location(location["lat"], location["lon"])
+            location_name = media_repository.get_location(
+                location["lat"],
+                location["lon"],
+                language=location_language,
+            )
             if location_name:
                 exif_data["location_name"] = location_name
         except Exception as e:
@@ -461,6 +467,7 @@ def _media_item_to_dto(
 def media_event_to_response_dto(
     media_item: Any,
     media_repository: IMediaRepository | None = None,
+    location_language: str | None = None,
 ) -> MediaResponseDTO:
     """Serialize current-media event payloads for WebSocket clients."""
     media_dict = _coerce_media_item_dict(media_item)
@@ -472,12 +479,22 @@ def media_event_to_response_dto(
         item_dicts = [media_dict]
 
     item_dtos = [
-        _media_item_to_dto(cast(dict[str, Any], item), media_repository)
+        _media_item_to_dto(
+            cast(dict[str, Any], item),
+            media_repository,
+            location_language=location_language,
+        )
         for item in item_dicts
         if isinstance(item, dict)
     ]
     if not item_dtos:
-        item_dtos = [_media_item_to_dto(media_dict, media_repository)]
+        item_dtos = [
+            _media_item_to_dto(
+                media_dict,
+                media_repository,
+                location_language=location_language,
+            )
+        ]
         primary_index = 0
     if primary_index < 0 or primary_index >= len(item_dtos):
         primary_index = 0
@@ -493,6 +510,16 @@ def media_event_to_response_dto(
         layout=layout,
         primary_index=primary_index,
         items=item_dtos,
+    )
+
+
+def _location_language_from_config(
+    config_repository: IConfigRepository | None,
+) -> str:
+    if config_repository is None:
+        return "en"
+    return language_from_locale(
+        config_repository.get_app_config("model.locale", "en_US.utf8")
     )
 
 
@@ -781,7 +808,11 @@ def create_app(
         loop = asyncio.get_running_loop()
         
         def handle_media_changed(event: CurrentMediaChangedEvent) -> None:
-            dto = media_event_to_response_dto(event.media_item, media_repository)
+            dto = media_event_to_response_dto(
+                event.media_item,
+                media_repository,
+                location_language=_location_language_from_config(config_repository),
+            )
             msg = json.dumps({"type": "MediaChangedEvent", "media": dto.model_dump()})
             # Use call_soon_threadsafe because this callback runs in the event bus thread
             loop.call_soon_threadsafe(send_queue.put_nowait, msg)
@@ -1331,7 +1362,11 @@ def create_app(
         """Return searchable media location options without loading every location."""
         if not media_repository:
             return {"locations": []}
-        locations = media_repository.search_location_options(q, limit)
+        locations = media_repository.search_location_options(
+            q,
+            limit,
+            location_language=_location_language_from_config(config_repository),
+        )
         return MediaLocationOptionsResponse(locations=locations).model_dump()
 
     @app.post(
@@ -1370,6 +1405,7 @@ def create_app(
             date_to=payload.date_to,
             location_filter=payload.location_filter,
             tags_filter=payload.tags_filter,
+            location_language=_location_language_from_config(config_repository),
             shuffle=False,
             recent_n=0,
         )

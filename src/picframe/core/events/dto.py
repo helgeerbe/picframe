@@ -174,6 +174,7 @@ class RendererConfig:
     show_text_enabled: bool = False
     text_overlay_format: str = "%b %d, %Y"
     show_text_fm: str = "%b %d, %Y"
+    model_locale: str = "en_US.utf8"
     text_justify: str = "L"
     show_text_sz: int = 40
     text_bkg_hgt: float = 0.25

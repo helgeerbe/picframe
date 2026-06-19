@@ -20,7 +20,12 @@ def mock_geo_reverse() -> MagicMock:
 def mock_config_repo() -> MagicMock:
     repo = MagicMock()
     repo.get_app_config_bool.return_value = True
-    repo.get_app_config.return_value = "test_key"
+    values = {
+        "model.geo_key": "test_key",
+        "model.locale": "de_DE.utf8",
+        "model.key_list": [["city"], ["country"]],
+    }
+    repo.get_app_config.side_effect = lambda key, default=None: values.get(key, default)
     return repo
 
 def test_geocoding_worker_initialization(mock_repo: MagicMock, mock_config_repo: MagicMock) -> None:
@@ -46,7 +51,11 @@ def test_geocoding_worker_queue_coordinates(mock_geo_reverse_class: MagicMock, m
     worker = GeocodingWorker(mock_repo, mock_config_repo)
     worker.start()
     worker.queue_lookup(10.1234, 20.5678)
-    mock_repo.enqueue_location_lookup.assert_called_once_with(10.1234, 20.5678)
+    mock_repo.enqueue_location_lookup.assert_called_once_with(
+        10.1234,
+        20.5678,
+        language="de",
+    )
     worker.stop()
 
 @patch('picframe.core.services.geocoding_worker.GeoReverse')
@@ -56,7 +65,11 @@ def test_geocoding_worker_process_queue(mock_geo_reverse_class: MagicMock, mock_
     mock_geo_reverse_class.return_value = mock_geo_instance
     
     # Mock the dequeue to return our task once, then None
-    mock_repo.dequeue_location_lookup.side_effect = [(10.1234, 20.5678), None, None]
+    mock_repo.dequeue_location_lookup.side_effect = [
+        (10.1234, 20.5678, "de"),
+        None,
+        None,
+    ]
     
     worker = GeocodingWorker(mock_repo, mock_config_repo)
     worker.start()
@@ -64,9 +77,14 @@ def test_geocoding_worker_process_queue(mock_geo_reverse_class: MagicMock, mock_
     time.sleep(0.1) # Give it time to process
     worker.stop()
     
-    mock_repo.get_location.assert_called_with(10.1234, 20.5678)
+    mock_repo.get_location.assert_called_with(10.1234, 20.5678, language="de")
     mock_geo_instance.get_address.assert_called_once_with(10.1234, 20.5678)
-    mock_repo.save_location.assert_called_once_with(10.1234, 20.5678, "Test Address")
+    mock_repo.save_location.assert_called_once_with(
+        10.1234,
+        20.5678,
+        "Test Address",
+        language="de",
+    )
 
 @patch('picframe.core.services.geocoding_worker.GeoReverse')
 def test_geocoding_worker_cache_hit(mock_geo_reverse_class: MagicMock, mock_repo: MagicMock, mock_config_repo: MagicMock) -> None:
@@ -81,7 +99,7 @@ def test_geocoding_worker_cache_hit(mock_geo_reverse_class: MagicMock, mock_repo
     time.sleep(0.1)
     worker.stop()
     
-    mock_repo.get_location.assert_called_once_with(10.1234, 20.5678)
+    mock_repo.get_location.assert_called_once_with(10.1234, 20.5678, language="de")
     mock_geo_instance.get_address.assert_not_called()
     mock_repo.save_location.assert_not_called()
 

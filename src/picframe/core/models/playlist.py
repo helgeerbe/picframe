@@ -28,6 +28,7 @@ class PlaylistCriteria:
     date_to: str | float | int | None = ""
     location_filter: str = ""
     tags_filter: str = ""
+    location_language: str = "en"
     shuffle: bool = True
     shuffle_mode: str = SHUFFLE_MODE_STANDARD
     sort_cols: str = "fname ASC"

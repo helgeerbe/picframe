@@ -29,5 +29,5 @@
 
 ## Verification Notes
 - Frontend build passes with `npm run build`; the 2026-06-18 merge check emitted sandbox stream-fd warnings before Vite completed successfully.
-- Backend pytest passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest` reported 617 passed, 1 GI deprecation warning on 2026-06-18.
+- Backend pytest passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest` reported 626 passed, 1 GI deprecation warning on 2026-06-19.
 - Current tests include Python 3.14 compatibility shims for Starlette/AnyIO test hangs and avoid real socket binding in API server unit tests.

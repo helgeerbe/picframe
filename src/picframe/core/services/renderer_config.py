@@ -71,6 +71,7 @@ def build_renderer_config(
         show_text_fm=str(
             config_repository.get_app_config("viewer.show_text_fm", "%b %d, %Y")
         ),
+        model_locale=str(config_repository.get_app_config("model.locale", "en_US.utf8")),
         text_justify=str(config_repository.get_app_config("viewer.text_justify", "L")),
         show_text_sz=int(config_repository.get_app_config("viewer.show_text_sz", 40)),
         text_bkg_hgt=float(config_repository.get_app_config("viewer.text_bkg_hgt", 0.25)),

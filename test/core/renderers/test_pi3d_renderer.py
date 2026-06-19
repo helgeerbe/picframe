@@ -100,6 +100,39 @@ def test_renderer_initialization(config: RendererConfig) -> None:
     assert renderer._animation_controller._state == RenderState.STATIC
 
 
+def test_renderer_formats_overlay_date_with_model_locale(config: RendererConfig) -> None:
+    """Renderer-side overlay generation uses the configured model locale."""
+    renderer = Pi3dRenderer(
+        replace(
+            config,
+            show_text_enabled=True,
+            text_overlay_format="date",
+            show_text_fm="%B %d, %Y",
+            model_locale="de_DE.utf8",
+        )
+    )
+    media_item = MediaItem(
+        filepath="/path/to/image.jpg",
+        filename="image.jpg",
+        directory_id=1,
+        media_type=MediaType.IMAGE,
+        file_size=1024,
+        last_modified=1.0,
+        exif_datetime=1_710_000_000.0,
+    )
+
+    with patch(
+        "picframe.core.renderers.pi3d_renderer.format_datetime_for_locale",
+        return_value="März 09, 2024",
+    ) as format_datetime:
+        assert renderer._generate_text_string(media_item) == "März 09, 2024"
+
+    format_datetime.assert_called_once()
+    _, date_format, locale_value = format_datetime.call_args.args
+    assert date_format == "%B %d, %Y"
+    assert locale_value == "de_DE.utf8"
+
+
 def test_renderer_start_stop(
     config: RendererConfig,
     mock_pi3d: MagicMock,

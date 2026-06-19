@@ -21,6 +21,7 @@ from picframe.core.models.playlist import (
 )
 from picframe.core.repositories.interfaces import IMediaRepository
 from picframe.core.repositories.migrations import Migration, MigrationManager
+from picframe.core.services.locale_utils import language_from_locale
 
 logger = logging.getLogger(__name__)
 
@@ -79,17 +80,49 @@ MEDIA_MIGRATIONS = [
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
+            language TEXT NOT NULL DEFAULT 'en',
             address TEXT,
-            UNIQUE (latitude, longitude)
+            UNIQUE (latitude, longitude, language)
         );
 
         CREATE TABLE IF NOT EXISTS geocoding_queue (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             latitude REAL NOT NULL,
             longitude REAL NOT NULL,
+            language TEXT NOT NULL DEFAULT 'en',
             created_at REAL DEFAULT (julianday('now')),
-            UNIQUE (latitude, longitude)
+            UNIQUE (latitude, longitude, language)
         );
+        """,
+    ),
+    Migration(
+        version=2,
+        up_script="""
+        CREATE TABLE locations_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            language TEXT NOT NULL DEFAULT 'en',
+            address TEXT,
+            UNIQUE (latitude, longitude, language)
+        );
+        INSERT OR IGNORE INTO locations_new (latitude, longitude, language, address)
+            SELECT latitude, longitude, 'legacy', address FROM locations;
+        DROP TABLE locations;
+        ALTER TABLE locations_new RENAME TO locations;
+
+        CREATE TABLE geocoding_queue_new (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            latitude REAL NOT NULL,
+            longitude REAL NOT NULL,
+            language TEXT NOT NULL DEFAULT 'en',
+            created_at REAL DEFAULT (julianday('now')),
+            UNIQUE (latitude, longitude, language)
+        );
+        INSERT OR IGNORE INTO geocoding_queue_new (latitude, longitude, language, created_at)
+            SELECT latitude, longitude, 'legacy', created_at FROM geocoding_queue;
+        DROP TABLE geocoding_queue;
+        ALTER TABLE geocoding_queue_new RENAME TO geocoding_queue;
         """,
     ),
 ]
@@ -282,6 +315,28 @@ class SQLiteMediaRepository(IMediaRepository):
         manager = MigrationManager(self._conn, MEDIA_MIGRATIONS)
         manager.migrate()
 
+    @staticmethod
+    def _location_language(language: str | None) -> str:
+        return language_from_locale(language or "en")
+
+    @classmethod
+    def _location_join_sql(cls, language: str | None) -> tuple[str, tuple[str]]:
+        return (
+            """
+            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
+                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+                AND l.language = ?
+            """,
+            (cls._location_language(language),),
+        )
+
+    @staticmethod
+    def _media_row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
+        data = dict(row)
+        if "resolved_location" in data:
+            data["location"] = data.pop("resolved_location")
+        return data
+
     def add_media_item(self, media_data: dict[str, Any]) -> int:
         """
         Add a new media item to the cache, or update if it exists.
@@ -323,18 +378,18 @@ class SQLiteMediaRepository(IMediaRepository):
         Returns:
             A dictionary containing the media metadata, or None if not found.
         """
+        location_join, location_params = self._location_join_sql(None)
         cursor = self._conn.execute(
             """
-            SELECT m.*, COALESCE(l.address, m.location) as location
+            SELECT m.*, COALESCE(l.address, m.location) as resolved_location
             FROM media m
-            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
-                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            """ + location_join + """
             WHERE m.filepath = ?
             """,
-            (filepath,)
+            (*location_params, filepath,)
         )
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return self._media_row_to_dict(row) if row else None
 
     def delete_media_by_path(self, filepath: str) -> None:
         """
@@ -350,7 +405,9 @@ class SQLiteMediaRepository(IMediaRepository):
                 (filepath,),
             )
 
-    def get_media_item(self, media_id: int) -> dict[str, Any] | None:
+    def get_media_item(
+        self, media_id: int, location_language: str | None = None
+    ) -> dict[str, Any] | None:
         """
         Retrieve a media item by its ID.
 
@@ -360,18 +417,18 @@ class SQLiteMediaRepository(IMediaRepository):
         Returns:
             A dictionary containing the media metadata, or None if not found.
         """
+        location_join, location_params = self._location_join_sql(location_language)
         cursor = self._conn.execute(
             """
-            SELECT m.*, COALESCE(l.address, m.location) as location
+            SELECT m.*, COALESCE(l.address, m.location) as resolved_location
             FROM media m
-            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
-                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            """ + location_join + """
             WHERE m.id = ?
             """,
-            (media_id,)
+            (*location_params, media_id,)
         )
         row = cursor.fetchone()
-        return dict(row) if row else None
+        return self._media_row_to_dict(row) if row else None
 
     def update_media_item(self, media_id: int, updates: dict[str, Any]) -> None:
         """
@@ -432,16 +489,17 @@ class SQLiteMediaRepository(IMediaRepository):
         Returns:
             A list of dictionaries containing media metadata.
         """
+        location_join, location_params = self._location_join_sql(None)
         cursor = self._conn.execute(
             """
-            SELECT m.*, COALESCE(l.address, m.location) as location
+            SELECT m.*, COALESCE(l.address, m.location) as resolved_location
             FROM media m
-            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
-                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            """ + location_join + """
             WHERE m.is_deleted = 0
-            """
+            """,
+            location_params,
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [self._media_row_to_dict(row) for row in cursor.fetchall()]
 
     def query_media(self, criteria: PlaylistCriteria) -> list[dict[str, Any]]:
         """
@@ -450,18 +508,18 @@ class SQLiteMediaRepository(IMediaRepository):
         where_clauses, params = self._build_media_where(criteria)
         order_clause = self._build_order_clause(criteria)
 
+        location_join, location_params = self._location_join_sql(criteria.location_language)
         cursor = self._conn.execute(
             f"""
-            SELECT m.*, COALESCE(l.address, m.location) as location
+            SELECT m.*, COALESCE(l.address, m.location) as resolved_location
             FROM media m
-            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
-                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            {location_join}
             WHERE {" AND ".join(where_clauses)}
             ORDER BY {order_clause}
             """,
-            params,
+            [*location_params, *params],
         )
-        return [dict(row) for row in cursor.fetchall()]
+        return [self._media_row_to_dict(row) for row in cursor.fetchall()]
 
     def count_media(self, criteria: PlaylistCriteria) -> dict[str, Any]:
         """
@@ -475,13 +533,23 @@ class SQLiteMediaRepository(IMediaRepository):
         )
         scope_label = (criteria.subdirectory or "").strip().strip("/")
         return {
-            "selected_count": self._count_media_where(selected_where, selected_params),
-            "total_count": self._count_media_where(total_where, total_params),
+            "selected_count": self._count_media_where(
+                selected_where,
+                selected_params,
+                criteria.location_language,
+            ),
+            "total_count": self._count_media_where(
+                total_where,
+                total_params,
+                criteria.location_language,
+            ),
             "scope": "subdirectory" if scope_label else "pic_dir",
             "scope_label": scope_label or str(Path(criteria.pic_dir or "").expanduser()),
         }
 
-    def record_media_displayed(self, media_id: int) -> dict[str, Any] | None:
+    def record_media_displayed(
+        self, media_id: int, location_language: str | None = None
+    ) -> dict[str, Any] | None:
         """Increment display statistics and return the updated media item."""
         with self._conn:
             self._conn.execute(
@@ -494,7 +562,7 @@ class SQLiteMediaRepository(IMediaRepository):
                 """,
                 (time.time(), media_id),
             )
-        return self.get_media_item(media_id)
+        return self.get_media_item(media_id, location_language=location_language)
 
     def get_filter_options(self, pic_dir: str | None = None) -> dict[str, Any]:
         """Return distinct values for Remote filter controls."""
@@ -532,11 +600,13 @@ class SQLiteMediaRepository(IMediaRepository):
         self,
         query: str = "",
         limit: int = 25,
+        location_language: str | None = None,
     ) -> list[dict[str, Any]]:
         """Return capped distinct location values with active-media counts."""
         query = (query or "").strip().lower()
         limit = max(1, min(int(limit or 25), 100))
         params: list[Any] = []
+        location_join, location_params = self._location_join_sql(location_language)
         where = "location IS NOT NULL AND TRIM(location) != ''"
         if query:
             where += " AND LOWER(location) LIKE ? ESCAPE '\\'"
@@ -548,8 +618,7 @@ class SQLiteMediaRepository(IMediaRepository):
             FROM (
                 SELECT COALESCE(l.address, m.location) AS location
                 FROM media m
-                LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
-                    AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+                {location_join}
                 WHERE m.is_deleted = 0
             )
             WHERE {where}
@@ -557,7 +626,7 @@ class SQLiteMediaRepository(IMediaRepository):
             ORDER BY count DESC, LOWER(location) ASC
             LIMIT ?
             """,
-            params,
+            [*location_params, *params],
         )
         return [
             {"value": str(row["value"]), "count": int(row["count"])}
@@ -602,16 +671,21 @@ class SQLiteMediaRepository(IMediaRepository):
 
         return where_clauses, params
 
-    def _count_media_where(self, where_clauses: list[str], params: list[Any]) -> int:
+    def _count_media_where(
+        self,
+        where_clauses: list[str],
+        params: list[Any],
+        location_language: str | None,
+    ) -> int:
+        location_join, location_params = self._location_join_sql(location_language)
         cursor = self._conn.execute(
             f"""
             SELECT COUNT(DISTINCT m.id)
             FROM media m
-            LEFT JOIN locations l ON ROUND(m.latitude, 4) = ROUND(l.latitude, 4)
-                AND ROUND(m.longitude, 4) = ROUND(l.longitude, 4)
+            {location_join}
             WHERE {" AND ".join(where_clauses)}
             """,
-            params,
+            [*location_params, *params],
         )
         return int(cursor.fetchone()[0])
 
@@ -714,7 +788,9 @@ class SQLiteMediaRepository(IMediaRepository):
             return ""
         return relative.as_posix()
 
-    def get_location(self, latitude: float, longitude: float) -> str | None:
+    def get_location(
+        self, latitude: float, longitude: float, language: str | None = None
+    ) -> str | None:
         """
         Retrieve a cached location string for the given coordinates.
 
@@ -726,13 +802,19 @@ class SQLiteMediaRepository(IMediaRepository):
             The cached address string, or None if not found.
         """
         cursor = self._conn.execute(
-            "SELECT address FROM locations WHERE latitude = ? AND longitude = ?",
-            (latitude, longitude),
+            """
+            SELECT address
+            FROM locations
+            WHERE latitude = ? AND longitude = ? AND language = ?
+            """,
+            (latitude, longitude, self._location_language(language)),
         )
         row = cursor.fetchone()
         return row["address"] if row else None
 
-    def save_location(self, latitude: float, longitude: float, address: str) -> None:
+    def save_location(
+        self, latitude: float, longitude: float, address: str, language: str | None = None
+    ) -> None:
         """
         Save a resolved location string for the given coordinates.
 
@@ -743,11 +825,16 @@ class SQLiteMediaRepository(IMediaRepository):
         """
         with self._conn:
             self._conn.execute(
-                "INSERT OR REPLACE INTO locations (latitude, longitude, address) VALUES (?, ?, ?)",
-                (latitude, longitude, address),
+                """
+                INSERT OR REPLACE INTO locations (latitude, longitude, language, address)
+                VALUES (?, ?, ?, ?)
+                """,
+                (latitude, longitude, self._location_language(language), address),
             )
 
-    def enqueue_location_lookup(self, latitude: float, longitude: float) -> None:
+    def enqueue_location_lookup(
+        self, latitude: float, longitude: float, language: str | None = None
+    ) -> None:
         """
         Add a location lookup task to the persistent queue.
 
@@ -757,11 +844,14 @@ class SQLiteMediaRepository(IMediaRepository):
         """
         with self._conn:
             self._conn.execute(
-                "INSERT OR IGNORE INTO geocoding_queue (latitude, longitude) VALUES (?, ?)",
-                (latitude, longitude),
+                """
+                INSERT OR IGNORE INTO geocoding_queue (latitude, longitude, language)
+                VALUES (?, ?, ?)
+                """,
+                (latitude, longitude, self._location_language(language)),
             )
 
-    def dequeue_location_lookup(self) -> tuple[float, float] | None:
+    def dequeue_location_lookup(self) -> tuple[float, float, str] | None:
         """
         Retrieve and remove the next location lookup task from the queue.
 
@@ -771,7 +861,7 @@ class SQLiteMediaRepository(IMediaRepository):
         with self._conn:
             cursor = self._conn.execute(
                 """
-                SELECT id, latitude, longitude
+                SELECT id, latitude, longitude, language
                 FROM geocoding_queue
                 ORDER BY created_at ASC
                 LIMIT 1
@@ -780,7 +870,7 @@ class SQLiteMediaRepository(IMediaRepository):
             row = cursor.fetchone()
             if row:
                 self._conn.execute("DELETE FROM geocoding_queue WHERE id = ?", (row["id"],))
-                return row["latitude"], row["longitude"]
+                return row["latitude"], row["longitude"], row["language"]
             return None
 
     def purge_missing_files(self) -> int:

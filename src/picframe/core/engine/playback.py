@@ -32,6 +32,10 @@ from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.exceptions import MediaProcessingError
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem
 from picframe.core.renderers.interfaces import IRenderer
+from picframe.core.services.locale_utils import (
+    format_datetime_for_locale,
+    language_from_locale,
+)
 from picframe.core.services.overlay_text import apply_geo_suppress_list
 from picframe.core.services.playlist import PlaylistManager
 from picframe.core.services.renderer_assets import format_renderer_asset_issues
@@ -468,6 +472,7 @@ class PlaybackEngine:
             config.show_text_enabled,
             config.text_overlay_format,
             config.show_text_fm,
+            config.model_locale,
             config.text_justify,
             config.show_text_sz,
             config.text_bkg_hgt,
@@ -1386,12 +1391,18 @@ class PlaybackEngine:
                     "viewer.show_text_fm", self._config.get("show_text_fm", "%b %d, %Y")
                 )
             )
+            model_locale = str(
+                self._config_repository.get_app_config(
+                    "model.locale", self._config.get("locale", "en_US.utf8")
+                )
+            )
         else:
             show_text_enabled = self._text_overlay_enabled(
                 self._config.get("show_text_enabled", self._config.get("show_text", False))
             )
             show_text_config = self._text_overlay_format()
             show_text_fm = str(self._config.get("show_text_fm", "%b %d, %Y"))
+            model_locale = str(self._config.get("locale", "en_US.utf8"))
             
         if not show_text_enabled or not self._text_overlay_enabled(show_text_config):
             return ""
@@ -1411,7 +1422,7 @@ class PlaybackEngine:
             import datetime
             try:
                 dt = datetime.datetime.fromtimestamp(media_item.exif_datetime)
-                parts.append(dt.strftime(show_text_fm))
+                parts.append(format_datetime_for_locale(dt, show_text_fm, model_locale))
             except Exception:
                 pass
                 
@@ -1421,15 +1432,28 @@ class PlaybackEngine:
             
         if "location" in show_text_config:
             location = getattr(media_item, "location", None)
-            if not location and getattr(media_item, "latitude", None) is not None and getattr(media_item, "longitude", None) is not None:
+            if (
+                not location
+                and getattr(media_item, "latitude", None) is not None
+                and getattr(media_item, "longitude", None) is not None
+            ):
                 # Check if it's in the database cache first
-                cached_location = self._playlist_manager._media_repo.get_location(media_item.latitude, media_item.longitude)
+                location_language = language_from_locale(model_locale)
+                cached_location = self._playlist_manager._media_repo.get_location(
+                    media_item.latitude,
+                    media_item.longitude,
+                    language=location_language,
+                )
                 if cached_location:
                     location = cached_location
                     media_item.location = location
                 else:
                     # Enqueue for background processing
-                    self._playlist_manager._media_repo.enqueue_location_lookup(media_item.latitude, media_item.longitude)
+                    self._playlist_manager._media_repo.enqueue_location_lookup(
+                        media_item.latitude,
+                        media_item.longitude,
+                        language=location_language,
+                    )
             
             if location:
                 if self._config_repository:

@@ -115,7 +115,9 @@ class IMediaRepository(Protocol):
         """
         ...
 
-    def get_media_item(self, media_id: int) -> dict[str, Any] | None:
+    def get_media_item(
+        self, media_id: int, location_language: str | None = None
+    ) -> dict[str, Any] | None:
         """
         Retrieve a media item by its ID.
 
@@ -211,7 +213,9 @@ class IMediaRepository(Protocol):
         """
         ...
 
-    def record_media_displayed(self, media_id: int) -> dict[str, Any] | None:
+    def record_media_displayed(
+        self, media_id: int, location_language: str | None = None
+    ) -> dict[str, Any] | None:
         """
         Increment display statistics for a media item.
 
@@ -261,7 +265,9 @@ class IMediaRepository(Protocol):
         """
         ...
 
-    def get_location(self, latitude: float, longitude: float) -> str | None:
+    def get_location(
+        self, latitude: float, longitude: float, language: str | None = None
+    ) -> str | None:
         """
         Retrieve a cached location string for the given coordinates.
 
@@ -274,7 +280,9 @@ class IMediaRepository(Protocol):
         """
         ...
 
-    def save_location(self, latitude: float, longitude: float, address: str) -> None:
+    def save_location(
+        self, latitude: float, longitude: float, address: str, language: str | None = None
+    ) -> None:
         """
         Save a resolved location string for the given coordinates.
 
@@ -285,7 +293,9 @@ class IMediaRepository(Protocol):
         """
         ...
 
-    def enqueue_location_lookup(self, latitude: float, longitude: float) -> None:
+    def enqueue_location_lookup(
+        self, latitude: float, longitude: float, language: str | None = None
+    ) -> None:
         """
         Add a location lookup task to the persistent queue.
 
@@ -295,7 +305,7 @@ class IMediaRepository(Protocol):
         """
         ...
 
-    def dequeue_location_lookup(self) -> tuple[float, float] | None:
+    def dequeue_location_lookup(self) -> tuple[float, float, str] | None:
         """
         Retrieve and remove the next location lookup task from the queue.
 

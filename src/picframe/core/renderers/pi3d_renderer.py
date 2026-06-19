@@ -35,6 +35,7 @@ from picframe.core.renderers.components.image_renderer import ImageRenderer
 from picframe.core.renderers.components.text_renderer import TextRenderer
 from picframe.core.renderers.interfaces import IRenderer
 from picframe.core.repositories.interfaces import IConfigRepository
+from picframe.core.services.locale_utils import format_datetime_for_locale
 from picframe.core.services.overlay_text import apply_geo_suppress_list
 
 PI3D_LABWC_IDENTIFIER = "picframe-pi3d"
@@ -198,7 +199,13 @@ class Pi3dRenderer(IRenderer):
             import datetime
             try:
                 dt = datetime.datetime.fromtimestamp(media_item.exif_datetime)
-                parts.append(dt.strftime(show_text_fm))
+                parts.append(
+                    format_datetime_for_locale(
+                        dt,
+                        show_text_fm,
+                        self._config.model_locale,
+                    )
+                )
             except Exception:
                 pass
         if "folder" in show_text_config and getattr(media_item, "filepath", None):
