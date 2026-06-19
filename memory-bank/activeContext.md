@@ -1,7 +1,7 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #694 is implemented and verified locally:
+The active branch is `v2-dev`. Issue #694 is implemented, pushed, and closed:
 Wayland brightness now infers internal DSI/eDP/LVDS outputs for
 `brightnessctl`, probes HDMI/DDC VCP 0x10 before `ddcutil setvcp`, reports
 captured command output in brightness failures, suppresses repeated identical
@@ -10,8 +10,8 @@ only committed values send `SET_BRIGHTNESS`.
 
 ## Current Repo State
 - Branch: `v2-dev`.
-- `v2-dev` contains local #694 implementation changes pending commit/push and
-  GitHub closeout.
+- `v2-dev` is aligned with `origin/v2-dev` after the #694 implementation was
+  pushed and GitHub issue #694 was closed.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
