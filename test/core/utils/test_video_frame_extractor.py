@@ -53,20 +53,6 @@ def _color_bbox(
     )
 
 
-def _rect_contains(
-    outer: tuple[int, int, int, int],
-    inner: tuple[int, int, int, int],
-) -> bool:
-    outer_x, outer_y, outer_w, outer_h = outer
-    inner_x, inner_y, inner_w, inner_h = inner
-    return (
-        inner_x >= outer_x
-        and inner_y >= outer_y
-        and inner_x + inner_w <= outer_x + outer_w
-        and inner_y + inner_h <= outer_y + outer_h
-    )
-
-
 def test_get_first_frame_as_image_success(tmp_path: Path) -> None:
     video_path = tmp_path / "test.mp4"
     cache_dir = tmp_path / "cache"
@@ -362,7 +348,7 @@ def test_cached_transition_frames_reject_current_signature_without_geometry(
     assert not extractor.cached_transition_frames_valid()
 
 
-def test_cached_transition_frames_reject_version_three_sidecar(
+def test_cached_transition_frames_reject_previous_processing_version_sidecar(
     tmp_path: Path,
 ) -> None:
     video_path = tmp_path / "video.mp4"
@@ -382,7 +368,7 @@ def test_cached_transition_frames_reject_version_three_sidecar(
     Path(extractor.get_metadata_path()).write_text(
         json.dumps(
             {
-                "version": 3,
+                "version": VIDEO_TRANSITION_FRAME_PROCESSING_VERSION - 1,
                 "frame_size": [400, 300],
                 "coordinate_space": VIDEO_TRANSITION_FRAME_COORDINATE_SPACE,
                 "matted": True,
@@ -850,7 +836,7 @@ def test_process_transition_frame_pair_applies_identical_matted_layout() -> None
     assert metadata.layout_spec["content_rects"][0] == metadata.content_rect
 
 
-def test_process_transition_frame_pair_uses_logical_bevel_content_rect() -> None:
+def test_process_transition_frame_pair_uses_visible_bevel_opening_rect() -> None:
     extractor = VideoFrameExtractor(
         "test.mp4",
         400,
@@ -876,9 +862,7 @@ def test_process_transition_frame_pair_uses_logical_bevel_content_rect() -> None
     visible_rect = _color_bbox(first, (255, 0, 0))
     assert metadata.content_rect is not None
     assert visible_rect is not None
-    assert _rect_contains(metadata.content_rect, visible_rect)
-    assert metadata.content_rect[0] < visible_rect[0]
-    assert metadata.content_rect[1] < visible_rect[1]
+    assert metadata.content_rect == visible_rect
     assert metadata.frame_size == (400, 300)
     assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
 
