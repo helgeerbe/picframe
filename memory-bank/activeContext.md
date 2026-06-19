@@ -1,15 +1,17 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #696 is implemented and verified locally:
-`SQLiteMediaRepository` serializes access to its shared SQLite connection so
-API location enrichment, playback, indexing, and geocoding do not race the same
-`media_cache.db3` connection and trigger SQLite API misuse errors.
+The active branch is `v2-dev`. Issue #697 is implemented and verified locally:
+media selection now uses indexable filepath ranges, active-media/date indexes,
+a rounded-coordinate location expression index, Python-side standard shuffle,
+and count queries that skip resolved-location joins unless a location filter
+requires them.
 
 ## Current Repo State
 - Branch: `v2-dev`.
-- `v2-dev` has pending local #696 media repository locking changes until
-  committed and pushed.
+- Local `v2-dev` is ahead of `origin/v2-dev` by the #696 media repository
+  locking commit plus pending #697 media selection performance changes until
+  pushed.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -46,6 +48,7 @@ API location enrichment, playback, indexing, and geocoding do not race the same
 - Ticket #694 hardens brightness control: HDMI/DDC brightness is capability-probed before write, DSI/eDP/LVDS outputs use `brightnessctl`, command stderr/stdout is surfaced in `brightness_unavailable` errors, repeated identical brightness failures are suppressed, and the Remote slider sends only committed brightness values to hardware.
 - Ticket #695 adds an explicit Settings clock hour mode: 24-hour writes `%H:%M`, 12-hour writes `%-I:%M %p`, Custom preserves and edits the raw `viewer.clock_format`, and the renderer/backend contract remains unchanged.
 - Ticket #696 hardens media-cache repository threading: all `SQLiteMediaRepository` connection use is serialized with an `RLock`, including location lookups used by API media DTO enrichment.
+- Ticket #697 improves media selection performance for large libraries: media-cache migrations add active filepath/date indexes and a rounded-coordinate location expression index; playlist folder scope uses filepath range predicates; standard shuffle happens in Python without SQL `RANDOM()`; count queries avoid location joins unless filtering by resolved location.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -66,6 +69,7 @@ API location enrichment, playback, indexing, and geocoding do not race the same
 - Preserve the #694 brightness boundary: Remote may preview slider movement locally, but hardware brightness commands should be sent only on commit/debounce; HDMI/DDC brightness should be attempted only after capability checks, and display power remains the route for a fully black screen when a monitor enforces a brightness floor.
 - Preserve the #695 clock boundary: clock hour mode is an explicit display preference backed by `viewer.clock_format`; do not infer or mutate it from `model.locale`.
 - Preserve the #696 repository boundary: shared SQLite connection access in `SQLiteMediaRepository` must stay serialized across API, playback, indexer, and geocoding threads.
+- Preserve the #697 performance boundary: keep Remote/Settings APIs and playlist filter semantics unchanged while using indexable media-cache queries and Python-side shuffle.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

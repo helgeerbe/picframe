@@ -46,6 +46,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Ticket #694 brightness hardening is closed: internal display outputs use `brightnessctl`, HDMI/DDC brightness probes VCP 0x10 before writing, command output is included in `brightness_unavailable` errors, repeated identical failures are suppressed, Remote brightness drags preview locally and commits one hardware command on release/change, and docs explain DDC prerequisites plus monitor brightness floors.
 - Ticket #695 clock hour mode is closed: Settings exposes 24-hour, 12-hour, and Custom clock choices while persisting only `viewer.clock_format`; locale does not drive clock hour mode.
 - Ticket #696 media repository locking is implemented locally: `SQLiteMediaRepository` serializes shared SQLite connection use so API location enrichment no longer races geocoding/indexer/playback access to `media_cache.db3`.
+- Ticket #697 media selection performance is implemented locally: indexed filepath/date/location query paths speed playlist rebuilds and selected-count checks while preserving existing Remote/API behavior.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
@@ -63,7 +64,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Keep legacy import documentation aligned with the explicit UI/API import path rather than adding a separate `picframe migrate` command unless a new tracked requirement asks for headless migration.
 
 ## Known Verification State
-- Latest backend verification on `v2-dev` (2026-06-19): `.venv/bin/python -m pytest` passed with 635 tests and 1 GI deprecation warning.
+- Latest backend verification on `v2-dev` (2026-06-19): `.venv/bin/python -m pytest` passed with 640 tests and 1 GI deprecation warning.
 - Latest frontend verification on `v2-dev` (2026-06-19): `npm run build` passed, with only sandbox stream-fd warnings before Vite completed.
 - Latest video hardening verification on this workspace: touched-file Ruff passed, and `.venv/bin/python -m pytest test/core/metadata/test_video_strategy.py test/core/services/test_media_indexer.py test/core/renderers test/core/engine/test_playback.py` passed with 123 tests.
 - Latest #691 cleanup verification: `.venv/bin/python -m pytest test/core/utils/test_video_frame_extractor.py test/core/engine/test_playback.py test/core/renderers/test_gst_pipeline_builder.py test/core/renderers/test_gst_video_renderer.py test/core/renderers/test_gst_worker.py test/core/renderers/test_gtk_video_presenter.py` passed with 190 tests; targeted Ruff correctness check passed.
@@ -71,4 +72,5 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Latest #694 target verification: `.venv/bin/python -m pytest test/infrastructure/os/test_wayland_power.py test/test_remote_brightness_controls.py` passed with 13 tests; targeted Ruff for the touched Python files passed.
 - Latest #695 target verification: `.venv/bin/python -m pytest test/test_settings_clock_format_controls.py` passed with 2 tests; targeted Ruff for the new source guard passed.
 - Latest #696 target verification: `.venv/bin/python -m pytest test/core/repositories/test_sqlite_media.py` passed with 23 tests; targeted Ruff for the touched media repository files passed.
+- Latest #697 target verification: `.venv/bin/python -m pytest test/core/repositories/test_sqlite_media.py test/core/services/test_playlist.py test/api/test_app.py` passed with 96 tests; targeted Ruff for the touched Python files passed.
 - Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.

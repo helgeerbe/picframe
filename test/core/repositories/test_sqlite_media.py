@@ -85,8 +85,18 @@ def test_repository_initialization_runs_migrations(
         row["name"]
         for row in media_repo._conn.execute("PRAGMA table_info(geocoding_queue)").fetchall()
     ]
+    index_names = {
+        row["name"]
+        for row in media_repo._conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='index'"
+        ).fetchall()
+    }
     assert "language" in location_columns
     assert "language" in queue_columns
+    assert "idx_media_active_filepath" in index_names
+    assert "idx_media_active_last_modified_filepath" in index_names
+    assert "idx_media_active_exif_datetime_filepath" in index_names
+    assert "idx_locations_language_rounded_coords" in index_names
 
 
 def test_add_and_get_media_item(
@@ -287,7 +297,35 @@ def test_query_media_applies_playlist_filters_and_sorting(
     assert [item["filename"] for item in result] == ["beach.jpg"]
 
 
-def test_order_clause_uses_random_only_for_standard_shuffle() -> None:
+def test_query_media_path_range_filter_matches_prefix_scope(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    holiday = root / "holiday"
+    sibling = tmp_path / "Pictures2"
+    holiday.mkdir(parents=True)
+    sibling.mkdir()
+    media_repo.add_media_item(_media_record(root / "root.jpg"))
+    media_repo.add_media_item(_media_record(holiday / "beach.jpg"))
+    media_repo.add_media_item(_media_record(sibling / "outside.jpg"))
+
+    root_result = media_repo.query_media(
+        PlaylistCriteria(pic_dir=str(root), shuffle=False, sort_cols="fname ASC")
+    )
+    holiday_result = media_repo.query_media(
+        PlaylistCriteria(
+            pic_dir=str(root),
+            subdirectory="holiday",
+            shuffle=False,
+            sort_cols="fname ASC",
+        )
+    )
+
+    assert [item["filename"] for item in root_result] == ["beach.jpg", "root.jpg"]
+    assert [item["filename"] for item in holiday_result] == ["beach.jpg"]
+
+
+def test_order_clause_avoids_sql_random_for_standard_shuffle() -> None:
     standard_clause = SQLiteMediaRepository._build_order_clause(
         PlaylistCriteria(shuffle=True, shuffle_mode="standard")
     )
@@ -305,10 +343,12 @@ def test_order_clause_uses_random_only_for_standard_shuffle() -> None:
         )
     )
 
-    assert "RANDOM()" in standard_clause
+    assert "RANDOM()" not in standard_clause
+    assert "m.filepath ASC" in standard_clause
     assert "RANDOM()" not in fewer_repeats_clause
     assert "m.filepath ASC" in fewer_repeats_clause
-    assert "RANDOM()" in invalid_clause
+    assert "RANDOM()" not in invalid_clause
+    assert "m.filepath ASC" in invalid_clause
     assert "RANDOM()" not in sorted_clause
     assert sorted_clause.startswith("m.rating DESC")
 
@@ -558,6 +598,26 @@ def test_location_cache_is_language_aware(
     assert german[0]["location"] == "Berlin, Deutschland"
 
 
+def test_location_join_uses_rounded_coordinate_expression_index(
+    media_repo: SQLiteMediaRepository,
+) -> None:
+    location_join, location_params = SQLiteMediaRepository._location_join_sql("de")
+    with media_repo._lock:
+        plan_rows = media_repo._conn.execute(
+            f"""
+            EXPLAIN QUERY PLAN
+            SELECT m.id
+            FROM media m
+            {location_join}
+            WHERE m.is_deleted = 0
+            """,
+            location_params,
+        ).fetchall()
+
+    plan = "\n".join(str(row["detail"]) for row in plan_rows)
+    assert "idx_locations_language_rounded_coords" in plan
+
+
 def test_location_lookup_waits_for_repository_connection_lock(
     media_repo: SQLiteMediaRepository,
 ) -> None:
@@ -580,6 +640,58 @@ def test_location_lookup_waits_for_repository_connection_lock(
     assert completed.wait(timeout=1.0)
     thread.join(timeout=1.0)
     assert result == ["Berlin, Germany"]
+
+
+def test_count_media_skips_location_join_without_location_filter(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    root.mkdir()
+    media_repo.add_media_item(_media_record(root / "family.jpg", tags="family"))
+    statements: list[str] = []
+    media_repo._conn.set_trace_callback(statements.append)
+    try:
+        counts = media_repo.count_media(
+            PlaylistCriteria(pic_dir=str(root), tags_filter="family")
+        )
+    finally:
+        media_repo._conn.set_trace_callback(None)
+
+    count_selects = [
+        statement.upper()
+        for statement in statements
+        if "SELECT COUNT" in statement.upper()
+    ]
+    assert counts["selected_count"] == 1
+    assert counts["total_count"] == 1
+    assert len(count_selects) == 2
+    assert all("JOIN LOCATIONS" not in statement for statement in count_selects)
+
+
+def test_count_media_joins_location_only_for_location_filter(
+    media_repo: SQLiteMediaRepository, tmp_path: Path
+) -> None:
+    root = tmp_path / "Pictures"
+    root.mkdir()
+    media_repo.add_media_item(_media_record(root / "berlin.jpg", location="Berlin"))
+    statements: list[str] = []
+    media_repo._conn.set_trace_callback(statements.append)
+    try:
+        counts = media_repo.count_media(
+            PlaylistCriteria(pic_dir=str(root), location_filter="Berlin")
+        )
+    finally:
+        media_repo._conn.set_trace_callback(None)
+
+    count_selects = [
+        statement.upper()
+        for statement in statements
+        if "SELECT COUNT" in statement.upper()
+    ]
+    assert counts["selected_count"] == 1
+    assert counts["total_count"] == 1
+    assert len(count_selects) == 2
+    assert sum("JOIN LOCATIONS" in statement for statement in count_selects) == 1
 
 
 def test_location_search_and_counts_use_requested_language(

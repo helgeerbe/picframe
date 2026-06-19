@@ -1,14 +1,14 @@
-from unittest.mock import Mock, patch
 from types import SimpleNamespace
 from typing import Any
+from unittest.mock import Mock, patch
 
 import pytest
 
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaType
 from picframe.core.models.playlist import (
-    PlaylistCriteria,
     SHUFFLE_MODE_FEWER_REPEATS,
     SHUFFLE_MODE_STANDARD,
+    PlaylistCriteria,
 )
 from picframe.core.repositories.interfaces import IMediaRepository
 from picframe.core.services.playlist import PlaylistManager
@@ -234,6 +234,24 @@ def test_invalid_shuffle_mode_falls_back_to_standard(mock_media_repo: Mock) -> N
     criteria = mock_media_repo.query_media.call_args[0][0]
     assert criteria.shuffle_mode == SHUFFLE_MODE_STANDARD
     assert manager._shuffle_mode == SHUFFLE_MODE_STANDARD
+
+
+def test_standard_shuffle_keeps_recent_media_before_older_media(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now = 2_000_000.0
+    monkeypatch.setattr("picframe.core.services.playlist.time.time", lambda: now)
+    rows = [
+        {"id": "old-1", "last_modified": now - (10 * 24 * 60 * 60)},
+        {"id": "recent-1", "last_modified": now - (2 * 24 * 60 * 60)},
+        {"id": "old-2", "last_modified": now - (8 * 24 * 60 * 60)},
+        {"id": "recent-2", "last_modified": now - (1 * 24 * 60 * 60)},
+    ]
+
+    shuffled = PlaylistManager._shuffle_standard_rows(rows, recent_n=7)
+
+    assert {row["id"] for row in shuffled[:2]} == {"recent-1", "recent-2"}
+    assert {row["id"] for row in shuffled[2:]} == {"old-1", "old-2"}
 
 
 def test_fewer_repeats_pushes_recently_displayed_slots_later(

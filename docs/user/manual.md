@@ -531,6 +531,11 @@ Display statistics (`displayed_count` and `last_displayed`) are stored in
 or changed files are reindexed. Manually deleting `media_cache.db3` rebuilds
 the media cache from scratch and resets those statistics.
 
+Large libraries are selected through indexed `media_cache.db3` queries. Folder
+scopes, common date ordering, and locale-aware resolved locations are indexed,
+and Remote's selected-media count avoids resolved-location work unless the
+current filters include a location expression.
+
 When `model.portrait_pairs` is enabled from Appearance, portrait image pairs
 are displayed as one slideshow slot with two original image files. Videos are
 never paired and always remain fullscreen. In Remote, pair metadata can be

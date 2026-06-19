@@ -9,6 +9,7 @@ handles shuffling logic, and maintains playback history.
 import logging
 import os
 import random
+import time
 from typing import Any
 
 from picframe.core.events.dto import FileChangeEvent
@@ -83,6 +84,11 @@ class PlaylistManager:
             self._shuffle = criteria.shuffle
             self._shuffle_mode = normalize_shuffle_mode(criteria.shuffle_mode)
             self._playlist = self._media_repo.query_media(criteria)
+            if self._shuffle and self._shuffle_mode == SHUFFLE_MODE_STANDARD:
+                self._playlist = self._shuffle_standard_rows(
+                    self._playlist,
+                    criteria.recent_n,
+                )
         else:
             self._playlist = self._media_repo.get_all_media()
             if self._shuffle:
@@ -231,7 +237,8 @@ class PlaylistManager:
             requested = [int(media_id) for media_id in media_ids]
             if sorted(requested) != sorted(selected_ids):
                 logger.warning(
-                    "Rejecting stale or mismatched delete payload. requested=%s current=%s target=%s",
+                    "Rejecting stale or mismatched delete payload. "
+                    "requested=%s current=%s target=%s",
                     requested,
                     current_ids,
                     target,
@@ -318,6 +325,36 @@ class PlaylistManager:
             self.build_playlist(shuffle=self._shuffle)
         else:
             self._current_index = 0
+
+    @staticmethod
+    def _shuffle_standard_rows(
+        playlist: list[dict[str, Any]],
+        recent_n: int,
+    ) -> list[dict[str, Any]]:
+        """Shuffle standard playback rows while keeping recent media first."""
+        if len(playlist) <= 1:
+            return list(playlist)
+        if recent_n <= 0:
+            shuffled = list(playlist)
+            random.shuffle(shuffled)
+            return shuffled
+
+        threshold = time.time() - (float(recent_n) * 24 * 60 * 60)
+        recent_rows: list[dict[str, Any]] = []
+        older_rows: list[dict[str, Any]] = []
+        for row in playlist:
+            try:
+                last_modified = float(row.get("last_modified") or 0.0)
+            except (TypeError, ValueError):
+                last_modified = 0.0
+            if last_modified >= threshold:
+                recent_rows.append(row)
+            else:
+                older_rows.append(row)
+
+        random.shuffle(recent_rows)
+        random.shuffle(older_rows)
+        return recent_rows + older_rows
 
     def _get_playlist_criteria(self, shuffle_override: bool | None = None) -> PlaylistCriteria:
         """Build playlist criteria from the live configuration repository."""
@@ -499,7 +536,10 @@ class PlaylistManager:
                 continue
 
             if self._file_has_changed(item_data, file_stat):
-                logger.info(f"File changed before display, requesting reindex and skipping: {filepath}")
+                logger.info(
+                    "File changed before display, requesting reindex and skipping: %s",
+                    filepath,
+                )
                 if filepath:
                     self._request_reindex(str(filepath))
                 continue

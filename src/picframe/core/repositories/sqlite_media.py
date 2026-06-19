@@ -126,6 +126,19 @@ MEDIA_MIGRATIONS = [
         ALTER TABLE geocoding_queue_new RENAME TO geocoding_queue;
         """,
     ),
+    Migration(
+        version=3,
+        up_script="""
+        CREATE INDEX IF NOT EXISTS idx_media_active_filepath
+            ON media(is_deleted, filepath);
+        CREATE INDEX IF NOT EXISTS idx_media_active_last_modified_filepath
+            ON media(is_deleted, last_modified, filepath);
+        CREATE INDEX IF NOT EXISTS idx_media_active_exif_datetime_filepath
+            ON media(is_deleted, exif_datetime, filepath);
+        CREATE INDEX IF NOT EXISTS idx_locations_language_rounded_coords
+            ON locations(language, ROUND(latitude, 4), ROUND(longitude, 4));
+        """,
+    ),
 ]
 
 SORT_COLUMN_MAP = {
@@ -544,11 +557,13 @@ class SQLiteMediaRepository(IMediaRepository):
                 selected_where,
                 selected_params,
                 criteria.location_language,
+                include_location_join=self._has_location_filter(criteria),
             ),
             "total_count": self._count_media_where(
                 total_where,
                 total_params,
                 criteria.location_language,
+                include_location_join=False,
             ),
             "scope": "subdirectory" if scope_label else "pic_dir",
             "scope_label": scope_label or str(Path(criteria.pic_dir or "").expanduser()),
@@ -655,8 +670,9 @@ class SQLiteMediaRepository(IMediaRepository):
 
         media_root = self._path_prefix(criteria.pic_dir, criteria.subdirectory)
         if media_root:
-            where_clauses.append("m.filepath LIKE ?")
-            params.append(f"{media_root}%")
+            lower_bound, upper_bound = self._path_prefix_range(media_root)
+            where_clauses.append("m.filepath >= ? AND m.filepath < ?")
+            params.extend([lower_bound, upper_bound])
 
         if include_date_filters:
             timestamp_expr = "COALESCE(NULLIF(m.exif_datetime, 0), m.last_modified)"
@@ -686,19 +702,27 @@ class SQLiteMediaRepository(IMediaRepository):
         where_clauses: list[str],
         params: list[Any],
         location_language: str | None,
+        *,
+        include_location_join: bool,
     ) -> int:
-        location_join, location_params = self._location_join_sql(location_language)
+        location_join = ""
+        location_params: tuple[str, ...] = ()
+        count_expression = "COUNT(*)"
+        if include_location_join:
+            location_join, location_params = self._location_join_sql(location_language)
+            count_expression = "COUNT(DISTINCT m.id)"
         with self._lock:
             cursor = self._conn.execute(
                 f"""
-                SELECT COUNT(DISTINCT m.id)
+                SELECT {count_expression}
                 FROM media m
                 {location_join}
                 WHERE {" AND ".join(where_clauses)}
                 """,
                 [*location_params, *params],
             )
-            return int(cursor.fetchone()[0])
+            row = cursor.fetchone()
+        return int(row[0])
 
     @staticmethod
     def _path_prefix(pic_dir: str, subdirectory: str) -> str:
@@ -708,6 +732,14 @@ class SQLiteMediaRepository(IMediaRepository):
         subdirectory = (subdirectory or "").strip().strip("/")
         base = root / subdirectory if subdirectory else root
         return str(base).rstrip("/") + "/"
+
+    @staticmethod
+    def _path_prefix_range(prefix: str) -> tuple[str, str]:
+        return prefix, prefix + chr(0x10FFFF)
+
+    @staticmethod
+    def _has_location_filter(criteria: PlaylistCriteria) -> bool:
+        return bool((criteria.location_filter or "").strip())
 
     @staticmethod
     def _parse_date_boundary(value: str | float | int | None, *, end_of_day: bool) -> float | None:
@@ -758,7 +790,7 @@ class SQLiteMediaRepository(IMediaRepository):
             criteria.shuffle
             and normalize_shuffle_mode(criteria.shuffle_mode) == SHUFFLE_MODE_STANDARD
         ):
-            order_parts.append("RANDOM()")
+            order_parts.append("m.filepath ASC")
             return ", ".join(order_parts)
 
         parsed_sort = SQLiteMediaRepository._parse_sort_columns(criteria.sort_cols)
