@@ -5,14 +5,13 @@ The active branch is `v2-dev`. Issue #693 is implemented and verified: reverse
 geocoding cache/queue rows are locale-aware, GPS media missing active-locale
 address text retry lookup during display, playlist/API location strings resolve
 for `model.locale`, and pi3d/playback overlay dates format with `model.locale`.
-The #691 video matted-handoff feature remains merged into `origin/v2-dev` and
-GitHub issue #691 is closed.
+The #691 video matted-handoff feature remains merged into `origin/v2-dev`.
+GitHub issues #691 and #693 are closed.
 
 ## Current Repo State
 - Branch: `v2-dev`.
-- `v2-dev` contains the #691 memory-bank closeout commit and the #693
-  implementation commit; check `git status --short --branch` for current
-  origin alignment before publishing or closing issues.
+- `v2-dev` is aligned with `origin/v2-dev` after the #693 implementation and
+  memory-bank closeout commits were pushed.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
