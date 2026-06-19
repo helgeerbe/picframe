@@ -1,7 +1,7 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #693 is implemented locally: reverse
+The active branch is `v2-dev`. Issue #693 is implemented and verified: reverse
 geocoding cache/queue rows are locale-aware, GPS media missing active-locale
 address text retry lookup during display, playlist/API location strings resolve
 for `model.locale`, and pi3d/playback overlay dates format with `model.locale`.
@@ -10,8 +10,9 @@ GitHub issue #691 is closed.
 
 ## Current Repo State
 - Branch: `v2-dev`.
-- Local `v2-dev` is ahead of `origin/v2-dev`; it includes the unpushed #691
-  memory-bank closeout commit plus the local #693 implementation until pushed.
+- `v2-dev` contains the #691 memory-bank closeout commit and the #693
+  implementation commit; check `git status --short --branch` for current
+  origin alignment before publishing or closing issues.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
