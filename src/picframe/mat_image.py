@@ -63,11 +63,11 @@ class MatImage:
         self.inner_mat_use_texture = inner_mat_use_texture
 
         # --- Matting resources ---
-        self.__mat_texture = Image.open('{0}/mat_texture.jpg'.format(resource_folder)).convert("L")
-        self.__9patch_bevel = Ninepatch('{0}/9_patch_bevel.png'.format(resource_folder))
-        self.__9patch_drop_shadow = Ninepatch('{0}/9_patch_drop_shadow.png'.format(resource_folder))
-        self.__9patch_inner_shadow = Ninepatch('{0}/9_patch_inner_shadow.png'.format(resource_folder))
-        self.__9patch_highlight = Ninepatch('{0}/9_patch_highlight.png'.format(resource_folder))
+        self.__mat_texture = Image.open(f'{resource_folder}/mat_texture.jpg').convert("L")
+        self.__9patch_bevel = Ninepatch(f'{resource_folder}/9_patch_bevel.png')
+        self.__9patch_drop_shadow = Ninepatch(f'{resource_folder}/9_patch_drop_shadow.png')
+        self.__9patch_inner_shadow = Ninepatch(f'{resource_folder}/9_patch_inner_shadow.png')
+        self.__9patch_highlight = Ninepatch(f'{resource_folder}/9_patch_highlight.png')
 
     # endregion Constructor
 
@@ -212,13 +212,9 @@ class MatImage:
                 else None
             )
 
-        image, fallback_content_rects = self.__render_with_rects(images, mat_type)
+        image, computed_content_rects = self.__render_with_rects(images, mat_type)
         if layout_spec is None:
-            content_rects = self.__measure_content_rects(
-                images,
-                mat_type,
-                fallback_content_rects,
-            )
+            content_rects = computed_content_rects
             layout_spec = MatLayoutSpec(
                 display_size=tuple(self.display_size),
                 mat_type=mat_type,
@@ -236,7 +232,7 @@ class MatImage:
             )
         else:
             content_rects = tuple(layout_spec.content_rects) or tuple(
-                fallback_content_rects
+                computed_content_rects
             )
 
         return MatImageResult(
@@ -251,7 +247,10 @@ class MatImage:
 
     def __style_float(self, images):
         pic_count = len(images)
-        pic_wid = (self.display_width / pic_count) - (((pic_count + 1) / pic_count) * self.outer_mat_border)
+        pic_wid = (
+            (self.display_width / pic_count)
+            - (((pic_count + 1) / pic_count) * self.outer_mat_border)
+        )
         pic_height = self.display_height - (self.outer_mat_border * 2)
 
         final_images = []
@@ -298,7 +297,11 @@ class MatImage:
             self.__add_image_outline(image, color2)
             image = ImageOps.expand(image, border_width)
             self.__add_image_outline(image, color, outline_width=border_width)
-            highlight = self.__9patch_highlight.render(image.width, image.height,  Image.Resampling.LANCZOS)
+            highlight = self.__9patch_highlight.render(
+                image.width,
+                image.height,
+                Image.Resampling.LANCZOS,
+            )
             image.paste(highlight, (0, 0), highlight)
             image = self.__add_drop_shadow(image)
             final_images.append(image)
@@ -328,7 +331,12 @@ class MatImage:
                    - (((pic_count + 1) / pic_count) * self.outer_mat_border)
                    - (self.inner_mat_border * 2)
                    - (bevel_wid * 4))
-        pic_height = self.display_height - (self.outer_mat_border * 2) - (self.inner_mat_border * 2) - (bevel_wid * 4)
+        pic_height = (
+            self.display_height
+            - (self.outer_mat_border * 2)
+            - (self.inner_mat_border * 2)
+            - (bevel_wid * 4)
+        )
 
         final_images = []
         for image in images:
@@ -338,7 +346,13 @@ class MatImage:
             mat_image = self.__get_inner_mat(mat_size)
             mat_image = self.__add_outer_bevel(mat_image)
             image = self.__add_outer_bevel(image)
-            mat_image.paste(image, (self.inner_mat_border + bevel_wid, self.inner_mat_border + bevel_wid))
+            mat_image.paste(
+                image,
+                (
+                    self.inner_mat_border + bevel_wid,
+                    self.inner_mat_border + bevel_wid,
+                ),
+            )
             final_images.append(mat_image)
 
         return self.__layout_images(final_images)
@@ -354,7 +368,10 @@ class MatImage:
         for image in images:
             image = self.__scale_image(image, (pic_wid, pic_height))
             self.__add_image_outline(image, self.__outer_mat_color_save)
-            mat_size = (image.width + (self.inner_mat_border * 2), image.height + (self.inner_mat_border * 2))
+            mat_size = (
+                image.width + (self.inner_mat_border * 2),
+                image.height + (self.inner_mat_border * 2),
+            )
             mat_image = self.__get_inner_mat(mat_size)
             mat_image = self.__add_inner_shadow(mat_image)
             mat_image.paste(image, (self.inner_mat_border, self.inner_mat_border))
@@ -391,7 +408,10 @@ class MatImage:
             width, height = size
 
         scale = min(width/image.width, height/image.height)
-        image = image.resize((int(image.width * scale), int(image.height * scale)), resample=Image.BICUBIC)
+        image = image.resize(
+            (int(image.width * scale), int(image.height * scale)),
+            resample=Image.BICUBIC,
+        )
         return image
 
     def __get_outer_mat_color(self, image):
@@ -430,12 +450,20 @@ class MatImage:
     def __add_outer_bevel(self, image, expand=True):
         if expand:
             image = ImageOps.expand(image, 5)
-        outer_bevel_image = self.__9patch_bevel.render(image.width, image.height, Image.Resampling.LANCZOS)
+        outer_bevel_image = self.__9patch_bevel.render(
+            image.width,
+            image.height,
+            Image.Resampling.LANCZOS,
+        )
         image.paste(outer_bevel_image, (0, 0), outer_bevel_image)
         return image
 
     def __add_inner_shadow(self, image):
-        inner_shadow_image = self.__9patch_inner_shadow.render(image.width, image.height,  Image.Resampling.LANCZOS)
+        inner_shadow_image = self.__9patch_inner_shadow.render(
+            image.width,
+            image.height,
+            Image.Resampling.LANCZOS,
+        )
         image.paste(inner_shadow_image, (0, 0), inner_shadow_image)
         return image
 
@@ -454,8 +482,16 @@ class MatImage:
 
     def __add_drop_shadow(self, image):
         shadow_offset = 15
-        mod_image = Image.new('RGBA', (image.width + shadow_offset, image.height + shadow_offset), (0, 0, 0, 0))
-        shadow_image = self.__9patch_drop_shadow.render(mod_image.width, mod_image.height,  Image.Resampling.LANCZOS)
+        mod_image = Image.new(
+            'RGBA',
+            (image.width + shadow_offset, image.height + shadow_offset),
+            (0, 0, 0, 0),
+        )
+        shadow_image = self.__9patch_drop_shadow.render(
+            mod_image.width,
+            mod_image.height,
+            Image.Resampling.LANCZOS,
+        )
         mod_image.paste(shadow_image, (0, 0), shadow_image)
         mod_image.paste(image, (0, 0))
         return mod_image
@@ -479,7 +515,10 @@ class MatImage:
 
     def __style_float_items(self, images):
         pic_count = len(images)
-        pic_wid = (self.display_width / pic_count) - (((pic_count + 1) / pic_count) * self.outer_mat_border)
+        pic_wid = (
+            (self.display_width / pic_count)
+            - (((pic_count + 1) / pic_count) * self.outer_mat_border)
+        )
         pic_height = self.display_height - (self.outer_mat_border * 2)
 
         final_images = []
@@ -533,7 +572,11 @@ class MatImage:
             content_h = max(1, image.height - 2)
             image = ImageOps.expand(image, border_width)
             self.__add_image_outline(image, color, outline_width=border_width)
-            highlight = self.__9patch_highlight.render(image.width, image.height,  Image.Resampling.LANCZOS)
+            highlight = self.__9patch_highlight.render(
+                image.width,
+                image.height,
+                Image.Resampling.LANCZOS,
+            )
             image.paste(highlight, (0, 0), highlight)
             content_rects.append((border_width + 1, border_width + 1, content_w, content_h))
             image = self.__add_drop_shadow(image)
@@ -564,7 +607,12 @@ class MatImage:
                    - (((pic_count + 1) / pic_count) * self.outer_mat_border)
                    - (self.inner_mat_border * 2)
                    - (bevel_wid * 4))
-        pic_height = self.display_height - (self.outer_mat_border * 2) - (self.inner_mat_border * 2) - (bevel_wid * 4)
+        pic_height = (
+            self.display_height
+            - (self.outer_mat_border * 2)
+            - (self.inner_mat_border * 2)
+            - (bevel_wid * 4)
+        )
 
         final_images = []
         content_rects = []
@@ -576,7 +624,13 @@ class MatImage:
             mat_image = self.__get_inner_mat(mat_size)
             mat_image = self.__add_outer_bevel(mat_image)
             image = self.__add_outer_bevel(image)
-            mat_image.paste(image, (self.inner_mat_border + bevel_wid, self.inner_mat_border + bevel_wid))
+            mat_image.paste(
+                image,
+                (
+                    self.inner_mat_border + bevel_wid,
+                    self.inner_mat_border + bevel_wid,
+                ),
+            )
             content_offset = self.inner_mat_border + (bevel_wid * 3)
             content_rects.append((content_offset, content_offset, content_w, content_h))
             final_images.append(mat_image)
@@ -596,11 +650,16 @@ class MatImage:
             self.__add_image_outline(image, self.__outer_mat_color_save)
             content_w = max(1, image.width - 2)
             content_h = max(1, image.height - 2)
-            mat_size = (image.width + (self.inner_mat_border * 2), image.height + (self.inner_mat_border * 2))
+            mat_size = (
+                image.width + (self.inner_mat_border * 2),
+                image.height + (self.inner_mat_border * 2),
+            )
             mat_image = self.__get_inner_mat(mat_size)
             mat_image = self.__add_inner_shadow(mat_image)
             mat_image.paste(image, (self.inner_mat_border, self.inner_mat_border))
-            content_rects.append((self.inner_mat_border + 1, self.inner_mat_border + 1, content_w, content_h))
+            content_rects.append(
+                (self.inner_mat_border + 1, self.inner_mat_border + 1, content_w, content_h)
+            )
             final_images.append(mat_image)
         return final_images, content_rects
 
@@ -612,7 +671,10 @@ class MatImage:
         return mat_image
 
     def __layout_images_with_rects(self, images, content_rects):
-        mat_image = self.__get_colorized_mat(self.__outer_mat_color_save, self.outer_mat_use_texture)
+        mat_image = self.__get_colorized_mat(
+            self.__outer_mat_color_save,
+            self.outer_mat_use_texture,
+        )
         total_wid = self.outer_mat_border * (len(images) + 1)
         for image in images:
             total_wid += image.width
@@ -633,90 +695,6 @@ class MatImage:
 
         return mat_image, tuple(final_rects)
 
-    def __measure_content_rects(self, images, mat_type, fallback_rects):
-        fallback_rects = tuple(fallback_rects)
-        try:
-            sentinel_colors = tuple(
-                self.__sentinel_color(index) for index, _image in enumerate(images)
-            )
-            sentinel_images = tuple(
-                Image.new("RGB", image.size, sentinel_colors[index])
-                for index, image in enumerate(images)
-            )
-            sentinel_render, _fallback_rects = self.__render_with_rects(
-                sentinel_images,
-                mat_type,
-            )
-            measured_rects = []
-            for color, fallback_rect in zip(sentinel_colors, fallback_rects):
-                rect = self.__color_bbox(sentinel_render, color)
-                if rect is None:
-                    raise ValueError(f"sentinel color {color} was not visible")
-                if not self.__rect_within(rect, fallback_rect):
-                    raise ValueError(
-                        f"measured rect {rect} exceeded computed rect {fallback_rect}"
-                    )
-                measured_rects.append(rect)
-            if len(measured_rects) != len(fallback_rects):
-                raise ValueError(
-                    f"measured {len(measured_rects)} rects for {len(fallback_rects)} images"
-                )
-            return tuple(measured_rects)
-        except Exception as exc:
-            self.__logger.warning(
-                "Could not measure mat content rects; using computed rects: %s",
-                exc,
-            )
-            return fallback_rects
-
-    @staticmethod
-    def __sentinel_color(index):
-        palette = (
-            (253, 5, 121),
-            (7, 251, 199),
-            (241, 229, 3),
-            (83, 19, 251),
-            (251, 137, 11),
-            (23, 191, 17),
-        )
-        if index < len(palette):
-            return palette[index]
-        return (
-            (37 + index * 73) % 256,
-            (97 + index * 151) % 256,
-            (193 + index * 199) % 256,
-        )
-
-    @staticmethod
-    def __color_bbox(image, color):
-        pixels = np.asarray(image.convert("RGB"))
-        target = np.asarray(color, dtype=pixels.dtype)
-        mask = np.all(pixels == target, axis=2)
-        if not mask.any():
-            return None
-        ys, xs = np.where(mask)
-        x_min = int(xs.min())
-        y_min = int(ys.min())
-        return (
-            x_min,
-            y_min,
-            int(xs.max()) - x_min + 1,
-            int(ys.max()) - y_min + 1,
-        )
-
-    @staticmethod
-    def __rect_within(inner, outer):
-        inner_x, inner_y, inner_w, inner_h = inner
-        outer_x, outer_y, outer_w, outer_h = outer
-        return (
-            inner_w > 0
-            and inner_h > 0
-            and inner_x >= outer_x
-            and inner_y >= outer_y
-            and inner_x + inner_w <= outer_x + outer_w
-            and inner_y + inner_h <= outer_y + outer_h
-        )
-
 
 class KmeansNp:
     def __init__(self, k=3, max_iterations=5, min_distance=5.0, size=200):
@@ -730,7 +708,8 @@ class KmeansNp:
         image.thumbnail(self.size)
         im = np.array(image, dtype=float)[:, :, :3]
         d = im.shape[-1]  # 3 or 5 if u,v added
-        im = im.reshape(-1, d)  # NB need to use floats to avoid coercing to uint8 scrambling subtractions
+        # Floats avoid coercing to uint8 and scrambling subtractions.
+        im = im.reshape(-1, d)
         n = len(im)
         if start_clusters is None:
             centroids = im[np.random.choice(np.arange(n), self.k)]
@@ -747,7 +726,7 @@ class KmeansNp:
             to_keep = []  # discard any centroids with no pixels nearest to them
             for j in range(self.k):  # write back average location of all nearest pixels
                 j_pixels = im[ix == j]  # view into im where ix points to centroid j
-                if len(j_pixels) > 0:  # error if try to get mean zero length array TODO remove groups with few pixels?
+                if len(j_pixels) > 0:
                     centroids[j] = j_pixels.mean(axis=0)
                     to_keep.append(j)
             if len(to_keep) < len(centroids):  # this will be relatively rare
@@ -759,7 +738,10 @@ class KmeansNp:
                 break
             old_centroids = centroids.copy()
 
-        c_max, c_min = centroids[:, :3].max(axis=1), centroids[:, :3].min(axis=1)  # max, min for each centroid
+        c_max, c_min = (
+            centroids[:, :3].max(axis=1),
+            centroids[:, :3].min(axis=1),
+        )
         c_sat = c_max - c_min  # value used previously includes element of lum TODO bias more to lighter using (1.5 * c_max - c_min) # noqa: E501
         ix_order = np.argsort(c_sat)[::-1]  # indices to sorted values - reversed
         return centroids[ix_order, :3].astype(np.uint8)
@@ -779,4 +761,4 @@ if __name__ == "__main__":
     for mat_type in matter.mat_types:
         matter.mat_type = mat_type
         img = matter.mat_image(images)
-        img.save('{0}/{1}_texture.jpg'.format(save_folder, mat_type))
+        img.save(f'{save_folder}/{mat_type}_texture.jpg')

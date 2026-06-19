@@ -24,7 +24,7 @@ from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourceP
 from picframe.mat_image import MatImage
 
 _image_file_lock = threading.Lock()
-VIDEO_TRANSITION_FRAME_PROCESSING_VERSION = 3
+VIDEO_TRANSITION_FRAME_PROCESSING_VERSION = 4
 VIDEO_TRANSITION_FRAME_COORDINATE_SPACE = "frame_pixels"
 
 

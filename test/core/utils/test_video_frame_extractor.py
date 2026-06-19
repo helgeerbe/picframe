@@ -52,6 +52,21 @@ def _color_bbox(
         int(ys.max()) - y_min + 1,
     )
 
+
+def _rect_contains(
+    outer: tuple[int, int, int, int],
+    inner: tuple[int, int, int, int],
+) -> bool:
+    outer_x, outer_y, outer_w, outer_h = outer
+    inner_x, inner_y, inner_w, inner_h = inner
+    return (
+        inner_x >= outer_x
+        and inner_y >= outer_y
+        and inner_x + inner_w <= outer_x + outer_w
+        and inner_y + inner_h <= outer_y + outer_h
+    )
+
+
 def test_get_first_frame_as_image_success(tmp_path: Path) -> None:
     video_path = tmp_path / "test.mp4"
     cache_dir = tmp_path / "cache"
@@ -338,6 +353,40 @@ def test_cached_transition_frames_reject_current_signature_without_geometry(
         json.dumps(
             {
                 "version": VIDEO_TRANSITION_FRAME_PROCESSING_VERSION,
+                "processing_signature": extractor._processing_signature(),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert not extractor.cached_transition_frames_valid()
+
+
+def test_cached_transition_frames_reject_version_three_sidecar(
+    tmp_path: Path,
+) -> None:
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    extractor = VideoFrameExtractor(
+        str(video_path),
+        400,
+        300,
+        cache_dir=str(tmp_path / "cache"),
+        matting_config=VideoFrameMattingConfig(mat_images="on", mat_type="double_bevel"),
+    )
+    first_path = Path(extractor.get_frame_path("first"))
+    last_path = Path(extractor.get_frame_path("last"))
+    first_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", (400, 300), "red").save(first_path, format="JPEG")
+    Image.new("RGB", (400, 300), "blue").save(last_path, format="JPEG")
+    Path(extractor.get_metadata_path()).write_text(
+        json.dumps(
+            {
+                "version": 3,
+                "frame_size": [400, 300],
+                "coordinate_space": VIDEO_TRANSITION_FRAME_COORDINATE_SPACE,
+                "matted": True,
+                "content_rect": [76, 83, 253, 139],
                 "processing_signature": extractor._processing_signature(),
             }
         ),
@@ -801,7 +850,7 @@ def test_process_transition_frame_pair_applies_identical_matted_layout() -> None
     assert metadata.layout_spec["content_rects"][0] == metadata.content_rect
 
 
-def test_process_transition_frame_pair_uses_measured_bevel_content_rect() -> None:
+def test_process_transition_frame_pair_uses_logical_bevel_content_rect() -> None:
     extractor = VideoFrameExtractor(
         "test.mp4",
         400,
@@ -824,7 +873,12 @@ def test_process_transition_frame_pair_uses_measured_bevel_content_rect() -> Non
         Image.new("RGB", (160, 90), "blue"),
     )
 
-    assert metadata.content_rect == _color_bbox(first, (255, 0, 0))
+    visible_rect = _color_bbox(first, (255, 0, 0))
+    assert metadata.content_rect is not None
+    assert visible_rect is not None
+    assert _rect_contains(metadata.content_rect, visible_rect)
+    assert metadata.content_rect[0] < visible_rect[0]
+    assert metadata.content_rect[1] < visible_rect[1]
     assert metadata.frame_size == (400, 300)
     assert metadata.coordinate_space == VIDEO_TRANSITION_FRAME_COORDINATE_SPACE
 

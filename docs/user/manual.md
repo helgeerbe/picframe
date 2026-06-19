@@ -571,9 +571,9 @@ colored from `viewer.background` so desktop shell UI cannot show through. The
 GTK host covers the configured pi3d display rectangle (`viewer.display_x`,
 `viewer.display_y`, `viewer.display_w`, and `viewer.display_h`) or fullscreen
 window. When Picframe has a valid cached transition-frame sidecar, the live
-video paintable is placed at the sidecar's image-content rectangle so the video
-matches the source pixels inside mats, solid bars, edge fill, or blurred
-backdrops. If GTK4 or `gtk4paintablesink` is unavailable, Picframe reports a
+video paintable is placed at the sidecar's logical source/video rectangle so
+the video matches the intended opening inside mats, solid bars, edge fill, or
+blurred backdrops. If GTK4 or `gtk4paintablesink` is unavailable, Picframe reports a
 video presentation system error instead of using a legacy sink fallback.
 
 When the display rectangle is effectively fullscreen, Picframe makes the GTK
@@ -603,9 +603,11 @@ images. With `viewer.blur_edges` enabled, the cached first/last frames are
 display-sized composites with blurred image fill behind the contained video
 frame. With blur disabled, `viewer.edge_alpha` blends image-derived edge fill
 with `viewer.background`; set `edge_alpha` to `0.0` for solid background bars.
-The generated sidecar records the source-image rectangle within that frame, and
-live playback uses the same rectangle for the video window so shadows, mats,
-bars, blurred fill, and edge fill remain outside the live video content.
+The generated sidecar records the logical source/video rectangle within that
+frame, and live playback uses the same rectangle for the video window so
+shadows, mats, bars, blurred fill, and edge fill remain outside the live video
+content. Beveled mat artwork can visually overlap the cached transition frame,
+but it does not shrink the live video window.
 When a cached frame contains matting, blur, or image-derived edge fill,
 Picframe may also use that cached first frame as the GTK video backdrop so the
 bars around live video match the pi3d title-card handoff where the video host

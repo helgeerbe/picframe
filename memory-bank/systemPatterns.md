@@ -27,8 +27,9 @@
 - The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:
   - Extract/cache the first decoded video frame and a tail-decoded final EOS frame under the managed runtime cache directory.
   - Generate cached transition frames with the same visual edge policy as still images: `viewer.blur_edges` creates blurred-edge composites, otherwise `viewer.edge_alpha` blends image-derived fill with `viewer.background`.
-  - Store transition-frame geometry in the sidecar: `frame_size`, `coordinate_space=frame_pixels`, and the visible source-image `content_rect`.
+  - Store transition-frame geometry in the sidecar: `frame_size`, `coordinate_space=frame_pixels`, and the logical source/video `content_rect`.
   - Use that sidecar `content_rect` for live video placement for every generated frame type: matted, solid-bar, edge-filled, blurred, and `viewer.video_fit_display`.
+  - Keep beveled mat overlap out of the geometry contract: bevel/highlight pixels can cover cached frame edges, but they must not inset the live video rectangle.
   - Treat transition-frame cache freshness as a processing-signature and geometry-metadata concern. Managed cache paths include the signature hash; legacy sidecar frame names require matching `.meta.json` metadata.
   - Render the first frame with pi3d as a video title card. If overlay text is present, wait through text fade-in, `viewer.show_text_tm`, fade-out to zero alpha, and clean redraw drain before starting GStreamer.
   - Preload pi3d's hidden background with the last frame before playback starts.

@@ -97,8 +97,10 @@ otherwise `viewer.edge_alpha` blends image-derived edge fill with
 image-derived edge fill, the playback engine can pass it to the GTK video host
 as a backdrop so the visible bars behind live video match the pi3d title card.
 The transition-frame sidecar stores `frame_size`, `coordinate_space`, and the
-visible source-image `content_rect`; playback uses that rect for live video
-placement for every generated frame type, not only matted videos. Managed
+logical source/video `content_rect`; playback uses that rect for live video
+placement for every generated frame type, not only matted videos. Beveled mat
+effects can overlap cached frame pixels without shrinking this live placement
+rectangle. Managed
 cache filenames include a short processing-signature hash; legacy sidecar
 `.1.frame` / `.2.frame` files keep their names but require a matching
 `.meta.json` signature and current geometry metadata before reuse.
