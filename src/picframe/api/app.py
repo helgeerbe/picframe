@@ -8,7 +8,9 @@ and sets up the necessary dependencies for the web control plane.
 import asyncio
 import json
 import logging
+import mimetypes
 import subprocess
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from typing import Any, cast
 
@@ -26,7 +28,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from picframe.api.models import (
@@ -78,6 +80,10 @@ MEDIA_DTO_EXIF_KEYS = [
     "duration", "codec", "pixel_format", "framerate", "bitrate",
     "displayed_count", "last_displayed"
 ]
+DEFAULT_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".heic", ".heif"}
+DEFAULT_VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".hevc"}
+DEFAULT_MEDIA_EXTENSIONS = DEFAULT_IMAGE_EXTENSIONS | DEFAULT_VIDEO_EXTENSIONS
+RANGE_CHUNK_SIZE = 1024 * 1024
 
 FILESYSTEM_KIND_VALUES = {"any", "file", "directory"}
 OPENAPI_DESCRIPTION = """
@@ -168,7 +174,10 @@ def _requires_basic_auth(path: str, method: str, scope: str) -> bool:
         return True
     if path == "/logs" or path.startswith("/logs/"):
         return True
-    return any(path == prefix or path.startswith(f"{prefix}/") for prefix in AUTH_PROTECTED_API_PREFIXES)
+    return any(
+        path == prefix or path.startswith(f"{prefix}/")
+        for prefix in AUTH_PROTECTED_API_PREFIXES
+    )
 
 
 def _basic_auth_challenge() -> Response:
@@ -187,13 +196,19 @@ def _filter_public_workflow_config(payload: dict[str, Any]) -> dict[str, dict[st
                 detail=f"Config section '{section}' is not available from public workflow controls",
             )
         if not isinstance(values, dict):
-            raise HTTPException(status_code=400, detail=f"Config section '{section}' must be an object")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Config section '{section}' must be an object",
+            )
         allowed = PUBLIC_WORKFLOW_KEYS[section]
         rejected = sorted(set(values) - allowed)
         if rejected:
             raise HTTPException(
                 status_code=403,
-                detail=f"Config keys are not available from public workflow controls: {', '.join(rejected)}",
+                detail=(
+                    "Config keys are not available from public workflow controls: "
+                    f"{', '.join(rejected)}"
+                ),
             )
         filtered[section] = {key: values[key] for key in values if key in allowed}
     return filtered
@@ -206,6 +221,350 @@ def _workflow_config_from_app_config(config: AppConfig) -> dict[str, dict[str, A
         "model": {key: model_dump[key] for key in PUBLIC_WORKFLOW_KEYS["model"]},
         "viewer": {key: viewer_dump[key] for key in PUBLIC_WORKFLOW_KEYS["viewer"]},
     }
+
+
+def _normalize_media_type(value: Any) -> str:
+    raw_value = getattr(value, "value", value)
+    return "video" if str(raw_value or "").lower() == "video" else "image"
+
+
+def _configured_media_extensions(config_repository: IConfigRepository | None) -> set[str]:
+    if config_repository is None:
+        return set(DEFAULT_MEDIA_EXTENSIONS)
+    image_extensions = _normalize_extensions(
+        config_repository.get_app_config(
+            "model.image_extensions",
+            sorted(DEFAULT_IMAGE_EXTENSIONS),
+        )
+    )
+    video_extensions = _normalize_extensions(
+        config_repository.get_app_config(
+            "model.video_extensions",
+            sorted(DEFAULT_VIDEO_EXTENSIONS),
+        )
+    )
+    return image_extensions | video_extensions | DEFAULT_MEDIA_EXTENSIONS
+
+
+def _configured_video_extensions(config_repository: IConfigRepository | None) -> set[str]:
+    if config_repository is None:
+        return set(DEFAULT_VIDEO_EXTENSIONS)
+    return (
+        _normalize_extensions(
+            config_repository.get_app_config(
+                "model.video_extensions",
+                sorted(DEFAULT_VIDEO_EXTENSIONS),
+            )
+        )
+        | DEFAULT_VIDEO_EXTENSIONS
+    )
+
+
+def _configured_media_directories(config_repository: IConfigRepository | None) -> list[Path]:
+    if config_repository is None:
+        return []
+
+    directories = [
+        Path(
+            config_repository.get_app_config("model.pic_dir", "~/Pictures")
+        ).expanduser().resolve()
+    ]
+    for directory in config_repository.get_all_directories():
+        path_value = directory.get("path")
+        if path_value:
+            directories.append(Path(path_value).expanduser().resolve())
+    return directories
+
+
+def _placeholder_media_paths(resource_paths: ResourcePaths) -> list[Path]:
+    return [
+        (resource_paths.data_dir / "no_pictures.jpg").resolve(),
+        ResourcePaths.packaged_no_files_img().resolve(),
+    ]
+
+
+def _path_is_allowed_media(
+    file_path: Path,
+    config_repository: IConfigRepository | None,
+    resource_paths: ResourcePaths,
+) -> bool:
+    for allowed_dir in _configured_media_directories(config_repository):
+        try:
+            file_path.relative_to(allowed_dir)
+            return True
+        except ValueError:
+            pass
+    return file_path in _placeholder_media_paths(resource_paths)
+
+
+def _resolve_allowed_media_path(
+    path: str,
+    config_repository: IConfigRepository | None,
+    resource_paths: ResourcePaths,
+) -> Path:
+    file_path = Path(path).expanduser().resolve()
+    if not _path_is_allowed_media(file_path, config_repository, resource_paths):
+        raise HTTPException(status_code=403, detail="Access denied")
+    return file_path
+
+
+def _media_fallback_path(resource_paths: ResourcePaths) -> Path | None:
+    for fallback_path in _placeholder_media_paths(resource_paths):
+        if fallback_path.exists() and fallback_path.is_file():
+            return fallback_path
+    return None
+
+
+def _resolve_served_media_path(
+    path: str,
+    config_repository: IConfigRepository | None,
+    resource_paths: ResourcePaths,
+) -> Path:
+    file_path = _resolve_allowed_media_path(path, config_repository, resource_paths)
+    if (
+        file_path.exists()
+        and file_path.is_file()
+        and file_path.suffix.lower() in _configured_media_extensions(config_repository)
+    ):
+        return file_path
+
+    fallback_path = _media_fallback_path(resource_paths)
+    if fallback_path is not None:
+        return fallback_path
+    raise HTTPException(status_code=404, detail="Media not found")
+
+
+def _media_type_for_path(path: Path) -> str:
+    return mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+
+
+def _range_not_satisfiable(file_size: int) -> HTTPException:
+    return HTTPException(
+        status_code=416,
+        detail="Range not satisfiable",
+        headers={
+            "Accept-Ranges": "bytes",
+            "Content-Range": f"bytes */{file_size}",
+        },
+    )
+
+
+def _parse_single_range(range_header: str, file_size: int) -> tuple[int, int]:
+    if file_size <= 0:
+        raise _range_not_satisfiable(file_size)
+
+    unit, separator, range_spec = range_header.partition("=")
+    if separator != "=" or unit.strip().lower() != "bytes" or "," in range_spec:
+        raise _range_not_satisfiable(file_size)
+
+    start_text, dash, end_text = range_spec.strip().partition("-")
+    if dash != "-":
+        raise _range_not_satisfiable(file_size)
+
+    try:
+        if not start_text:
+            suffix_length = int(end_text)
+            if suffix_length <= 0:
+                raise ValueError
+            start = max(file_size - suffix_length, 0)
+            end = file_size - 1
+        else:
+            start = int(start_text)
+            end = int(end_text) if end_text else file_size - 1
+            if start < 0 or end < start:
+                raise ValueError
+            end = min(end, file_size - 1)
+    except ValueError as exc:
+        raise _range_not_satisfiable(file_size) from exc
+
+    if start >= file_size:
+        raise _range_not_satisfiable(file_size)
+    return start, end
+
+
+def _file_range_iterator(file_path: Path, start: int, end: int) -> Iterator[bytes]:
+    with file_path.open("rb") as file:
+        file.seek(start)
+        remaining = end - start + 1
+        while remaining > 0:
+            chunk = file.read(min(RANGE_CHUNK_SIZE, remaining))
+            if not chunk:
+                break
+            remaining -= len(chunk)
+            yield chunk
+
+
+def _media_record_for_path(
+    file_path: Path,
+    media_repository: IMediaRepository | None,
+) -> dict[str, Any] | None:
+    if media_repository is None:
+        return None
+    try:
+        return media_repository.get_media_by_path(str(file_path))
+    except Exception as exc:
+        logger.error("Error fetching media record for %s: %s", file_path, exc)
+        return None
+
+
+def _media_record_for_candidate_paths(
+    paths: Iterable[str],
+    media_repository: IMediaRepository | None,
+) -> dict[str, Any] | None:
+    if media_repository is None:
+        return None
+
+    seen: set[str] = set()
+    for path in paths:
+        if path in seen:
+            continue
+        seen.add(path)
+        try:
+            record = media_repository.get_media_by_path(path)
+        except Exception as exc:
+            logger.error("Error fetching media record for %s: %s", path, exc)
+            continue
+        if record is not None:
+            return record
+    return None
+
+
+def _path_for_video_cache_key(
+    requested_path: str,
+    resolved_path: Path,
+    media_record: dict[str, Any] | None,
+) -> Path:
+    candidates = []
+    record_path = (media_record or {}).get("filepath")
+    if record_path:
+        candidates.append(Path(str(record_path)).expanduser())
+    candidates.append(Path(requested_path).expanduser())
+
+    for candidate in candidates:
+        try:
+            if candidate.resolve() == resolved_path:
+                return candidate
+        except OSError:
+            continue
+    return resolved_path
+
+
+def _config_int(
+    config_repository: IConfigRepository | None,
+    key: str,
+    default: int = 0,
+) -> int:
+    if config_repository is None:
+        return default
+    value = config_repository.get_app_config(key, default)
+    try:
+        return int(value) if value else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _cache_dir_from_processing_service(image_processing_service: Any | None) -> str | None:
+    if image_processing_service is None:
+        return None
+    cache_dir = getattr(image_processing_service, "_cache_dir", None)
+    return str(cache_dir) if cache_dir is not None else None
+
+
+def _valid_managed_video_poster_candidate(first_path: Path) -> bool:
+    if not first_path.is_file() or not str(first_path).endswith(".1.frame"):
+        return False
+    metadata_path = Path(f"{first_path}.meta.json")
+    if not metadata_path.is_file():
+        return False
+    try:
+        with metadata_path.open(encoding="utf-8") as metadata_file:
+            metadata = json.load(metadata_file)
+    except (OSError, json.JSONDecodeError):
+        return False
+    return bool(metadata.get("processing_signature"))
+
+
+def _find_managed_video_poster_candidate(video_path: Path, cache_dir: str | None) -> Path | None:
+    if not cache_dir:
+        return None
+
+    cache_path = Path(cache_dir).expanduser()
+    if not cache_path.is_dir():
+        return None
+
+    safe_stem = video_path.stem[:48] or "video"
+    try:
+        candidates = sorted(
+            cache_path.glob(f"{safe_stem}-*.1.frame"),
+            key=lambda candidate: candidate.stat().st_mtime,
+            reverse=True,
+        )
+    except OSError:
+        return None
+
+    for candidate in candidates:
+        if _valid_managed_video_poster_candidate(candidate):
+            return candidate
+    return None
+
+
+def _video_frame_cache_kwargs(
+    video_path: Path,
+    media_record: dict[str, Any] | None,
+    config_repository: IConfigRepository | None,
+    image_processing_service: Any | None,
+) -> dict[str, Any]:
+    width = _config_int(config_repository, "viewer.display_w") or int(
+        (media_record or {}).get("width") or 0
+    )
+    height = _config_int(config_repository, "viewer.display_h") or int(
+        (media_record or {}).get("height") or 0
+    )
+    kwargs: dict[str, Any] = {
+        "video_path": str(video_path),
+        "display_width": width,
+        "display_height": height,
+        "fit_display": False,
+        "cache_dir": _cache_dir_from_processing_service(image_processing_service),
+        "background": None,
+        "matting_config": None,
+        "edge_config": None,
+    }
+    if config_repository is None:
+        return kwargs
+
+    kwargs["fit_display"] = config_repository.get_app_config_bool(
+        "viewer.video_fit_display",
+        False,
+    )
+    kwargs["background"] = config_repository.get_app_config("viewer.background", None)
+    kwargs["edge_config"] = {
+        "blur_edges": config_repository.get_app_config_bool("viewer.blur_edges", False),
+        "blur_amount": config_repository.get_app_config("viewer.blur_amount", 12),
+        "blur_zoom": config_repository.get_app_config("viewer.blur_zoom", 1.0),
+        "edge_alpha": config_repository.get_app_config("viewer.edge_alpha", 0.5),
+    }
+    kwargs["matting_config"] = {
+        "mat_images": config_repository.get_app_config("viewer.mat_images", 0.01),
+        "mat_type": config_repository.get_app_config("viewer.mat_type", None),
+        "outer_mat_color": config_repository.get_app_config("viewer.outer_mat_color", None),
+        "inner_mat_color": config_repository.get_app_config("viewer.inner_mat_color", None),
+        "outer_mat_border": config_repository.get_app_config("viewer.outer_mat_border", 75),
+        "inner_mat_border": config_repository.get_app_config("viewer.inner_mat_border", 40),
+        "outer_mat_use_texture": config_repository.get_app_config(
+            "viewer.outer_mat_use_texture",
+            True,
+        ),
+        "inner_mat_use_texture": config_repository.get_app_config(
+            "viewer.inner_mat_use_texture",
+            False,
+        ),
+        "mat_resource_folder": config_repository.get_app_config(
+            "viewer.mat_resource_folder",
+            f"{PICFRAME_DATA_TOKEN}/mat",
+        ),
+    }
+    return kwargs
 
 
 async def _send_websocket_text(websocket: WebSocket, message: str) -> bool:
@@ -456,6 +815,7 @@ def _media_item_to_dto(
 
     return MediaResponseDTO(
         file_path=str(file_path),
+        media_type=_normalize_media_type(item_dict.get("media_type")),
         exif=exif_data,
         location=location,
         id=item_dict.get("id"),
@@ -502,6 +862,7 @@ def media_event_to_response_dto(
     primary_dto = item_dtos[primary_index]
     return MediaResponseDTO(
         file_path=primary_dto.file_path,
+        media_type=primary_dto.media_type,
         exif=primary_dto.exif,
         location=primary_dto.location,
         id=primary_dto.id,
@@ -728,7 +1089,7 @@ def create_app(
     )
     async def api_put_auth_config(payload: BasicAuthConfigRequest) -> dict[str, Any]:
         try:
-            settings = auth_store.update(
+            auth_store.update(
                 scope=payload.scope,
                 enabled=payload.enabled,
                 username=payload.username,
@@ -1047,7 +1408,11 @@ def create_app(
             "status": status,
             "active": status == "active",
             "restart_available": status == "active",
-            "message": None if status == "active" else "Restart requires an active picframe.service.",
+            "message": (
+                None
+                if status == "active"
+                else "Restart requires an active picframe.service."
+            ),
         }
 
     @app.post(
@@ -1056,7 +1421,9 @@ def create_app(
         response_model_exclude_none=True,
         tags=["System"],
         summary="Restart Picframe service",
-        description="Restart picframe.service when Picframe is running as an active systemd service.",
+        description=(
+            "Restart picframe.service when Picframe is running as an active systemd service."
+        ),
     )
     async def api_restart_service() -> dict[str, str]:
         """Restart the managed Picframe service when available."""
@@ -1260,7 +1627,8 @@ def create_app(
         tags=["Configuration"],
         summary="Get public Remote workflow configuration",
         description=(
-            "Return only the playback and appearance workflow settings needed by Remote and Appearance. "
+            "Return only the playback and appearance workflow settings needed by Remote and "
+            "Appearance. "
             "This endpoint stays public in Settings-only auth mode and is protected in "
             "complete-site auth mode."
         ),
@@ -1579,16 +1947,30 @@ def create_app(
 
     @app.get(
         "/media",
-        response_class=FileResponse,
         tags=["Media"],
         summary="Serve an allowed media file",
         description=(
             "Serve image and video files only when the requested path belongs to the "
-            "configured media directories or Picframe's default placeholder image."
+            "configured media directories or Picframe's default placeholder image. "
+            "Single HTTP byte ranges are supported for browser video playback."
         ),
         responses={
             200: {
                 "description": "Media file stream.",
+                "content": {
+                    "image/jpeg": {},
+                    "image/png": {},
+                    "image/gif": {},
+                    "video/mp4": {},
+                    "video/quicktime": {},
+                    "video/x-matroska": {},
+                    "video/x-msvideo": {},
+                    "video/webm": {},
+                    "application/octet-stream": {},
+                },
+            },
+            206: {
+                "description": "Partial media file stream for a single byte range.",
                 "content": {
                     "image/jpeg": {},
                     "image/png": {},
@@ -1606,64 +1988,94 @@ def create_app(
         },
     )
     async def serve_media(
+        request: Request,
         path: str = Query(..., description="Absolute media path to stream."),
-    ) -> FileResponse:
-        """Serve media files from the filesystem."""
-        file_path = Path(path).resolve()
-        
-        # Basic security check: only serve files with known media extensions
-        # to prevent arbitrary file read (e.g., /etc/passwd)
-        allowed_extensions = {
-            ".jpg", ".jpeg", ".png", ".gif", ".heic",
-            ".mp4", ".mov", ".mkv", ".avi", ".webm"
+    ) -> Response:
+        """Serve media files from the filesystem, with explicit byte-range support."""
+        file_path = _resolve_served_media_path(path, config_repository, resource_paths)
+        file_size = file_path.stat().st_size
+        media_type = _media_type_for_path(file_path)
+        headers = {"Accept-Ranges": "bytes"}
+
+        range_header = request.headers.get("range")
+        if not range_header:
+            return FileResponse(file_path, media_type=media_type, headers=headers)
+
+        start, end = _parse_single_range(range_header, file_size)
+        content_length = end - start + 1
+        range_headers = {
+            **headers,
+            "Content-Range": f"bytes {start}-{end}/{file_size}",
+            "Content-Length": str(content_length),
         }
-        
-        # Security check: ensure the path is within the configured media directory
-        is_allowed = False
-        if config_repository:
-            # We need to get the full config to check the pic_dir
-            # Since IConfigRepository doesn't have a get_config method, we'll use get_all_app_config
-            # and reconstruct the nested structure, or just get the specific key if it's flat
-            pic_dir_str = config_repository.get_app_config("model.pic_dir", "~/Pictures")
-            pic_dir = Path(pic_dir_str).expanduser().resolve()
-            
-            # Also check directories table
-            allowed_dirs = [pic_dir]
-            for d in config_repository.get_all_directories():
-                allowed_dirs.append(Path(d["path"]).expanduser().resolve())
-                
-            for allowed_dir in allowed_dirs:
-                if file_path.is_relative_to(allowed_dir):
-                    is_allowed = True
-                    break
-                
-        if not is_allowed:
-            # Allow serving the default no_pictures.jpg
-            user_no_pic_path = Path.home() / ".picframe" / "data" / "no_pictures.jpg"
-            fallback_path = Path(__file__).parent.parent / "data" / "no_pictures.jpg"
-            if file_path == user_no_pic_path.resolve() or file_path == fallback_path.resolve():
-                is_allowed = True
-                
-        if not is_allowed:
-            raise HTTPException(status_code=403, detail="Access denied")
-        
-        if (file_path.exists() and file_path.is_file() and
-            file_path.suffix.lower() in allowed_extensions):
-            return FileResponse(file_path)
-            
-        # Return a 404 or a default image if not found
-        # First try the user's configuration directory
-        user_no_pic_path = Path.home() / ".picframe" / "data" / "no_pictures.jpg"
-        if user_no_pic_path.exists() and user_no_pic_path.is_file():
-            return FileResponse(user_no_pic_path)
-            
-        # Fallback to the source code directory
-        fallback_path = Path(__file__).parent.parent / "data" / "no_pictures.jpg"
-        if fallback_path.exists() and fallback_path.is_file():
-            return FileResponse(fallback_path)
-            
-        # If all else fails, return a 404
-        raise HTTPException(status_code=404, detail="Media not found")
+        return StreamingResponse(
+            _file_range_iterator(file_path, start, end),
+            status_code=206,
+            media_type=media_type,
+            headers=range_headers,
+        )
+
+    @app.get(
+        "/media/poster",
+        response_class=FileResponse,
+        tags=["Media"],
+        summary="Serve a cached video poster",
+        description=(
+            "Serve the cached first transition frame for an allowed video file. "
+            "This endpoint never extracts frames during the HTTP request."
+        ),
+        responses={
+            200: {
+                "description": "Cached video poster image.",
+                "content": {"image/jpeg": {}},
+            },
+            **BAD_REQUEST_RESPONSE,
+            **FORBIDDEN_RESPONSE,
+            **NOT_FOUND_RESPONSE,
+        },
+    )
+    async def serve_media_poster(
+        path: str = Query(..., description="Absolute video path to use for poster lookup."),
+    ) -> FileResponse:
+        """Serve an existing cached video first frame as a poster image."""
+        requested_video_path = Path(path).expanduser()
+        video_path = _resolve_allowed_media_path(path, config_repository, resource_paths)
+        if requested_video_path.suffix.lower() not in _configured_video_extensions(
+            config_repository
+        ):
+            raise HTTPException(status_code=400, detail="Poster is only available for videos")
+
+        media_record = _media_record_for_candidate_paths(
+            [str(requested_video_path), str(video_path)],
+            media_repository,
+        )
+        if media_record is not None and _normalize_media_type(
+            media_record.get("media_type")
+        ) != "video":
+            raise HTTPException(status_code=400, detail="Poster is only available for videos")
+
+        from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
+
+        cache_kwargs = _video_frame_cache_kwargs(
+            _path_for_video_cache_key(path, video_path, media_record),
+            media_record,
+            config_repository,
+            image_processing_service,
+        )
+        extractor = VideoFrameExtractor(**cache_kwargs)
+        poster_path = Path(extractor.get_frame_path("first"))
+        if not extractor.cached_transition_frames_valid() or not poster_path.is_file():
+            poster_path = _find_managed_video_poster_candidate(
+                Path(str(cache_kwargs["video_path"])),
+                cache_kwargs.get("cache_dir"),
+            )
+        if poster_path is None or not poster_path.is_file():
+            raise HTTPException(status_code=404, detail="Poster not found")
+        return FileResponse(
+            poster_path,
+            media_type="image/jpeg",
+            headers={"Cache-Control": "public, max-age=3600"},
+        )
 
     # Serve SPA static files
     html_dir_path = Path(html_dir).expanduser()

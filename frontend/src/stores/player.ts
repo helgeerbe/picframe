@@ -6,6 +6,7 @@ export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'of
 export interface MediaItem {
   id?: number | null
   file_path: string
+  media_type?: 'image' | 'video' | string
   exif?: Record<string, any>
   location?: {
     lat: number

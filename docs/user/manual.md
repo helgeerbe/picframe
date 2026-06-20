@@ -621,6 +621,15 @@ Picframe uses that cached first frame as the GTK video backdrop so the
 bars around live video match the pi3d title-card handoff, including on
 Raspberry Pi/labwc where the plain video host would otherwise be transparent.
 
+The web Remote also uses cached video first frames, but only as lightweight
+browser posters. The normal Remote preview does not load the full video file;
+if no poster has been cached yet, it shows a video placeholder instead. Use the
+preview play button or expand action to open the media view. In that expanded
+view, the browser uses native video playback with metadata preload and HTTP
+byte-range streaming. Browser playback is best-effort and depends on the
+browser's supported codecs, while Picframe's on-frame GStreamer playback
+remains the authoritative slideshow path.
+
 Hardware playback is selected only when the Raspberry Pi model is known to
 support the codec at the stream resolution/framerate and GStreamer exposes a
 matching V4L2 decoder. Unknown, unsupported, over-limit, or missing-decoder
