@@ -73,6 +73,7 @@ class LogSnapshotMessage(BaseModel):
 class MediaResponseDTO(BaseModel):
     """Data Transfer Object for media items sent to the frontend."""
     file_path: str
+    media_type: Literal["image", "video"] = "image"
     exif: dict[str, Any] = Field(default_factory=dict)
     location: dict[str, float] | None = None
     id: int | None = None

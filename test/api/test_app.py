@@ -7,11 +7,16 @@ from unittest.mock import AsyncMock, MagicMock
 import httpx
 import pytest
 from fastapi import FastAPI
+from PIL import Image
 
-from picframe.api.app import create_app, media_event_to_response_dto, _send_websocket_text
+from picframe.api.app import _send_websocket_text, create_app, media_event_to_response_dto
 from picframe.core.events.dto import Command
 from picframe.core.services.basic_auth import AUTH_COOKIE_NAME, BasicAuthStore
 from picframe.core.services.resource_paths import ResourcePaths
+from picframe.core.utils.video_frame_extractor import (
+    VideoFrameExtractor,
+    VideoTransitionFrameMetadata,
+)
 
 
 @pytest.fixture
@@ -88,6 +93,43 @@ class FakeSystemManager:
 def basic_auth(username: str = "admin", password: str = "secret") -> dict[str, str]:
     token = base64.b64encode(f"{username}:{password}".encode()).decode()
     return {"Authorization": f"Basic {token}"}
+
+
+def media_config_repo(media_root: Path) -> MagicMock:
+    values: dict[str, Any] = {
+        "model.pic_dir": str(media_root),
+        "model.image_extensions": [".jpg", ".jpeg", ".png", ".gif", ".heic", ".heif"],
+        "model.video_extensions": [".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".hevc"],
+        "viewer.display_w": 0,
+        "viewer.display_h": 0,
+        "viewer.video_fit_display": False,
+        "viewer.background": None,
+        "viewer.blur_edges": False,
+        "viewer.blur_amount": 12,
+        "viewer.blur_zoom": 1.0,
+        "viewer.edge_alpha": 0.5,
+        "viewer.mat_images": 0.01,
+        "viewer.mat_type": None,
+        "viewer.outer_mat_color": None,
+        "viewer.inner_mat_color": None,
+        "viewer.outer_mat_border": 75,
+        "viewer.inner_mat_border": 40,
+        "viewer.outer_mat_use_texture": True,
+        "viewer.inner_mat_use_texture": False,
+        "viewer.mat_resource_folder": "${PICFRAME_DATA}/mat",
+    }
+    repo = MagicMock()
+    repo.get_app_config.side_effect = lambda key, default=None: values.get(key, default)
+    repo.get_app_config_bool.side_effect = lambda key, default=False: bool(
+        values.get(key, default)
+    )
+    repo.get_all_directories.return_value = []
+    return repo
+
+
+class FakeImageProcessingService:
+    def __init__(self, cache_dir: Path) -> None:
+        self._cache_dir = cache_dir
 
 
 def test_health_check(client: ASGITestClient) -> None:
@@ -725,6 +767,38 @@ def test_media_event_dto_without_repository_does_not_guess_location_path() -> No
     assert dto.location == {"lat": 52.5, "lon": 13.4}
     assert "location_name" not in dto.exif
 
+
+def test_media_event_dto_includes_media_type_for_video() -> None:
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/clip.mp4",
+            "media_type": "video",
+            "duration": 12.5,
+        }
+    )
+
+    assert dto.media_type == "video"
+    assert dto.exif["duration"] == 12.5
+
+
+def test_media_event_dto_includes_media_type_for_display_items() -> None:
+    dto = media_event_to_response_dto(
+        {
+            "layout": "single",
+            "primary_index": 0,
+            "items": [
+                {
+                    "filepath": "/photos/clip.mp4",
+                    "media_type": "video",
+                }
+            ],
+        }
+    )
+
+    assert dto.media_type == "video"
+    assert dto.items[0].media_type == "video"
+
+
 def test_api_get_config(client: ASGITestClient) -> None:
     # Test without config repository
     response = client.get("/api/config")
@@ -849,6 +923,288 @@ def test_workflow_config_rejects_non_workflow_keys() -> None:
 
     assert response.status_code == 403
     mock_repo.set_app_config.assert_not_called()
+
+
+def test_media_endpoint_serves_full_allowed_file(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    media_file = media_root / "clip.mp4"
+    media_file.write_bytes(b"0123456789")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media?path={media_file}")
+
+    assert response.status_code == 200
+    assert response.content == b"0123456789"
+    assert response.headers["accept-ranges"] == "bytes"
+
+
+def test_media_endpoint_serves_bounded_range(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    media_file = media_root / "clip.mp4"
+    media_file.write_bytes(b"0123456789")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media?path={media_file}", headers={"Range": "bytes=2-5"})
+
+    assert response.status_code == 206
+    assert response.content == b"2345"
+    assert response.headers["accept-ranges"] == "bytes"
+    assert response.headers["content-range"] == "bytes 2-5/10"
+    assert response.headers["content-length"] == "4"
+
+
+def test_media_endpoint_serves_open_ended_and_suffix_ranges(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    media_file = media_root / "clip.mp4"
+    media_file.write_bytes(b"0123456789")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+    )
+    client = ASGITestClient(app)
+
+    open_ended = client.get(f"/media?path={media_file}", headers={"Range": "bytes=7-"})
+    suffix = client.get(f"/media?path={media_file}", headers={"Range": "bytes=-3"})
+
+    assert open_ended.status_code == 206
+    assert open_ended.content == b"789"
+    assert open_ended.headers["content-range"] == "bytes 7-9/10"
+    assert suffix.status_code == 206
+    assert suffix.content == b"789"
+    assert suffix.headers["content-range"] == "bytes 7-9/10"
+
+
+def test_media_endpoint_rejects_invalid_ranges(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    media_file = media_root / "clip.mp4"
+    media_file.write_bytes(b"0123456789")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+    )
+    client = ASGITestClient(app)
+
+    invalid = client.get(f"/media?path={media_file}", headers={"Range": "bytes=20-30"})
+    multipart = client.get(
+        f"/media?path={media_file}",
+        headers={"Range": "bytes=0-1,3-4"},
+    )
+
+    assert invalid.status_code == 416
+    assert invalid.headers["content-range"] == "bytes */10"
+    assert multipart.status_code == 416
+    assert multipart.headers["content-range"] == "bytes */10"
+
+
+def write_cached_video_transition_frames(
+    video_file: Path,
+    cache_dir: Path,
+    display_size: tuple[int, int] = (4, 4),
+) -> None:
+    cache_config = {
+        "mat_images": 0.01,
+        "mat_type": None,
+        "outer_mat_color": None,
+        "inner_mat_color": None,
+        "outer_mat_border": 75,
+        "inner_mat_border": 40,
+        "outer_mat_use_texture": True,
+        "inner_mat_use_texture": False,
+        "mat_resource_folder": "${PICFRAME_DATA}/mat",
+    }
+    edge_config = {
+        "blur_edges": False,
+        "blur_amount": 12,
+        "blur_zoom": 1.0,
+        "edge_alpha": 0.5,
+    }
+    width, height = display_size
+    extractor = VideoFrameExtractor(
+        str(video_file),
+        width,
+        height,
+        cache_dir=str(cache_dir),
+        matting_config=cache_config,
+        edge_config=edge_config,
+    )
+    first_path = Path(extractor.get_frame_path("first"))
+    last_path = Path(extractor.get_frame_path("last"))
+    first_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", display_size, "red").save(first_path, format="JPEG")
+    Image.new("RGB", display_size, "blue").save(last_path, format="JPEG")
+    extractor._write_transition_metadata(
+        VideoTransitionFrameMetadata(
+            frame_size=display_size,
+            content_rect=(0, 0, width, height),
+        )
+    )
+
+
+def test_media_poster_serves_cached_video_first_frame(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    media_root.mkdir()
+    video_file = media_root / "clip.mp4"
+    video_file.write_bytes(b"video")
+    config_repo = media_config_repo(media_root)
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.return_value = {
+        "filepath": str(video_file),
+        "media_type": "video",
+        "width": 4,
+        "height": 4,
+    }
+    write_cached_video_transition_frames(video_file, cache_dir)
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=config_repo,
+        media_repository=media_repo,
+        image_processing_service=FakeImageProcessingService(cache_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media/poster?path={video_file}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.content
+
+
+def test_media_poster_uses_requested_path_for_cache_key_after_authorization(
+    tmp_path: Path,
+) -> None:
+    media_root = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    media_root.mkdir()
+    real_video = media_root / "real-clip.mp4"
+    linked_video = media_root / "clip.mp4"
+    real_video.write_bytes(b"video")
+    try:
+        linked_video.symlink_to(real_video)
+    except OSError as exc:
+        pytest.skip(f"Symlinks are unavailable in this environment: {exc}")
+
+    config_repo = media_config_repo(media_root)
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.side_effect = lambda filepath: (
+        {
+            "filepath": str(linked_video),
+            "media_type": "video",
+            "width": 4,
+            "height": 4,
+        }
+        if filepath == str(linked_video)
+        else None
+    )
+    write_cached_video_transition_frames(linked_video, cache_dir)
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=config_repo,
+        media_repository=media_repo,
+        image_processing_service=FakeImageProcessingService(cache_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media/poster?path={linked_video}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+
+
+def test_media_poster_falls_back_to_existing_managed_cache_frame(
+    tmp_path: Path,
+) -> None:
+    media_root = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    media_root.mkdir()
+    video_file = media_root / "clip.mp4"
+    video_file.write_bytes(b"video")
+    config_repo = media_config_repo(media_root)
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.return_value = {
+        "filepath": str(video_file),
+        "media_type": "video",
+        "width": 4,
+        "height": 4,
+    }
+    write_cached_video_transition_frames(video_file, cache_dir, display_size=(8, 8))
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=config_repo,
+        media_repository=media_repo,
+        image_processing_service=FakeImageProcessingService(cache_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media/poster?path={video_file}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.content
+
+
+def test_media_poster_rejects_non_video_and_outside_paths(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    image_file = media_root / "photo.jpg"
+    outside_file = tmp_path / "outside.mp4"
+    image_file.write_bytes(b"image")
+    outside_file.write_bytes(b"video")
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.return_value = {
+        "filepath": str(image_file),
+        "media_type": "image",
+    }
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+        media_repository=media_repo,
+    )
+    client = ASGITestClient(app)
+
+    non_video = client.get(f"/media/poster?path={image_file}")
+    outside = client.get(f"/media/poster?path={outside_file}")
+
+    assert non_video.status_code == 400
+    assert outside.status_code == 403
+
+
+def test_media_poster_returns_404_when_cached_frame_missing(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    media_root.mkdir()
+    video_file = media_root / "clip.mp4"
+    video_file.write_bytes(b"video")
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.return_value = {
+        "filepath": str(video_file),
+        "media_type": "video",
+        "width": 4,
+        "height": 4,
+    }
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+        media_repository=media_repo,
+        image_processing_service=FakeImageProcessingService(cache_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media/poster?path={video_file}")
+
+    assert response.status_code == 404
 
 
 def test_api_media_filter_options() -> None:

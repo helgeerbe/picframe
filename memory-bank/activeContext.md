@@ -1,16 +1,14 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #697 is implemented, pushed, and closed:
-media selection now uses indexable filepath ranges, active-media/date indexes,
-a rounded-coordinate location expression index, Python-side standard shuffle,
-and count queries that skip resolved-location joins unless a location filter
-requires them.
+The active branch is `feature/699-remote-video-streaming`. Issue #699 tracks
+poster-first Remote video previews and explicit HTTP byte-range streaming so
+browser clients do not eagerly load full video files.
 
 ## Current Repo State
-- Branch: `v2-dev`.
-- `v2-dev` is aligned with `origin/v2-dev` after the #696 and #697 closeouts
-  were pushed.
+- Branch: `feature/699-remote-video-streaming`, created from `v2-dev`.
+- Issue #699 owns the current code/docs changes; commit messages for this work
+  must include `#699`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -48,6 +46,7 @@ requires them.
 - Ticket #695 adds an explicit Settings clock hour mode: 24-hour writes `%H:%M`, 12-hour writes `%-I:%M %p`, Custom preserves and edits the raw `viewer.clock_format`, and the renderer/backend contract remains unchanged.
 - Ticket #696 hardens media-cache repository threading: all `SQLiteMediaRepository` connection use is serialized with an `RLock`, including location lookups used by API media DTO enrichment.
 - Ticket #697 improves media selection performance for large libraries: media-cache migrations add active filepath/date indexes and a rounded-coordinate location expression index; playlist folder scope uses filepath range predicates; standard shuffle happens in Python without SQL `RANDOM()`; count queries avoid location joins unless filtering by resolved location.
+- Ticket #699 adds the Remote browser-memory boundary for videos: WebSocket media DTOs expose `media_type`, normal Remote video previews request only `/media/poster`, poster lookup can reuse existing managed-cache first frames when the exact transition key changes, missing poster caches show a lightweight play placeholder, expanded media uses native `<video preload="metadata">`, and `/media` explicitly supports single HTTP byte ranges. Browser codec support remains best-effort; GStreamer playback on the frame remains authoritative.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -69,6 +68,7 @@ requires them.
 - Preserve the #695 clock boundary: clock hour mode is an explicit display preference backed by `viewer.clock_format`; do not infer or mutate it from `model.locale`.
 - Preserve the #696 repository boundary: shared SQLite connection access in `SQLiteMediaRepository` must stay serialized across API, playback, indexer, and geocoding threads.
 - Preserve the #697 performance boundary: keep Remote/Settings APIs and playlist filter semantics unchanged while using indexable media-cache queries and Python-side shuffle.
+- Preserve the #699 browser-preview boundary: normal Remote video previews must not mount `<video>` or request the full `/media` video URL; only the expanded media modal may stream video bytes.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

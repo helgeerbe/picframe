@@ -36,6 +36,11 @@
     "expand": "Expand",
     "previewLoadFailed": "Preview could not be loaded.",
     "retryPreview": "Retry preview",
+    "videoPreview": "Video preview",
+    "videoPreviewUnavailable": "Poster not cached",
+    "playVideo": "Play video",
+    "showTags": "Show tags",
+    "hideTags": "Hide tags",
     "mediaInfo": {
       "title": "Media info",
       "open": "Show media info",

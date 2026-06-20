@@ -81,8 +81,11 @@ const shuffleModeMenuRef = ref<HTMLElement | null>(null)
 const selectedPairIndex = ref(0)
 const showPairDeleteDialog = ref(false)
 const expandedPanel = ref<'media' | 'map' | null>(null)
+const expandedVideoAutoplay = ref(false)
+const isMediaOverlayPinned = ref(false)
 const isMediaInfoOpen = ref(false)
 const imageLoadFailures = ref<Record<string, number>>({})
+const videoPosterFailures = ref<Record<string, boolean>>({})
 const locationSearch = ref('')
 const locationSearchResults = ref<LocationOption[]>([])
 const isLocationSearchLoading = ref(false)
@@ -118,7 +121,7 @@ const handleDocumentClick = (event: MouseEvent) => {
 const handleDocumentKeydown = (event: KeyboardEvent) => {
   if (event.key === 'Escape') {
     if (expandedPanel.value) {
-      expandedPanel.value = null
+      closeExpandedPanel()
       return
     }
     closeShuffleModeMenu()
@@ -206,7 +209,10 @@ watch(
     selectedPairIndex.value = media?.primary_index ?? 0
     showPairDeleteDialog.value = false
     isMediaInfoOpen.value = false
+    expandedVideoAutoplay.value = false
+    isMediaOverlayPinned.value = false
     imageLoadFailures.value = {}
+    videoPosterFailures.value = {}
   }
 )
 
@@ -313,6 +319,12 @@ const selectedMediaItem = computed(() => {
   return items[index]
 })
 
+const isVideoMedia = (media: MediaItem | null | undefined) => {
+  if (!media) return false
+  if (String(media.media_type || '').toLowerCase() === 'video') return true
+  return /\.(mp4|mov|mkv|avi|webm|flv|hevc)(?:$|[?#])/i.test(media.file_path || '')
+}
+
 const mediaImageKey = (media: MediaItem | null | undefined) => media?.file_path || ''
 
 const mediaImageSrc = (media: MediaItem | null | undefined) => {
@@ -330,9 +342,38 @@ const mediaImageSrc = (media: MediaItem | null | undefined) => {
   }
 }
 
+const mediaPosterSrc = (media: MediaItem | null | undefined) => {
+  const source = mediaImageKey(media)
+  if (!source) return ''
+  try {
+    const url = new URL(source, window.location.origin)
+    url.pathname = '/media/poster'
+    url.searchParams.delete('_picframe_preview_retry')
+    return url.toString()
+  } catch (error) {
+    return ''
+  }
+}
+
+const mediaVideoSrc = (media: MediaItem | null | undefined) => media?.file_path || ''
+
 const hasMediaImageFailed = (media: MediaItem | null | undefined) => {
   const key = mediaImageKey(media)
   return key ? (imageLoadFailures.value[key] || 0) >= MAX_IMAGE_AUTO_RETRIES : false
+}
+
+const hasVideoPosterFailed = (media: MediaItem | null | undefined) => {
+  const key = mediaImageKey(media)
+  return key ? Boolean(videoPosterFailures.value[key]) : false
+}
+
+const handleVideoPosterError = (media: MediaItem | null | undefined) => {
+  const key = mediaImageKey(media)
+  if (!key) return
+  videoPosterFailures.value = {
+    ...videoPosterFailures.value,
+    [key]: true
+  }
 }
 
 const handleMediaImageError = (media: MediaItem | null | undefined) => {
@@ -598,13 +639,23 @@ const selectedMediaLocation = computed(() => {
   return selectedMediaItem.value?.location
 })
 
-const openExpandedPanel = (panel: 'media' | 'map') => {
+const openExpandedPanel = (panel: 'media' | 'map', autoplayVideo = false) => {
   if (panel === 'map' && !selectedMediaLocation.value) return
+  expandedVideoAutoplay.value = panel === 'media' && autoplayVideo
   expandedPanel.value = panel
+}
+
+const openExpandedVideo = () => {
+  openExpandedPanel('media', true)
 }
 
 const closeExpandedPanel = () => {
   expandedPanel.value = null
+  expandedVideoAutoplay.value = false
+}
+
+const toggleMediaOverlay = () => {
+  isMediaOverlayPinned.value = !isMediaOverlayPinned.value
 }
 
 const updateLocationSearch = async () => {
@@ -884,14 +935,33 @@ const metadataFields = computed(() => {
                 class="relative min-w-0 overflow-hidden rounded-lg bg-black/40 focus:outline-none focus:ring-2 focus:ring-white/80"
                 :class="selectedPairIndex === index ? 'ring-2 ring-sky-300' : 'ring-1 ring-white/10'"
               >
+                <template v-if="isVideoMedia(item)">
+                  <img
+                    v-if="mediaPosterSrc(item) && !hasVideoPosterFailed(item)"
+                    :src="mediaPosterSrc(item)"
+                    :alt="t('remote.videoPreview')"
+                    class="h-full w-full object-contain"
+                    @error="handleVideoPosterError(item)"
+                  />
+                  <div
+                    v-else
+                    class="flex h-full w-full flex-col items-center justify-center px-4 text-center text-gray-200"
+                  >
+                    <svg class="mb-2 h-8 w-8 opacity-70" viewBox="0 0 24 24" aria-hidden="true">
+                      <path :d="mdiVideo" fill="currentColor" />
+                    </svg>
+                    <span class="text-xs font-semibold">{{ t('remote.videoPreviewUnavailable') }}</span>
+                  </div>
+                </template>
                 <img
+                  v-else
                   :src="mediaImageSrc(item)"
                   :alt="pairSideLabel(index)"
                   class="h-full w-full object-contain"
                   @error="handleMediaImageError(item)"
                 />
                 <div
-                  v-if="hasMediaImageFailed(item)"
+                  v-if="!isVideoMedia(item) && hasMediaImageFailed(item)"
                   class="absolute inset-0 flex flex-col items-center justify-center bg-black/70 px-4 text-center text-white"
                 >
                   <PhotoIcon class="mb-2 h-8 w-8 opacity-70" />
@@ -901,6 +971,39 @@ const metadataFields = computed(() => {
                   {{ pairSideLabel(index) }}
                 </span>
               </button>
+            </div>
+            <div
+              v-else-if="selectedMediaItem?.file_path && isVideoMedia(selectedMediaItem)"
+              class="absolute inset-0 flex items-center justify-center bg-black"
+            >
+              <img
+                v-if="mediaPosterSrc(selectedMediaItem) && !hasVideoPosterFailed(selectedMediaItem)"
+                :src="mediaPosterSrc(selectedMediaItem)"
+                :alt="t('remote.videoPreview')"
+                class="absolute inset-0 h-full w-full object-contain transition-transform duration-1000 ease-out group-hover:scale-[1.02]"
+                @error="handleVideoPosterError(selectedMediaItem)"
+              />
+              <div
+                v-if="!mediaPosterSrc(selectedMediaItem) || hasVideoPosterFailed(selectedMediaItem)"
+                class="flex flex-col items-center justify-center px-6 text-center text-gray-200"
+              >
+                <svg class="mb-3 h-16 w-16 opacity-70" viewBox="0 0 24 24" aria-hidden="true">
+                  <path :d="mdiVideo" fill="currentColor" />
+                </svg>
+                <p class="text-sm font-semibold">{{ t('remote.videoPreviewUnavailable') }}</p>
+              </div>
+              <div class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+                <button
+                  type="button"
+                  class="pointer-events-auto inline-flex h-20 w-20 items-center justify-center rounded-full border border-white/30 bg-white/90 text-gray-950 shadow-2xl shadow-black/40 transition-transform hover:scale-105 hover:bg-white focus:outline-none focus:ring-4 focus:ring-white/70 active:scale-95"
+                  :aria-label="t('remote.playVideo')"
+                  :title="t('remote.playVideo')"
+                  @click.stop="openExpandedVideo"
+                >
+                  <PlayIconSolid class="ml-1 h-10 w-10" />
+                  <span class="sr-only">{{ t('remote.playVideo') }}</span>
+                </button>
+              </div>
             </div>
             <img
               v-else-if="selectedMediaItem?.file_path"
@@ -914,7 +1017,7 @@ const metadataFields = computed(() => {
               <p class="text-sm font-medium uppercase tracking-wide opacity-60">{{ t('remote.noMedia') }}</p>
             </div>
             <div
-              v-if="selectedMediaItem?.file_path && hasMediaImageFailed(selectedMediaItem)"
+              v-if="selectedMediaItem?.file_path && !isVideoMedia(selectedMediaItem) && hasMediaImageFailed(selectedMediaItem)"
               class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 px-6 text-center text-white"
             >
               <PhotoIcon class="mb-3 h-12 w-12 opacity-70" />
@@ -928,6 +1031,19 @@ const metadataFields = computed(() => {
               </button>
             </div>
             <div v-if="selectedMediaItem" class="absolute right-4 top-4 z-10 flex items-center gap-2">
+              <button
+                v-if="currentMediaTags.length"
+                type="button"
+                class="inline-flex h-10 w-10 items-center justify-center rounded-lg border text-white shadow-sm backdrop-blur-sm transition-colors focus:outline-none focus:ring-2 focus:ring-white/80"
+                :class="isMediaOverlayPinned ? 'border-sky-300 bg-sky-600/85' : 'border-white/20 bg-black/55 hover:bg-black/75'"
+                :aria-label="isMediaOverlayPinned ? t('remote.hideTags') : t('remote.showTags')"
+                :title="isMediaOverlayPinned ? t('remote.hideTags') : t('remote.showTags')"
+                :aria-expanded="isMediaOverlayPinned"
+                aria-controls="remote-current-media-tags"
+                @click.stop="toggleMediaOverlay"
+              >
+                <TagIcon class="h-5 w-5" />
+              </button>
               <InfoButton :label="t('remote.mediaInfo.open')" @click="isMediaInfoOpen = true" />
               <button
                 v-if="selectedMediaItem?.file_path"
@@ -942,18 +1058,33 @@ const metadataFields = computed(() => {
             </div>
             
             <!-- Adaptive Cinematic Gradient Overlay -->
-            <div v-if="selectedMediaItem?.file_path" class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-40 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+            <div
+              v-if="selectedMediaItem?.file_path"
+              class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-500 pointer-events-none"
+              :class="isMediaOverlayPinned ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'"
+            ></div>
             
             <!-- Narrative Metadata Overlay (Progressive Disclosure) -->
-            <div v-if="selectedMediaItem?.file_path" class="absolute bottom-0 left-0 right-0 p-6 transition-all duration-500 flex justify-between items-end group-hover:backdrop-blur-sm">
+            <div
+              v-if="selectedMediaItem?.file_path"
+              class="absolute bottom-0 left-0 right-0 p-6 transition-all duration-500 flex justify-between items-end group-hover:backdrop-blur-sm"
+              :class="isMediaOverlayPinned ? 'backdrop-blur-sm' : ''"
+            >
               <div class="flex-1 min-w-0 pr-4 pointer-events-none">
                 <!-- Title (Always visible) -->
-                <h2 class="text-2xl font-bold text-white truncate drop-shadow-md transition-transform duration-500 group-hover:-translate-y-1">
+                <h2
+                  class="text-2xl font-bold text-white truncate drop-shadow-md transition-transform duration-500 group-hover:-translate-y-1"
+                  :class="isMediaOverlayPinned ? '-translate-y-1' : ''"
+                >
                   {{ selectedMediaItem?.exif?.title || displayFileName }}
                 </h2>
                 
                 <!-- Progressive Disclosure: Caption & Tags (Visible on hover) -->
-                <div class="grid grid-rows-[0fr] group-hover:grid-rows-[1fr] transition-all duration-500 ease-in-out opacity-0 group-hover:opacity-100">
+                <div
+                  id="remote-current-media-tags"
+                  class="grid transition-all duration-500 ease-in-out"
+                  :class="isMediaOverlayPinned ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 group-hover:grid-rows-[1fr] group-hover:opacity-100'"
+                >
                   <div class="overflow-hidden">
                     <p v-if="selectedMediaItem?.exif?.caption" class="text-sm text-gray-200 mt-2 line-clamp-3 drop-shadow">
                       {{ selectedMediaItem.exif.caption }}
@@ -1387,38 +1518,59 @@ const metadataFields = computed(() => {
 
     <div
       v-if="expandedPanel"
-      class="fixed inset-0 z-50 flex items-center justify-center bg-gray-950/90 p-4 backdrop-blur-sm"
+      class="fixed inset-0 z-50 flex flex-col bg-gray-950/90 p-3 backdrop-blur-sm sm:p-4"
       role="dialog"
       aria-modal="true"
       :aria-label="expandedPanel === 'map' ? t('remote.location') : t('remote.controls.currentMedia')"
       @click.self="closeExpandedPanel"
     >
-      <button
-        type="button"
-        class="fixed right-5 top-5 z-[10000] inline-flex h-12 min-w-12 items-center justify-center gap-2 rounded-full border-2 border-white bg-red-600 px-4 text-white shadow-2xl ring-4 ring-black/30 transition-colors hover:bg-red-500 focus:outline-none focus:ring-4 focus:ring-red-300"
-        :aria-label="t('common.close')"
-        :title="t('common.close')"
-        @click.stop="closeExpandedPanel"
-      >
-        <XMarkIcon class="h-6 w-6" />
-        <span class="pr-1 text-sm font-bold">{{ t('common.close') }}</span>
-      </button>
+      <div class="relative z-[10000] mb-3 flex h-12 shrink-0 justify-end">
+        <button
+          type="button"
+          class="inline-flex h-12 min-w-12 items-center justify-center gap-2 rounded-full border-2 border-white bg-red-600 px-4 text-white shadow-2xl ring-4 ring-black/30 transition-colors hover:bg-red-500 focus:outline-none focus:ring-4 focus:ring-red-300"
+          :aria-label="t('common.close')"
+          :title="t('common.close')"
+          @click.stop="closeExpandedPanel"
+        >
+          <XMarkIcon class="h-6 w-6" />
+          <span class="pr-1 text-sm font-bold">{{ t('common.close') }}</span>
+        </button>
+      </div>
 
-      <div v-if="expandedPanel === 'media'" class="h-full w-full">
+      <div v-if="expandedPanel === 'media'" class="min-h-0 flex-1 w-full">
         <div v-if="isPortraitPair" class="grid h-full w-full grid-cols-1 gap-3 md:grid-cols-2">
           <figure
             v-for="(item, index) in currentMediaItems.slice(0, 2)"
             :key="item.id ?? item.file_path"
             class="relative flex min-h-0 items-center justify-center overflow-hidden rounded-xl bg-black/50"
           >
+            <template v-if="isVideoMedia(item)">
+              <img
+                v-if="mediaPosterSrc(item) && !hasVideoPosterFailed(item)"
+                :src="mediaPosterSrc(item)"
+                :alt="t('remote.videoPreview')"
+                class="max-h-full max-w-full object-contain"
+                @error="handleVideoPosterError(item)"
+              />
+              <div
+                v-else
+                class="flex h-full w-full flex-col items-center justify-center px-4 text-center text-gray-200"
+              >
+                <svg class="mb-2 h-10 w-10 opacity-70" viewBox="0 0 24 24" aria-hidden="true">
+                  <path :d="mdiVideo" fill="currentColor" />
+                </svg>
+                <span class="text-xs font-semibold">{{ t('remote.videoPreviewUnavailable') }}</span>
+              </div>
+            </template>
             <img
+              v-else
               :src="mediaImageSrc(item)"
               :alt="pairSideLabel(index)"
               class="max-h-full max-w-full object-contain"
               @error="handleMediaImageError(item)"
             />
             <div
-              v-if="hasMediaImageFailed(item)"
+              v-if="!isVideoMedia(item) && hasMediaImageFailed(item)"
               class="absolute inset-0 flex flex-col items-center justify-center bg-black/70 px-4 text-center text-white"
             >
               <PhotoIcon class="mb-2 h-8 w-8 opacity-70" />
@@ -1437,15 +1589,26 @@ const metadataFields = computed(() => {
           </figure>
         </div>
         <div v-else class="relative flex h-full w-full items-center justify-center">
+          <video
+            v-if="selectedMediaItem?.file_path && isVideoMedia(selectedMediaItem)"
+            :src="mediaVideoSrc(selectedMediaItem)"
+            :poster="mediaPosterSrc(selectedMediaItem)"
+            :aria-label="displayFileName"
+            :autoplay="expandedVideoAutoplay"
+            class="max-h-full max-w-full"
+            controls
+            playsinline
+            preload="metadata"
+          />
           <img
-            v-if="selectedMediaItem?.file_path"
+            v-else-if="selectedMediaItem?.file_path"
             :src="mediaImageSrc(selectedMediaItem)"
             :alt="displayFileName"
             class="max-h-full max-w-full object-contain"
             @error="handleMediaImageError(selectedMediaItem)"
           />
           <div
-            v-if="selectedMediaItem?.file_path && hasMediaImageFailed(selectedMediaItem)"
+            v-if="selectedMediaItem?.file_path && !isVideoMedia(selectedMediaItem) && hasMediaImageFailed(selectedMediaItem)"
             class="absolute inset-0 flex flex-col items-center justify-center bg-black/70 px-6 text-center text-white"
           >
             <PhotoIcon class="mb-3 h-12 w-12 opacity-70" />
@@ -1461,7 +1624,7 @@ const metadataFields = computed(() => {
         </div>
       </div>
 
-      <div v-else-if="expandedPanel === 'map'" class="h-full w-full overflow-hidden rounded-xl bg-white dark:bg-gray-800">
+      <div v-else-if="expandedPanel === 'map'" class="min-h-0 flex-1 w-full overflow-hidden rounded-xl bg-white dark:bg-gray-800">
         <MapComponent
           :latitude="selectedMediaItem?.location?.lat"
           :longitude="selectedMediaItem?.location?.lon"
@@ -1485,7 +1648,26 @@ const metadataFields = computed(() => {
             class="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50"
           >
             <div class="aspect-video bg-black/80">
+              <template v-if="isVideoMedia(item)">
+                <img
+                  v-if="mediaPosterSrc(item) && !hasVideoPosterFailed(item)"
+                  :src="mediaPosterSrc(item)"
+                  :alt="t('remote.videoPreview')"
+                  class="h-full w-full object-contain"
+                  @error="handleVideoPosterError(item)"
+                />
+                <div
+                  v-else
+                  class="flex h-full w-full flex-col items-center justify-center px-3 text-center text-gray-200"
+                >
+                  <svg class="mb-2 h-8 w-8 opacity-70" viewBox="0 0 24 24" aria-hidden="true">
+                    <path :d="mdiVideo" fill="currentColor" />
+                  </svg>
+                  <span class="text-xs font-semibold">{{ t('remote.videoPreviewUnavailable') }}</span>
+                </div>
+              </template>
               <img
+                v-else
                 :src="mediaImageSrc(item)"
                 :alt="pairSideLabel(index)"
                 class="h-full w-full object-contain"

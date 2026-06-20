@@ -36,6 +36,7 @@ This view acts as the real-time remote control and information display for the c
 ### 4.1 Media Display & Playback Controls
 *   **Current Media Preview:** A responsive image/video container displaying a low-resolution thumbnail or the actual image currently rendered on the Pi.
     *   The preview exposes an expand action that opens a fullscreen frontend-only modal. The modal supports single media and portrait pairs, closes with Escape/backdrop/close button, and never changes playback state.
+    *   Video media is poster-first in the normal Remote preview: the browser requests only the cached first-frame poster from `/media/poster` and does not mount a `<video>` element or request the full `/media` video URL until the user expands the media view. If no poster cache exists, Remote shows a lightweight video placeholder with an explicit play button. The expanded modal uses native browser playback with `preload="metadata"` so supported browsers stream through HTTP byte-range requests.
 *   **Transport Controls:** A sticky or prominent control bar featuring:
     *   `Previous` (Skip to previous media)
     *   `Play/Pause` (Toggle playback state, icon changes dynamically based on WebSocket state)
@@ -174,7 +175,8 @@ A dedicated "Danger Zone" or Maintenance tab for system-level operations. All ac
 *   `POST /api/media/selection-count` - Returns selected and folder-scope media counts.
 *   `GET /api/hardware-inputs` - Returns validated GPIO button/PIR sensor configuration.
 *   `PUT /api/hardware-inputs` - Validates, persists, and broadcasts hardware input configuration.
-*   `GET /media` - Streams allowed image/video files or Picframe's placeholder image.
+*   `GET /media` - Streams allowed image/video files or Picframe's placeholder image. It supports single HTTP byte-range requests for native browser video playback.
+*   `GET /media/poster` - Returns an existing cached first-frame JPEG poster for an allowed video file without running frame extraction in the HTTP request path.
 
 ## 7. UI/UX Design Principles & Consistency
 

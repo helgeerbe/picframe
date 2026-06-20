@@ -36,6 +36,11 @@
     "expand": "Vergrößern",
     "previewLoadFailed": "Vorschau konnte nicht geladen werden.",
     "retryPreview": "Vorschau erneut laden",
+    "videoPreview": "Video-Vorschau",
+    "videoPreviewUnavailable": "Kein Poster im Cache",
+    "playVideo": "Video abspielen",
+    "showTags": "Tags anzeigen",
+    "hideTags": "Tags ausblenden",
     "mediaInfo": {
       "title": "Medieninfo",
       "open": "Medieninfo anzeigen",
