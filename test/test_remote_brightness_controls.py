@@ -46,3 +46,25 @@ def test_remote_video_preview_is_poster_first_and_expanded_video_only() -> None:
         preview_section.index("mediaImageSrc(selectedMediaItem)")
     )
     assert "<video" not in preview_section
+
+
+def test_remote_current_media_tags_are_touch_accessible() -> None:
+    remote_view = Path("frontend/src/views/RemoteView.vue").read_text()
+    en_locale = Path("frontend/src/locales/en.json").read_text()
+    de_locale = Path("frontend/src/locales/de.json").read_text()
+
+    assert "const isMediaOverlayPinned = ref(false)" in remote_view
+    assert "isMediaOverlayPinned.value = false" in remote_view
+    assert "const toggleMediaOverlay" in remote_view
+    assert 'v-if="currentMediaTags.length"' in remote_view
+    assert ':aria-expanded="isMediaOverlayPinned"' in remote_view
+    assert 'aria-controls="remote-current-media-tags"' in remote_view
+    assert '@click.stop="toggleMediaOverlay"' in remote_view
+    assert 'id="remote-current-media-tags"' in remote_view
+    assert "group-hover:grid-rows-[1fr]" in remote_view
+    assert "grid-rows-[1fr] opacity-100" in remote_view
+    assert '@click.stop="setTagFilter(tag, $event)"' in remote_view
+    assert '"showTags": "Show tags"' in en_locale
+    assert '"hideTags": "Hide tags"' in en_locale
+    assert '"showTags": "Tags anzeigen"' in de_locale
+    assert '"hideTags": "Tags ausblenden"' in de_locale

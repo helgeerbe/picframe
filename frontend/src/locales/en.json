@@ -39,6 +39,8 @@
     "videoPreview": "Video preview",
     "videoPreviewUnavailable": "Poster not cached",
     "playVideo": "Play video",
+    "showTags": "Show tags",
+    "hideTags": "Hide tags",
     "mediaInfo": {
       "title": "Media info",
       "open": "Show media info",

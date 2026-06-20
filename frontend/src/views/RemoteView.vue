@@ -82,6 +82,7 @@ const selectedPairIndex = ref(0)
 const showPairDeleteDialog = ref(false)
 const expandedPanel = ref<'media' | 'map' | null>(null)
 const expandedVideoAutoplay = ref(false)
+const isMediaOverlayPinned = ref(false)
 const isMediaInfoOpen = ref(false)
 const imageLoadFailures = ref<Record<string, number>>({})
 const videoPosterFailures = ref<Record<string, boolean>>({})
@@ -209,6 +210,7 @@ watch(
     showPairDeleteDialog.value = false
     isMediaInfoOpen.value = false
     expandedVideoAutoplay.value = false
+    isMediaOverlayPinned.value = false
     imageLoadFailures.value = {}
     videoPosterFailures.value = {}
   }
@@ -652,6 +654,10 @@ const closeExpandedPanel = () => {
   expandedVideoAutoplay.value = false
 }
 
+const toggleMediaOverlay = () => {
+  isMediaOverlayPinned.value = !isMediaOverlayPinned.value
+}
+
 const updateLocationSearch = async () => {
   const query = locationSearch.value.trim()
   if (query.length < 2) {
@@ -1025,6 +1031,19 @@ const metadataFields = computed(() => {
               </button>
             </div>
             <div v-if="selectedMediaItem" class="absolute right-4 top-4 z-10 flex items-center gap-2">
+              <button
+                v-if="currentMediaTags.length"
+                type="button"
+                class="inline-flex h-10 w-10 items-center justify-center rounded-lg border text-white shadow-sm backdrop-blur-sm transition-colors focus:outline-none focus:ring-2 focus:ring-white/80"
+                :class="isMediaOverlayPinned ? 'border-sky-300 bg-sky-600/85' : 'border-white/20 bg-black/55 hover:bg-black/75'"
+                :aria-label="isMediaOverlayPinned ? t('remote.hideTags') : t('remote.showTags')"
+                :title="isMediaOverlayPinned ? t('remote.hideTags') : t('remote.showTags')"
+                :aria-expanded="isMediaOverlayPinned"
+                aria-controls="remote-current-media-tags"
+                @click.stop="toggleMediaOverlay"
+              >
+                <TagIcon class="h-5 w-5" />
+              </button>
               <InfoButton :label="t('remote.mediaInfo.open')" @click="isMediaInfoOpen = true" />
               <button
                 v-if="selectedMediaItem?.file_path"
@@ -1039,18 +1058,33 @@ const metadataFields = computed(() => {
             </div>
             
             <!-- Adaptive Cinematic Gradient Overlay -->
-            <div v-if="selectedMediaItem?.file_path" class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent opacity-40 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none"></div>
+            <div
+              v-if="selectedMediaItem?.file_path"
+              class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-500 pointer-events-none"
+              :class="isMediaOverlayPinned ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'"
+            ></div>
             
             <!-- Narrative Metadata Overlay (Progressive Disclosure) -->
-            <div v-if="selectedMediaItem?.file_path" class="absolute bottom-0 left-0 right-0 p-6 transition-all duration-500 flex justify-between items-end group-hover:backdrop-blur-sm">
+            <div
+              v-if="selectedMediaItem?.file_path"
+              class="absolute bottom-0 left-0 right-0 p-6 transition-all duration-500 flex justify-between items-end group-hover:backdrop-blur-sm"
+              :class="isMediaOverlayPinned ? 'backdrop-blur-sm' : ''"
+            >
               <div class="flex-1 min-w-0 pr-4 pointer-events-none">
                 <!-- Title (Always visible) -->
-                <h2 class="text-2xl font-bold text-white truncate drop-shadow-md transition-transform duration-500 group-hover:-translate-y-1">
+                <h2
+                  class="text-2xl font-bold text-white truncate drop-shadow-md transition-transform duration-500 group-hover:-translate-y-1"
+                  :class="isMediaOverlayPinned ? '-translate-y-1' : ''"
+                >
                   {{ selectedMediaItem?.exif?.title || displayFileName }}
                 </h2>
                 
                 <!-- Progressive Disclosure: Caption & Tags (Visible on hover) -->
-                <div class="grid grid-rows-[0fr] group-hover:grid-rows-[1fr] transition-all duration-500 ease-in-out opacity-0 group-hover:opacity-100">
+                <div
+                  id="remote-current-media-tags"
+                  class="grid transition-all duration-500 ease-in-out"
+                  :class="isMediaOverlayPinned ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 group-hover:grid-rows-[1fr] group-hover:opacity-100'"
+                >
                   <div class="overflow-hidden">
                     <p v-if="selectedMediaItem?.exif?.caption" class="text-sm text-gray-200 mt-2 line-clamp-3 drop-shadow">
                       {{ selectedMediaItem.exif.caption }}
