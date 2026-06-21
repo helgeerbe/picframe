@@ -6,11 +6,11 @@ defineProps<{
 </script>
 
 <template>
-  <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-    <div class="min-w-0">
+  <header class="flex flex-col gap-4 xl:flex-row xl:items-end xl:justify-between">
+    <div class="min-w-0 xl:flex-1">
       <div class="flex min-w-0 items-center gap-3">
         <slot name="icon" />
-        <h1 class="break-words text-2xl font-bold tracking-normal text-gray-950 dark:text-white sm:text-4xl">
+        <h1 class="min-w-0 break-words text-2xl font-bold tracking-normal text-gray-950 dark:text-white sm:text-3xl xl:text-4xl">
           {{ title }}
         </h1>
       </div>
@@ -18,6 +18,8 @@ defineProps<{
         {{ description }}
       </p>
     </div>
-    <slot name="actions" />
+    <div v-if="$slots.actions" class="flex w-full min-w-0 justify-end xl:w-auto xl:shrink-0">
+      <slot name="actions" />
+    </div>
   </header>
 </template>
