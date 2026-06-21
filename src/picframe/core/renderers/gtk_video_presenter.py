@@ -15,6 +15,7 @@ EOS_GTK_WINDOW_OPACITY = 0.99
 STARTUP_GTK_WINDOW_OPACITY = 0.0
 GTK_TRANSPARENT_HOST_CLASS = "picframe-transparent-video-host"
 GTK_OPAQUE_HOST_CLASS = "picframe-opaque-video-host"
+GTK_PAUSE_OVERLAY_CLASS = "picframe-video-pause-overlay"
 
 
 class GtkVideoPresenter:
@@ -40,6 +41,7 @@ class GtkVideoPresenter:
         self._gtk_host: Any = None
         self._gtk_sink_widget: Any = None
         self._gtk_video_sink: Any = None
+        self._gtk_pause_label: Any = None
         self._gtk_pump_source_id: int | None = None
         self._gtk_presentation_failure: str | None = None
 
@@ -144,6 +146,26 @@ class GtkVideoPresenter:
     def apply_eos_opacity_probe(self, pipeline: Any) -> None:
         self._apply_gtk_eos_opacity_probe(pipeline)
 
+    def set_pause_overlay(self, visible: bool, text: str = "") -> None:
+        label = self._gtk_pause_label
+        if label is None:
+            return
+        try:
+            if visible and text:
+                set_label = getattr(label, "set_label", None)
+                if callable(set_label):
+                    set_label(text)
+            set_visible = getattr(label, "set_visible", None)
+            if callable(set_visible):
+                set_visible(bool(visible))
+            if visible and self._gtk_window is not None:
+                present = getattr(self._gtk_window, "present", None)
+                if callable(present):
+                    present()
+            self._pump_gtk_events()
+        except Exception as exc:
+            logger.debug("Could not update GTK pause overlay: %s", exc)
+
     def destroy(self) -> None:
         self._destroy_gtk_video_window()
 
@@ -235,7 +257,7 @@ class GtkVideoPresenter:
             and fullscreen_video
             and not has_backdrop
         )
-        fixed_host = has_backdrop or not fullscreen_video or not transparent_host
+        fixed_host = True
         _, _, widget_w, widget_h = self._gtk_video_widget_geometry(
             x,
             y,
@@ -562,6 +584,14 @@ class GtkVideoPresenter:
                 .{GTK_OPAQUE_HOST_CLASS} {{
                     background-color: {opaque_background};
                 }}
+                .{GTK_PAUSE_OVERLAY_CLASS} {{
+                    color: rgba(255, 255, 255, 0.96);
+                    background-color: rgba(0, 0, 0, 0.58);
+                    border-radius: 6px;
+                    font-size: 42px;
+                    font-weight: 700;
+                    padding: 10px 24px;
+                }}
                 """.encode()
             )
             Gtk.StyleContext.add_provider_for_display(
@@ -611,6 +641,7 @@ class GtkVideoPresenter:
         host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None,
     ) -> Any:
         host = Gtk.Fixed()
+        self._gtk_pause_label = None
         widget_x, widget_y, widget_w, widget_h = self._gtk_video_widget_geometry(
             x,
             y,
@@ -669,7 +700,70 @@ class GtkVideoPresenter:
                 widget_x,
                 widget_y,
             )
+        pause_label = self._create_gtk_pause_label(Gtk, "PAUSED", host_w, host_h)
+        if pause_label is not None:
+            label_w, label_h = self._gtk_pause_overlay_size(host_w, host_h)
+            label_x = max(0, (host_w - label_w) // 2)
+            label_y = max(0, (host_h - label_h) // 2)
+            try:
+                host.put(pause_label, label_x, label_y)
+                self._gtk_pause_label = pause_label
+            except Exception:
+                logger.debug(
+                    "Could not place GTK pause overlay at %s,%s.",
+                    label_x,
+                    label_y,
+                )
         return host
+
+    @staticmethod
+    def _gtk_pause_overlay_size(host_w: int, host_h: int) -> tuple[int, int]:
+        width = min(max(220, host_w // 5), max(1, host_w))
+        height = min(max(72, host_h // 9), max(1, host_h))
+        return width, height
+
+    def _create_gtk_pause_label(
+        self,
+        Gtk: Any,
+        text: str,
+        host_w: int,
+        host_h: int,
+    ) -> Any | None:
+        try:
+            label = Gtk.Label(label=text)
+            label_w, label_h = self._gtk_pause_overlay_size(host_w, host_h)
+            try:
+                label.set_size_request(label_w, label_h)
+            except Exception:
+                pass
+            for method_name, value in (
+                ("set_xalign", 0.5),
+                ("set_yalign", 0.5),
+            ):
+                method = getattr(label, method_name, None)
+                if callable(method):
+                    try:
+                        method(value)
+                    except Exception:
+                        pass
+            justification = getattr(getattr(Gtk, "Justification", None), "CENTER", None)
+            set_justify = getattr(label, "set_justify", None)
+            if callable(set_justify) and justification is not None:
+                try:
+                    set_justify(justification)
+                except Exception:
+                    pass
+            add_css_class = getattr(label, "add_css_class", None)
+            if callable(add_css_class):
+                add_css_class(GTK_PAUSE_OVERLAY_CLASS)
+            set_can_target = getattr(label, "set_can_target", None)
+            if callable(set_can_target):
+                set_can_target(False)
+            label.set_visible(False)
+            return label
+        except Exception as exc:
+            logger.debug("Could not create GTK pause overlay label: %s", exc)
+            return None
 
     def _create_gtk_backdrop_picture(
         self,
@@ -1057,4 +1151,5 @@ class GtkVideoPresenter:
         self._gtk_host = None
         self._gtk_sink_widget = None
         self._gtk_video_sink = None
+        self._gtk_pause_label = None
         self._pump_gtk_events()

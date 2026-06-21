@@ -1,7 +1,11 @@
-import pytest
 from unittest.mock import MagicMock, patch
-from picframe.core.renderers.components.text_renderer import TextRenderer
+
+import pytest
+
 from picframe.core.events.dto import OverlayConfig
+from picframe.core.renderers.components.text_renderer import TextRenderer
+
+FIXED_STRING_PATCH = "picframe.core.renderers.components.text_renderer.pi3d.FixedString"
 
 @pytest.fixture
 def mock_display():
@@ -16,9 +20,13 @@ def mock_shader():
 
 @pytest.fixture
 def text_renderer(mock_display, mock_shader):
-    with patch('picframe.core.renderers.components.text_renderer.pi3d.FixedString') as mock_fixed_string:
+    with patch(FIXED_STRING_PATCH) as mock_fixed_string:
         mock_fixed_string.return_value.sprite = MagicMock()
-        return TextRenderer(mock_display, mock_shader, "src/picframe/data/fonts/NotoSans-Regular.ttf")
+        return TextRenderer(
+            mock_display,
+            mock_shader,
+            "src/picframe/data/fonts/NotoSans-Regular.ttf",
+        )
 
 def test_text_renderer_initialization(text_renderer, mock_display):
     assert text_renderer._display == mock_display
@@ -34,6 +42,51 @@ def test_text_renderer_update_config_hide_text(text_renderer):
     config = OverlayConfig(show_text=False, text_string="Test String")
     text_renderer.update_config(config)
     assert text_renderer._text_block is None
+
+
+def test_text_renderer_status_text_shows_when_metadata_hidden(mock_display, mock_shader):
+    with patch(FIXED_STRING_PATCH) as mock_fixed_string:
+        mock_fixed_string.return_value.sprite = MagicMock()
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+
+        renderer.update_config(
+            OverlayConfig(
+                show_text=False,
+                text_string="Metadata",
+                status_text="PAUSED",
+            )
+        )
+
+    assert mock_fixed_string.call_count == 1
+    assert mock_fixed_string.call_args.args[1] == "PAUSED"
+
+
+def test_text_renderer_status_text_is_single_center_overlay_for_pairs(
+    mock_display,
+    mock_shader,
+):
+    with patch(FIXED_STRING_PATCH) as mock_fixed_string:
+        text_blocks = []
+        for height in (40, 40, 54):
+            text_block = MagicMock()
+            text_block.sprite = MagicMock()
+            text_block.sprite.height = height
+            text_blocks.append(text_block)
+        mock_fixed_string.side_effect = text_blocks
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Left",
+                text_strings=("Left", "Right"),
+                status_text="PAUSED",
+            )
+        )
+
+    rendered_texts = [call.args[1] for call in mock_fixed_string.call_args_list]
+    assert rendered_texts == ["Left", "Right", "PAUSED"]
+    text_blocks[2].sprite.position.assert_called_once_with(0.0, 0.0, 0.2)
 
 def test_text_renderer_set_alpha(text_renderer):
     config = OverlayConfig(show_text=True, text_string="Test String")
@@ -76,7 +129,7 @@ def test_text_renderer_draws_pair_text_blocks(text_renderer):
 
 
 def test_text_renderer_applies_overlay_style(mock_display, mock_shader):
-    with patch('picframe.core.renderers.components.text_renderer.pi3d.FixedString') as mock_fixed_string:
+    with patch(FIXED_STRING_PATCH) as mock_fixed_string:
         mock_fixed_string.return_value.sprite = MagicMock()
         renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
         renderer.update_config(
@@ -102,7 +155,7 @@ def test_text_renderer_applies_overlay_style(mock_display, mock_shader):
 
 
 def test_text_renderer_positions_text_inside_render_rect(mock_display, mock_shader):
-    with patch('picframe.core.renderers.components.text_renderer.pi3d.FixedString') as mock_fixed_string:
+    with patch(FIXED_STRING_PATCH) as mock_fixed_string:
         sprite = MagicMock()
         sprite.height = 50
         mock_fixed_string.return_value.sprite = sprite
@@ -126,7 +179,7 @@ def test_text_renderer_positions_text_inside_render_rect(mock_display, mock_shad
 
 
 def test_text_renderer_rebuilds_when_style_changes_for_same_text(mock_display, mock_shader):
-    with patch('picframe.core.renderers.components.text_renderer.pi3d.FixedString') as mock_fixed_string:
+    with patch(FIXED_STRING_PATCH) as mock_fixed_string:
         mock_fixed_string.return_value.sprite = MagicMock()
         renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
 

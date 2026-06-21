@@ -12,8 +12,8 @@ from picframe.core.renderers.gst_worker import (
     PIPELINE_HARDWARE_PLAYBIN,
     PIPELINE_SKIPPED,
     GstWorker,
-    PlayRequest,
     PlaybackDecision,
+    PlayRequest,
     VideoStreamFacts,
 )
 
@@ -242,6 +242,43 @@ def test_handle_play_skips_uri_without_video_stream(monkeypatch) -> None:
     sent_event = json.loads(worker.conn.send.call_args[0][0])
     assert sent_event["type"] == "error"
     assert sent_event["details"] == "No playable video stream found."
+
+
+def test_pause_request_prevents_async_done_from_resuming_pipeline(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    monkeypatch.setattr(
+        gst_worker,
+        "Gst",
+        SimpleNamespace(State=SimpleNamespace(PAUSED="paused", PLAYING="playing")),
+    )
+    worker.pipeline = MagicMock()
+    worker._schedule_first_frame_probe = MagicMock()
+
+    worker._handle_pause()
+
+    worker.pipeline.set_state.assert_called_once_with("paused")
+    worker.pipeline.set_state.reset_mock()
+
+    worker._on_async_done(MagicMock(), MagicMock())
+
+    worker.pipeline.set_state.assert_not_called()
+    worker._schedule_first_frame_probe.assert_called_once_with()
+
+
+def test_resume_request_resumes_existing_pipeline(monkeypatch) -> None:
+    worker = GstWorker("/tmp/picframe-test-gst.sock")
+    monkeypatch.setattr(
+        gst_worker,
+        "Gst",
+        SimpleNamespace(State=SimpleNamespace(PLAYING="playing")),
+    )
+    worker.pipeline = MagicMock()
+    worker._pause_requested = True
+
+    worker._handle_resume()
+
+    assert worker._pause_requested is False
+    worker.pipeline.set_state.assert_called_once_with("playing")
 
 
 def test_gtk_playbin_attempt_uses_only_pi_hardware_path() -> None:

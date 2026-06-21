@@ -16,6 +16,9 @@ RENDER_PROMOTE_VIDEO_REVEAL = "PROMOTE_VIDEO_REVEAL"
 RENDER_PARK_VIDEO_REVEAL = "PARK_VIDEO_REVEAL"
 RENDER_WAKE_VIDEO_REVEAL = "WAKE_VIDEO_REVEAL"
 RENDER_VIDEO_FIRST_FRAME = "VIDEO_FIRST_FRAME"
+RENDER_UPDATE_OVERLAY = "UPDATE_OVERLAY"
+RENDER_PAUSE_PLAYBACK = "PAUSE_PLAYBACK"
+RENDER_RESUME_PLAYBACK = "RESUME_PLAYBACK"
 
 
 class Command(Enum):
@@ -140,6 +143,7 @@ class OverlayConfig:
     show_text: bool = False
     text_string: str = ""
     text_strings: tuple[str, ...] = field(default_factory=tuple)
+    status_text: str = ""
     text_justify: str = "L"
     show_text_sz: int = 40
     text_bkg_hgt: float = 0.25

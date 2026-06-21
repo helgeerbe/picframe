@@ -14,8 +14,11 @@ import pi3d
 
 from picframe.core.events.dto import (
     RENDER_PARK_VIDEO_REVEAL,
+    RENDER_PAUSE_PLAYBACK,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_RESUME_PLAYBACK,
+    RENDER_UPDATE_OVERLAY,
     RENDER_VIDEO_FIRST_FRAME,
     RENDER_WAKE_VIDEO_REVEAL,
     CurrentMediaChangedEvent,
@@ -776,6 +779,8 @@ class Pi3dRenderer(IRenderer):
                     )
 
     def _overlay_has_visible_text(self) -> bool:
+        if self._overlay_config.status_text:
+            return True
         if not self._overlay_config.show_text:
             return False
         if self._overlay_config.text_string:
@@ -820,6 +825,7 @@ class Pi3dRenderer(IRenderer):
                 self._overlay_config,
                 text_string=command.overlay.text_string,
                 text_strings=command.overlay.text_strings,
+                status_text=command.overlay.status_text,
             )
             
         try:
@@ -855,6 +861,43 @@ class Pi3dRenderer(IRenderer):
                 self._animation_controller.resume()
                 self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
                 self._logger.debug("Woke parked pi3d video reveal surface for EOS handoff.")
+                return
+            elif command.render_action == RENDER_PAUSE_PLAYBACK:
+                self._animation_controller.update_text_config(
+                    self._overlay_has_visible_text(),
+                    False,
+                )
+                self._animation_controller.pause(
+                    force_text_visible=bool(self._overlay_config.status_text)
+                )
+                if self._text_renderer:
+                    self._text_renderer.update_config(self._overlay_config)
+                if self._clock_renderer:
+                    self._clock_renderer.update_config(self._overlay_config)
+                self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
+                return
+            elif command.render_action == RENDER_RESUME_PLAYBACK:
+                self._animation_controller.update_text_config(
+                    self._overlay_has_visible_text(),
+                    False,
+                )
+                self._animation_controller.resume_pause()
+                if self._text_renderer:
+                    self._text_renderer.update_config(self._overlay_config)
+                if self._clock_renderer:
+                    self._clock_renderer.update_config(self._overlay_config)
+                self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
+                return
+            elif command.render_action == RENDER_UPDATE_OVERLAY:
+                self._animation_controller.update_text_config(
+                    self._overlay_has_visible_text(),
+                    True,
+                )
+                if self._text_renderer:
+                    self._text_renderer.update_config(self._overlay_config)
+                if self._clock_renderer:
+                    self._clock_renderer.update_config(self._overlay_config)
+                self._animation_controller.force_redraw(RESUME_REDRAW_FRAMES)
                 return
 
             # Delegate to ImageRenderer
@@ -940,6 +983,10 @@ class Pi3dRenderer(IRenderer):
             time.sleep(0.05)
             return True
 
+        if self._animation_controller.is_paused and anim_state.frames_to_render <= 0:
+            time.sleep(0.05)
+            return True
+
         # Sleep optimization for SUSPENDED state
         if anim_state.render_state == RenderState.SUSPENDED:
             time.sleep(0.1)
@@ -999,7 +1046,7 @@ class Pi3dRenderer(IRenderer):
         
         if (
             self._text_renderer
-            and self._overlay_config.show_text
+            and self._overlay_has_visible_text()
             and anim_state.text_alpha > TEXT_VISIBLE_ALPHA_THRESHOLD
         ):
             self._text_renderer.draw()

@@ -154,7 +154,7 @@ A dedicated "Danger Zone" or Maintenance tab for system-level operations. All ac
 *   **Brightness command:** `{ "command": "SET_BRIGHTNESS", "value": 0.8 }`.
 *   **Configuration command:** `{ "command": "SET_CONFIG", "payload": { ... } }` or root-level config keys alongside `"command": "SET_CONFIG"`.
 *   **Outbound media updates:** `MediaChangedEvent` with a `media` payload matching `MediaResponseDTO`.
-*   **Outbound state updates:** `StateEvent` with a state enum name and optional payload. `PAUSED` is the explicit slideshow pause state returned by `REQUEST_STATE`; display-off commands pause playback and display-on commands resume it.
+*   **Outbound state updates:** `StateEvent` with a state enum name and optional payload. `PAUSED` is the explicit slideshow pause state returned by `REQUEST_STATE`; display-off commands pause playback and display-on commands resume it. The backend also renders a `PAUSED` status overlay on the frame display after pause confirmation, using pi3d for still images and in-flight pi3d fades, and the GTK video host for active videos. Active video resume continues the existing paused GStreamer pipeline; the Remote only reflects the confirmed backend state.
 *   **Outbound errors:** `SystemErrorEvent` with `message`, `component`, `sticky`, and optional `code`.
 *   On connection the backend subscribes to media/state/error events and requests current state. High-frequency state events are rate limited, while rapid `NEXT`, `PREV`, and `SET_BRIGHTNESS` commands are debounced.
 

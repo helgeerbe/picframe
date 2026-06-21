@@ -341,6 +341,7 @@ def test_present_gtk_paintable_keeps_transparent_fullscreen_without_backdrop(
     presenter = make_presenter("Raspberry Pi 4 Model B Rev 1.2")
     window = MagicMock()
     widget = MagicMock()
+    host = MagicMock()
     video_sink = MagicMock()
 
     class FakeGtk:
@@ -349,10 +350,10 @@ def test_present_gtk_paintable_keeps_transparent_fullscreen_without_backdrop(
     monkeypatch.setattr(presenter, "_gtk_geometry_is_fullscreen", lambda *args: True)
     monkeypatch.setattr(presenter, "_gtk_video_host_uses_transparency", lambda: True)
     monkeypatch.setattr(presenter, "_create_gtk_video_picture", MagicMock(return_value=widget))
-    fixed_host = MagicMock()
+    fixed_host = MagicMock(return_value=host)
     monkeypatch.setattr(presenter, "_create_gtk_fixed_video_host", fixed_host)
-    apply_window_geometry = MagicMock()
-    monkeypatch.setattr(presenter, "_apply_gtk_window_geometry", apply_window_geometry)
+    apply_host_geometry = MagicMock()
+    monkeypatch.setattr(presenter, "_apply_gtk_host_window_geometry", apply_host_geometry)
     monkeypatch.setattr(presenter, "_configure_gtk_video_window", MagicMock())
     configure_background = MagicMock()
     monkeypatch.setattr(presenter, "_configure_gtk_video_host_background", configure_background)
@@ -385,16 +386,26 @@ def test_present_gtk_paintable_keeps_transparent_fullscreen_without_backdrop(
         transparent=True,
         host_background=(0.2, 0.2, 0.3, 1.0),
     )
-    fixed_host.assert_not_called()
-    window.set_child.assert_called_once_with(widget)
-    apply_window_geometry.assert_called_once_with(
+    fixed_host.assert_called_once_with(
+        FakeGtk,
+        window,
+        widget,
+        0,
+        0,
+        800,
+        600,
+        transparent=True,
+        host_background=(0.2, 0.2, 0.3, 1.0),
+        host_backdrop_path=None,
+        host_backdrop_rect=None,
+    )
+    window.set_child.assert_called_once_with(host)
+    apply_host_geometry.assert_called_once_with(
         window,
         0,
         0,
         800,
         600,
-        fullscreen=True,
-        widget=widget,
     )
 
 
@@ -580,6 +591,70 @@ def test_create_gtk_fixed_video_host_places_backdrop_under_video(
     backdrop.set_content_fit.assert_called_once_with("fill")
     assert host.put.call_args_list[0].args == (backdrop, 10, 20)
     assert host.put.call_args_list[1].args == (widget, 100, 80)
+
+
+def test_create_gtk_fixed_video_host_places_pause_label_above_video(
+    monkeypatch,
+) -> None:
+    presenter = make_presenter()
+    monkeypatch.setattr(
+        presenter,
+        "_gtk_primary_monitor_geometry",
+        lambda: (0, 0, 800, 600),
+    )
+    presenter._set_gtk_video_host_background = MagicMock()
+    host = MagicMock()
+    label = MagicMock()
+
+    class FakeGtk:
+        Align = SimpleNamespace(CENTER="center", FILL="fill")
+        Fixed = MagicMock(return_value=host)
+        Justification = SimpleNamespace(CENTER="center")
+        Label = MagicMock(return_value=label)
+
+    window = MagicMock()
+    widget = MagicMock()
+
+    result = presenter._create_gtk_fixed_video_host(
+        FakeGtk,
+        window,
+        widget,
+        100,
+        80,
+        320,
+        180,
+        transparent=True,
+    )
+
+    assert result is host
+    FakeGtk.Label.assert_called_once_with(label="PAUSED")
+    assert host.put.call_args_list[0].args == (widget, 100, 80)
+    assert host.put.call_args_list[1].args == (label, 290, 264)
+    label.set_size_request.assert_called_once_with(220, 72)
+    label.set_visible.assert_called_once_with(False)
+    assert presenter._gtk_pause_label is label
+
+
+def test_set_pause_overlay_toggles_existing_label() -> None:
+    presenter = make_presenter()
+    label = MagicMock()
+    presenter._gtk_pause_label = label
+    presenter._pump_gtk_events = MagicMock()
+
+    presenter.set_pause_overlay(True, "PAUSED")
+
+    label.set_label.assert_called_once_with("PAUSED")
+    label.set_visible.assert_called_once_with(True)
+    presenter._pump_gtk_events.assert_called_once_with()
+
+    label.reset_mock()
+    presenter._pump_gtk_events.reset_mock()
+
+    presenter.set_pause_overlay(False, "")
+
+    label.set_label.assert_not_called()
+    label.set_visible.assert_called_once_with(False)
+    presenter._pump_gtk_events.assert_called_once_with()
 
 
 def test_create_gtk_video_picture_content_fit_modes() -> None:

@@ -15,7 +15,6 @@ from dataclasses import dataclass
 from multiprocessing.connection import Connection, Listener
 from typing import Any
 
-from picframe.core.renderers.gtk_video_presenter import GtkVideoPresenter
 from picframe.core.renderers.gst_pipeline_builder import GstPipelineBuilder
 from picframe.core.renderers.gst_playback_policy import (
     DEFAULT_SOFTWARE_DECODE_LIMIT,
@@ -24,8 +23,7 @@ from picframe.core.renderers.gst_playback_policy import (
     PIPELINE_GTK_PLAYBIN,
     PIPELINE_HARDWARE_DIRECT,
     PIPELINE_HARDWARE_PLAYBIN,
-    PIPELINE_SKIPPED as PIPELINE_SKIPPED,
-    RPI_HARDWARE_DECODE_LIMITS as RPI_HARDWARE_DECODE_LIMITS,
+    PIPELINE_SKIPPED,  # noqa: F401 - re-exported for compatibility with tests
     UNSUPPORTED_MEDIA_CODE,
     DecodeHardwareLimit,
     DecodeResolutionLimit,
@@ -34,6 +32,7 @@ from picframe.core.renderers.gst_playback_policy import (
     PlaybackPolicy,
     VideoStreamFacts,
 )
+from picframe.core.renderers.gtk_video_presenter import GtkVideoPresenter
 from picframe.core.renderers.ipc_protocol import (
     CapsResultEvent,
     CheckCapsCommand,
@@ -43,6 +42,8 @@ from picframe.core.renderers.ipc_protocol import (
     IpcMessage,
     PauseCommand,
     PlayCommand,
+    ResumeCommand,
+    SetPauseOverlayCommand,
     SetVolumeCommand,
     StopCommand,
     VideoDiagnosticsEvent,
@@ -139,6 +140,7 @@ class GstWorker:
         self._first_frame_event_sent = False
         self._first_frame_probe_source_id: int | None = None
         self._first_frame_probe_started_at = 0.0
+        self._pause_requested = False
 
     @staticmethod
     def _read_hardware_model() -> str:
@@ -381,6 +383,10 @@ class GstWorker:
             )
         elif isinstance(cmd, PauseCommand):
             self._handle_pause()
+        elif isinstance(cmd, ResumeCommand):
+            self._handle_resume()
+        elif isinstance(cmd, SetPauseOverlayCommand):
+            self._handle_pause_overlay(cmd.visible, cmd.text)
         elif isinstance(cmd, StopCommand):
             self._handle_stop()
         elif isinstance(cmd, SetVolumeCommand):
@@ -403,6 +409,7 @@ class GstWorker:
         content_fit: str | None = None,
     ) -> None:
         try:
+            self._pause_requested = False
             stream_facts, reason = self._discover_video_stream_facts(uri)
             if stream_facts is None:
                 details = reason or "No playable video stream found."
@@ -1683,10 +1690,20 @@ class GstWorker:
             return ""
 
     def _handle_pause(self) -> None:
+        self._pause_requested = True
         if self.pipeline:
             self.pipeline.set_state(Gst.State.PAUSED)
 
+    def _handle_resume(self) -> None:
+        self._pause_requested = False
+        if self.pipeline:
+            self.pipeline.set_state(Gst.State.PLAYING)
+
+    def _handle_pause_overlay(self, visible: bool, text: str = "") -> None:
+        self._gtk_presenter.set_pause_overlay(visible, text)
+
     def _handle_stop(self) -> None:
+        self._pause_requested = False
         self._stop_first_frame_probe()
         self._first_frame_event_sent = False
         if self.pipeline:
@@ -1914,8 +1931,9 @@ class GstWorker:
         )
 
     def _on_async_done(self, bus: Any, msg: Any) -> None:
-        # Ensure pipeline is playing after async-done
-        if self.pipeline:
+        # Startup async-done should keep playback moving, but PAUSED transitions can
+        # also emit async-done. Respect an explicit pause request.
+        if self.pipeline and not self._pause_requested:
             self.pipeline.set_state(Gst.State.PLAYING)
         self._schedule_first_frame_probe()
 

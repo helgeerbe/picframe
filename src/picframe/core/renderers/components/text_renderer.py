@@ -5,6 +5,7 @@ Responsible for rendering static text overlays (e.g., image metadata) using pi3d
 """
 import logging
 from typing import Any
+
 import pi3d
 
 from picframe.core.events.dto import OverlayConfig
@@ -29,6 +30,7 @@ class TextRenderer:
         self._text_blocks: list[pi3d.FixedString] = []
         self._current_text = ""
         self._current_texts: tuple[str, ...] = ()
+        self._current_status_text = ""
         self._visual_signature: tuple[Any, ...] | None = None
 
     def _render_bounds(self) -> tuple[int, int, int, int]:
@@ -49,24 +51,34 @@ class TextRenderer:
         text_strings = tuple(config.text_strings or ())
         if not text_strings and config.text_string:
             text_strings = (config.text_string,)
+        if not config.show_text:
+            text_strings = ()
+        status_text = str(config.status_text or "").strip()
 
-        if not config.show_text or not any(text_strings):
+        if not any(text_strings) and not status_text:
             self._text_block = None
             self._text_blocks = []
             self._current_text = ""
             self._current_texts = ()
+            self._current_status_text = ""
             self._visual_signature = None
             return
 
         visual_signature = self._build_visual_signature(config, brightness)
         if (
             text_strings != self._current_texts
+            or status_text != self._current_status_text
             or visual_signature != self._visual_signature
             or not self._text_blocks
         ):
-            self._logger.debug(f"Rebuilding text overlay: {text_strings}")
+            self._logger.debug(
+                "Rebuilding text overlay: %s status=%s",
+                text_strings,
+                status_text,
+            )
             self._current_text = config.text_string
             self._current_texts = text_strings
+            self._current_status_text = status_text
             self._visual_signature = visual_signature
 
             font_size = max(8, int(config.show_text_sz))
@@ -114,7 +126,11 @@ class TextRenderer:
                 x = render_center_x
                 if pair_mode:
                     pair_offset = render_w // 4
-                    x = render_center_x - pair_offset if index == 0 else render_center_x + pair_offset
+                    x = (
+                        render_center_x - pair_offset
+                        if index == 0
+                        else render_center_x + pair_offset
+                    )
                 y = (
                     render_center_y
                     - (render_h // 2)
@@ -124,6 +140,23 @@ class TextRenderer:
                 text_block.sprite.position(x, y, 0.1)
                 text_block.sprite.set_alpha(0.0)
                 self._text_blocks.append(text_block)
+
+            if status_text:
+                status_block = pi3d.FixedString(
+                    self._font_file,
+                    status_text,
+                    font_size=font_size,
+                    shadow_radius=3,
+                    shader=self._shader,
+                    justify="C",
+                    width=max(font_size * 4, render_w - (margin * 2)),
+                    margin=5.0,
+                    color=(255, 255, 255, opacity),
+                    background_color=(0, 0, 0, int(255 * 0.45 * brightness)),
+                )
+                status_block.sprite.position(render_center_x, render_center_y, 0.2)
+                status_block.sprite.set_alpha(0.0)
+                self._text_blocks.append(status_block)
 
             self._text_block = self._text_blocks[0] if self._text_blocks else None
 

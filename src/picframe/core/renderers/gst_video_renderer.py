@@ -30,6 +30,8 @@ from picframe.core.renderers.ipc_protocol import (
     IpcMessage,
     PauseCommand,
     PlayCommand,
+    ResumeCommand,
+    SetPauseOverlayCommand,
     SetVolumeCommand,
     StopCommand,
     VideoDiagnosticsEvent,
@@ -328,23 +330,13 @@ class GstVideoRenderer(IVideoPlayer):
     def resume(self) -> None:
         """Resume paused video playback."""
         if self._current_media:
-            uri = Path(self._current_media.filepath).absolute().as_uri()
-            self._send_command(
-                PlayCommand(
-                    uri=uri,
-                    x=self._geometry[0],
-                    y=self._geometry[1],
-                    w=self._geometry[2],
-                    h=self._geometry[3],
-                    max_software_decode_resolution=self._max_software_decode_resolution,
-                    fit_display=self._fit_display,
-                    host_background=self._host_background,
-                    host_backdrop_path=self._host_backdrop_path,
-                    host_backdrop_rect=self._host_backdrop_rect,
-                    content_fit=self._content_fit,
-                )
-            )
-            logger.debug("Sent resume (play) command.")
+            self._send_command(ResumeCommand())
+            logger.debug("Sent resume command.")
+
+    def set_pause_overlay(self, visible: bool, text: str = "") -> None:
+        """Show or hide the video-window pause status overlay."""
+        self._send_command(SetPauseOverlayCommand(visible=visible, text=text))
+        logger.debug("Sent pause overlay command: visible=%s text=%r.", visible, text)
 
     def set_volume(self, level: float) -> None:
         """Set the audio volume level (0.0 to 1.0)."""

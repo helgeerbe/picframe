@@ -59,7 +59,8 @@ Raspberry Pi 4 / labwc PoC testing showed that a fully covering plain
 `waylandsink` surface can trigger a short pi3d redraw flicker when the video
 surface closes at EOS. Production playback therefore requires GTK4
 `gtk4paintablesink` presentation on Wayland. Raspberry Pi/labwc uses a
-fullscreen transparent GTK4 host. GNOME/VM uses a fullscreen opaque GTK4 host
+fullscreen transparent fixed GTK4 host so the worker can draw playback-status
+overlays above plain live video. GNOME/VM uses a fullscreen opaque GTK4 host
 colored from `viewer.background` so desktop shell UI cannot show through during
 custom-size playback.
 
@@ -68,12 +69,17 @@ hides its own cursor, and EOS still flows back through IPC to the playback
 engine. If the rectangle is effectively fullscreen, the video paintable fills
 the GTK4 host. Custom non-fullscreen rectangles use the same fullscreen host
 with fixed child placement because GTK4/Wayland does not provide the old GTK3
-move/resize window controls. The GTK-compatible path converts decoded frames to
-8-bit RGBA before `gtk4paintablesink` so VM software playback can present HEVC
-Main10 MOV files safely. The worker dims the GTK4 window to 99% opacity at EOS,
-then the playback engine wakes pi3d to redraw before destroying the video
-window. If GTK4 or `gtk4paintablesink` is unavailable, the worker reports
-`gtk_presentation_unavailable` instead of falling back to legacy sinks.
+move/resize window controls. The host also owns the `PAUSED` label for active
+videos; pi3d draws the same status for still images. Pause and resume use
+GStreamer state changes on the existing pipeline rather than replaying the
+current media, so the live video continues from its paused timestamp. The
+GTK-compatible path
+converts decoded frames to 8-bit RGBA before `gtk4paintablesink` so VM software
+playback can present HEVC Main10 MOV files safely. The worker dims the GTK4
+window to 99% opacity at EOS, then the playback engine wakes pi3d to redraw
+before destroying the video window. If GTK4 or `gtk4paintablesink` is
+unavailable, the worker reports `gtk_presentation_unavailable` instead of
+falling back to legacy sinks.
 
 The first video frame is treated as a pi3d title card before GStreamer starts.
 When an overlay is generated, pi3d blends in the first frame, keeps the text
@@ -82,7 +88,10 @@ clean redraw frames before publishing the transition completion that starts the
 video worker. This keeps overlay text out of the surface that Wayland may reveal
 around the handoff. The worker also waits for sink stats to report a rendered
 video frame when available before the playback engine promotes the cached final
-frame as pi3d's hidden reveal surface.
+frame as pi3d's hidden reveal surface. If pause arrives while the first frame is
+still fading in, pi3d freezes that transition with the `PAUSED` status overlay
+and the playback engine keeps the pending video handoff from issuing the
+GStreamer play command until playback resumes.
 
 Transition-frame caching is also aligned with EOS handoff. The first cached
 frame is extracted from the first decoded video frame. The final cached frame
@@ -100,6 +109,9 @@ The GTK presenter treats a supplied backdrop as an opaque fixed-host request,
 including on Raspberry Pi/labwc, so transparent host regions do not reveal stale
 pi3d pixels. Inset or custom video rectangles without a backdrop also use an
 opaque fixed host, with `viewer.background` filling non-video regions.
+Fullscreen plain videos keep a transparent fixed host so they retain the same
+visual behavior while still allowing the pause label to be toggled above the
+paintable.
 The transition-frame sidecar stores `frame_size`, `coordinate_space`, and the
 visible video-opening `content_rect`; playback uses that rect for live video
 placement for every generated frame type, not only matted videos. Beveled mat

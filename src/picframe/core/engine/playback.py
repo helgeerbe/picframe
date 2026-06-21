@@ -6,12 +6,16 @@ import os
 import threading
 import time
 from collections.abc import Callable
+from dataclasses import replace
 from typing import Any
 
 from picframe.core.events.dto import (
     RENDER_PARK_VIDEO_REVEAL,
+    RENDER_PAUSE_PLAYBACK,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_RESUME_PLAYBACK,
+    RENDER_UPDATE_OVERLAY,
     RENDER_VIDEO_FIRST_FRAME,
     RENDER_WAKE_VIDEO_REVEAL,
     Command,
@@ -45,6 +49,7 @@ VIDEO_TRANSITION_FRAME_GENERATE_TIMEOUT_SECONDS = 20.0
 VIDEO_REVEAL_SETTLE_FRAMES = 5
 VIDEO_REVEAL_SETTLE_TIMEOUT_SECONDS = 0.5
 VIDEO_REVEAL_EOS_REDRAW_SECONDS = 0.25
+PAUSED_STATUS_TEXT = "PAUSED"
 
 
 class PlaybackEngine:
@@ -108,6 +113,7 @@ class PlaybackEngine:
         self._video_reveal_park_frames = 0
         self._video_reveal_park_started_at = 0.0
         self._video_handoff_sequence = 0
+        self._paused_from_state: State | None = None
         
         # Circuit breaker state
         self._consecutive_errors = 0
@@ -368,7 +374,11 @@ class PlaybackEngine:
         elif event.command == Command.PAUSE:
             if self._state == State.PAUSED:
                 self._resume_playback()
-            elif self._state == State.PLAYING:
+            elif self._state in (
+                State.PLAYING,
+                State.TRANSITIONING,
+                State.PREPARING_VIDEO,
+            ):
                 self._pause_playback()
         elif event.command == Command.PLAY:
             self._resume_playback()
@@ -387,19 +397,56 @@ class PlaybackEngine:
     def _has_active_video_playback(self) -> bool:
         return hasattr(self, "_active_video_media")
 
+    def _has_pending_video_playback_started(self) -> bool:
+        return bool(getattr(self, "_pending_video_playback_started", False))
+
     def _pause_playback(self) -> None:
-        if self._video_player and self._has_active_video_playback():
+        self._paused_from_state = self._state
+        active_video = self._has_active_video_playback()
+        pending_video = self._has_pending_video_playback_started()
+        if self._video_player and (active_video or pending_video):
             self._video_player.pause()
+            self._set_video_pause_overlay(True, PAUSED_STATUS_TEXT)
+        render_action = RENDER_UPDATE_OVERLAY if active_video else RENDER_PAUSE_PLAYBACK
+        self._send_status_overlay(PAUSED_STATUS_TEXT, render_action=render_action)
         self._change_state(State.PAUSED)
 
     def _resume_playback(self) -> None:
+        paused_from_state = self._paused_from_state
+        self._paused_from_state = None
         active_video = self._has_active_video_playback()
-        self._change_state(State.PLAYING)
+        pending_video = self._has_pending_video_playback_started()
         if active_video:
+            render_action = (
+                RENDER_RESUME_PLAYBACK
+                if paused_from_state == State.PREPARING_VIDEO
+                else RENDER_UPDATE_OVERLAY
+            )
+            self._send_status_overlay("", render_action=render_action)
+            self._set_video_pause_overlay(False, "")
+            self._change_state(State.PLAYING)
             self._next_transition_time = float("inf")
+            if (
+                paused_from_state == State.PREPARING_VIDEO
+                and getattr(self, "_active_video_uses_reveal_sandwich", False)
+            ):
+                self._start_video_reveal_parking()
             if self._video_player:
                 self._video_player.resume()
             return
+        if pending_video:
+            self._send_status_overlay("", render_action=RENDER_RESUME_PLAYBACK)
+            self._set_video_pause_overlay(False, "")
+            self._change_state(State.PREPARING_VIDEO)
+            if self._video_player:
+                self._video_player.resume()
+            return
+
+        self._send_status_overlay("", render_action=RENDER_RESUME_PLAYBACK)
+        if paused_from_state in (State.PREPARING_VIDEO, State.TRANSITIONING):
+            self._change_state(paused_from_state)
+            return
+        self._change_state(State.PLAYING)
         self._next_transition_time = time.time() + self._time_delay
 
     def _handle_state_event(self, event: StateEvent) -> None:
@@ -841,6 +888,40 @@ class PlaybackEngine:
             text_y_margin=int(config_value("viewer.text_y_margin", "text_y_margin", 0)),
         )
 
+    def _overlay_config_for_current_status(self, status_text: str) -> Any:
+        """Build a status overlay without forcing metadata text on."""
+        from picframe.core.events.dto import OverlayConfig
+
+        current_display = self._as_display_item(self._playlist_manager.get_current())
+        base_overlay = (
+            self._build_overlay_config(current_display)
+            if current_display is not None
+            else OverlayConfig()
+        )
+        return replace(base_overlay, status_text=status_text)
+
+    def _send_status_overlay(
+        self,
+        status_text: str,
+        *,
+        render_action: str = RENDER_UPDATE_OVERLAY,
+    ) -> None:
+        overlay_config = self._overlay_config_for_current_status(status_text)
+        self._renderer.execute(
+            RenderCommand(
+                image_path=render_action,
+                overlay=overlay_config,
+                render_action=render_action,
+            )
+        )
+
+    def _set_video_pause_overlay(self, visible: bool, text: str = "") -> None:
+        if self._video_player is None:
+            return
+        set_pause_overlay = getattr(self._video_player, "set_pause_overlay", None)
+        if callable(set_pause_overlay):
+            set_pause_overlay(visible, text)
+
     @staticmethod
     def _text_overlay_enabled(raw_value: Any) -> bool:
         """Parse boolean or legacy text-format overlay settings."""
@@ -1256,6 +1337,7 @@ class PlaybackEngine:
                         else None
                     ),
                 )
+                self._pending_video_playback_started = True
                 self._video_first_frame_deadline = time.time() + self._video_first_frame_timeout
             # We don't change state to PLAYING yet. We wait for VideoFirstFrameRenderedEvent.
             # This ensures pi3d stays opaque until GStreamer is actually rendering.
@@ -1372,14 +1454,23 @@ class PlaybackEngine:
 
     def _complete_video_first_frame_handoff(self) -> None:
         """Reveal video playback after GStreamer has presented its first frame."""
-        if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
+        handoff_paused = (
+            self._state == State.PAUSED
+            and self._paused_from_state == State.PREPARING_VIDEO
+            and self._has_pending_video_playback_started()
+        )
+        if (
+            self._state == State.PREPARING_VIDEO
+            or handoff_paused
+        ) and hasattr(self, '_pending_video_media'):
             self._logger.info("GStreamer first frame rendered, fading out pi3d.")
             media_item = self._pending_video_media
             self._active_video_media = media_item
             reveal_promoted = self._promote_pending_video_reveal_frame()
             self._active_video_uses_reveal_sandwich = reveal_promoted
-            self._change_state(State.PLAYING)
-            if reveal_promoted:
+            if not handoff_paused:
+                self._change_state(State.PLAYING)
+            if reveal_promoted and not handoff_paused:
                 self._start_video_reveal_parking()
             self._clear_pending_video_preparation()
 
@@ -1502,6 +1593,7 @@ class PlaybackEngine:
             '_pending_video_transition_token',
             '_pending_video_backdrop_path',
             '_pending_video_backdrop_rect',
+            '_pending_video_playback_started',
         ):
             if hasattr(self, attr):
                 delattr(self, attr)

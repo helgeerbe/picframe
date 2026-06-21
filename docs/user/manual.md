@@ -216,9 +216,16 @@ default. The main views are:
 The Remote play/pause button reflects the backend playback state delivered over
 the live WebSocket. When pause is confirmed, the button switches to the play
 icon, timed image transitions stop, and active video playback is paused until
-play is sent again. Turning the display off also pauses playback; turning it
-back on resumes the slideshow. Display toggle follows the final display power
-state reported by the HAL adapter.
+play is sent again. Video resume continues the existing paused GStreamer
+pipeline rather than restarting the clip. If pause is pressed during an image
+fade or video first-frame handoff, the visible pi3d transition freezes and
+continues after play; GStreamer video playback is not started from a paused
+first-frame handoff until play resumes it. The frame display shows a `PAUSED`
+status overlay while paused; for active videos, the status is drawn in the GTK
+video window because that window sits above pi3d. Turning the display off also
+pauses playback;
+turning it back on resumes the slideshow. Display toggle follows the final
+display power state reported by the HAL adapter.
 
 Backend API documentation is available at:
 
@@ -573,19 +580,19 @@ GStreamer.
 
 On Wayland, Picframe hosts video playback in a borderless GTK4 window using
 `gtk4paintablesink`; GTK4 presentation is required. Raspberry Pi/labwc uses a
-transparent fullscreen GTK4 host only for fullscreen plain videos. Inset or
-custom video rectangles use an opaque fixed host, with the cached first frame
-behind the live paintable when a sidecar backdrop is available and
-`viewer.background` as fallback. GNOME/VM uses an opaque fullscreen GTK4 host
-colored from `viewer.background` so desktop shell UI cannot show through. The
-GTK host covers the configured pi3d display rectangle (`viewer.display_x`,
-`viewer.display_y`, `viewer.display_w`, and `viewer.display_h`) or fullscreen
-window. When Picframe has a valid cached transition-frame sidecar, the live
-video paintable is placed at the sidecar's visible video-opening rectangle so
-the video matches the intended opening inside mats, solid bars, edge fill, or
-blurred backdrops. If GTK4 or `gtk4paintablesink` is unavailable, Picframe
-reports a video presentation system error instead of using a legacy sink
-fallback.
+transparent fixed GTK4 host for fullscreen plain videos so pause status can be
+drawn above the live video. Inset or custom video rectangles use an opaque
+fixed host, with the cached first frame behind the live paintable when a
+sidecar backdrop is available and `viewer.background` as fallback. GNOME/VM
+uses an opaque fullscreen GTK4 host colored from `viewer.background` so desktop
+shell UI cannot show through. The GTK host covers the configured pi3d display
+rectangle (`viewer.display_x`, `viewer.display_y`, `viewer.display_w`, and
+`viewer.display_h`) or fullscreen window. When Picframe has a valid cached
+transition-frame sidecar, the live video paintable is placed at the sidecar's
+visible video-opening rectangle so the video matches the intended opening
+inside mats, solid bars, edge fill, or blurred backdrops. If GTK4 or
+`gtk4paintablesink` is unavailable, Picframe reports a video presentation
+system error instead of using a legacy sink fallback.
 
 When the display rectangle is effectively fullscreen, Picframe makes the GTK
 video window fullscreen as well; this is the preferred path for both Cage and
@@ -626,7 +633,7 @@ not show a frozen video edge. Still images keep their normal matting behavior.
 When a cached frame contains matting, blur, or image-derived edge fill,
 Picframe uses that cached first frame as the GTK video backdrop so the
 bars around live video match the pi3d title-card handoff, including on
-Raspberry Pi/labwc where the plain video host would otherwise be transparent.
+Raspberry Pi/labwc where plain live-video host regions remain transparent.
 
 The web Remote also uses cached video first frames, but only as lightweight
 browser posters. The normal Remote preview does not load the full video file;

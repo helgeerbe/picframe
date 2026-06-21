@@ -65,6 +65,7 @@ class AnimationController:
         self._next_tm = 0.0
         
         self._show_text = False
+        self._paused = False
 
     def update_config(self, config: dict[str, Any]) -> None:
         """Refresh animation timing settings after a runtime config change."""
@@ -93,6 +94,7 @@ class AnimationController:
         self._kb_ystep = kb_ystep
         self._kb_x = 0.0
         self._kb_y = 0.0
+        self._paused = False
 
     def suspend(self) -> None:
         """Suspend animations (e.g., for video playback)."""
@@ -102,6 +104,21 @@ class AnimationController:
         """Resume animations after suspension."""
         if self._state == RenderState.SUSPENDED:
             self._state = RenderState.STATIC
+
+    @property
+    def is_paused(self) -> bool:
+        """Return whether animation progression is currently frozen."""
+        return self._paused
+
+    def pause(self, *, force_text_visible: bool = False) -> None:
+        """Freeze animation progression at the current visual frame."""
+        self._paused = True
+        if force_text_visible and self._show_text:
+            self._text_alpha = 1.0
+
+    def resume_pause(self) -> None:
+        """Resume animation progression after a pause freeze."""
+        self._paused = False
 
     def force_redraw(self, frames: int = 2) -> None:
         """
@@ -157,6 +174,16 @@ class AnimationController:
             self._frames_to_render -= 1
 
         current_state = self._state
+
+        if self._paused:
+            return AnimationState(
+                render_state=self._state,
+                image_alpha=self._image_alpha,
+                text_alpha=self._text_alpha,
+                kenburns_x=self._kb_x,
+                kenburns_y=self._kb_y,
+                frames_to_render=current_frames_to_render
+            )
 
         # Image Transition
         if current_state == RenderState.TRANSITIONING:

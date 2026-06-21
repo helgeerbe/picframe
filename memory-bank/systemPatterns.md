@@ -35,11 +35,13 @@
   - Route manual next/previous video navigation through the same tokened first-frame handoff path as timed playback, ignore stale transition completions, and keep direct fallback constrained by cached sidecar metadata when it exists.
   - Treat transition-frame cache freshness as a processing-signature and geometry-metadata concern. Managed cache paths include the signature hash; legacy sidecar frame names require matching `.meta.json` metadata.
   - Render the first frame with pi3d as a video title card. If overlay text is present, wait through text fade-in, `viewer.show_text_tm`, fade-out to zero alpha, and clean redraw drain before starting GStreamer.
+  - If pause arrives during an image fade or video title-card handoff, freeze pi3d animation with a `PAUSED` status overlay and do not publish transition completion until playback resumes.
+  - If pause arrives after GStreamer has started but before first-frame promotion, pause the pending video pipeline too; a first-frame event received while paused may mark the video active, but must keep public state `PAUSED` until resume.
   - Preload pi3d's hidden background with the last frame before playback starts.
   - Promote the hidden last-frame reveal only after the GStreamer worker reports that a real video frame has rendered when sink stats expose that count.
   - At EOS, dim the GTK4 video window to 99% opacity, wake pi3d to redraw behind it, then close the video window.
   - Transition out from the last frame when GStreamer reaches EOS.
-- On Wayland, require the GTK4 `playbin`/GTK-compatible `gtk4paintablesink` presentation path inside a borderless fullscreen GTK4 host. Raspberry Pi/labwc uses a transparent host only for fullscreen plain videos; matted/edge-filled and other inset/custom handoffs use an opaque fixed host with either the cached frame or `viewer.background` behind the live paintable. GNOME/VM uses an opaque host colored from `viewer.background`. The host/backdrop covers the display rectangle; the live paintable uses sidecar `content_rect` when transition-frame metadata is valid, and explicit `content_fit` controls fill/contain behavior. The GTK4 video surface hides the cursor during playback.
+- On Wayland, require the GTK4 `playbin`/GTK-compatible `gtk4paintablesink` presentation path inside a borderless fullscreen GTK4 host. Raspberry Pi/labwc uses a transparent fixed host for fullscreen plain videos so a pause label can be drawn above the live paintable; matted/edge-filled and other inset/custom handoffs use an opaque fixed host with either the cached frame or `viewer.background` behind the live paintable. GNOME/VM uses an opaque host colored from `viewer.background`. The host/backdrop covers the display rectangle; the live paintable uses sidecar `content_rect` when transition-frame metadata is valid, and explicit `content_fit` controls fill/contain behavior. The GTK4 video surface hides the cursor during playback.
 - If GTK4 or `gtk4paintablesink` is unavailable, publish a GTK presentation system error instead of falling back to legacy sinks.
 - Only one renderer should actively own visible display output at a time.
 - Clear Image Cache removes generated cache artifacts such as video transition frames, but original media files and media database rows are handled by separate operations.
@@ -60,6 +62,7 @@
 - Vue 3 SPA uses Pinia stores for player state, config state, and system actions.
 - WebSocket `/ws/state` handles real-time media/state/error updates and outgoing player commands.
 - Remote play/pause UI is backend-confirmed: the store keeps the raw playback state, treats `PAUSED` and `IDLE` as not playing, and changes the central play/pause icon from `StateEvent`s rather than optimistic local toggles.
+- Visible pause status is renderer-owned: pi3d uses overlay `status_text` for still images, while active videos show a GTK host label because the video window sits above pi3d.
 - Display power commands coordinate with playback in `DisplayPowerManager`: display off publishes `PAUSE`, display on publishes `PLAY`, and display toggle publishes based on the HAL final `is_on()` state.
 - WebSocket media DTO enrichment uses event payload data first and injected repository ports for cache lookups; the API layer must not open hardcoded `media_cache.db3` paths.
 - REST `/api/config` and maintenance/system endpoints handle settings and administrative actions.

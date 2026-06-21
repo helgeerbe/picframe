@@ -9,8 +9,11 @@ import pytest
 
 from picframe.core.events.dto import (
     RENDER_PARK_VIDEO_REVEAL,
+    RENDER_PAUSE_PLAYBACK,
     RENDER_PRELOAD_VIDEO_REVEAL,
     RENDER_PROMOTE_VIDEO_REVEAL,
+    RENDER_RESUME_PLAYBACK,
+    RENDER_UPDATE_OVERLAY,
     RENDER_VIDEO_FIRST_FRAME,
     RENDER_WAKE_VIDEO_REVEAL,
     CurrentMediaChangedEvent,
@@ -495,6 +498,132 @@ def test_renderer_execute_video_first_frame_marks_delayed_handoff(
     assert renderer._video_first_frame_transition is True
     assert renderer._was_transitioning is True
     assert renderer._animation_controller._state == RenderState.TRANSITIONING
+
+
+def test_renderer_update_overlay_refreshes_text_without_image_transition(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    mock_image_renderer.execute.reset_mock()
+
+    renderer.execute(
+        RenderCommand(
+            image_path="UPDATE_OVERLAY",
+            overlay=OverlayConfig(show_text=False, status_text="PAUSED"),
+            render_action=RENDER_UPDATE_OVERLAY,
+        )
+    )
+
+    mock_image_renderer.execute.assert_not_called()
+    assert renderer._overlay_config.status_text == "PAUSED"
+    mock_text_renderer.update_config.assert_called_once_with(renderer._overlay_config)
+    assert renderer._animation_controller._state == RenderState.TEXT_ANIMATING
+
+
+@patch("time.sleep")
+def test_renderer_pause_action_freezes_inflight_transition(
+    mock_sleep: MagicMock,
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    publisher = MagicMock()
+    renderer = Pi3dRenderer(config, event_publisher=publisher)
+    renderer.start()
+    renderer._was_transitioning = True
+    renderer._animation_controller._state = RenderState.TRANSITIONING
+    renderer._animation_controller._image_alpha = 0.5
+    renderer._animation_controller._text_alpha = 0.0
+    renderer._animation_controller._frames_to_render = 0
+    renderer._last_text_alpha = 0.0
+    mock_clock_renderer.has_changed.return_value = False
+
+    renderer.execute(
+        RenderCommand(
+            image_path="PAUSE_PLAYBACK",
+            overlay=OverlayConfig(status_text="PAUSED"),
+            render_action=RENDER_PAUSE_PLAYBACK,
+        )
+    )
+
+    assert renderer._animation_controller.is_paused
+    assert renderer._animation_controller._text_alpha == 1.0
+    assert renderer._overlay_config.status_text == "PAUSED"
+
+    renderer._animation_controller._frames_to_render = 0
+    with patch("time.time", return_value=100.0):
+        result = renderer.render_frame()
+
+    assert result is True
+    assert renderer._animation_controller._image_alpha == 0.5
+    publisher.publish.assert_not_called()
+    mock_sleep.assert_called_once_with(0.05)
+
+
+def test_renderer_resume_action_continues_frozen_transition(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._animation_controller._state = RenderState.TRANSITIONING
+    renderer._animation_controller._image_alpha = 0.5
+    renderer._animation_controller.pause(force_text_visible=True)
+
+    renderer.execute(
+        RenderCommand(
+            image_path="RESUME_PLAYBACK",
+            overlay=OverlayConfig(status_text=""),
+            render_action=RENDER_RESUME_PLAYBACK,
+        )
+    )
+
+    assert not renderer._animation_controller.is_paused
+    assert renderer._overlay_config.status_text == ""
+
+
+def test_renderer_pause_resume_preserves_visible_text_timer(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._overlay_config = OverlayConfig(show_text=True, text_string="Photo")
+    renderer._animation_controller._show_text = True
+    renderer._animation_controller._state = RenderState.STATIC
+    renderer._animation_controller._text_alpha = 1.0
+    renderer._animation_controller._text_timer = 101.0
+
+    renderer.execute(
+        RenderCommand(
+            image_path="PAUSE_PLAYBACK",
+            overlay=OverlayConfig(show_text=True, text_string="Photo", status_text="PAUSED"),
+            render_action=RENDER_PAUSE_PLAYBACK,
+        )
+    )
+    renderer.execute(
+        RenderCommand(
+            image_path="RESUME_PLAYBACK",
+            overlay=OverlayConfig(show_text=True, text_string="Photo", status_text=""),
+            render_action=RENDER_RESUME_PLAYBACK,
+        )
+    )
+    renderer._animation_controller.update(100.0)
+
+    assert renderer._animation_controller._state == RenderState.STATIC
+    assert renderer._animation_controller._text_timer == 101.0
 
 
 @patch("time.sleep")

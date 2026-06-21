@@ -123,6 +123,28 @@ def test_suspend(config):
     state = controller.update(100.0)
     assert state.render_state == RenderState.SUSPENDED
 
+
+def test_pause_freezes_transition_until_resume(config):
+    controller = AnimationController(config)
+    controller.start_transition(100.0)
+    first_state = controller.update(100.0)
+    controller.update_text_config(True, True)
+
+    controller.pause(force_text_visible=True)
+    paused_state = controller.update(101.0)
+    later_paused_state = controller.update(102.0)
+
+    assert paused_state.render_state == RenderState.TRANSITIONING
+    assert paused_state.image_alpha == first_state.image_alpha
+    assert later_paused_state.image_alpha == first_state.image_alpha
+    assert paused_state.text_alpha == 1.0
+
+    controller.resume_pause()
+    resumed_state = controller.update(103.0)
+
+    assert resumed_state.image_alpha > first_state.image_alpha
+
+
 def test_force_redraw(config):
     controller = AnimationController(config)
     controller.force_redraw(5)

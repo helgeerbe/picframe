@@ -40,6 +40,10 @@ class IVideoPlayer(Protocol):
         """Resume paused video playback."""
         ...
 
+    def set_pause_overlay(self, visible: bool, text: str = "") -> None:
+        """Show or hide a playback-status overlay above the video window."""
+        ...
+
     def set_volume(self, level: float) -> None:
         """
         Set the audio volume level.

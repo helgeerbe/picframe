@@ -7,7 +7,7 @@ to the GStreamer worker and receiving events back from it.
 
 import json
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, Type, TypeVar
+from typing import Any, TypeVar
 
 T = TypeVar("T", bound="IpcMessage")
 
@@ -20,7 +20,7 @@ class IpcMessage:
         return json.dumps(asdict(self))
 
     @classmethod
-    def from_dict(cls: Type[T], data: Dict[str, Any]) -> T:
+    def from_dict(cls: type[T], data: dict[str, Any]) -> T:
         """Deserialize a dictionary into an IPC message."""
         # Remove 'type' from data as it's handled by the subclass constructor or implicitly
         filtered_data = {k: v for k, v in data.items() if k != "type"}
@@ -48,6 +48,21 @@ class PlayCommand(IpcMessage):
 class PauseCommand(IpcMessage):
     """Command to pause playback."""
     type: str = field(default="pause", init=False)
+
+
+@dataclass(frozen=True)
+class ResumeCommand(IpcMessage):
+    """Command to resume playback without rebuilding the pipeline."""
+    type: str = field(default="resume", init=False)
+
+
+@dataclass(frozen=True)
+class SetPauseOverlayCommand(IpcMessage):
+    """Command to show or hide video-window playback status text."""
+    visible: bool
+    text: str = ""
+    type: str = field(default="set_pause_overlay", init=False)
+
 
 @dataclass(frozen=True)
 class StopCommand(IpcMessage):
@@ -135,6 +150,10 @@ def parse_ipc_message(json_str: str) -> IpcMessage | None:
             return PlayCommand.from_dict(data)
         elif msg_type == "pause":
             return PauseCommand.from_dict(data)
+        elif msg_type == "resume":
+            return ResumeCommand.from_dict(data)
+        elif msg_type == "set_pause_overlay":
+            return SetPauseOverlayCommand.from_dict(data)
         elif msg_type == "stop":
             return StopCommand.from_dict(data)
         elif msg_type == "set_volume":

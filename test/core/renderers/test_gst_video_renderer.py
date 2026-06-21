@@ -15,6 +15,8 @@ from picframe.core.renderers.ipc_protocol import (
     EosEvent,
     ErrorEvent,
     PlayCommand,
+    ResumeCommand,
+    SetPauseOverlayCommand,
     VideoDiagnosticsEvent,
     WarningEvent,
     parse_ipc_message,
@@ -253,6 +255,28 @@ def test_parse_play_command_preserves_host_background() -> None:
     assert command.content_fit == "fill"
 
 
+def test_parse_set_pause_overlay_command() -> None:
+    command = parse_ipc_message(
+        json.dumps(
+            {
+                "type": "set_pause_overlay",
+                "visible": True,
+                "text": "PAUSED",
+            }
+        )
+    )
+
+    assert isinstance(command, SetPauseOverlayCommand)
+    assert command.visible is True
+    assert command.text == "PAUSED"
+
+
+def test_parse_resume_command() -> None:
+    command = parse_ipc_message(json.dumps({"type": "resume"}))
+
+    assert isinstance(command, ResumeCommand)
+
+
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
 @patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
@@ -337,16 +361,34 @@ def test_pause_resume_video(
     mock_conn.send.assert_called_once()
     sent_json = mock_conn.send.call_args[0][0]
     sent_dict = json.loads(sent_json)
-    assert sent_dict["type"] == "play"
-    assert sent_dict["x"] == 100
-    assert sent_dict["y"] == 80
-    assert sent_dict["w"] == 640
-    assert sent_dict["h"] == 360
-    assert sent_dict["fit_display"] is True
-    assert sent_dict["host_background"] == [0.2, 0.2, 0.3, 1.0]
-    assert sent_dict["host_backdrop_path"] == "/cache/video.1.frame"
-    assert sent_dict["host_backdrop_rect"] == [10, 20, 1000, 800]
-    assert sent_dict["content_fit"] == "fill"
+    assert sent_dict == {"type": "resume"}
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_set_pause_overlay_sends_ipc_command(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+) -> None:
+    mock_conn = MagicMock()
+    mock_client.return_value = mock_conn
+
+    renderer = GstVideoRenderer(mock_publisher)
+    mock_conn.send.reset_mock()
+
+    renderer.set_pause_overlay(True, "PAUSED")
+
+    mock_conn.send.assert_called_once()
+    sent_json = mock_conn.send.call_args[0][0]
+    assert json.loads(sent_json) == {
+        "visible": True,
+        "text": "PAUSED",
+        "type": "set_pause_overlay",
+    }
+
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
