@@ -773,14 +773,104 @@ def test_engine_handle_command_pause_play(
     event = CommandEvent(command=Command.PAUSE)
     engine._handle_command(event)
     
-    assert engine._state == State.IDLE
-    mock_event_publisher.publish.assert_called_with(StateEvent(state=State.IDLE))
+    assert engine._state == State.PAUSED
+    mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PAUSED))
     
     # Play
     event = CommandEvent(command=Command.PLAY)
     engine._handle_command(event)
     
     assert engine._state == State.PLAYING
+    mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PLAYING))
+
+
+def test_engine_pause_toggles_back_to_playing_for_legacy_shortcuts(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+    engine._state = State.PAUSED
+
+    with patch("picframe.core.engine.playback.time.time", return_value=100.0):
+        engine._handle_command(CommandEvent(command=Command.PAUSE))
+
+    assert engine._state == State.PLAYING
+    assert engine._next_transition_time == 110.0
+    mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PLAYING))
+
+
+def test_engine_pause_pauses_active_video(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._state = State.PLAYING
+    engine._active_video_media = MediaItem(
+        id=2,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=2048,
+        last_modified=1234567890.0,
+    )
+
+    engine._handle_command(CommandEvent(command=Command.PAUSE))
+
+    mock_video_player.pause.assert_called_once()
+    assert engine._state == State.PAUSED
+    mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PAUSED))
+
+
+def test_engine_play_resumes_active_video_without_scheduling_timer(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    mock_video_player = MagicMock()
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        video_player=mock_video_player,
+    )
+    engine._state = State.PAUSED
+    engine._next_transition_time = 25.0
+    engine._active_video_media = MediaItem(
+        id=2,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=2048,
+        last_modified=1234567890.0,
+    )
+
+    engine._handle_command(CommandEvent(command=Command.PLAY))
+
+    mock_video_player.resume.assert_called_once()
+    assert engine._state == State.PLAYING
+    assert engine._next_transition_time == float("inf")
     mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PLAYING))
 
 

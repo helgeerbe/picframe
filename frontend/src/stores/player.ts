@@ -22,6 +22,7 @@ export interface MediaItem {
 export const usePlayerStore = defineStore('player', () => {
   const currentMedia = ref<MediaItem | null>(null)
   const isPlaying = ref(false)
+  const playbackState = ref('IDLE')
   const brightness = ref(1.0)
   const isDisplayOn = ref(true)
   const connectionStatus = ref<ConnectionStatus>('offline')
@@ -78,8 +79,8 @@ export const usePlayerStore = defineStore('player', () => {
         if (data.type === 'MediaChangedEvent') {
           currentMedia.value = normalizeMediaUrls(data.media)
         } else if (data.type === 'StateEvent') {
-          if (data.state === 'PLAYING') isPlaying.value = true
-          if (data.state === 'PAUSED') isPlaying.value = false
+          playbackState.value = data.state
+          isPlaying.value = ['PLAYING', 'TRANSITIONING', 'PREPARING_VIDEO'].includes(data.state)
           if (data.state === 'ERROR') {
             isPlaying.value = false
             if (data.payload?.reason === 'invalid_renderer_config') {
@@ -250,6 +251,7 @@ export const usePlayerStore = defineStore('player', () => {
   return {
     currentMedia,
     isPlaying,
+    playbackState,
     brightness,
     isConnected,
     connectionStatus,

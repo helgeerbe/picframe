@@ -124,7 +124,7 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Reasoning & Benefits:** This decouples the core media orchestration from the presentation and control layers. It allows us to swap out the UI (e.g., Vue.js instead of a local GUI) or the database (SQLite instead of YAML) without touching the core logic. It also enables pure unit testing of the business rules by mocking the outer layers. To enforce this, legacy "God Objects" are dismantled into dedicated services:
     *   **`HardwareInputService` (Control Plane):** Monitors GPIO (PIR sensors, buttons) and publishes `HardwareEvent`s.
     *   **Renderer image preparation:** Handles EXIF-corrected image loading and in-memory matting before pi3d texture creation.
-    *   **`DisplayPowerManager` (Infrastructure Layer):** Manages OS-level screen power (vcgencmd, xset) independently of the pixel renderer.
+    *   **`DisplayPowerManager` (Infrastructure Layer):** Manages OS-level screen power independently of the pixel renderer and publishes follow-up playback commands so display off pauses, display on resumes, and display toggle maps to the HAL final display state.
 
 ### 2.2 Strict Event-Driven Architecture (EDA) & PriorityQueue
 *   **Concept:** Components communicate exclusively by publishing and subscribing to events via a central Event Bus, implemented using a custom, thread-safe `queue.PriorityQueue`.
@@ -142,7 +142,7 @@ The Picframe 2.0 architecture is built upon several advanced software design pat
 *   **Concept:** The monolithic state machine is split into two distinct components:
     *   **`PlaylistManager`:** Handles media querying, filtering, shuffling, and history.
     *   **`PlaybackEngine`:** Manages the playback state (Playing, Paused, Transitioning) and timing.
-*   **Reasoning & Benefits:** Prevents the creation of a "God Object." The `PlaylistManager` can be tested purely for its logic (e.g., "does shuffle work?"), while the `PlaybackEngine` can be tested purely for its state transitions (e.g., "does it pause correctly?"), reducing cognitive load and test complexity.
+*   **Reasoning & Benefits:** Prevents the creation of a "God Object." The `PlaylistManager` can be tested purely for its logic (e.g., "does shuffle work?"), while the `PlaybackEngine` can be tested purely for its state transitions (e.g., "does it pause correctly?"), reducing cognitive load and test complexity. `State.PAUSED` is the explicit pause state published to Remote, MQTT, and WebSocket clients; `IDLE` is not used as a user-facing pause alias.
 
 ### 2.6 Dual-Database Strategy (Repository Pattern)
 *   **Concept:** Configuration and media metadata are strictly separated into `config.db3` (persistent user settings) and `media_cache.db3` (ephemeral media metadata).

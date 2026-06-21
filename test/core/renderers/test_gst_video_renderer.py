@@ -313,7 +313,18 @@ def test_pause_resume_video(
     mock_client.return_value = mock_conn
     
     renderer = GstVideoRenderer(mock_publisher)
-    renderer.play(media_item, fit_display=True)
+    renderer.play(
+        media_item,
+        100,
+        80,
+        640,
+        360,
+        fit_display=True,
+        host_background=(0.2, 0.2, 0.3, 1.0),
+        host_backdrop_path="/cache/video.1.frame",
+        host_backdrop_rect=(10, 20, 1000, 800),
+        content_fit="fill",
+    )
     mock_conn.send.reset_mock()
     
     renderer.pause()
@@ -327,7 +338,15 @@ def test_pause_resume_video(
     sent_json = mock_conn.send.call_args[0][0]
     sent_dict = json.loads(sent_json)
     assert sent_dict["type"] == "play"
+    assert sent_dict["x"] == 100
+    assert sent_dict["y"] == 80
+    assert sent_dict["w"] == 640
+    assert sent_dict["h"] == 360
     assert sent_dict["fit_display"] is True
+    assert sent_dict["host_background"] == [0.2, 0.2, 0.3, 1.0]
+    assert sent_dict["host_backdrop_path"] == "/cache/video.1.frame"
+    assert sent_dict["host_backdrop_rect"] == [10, 20, 1000, 800]
+    assert sent_dict["content_fit"] == "fill"
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")

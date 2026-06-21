@@ -20,7 +20,7 @@ This document outlines the frontend architecture and user interface specificatio
 ## 3. Core Architecture & Data Flow
 
 ### 3.1 State Management (Pinia Stores)
-*   **`usePlayerStore`:** Manages the WebSocket connection to `ws://<ip>/ws/state`. It holds the current `MediaItem` DTO, playback status (playing/paused), and current brightness. It automatically updates the UI when the backend broadcasts a `MediaChangedEvent` or `StateEvent`.
+*   **`usePlayerStore`:** Manages the WebSocket connection to `ws://<ip>/ws/state`. It holds the current `MediaItem` DTO, raw playback state, derived playing/paused status, and current brightness. It automatically updates the UI when the backend broadcasts a `MediaChangedEvent` or `StateEvent`.
 *   **`useConfigStore`:** Manages REST API interactions (`GET /api/config`, `PUT /api/config`) for the Administrative Dashboard.
 *   **`useSystemStore`:** Handles maintenance operations and system state commands (Reboot, Shutdown).
 
@@ -39,7 +39,7 @@ This view acts as the real-time remote control and information display for the c
     *   Video media is poster-first in the normal Remote preview: the browser requests only the cached first-frame poster from `/media/poster` and does not mount a `<video>` element or request the full `/media` video URL until the user expands the media view. If no poster cache exists, Remote shows a lightweight video placeholder with an explicit play button. The expanded modal uses native browser playback with `preload="metadata"` so supported browsers stream through HTTP byte-range requests.
 *   **Transport Controls:** A sticky or prominent control bar featuring:
     *   `Previous` (Skip to previous media)
-    *   `Play/Pause` (Toggle playback state, icon changes dynamically based on WebSocket state)
+    *   `Play/Pause` (Toggle playback state; the icon changes from backend `StateEvent` confirmation, with `PAUSED` showing the play icon)
     *   `Next` (Skip to next media)
 *   **Display Brightness:** A horizontal slider component bound to the backend brightness state. Dragging the slider updates the local value shown in the UI; the final `CommandEvent(SET_BRIGHTNESS)` is emitted when the slider value is committed so hardware backends such as `ddcutil` are not flooded with intermediate values.
 
@@ -154,7 +154,7 @@ A dedicated "Danger Zone" or Maintenance tab for system-level operations. All ac
 *   **Brightness command:** `{ "command": "SET_BRIGHTNESS", "value": 0.8 }`.
 *   **Configuration command:** `{ "command": "SET_CONFIG", "payload": { ... } }` or root-level config keys alongside `"command": "SET_CONFIG"`.
 *   **Outbound media updates:** `MediaChangedEvent` with a `media` payload matching `MediaResponseDTO`.
-*   **Outbound state updates:** `StateEvent` with a state enum name and optional payload.
+*   **Outbound state updates:** `StateEvent` with a state enum name and optional payload. `PAUSED` is the explicit slideshow pause state returned by `REQUEST_STATE`; display-off commands pause playback and display-on commands resume it.
 *   **Outbound errors:** `SystemErrorEvent` with `message`, `component`, `sticky`, and optional `code`.
 *   On connection the backend subscribes to media/state/error events and requests current state. High-frequency state events are rate limited, while rapid `NEXT`, `PREV`, and `SET_BRIGHTNESS` commands are debounced.
 

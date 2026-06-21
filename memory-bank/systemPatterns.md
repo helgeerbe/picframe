@@ -59,6 +59,8 @@
 ## Frontend Patterns
 - Vue 3 SPA uses Pinia stores for player state, config state, and system actions.
 - WebSocket `/ws/state` handles real-time media/state/error updates and outgoing player commands.
+- Remote play/pause UI is backend-confirmed: the store keeps the raw playback state, treats `PAUSED` and `IDLE` as not playing, and changes the central play/pause icon from `StateEvent`s rather than optimistic local toggles.
+- Display power commands coordinate with playback in `DisplayPowerManager`: display off publishes `PAUSE`, display on publishes `PLAY`, and display toggle publishes based on the HAL final `is_on()` state.
 - WebSocket media DTO enrichment uses event payload data first and injected repository ports for cache lookups; the API layer must not open hardcoded `media_cache.db3` paths.
 - REST `/api/config` and maintenance/system endpoints handle settings and administrative actions.
 - MQTT/Home Assistant exposes playback/display/config controls, targeted delete, reboot, and shutdown; purge DB and clear-cache remain UI/REST maintenance actions.

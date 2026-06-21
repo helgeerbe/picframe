@@ -1,14 +1,15 @@
 # Active Context
 
 ## Current Focus
-The active branch is `feature/699-remote-video-streaming`. Issue #699 tracks
-poster-first Remote video previews and explicit HTTP byte-range streaming so
-browser clients do not eagerly load full video files.
+The active branch is `v2-dev`. Issue #701 tracks the Remote pause-state fix so
+the Remote play/pause icon reflects backend `StateEvent(PAUSED)` confirmation
+and active videos pause/resume through GStreamer.
 
 ## Current Repo State
-- Branch: `feature/699-remote-video-streaming`, created from `v2-dev`.
-- Issue #699 owns the current code/docs changes; commit messages for this work
-  must include `#699`.
+- Branch: `v2-dev`; local history includes `d73e42c` for the tablet Settings
+  header/action layout fix and the current #701 work on top.
+- Issue #701 owns the current code/docs changes; commit messages for this work
+  must include `#701`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -47,6 +48,7 @@ browser clients do not eagerly load full video files.
 - Ticket #696 hardens media-cache repository threading: all `SQLiteMediaRepository` connection use is serialized with an `RLock`, including location lookups used by API media DTO enrichment.
 - Ticket #697 improves media selection performance for large libraries: media-cache migrations add active filepath/date indexes and a rounded-coordinate location expression index; playlist folder scope uses filepath range predicates; standard shuffle happens in Python without SQL `RANDOM()`; count queries avoid location joins unless filtering by resolved location.
 - Ticket #699 adds the Remote browser-memory boundary for videos: WebSocket media DTOs expose `media_type`, normal Remote video previews request only `/media/poster`, poster lookup can reuse existing managed-cache first frames when the exact transition key changes, missing poster caches show a lightweight play placeholder, expanded media uses native `<video preload="metadata">`, and `/media` explicitly supports single HTTP byte ranges. Browser codec support remains best-effort; GStreamer playback on the frame remains authoritative.
+- Ticket #701 makes pause state explicit: Remote sends `PAUSE`/`PLAY` but updates its icon from backend `StateEvent`s; `PlaybackEngine` publishes `PAUSED` instead of using `IDLE` as a pause alias, active videos call GStreamer pause/resume, resumed videos keep their geometry/backdrop/content-fit command fields, and display off/on/toggle map to pause/play through `DisplayPowerManager`.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -69,6 +71,7 @@ browser clients do not eagerly load full video files.
 - Preserve the #696 repository boundary: shared SQLite connection access in `SQLiteMediaRepository` must stay serialized across API, playback, indexer, and geocoding threads.
 - Preserve the #697 performance boundary: keep Remote/Settings APIs and playlist filter semantics unchanged while using indexable media-cache queries and Python-side shuffle.
 - Preserve the #699 browser-preview boundary: normal Remote video previews must not mount `<video>` or request the full `/media` video URL; only the expanded media modal may stream video bytes.
+- Preserve the #701 pause-state boundary: `State.PAUSED` is the public paused state for WebSocket/MQTT/Remote clients; `PAUSE` remains a legacy toggle when already paused; active video resume must preserve the previous GTK presentation geometry; display toggle should resolve play/pause from the HAL final `is_on()` state.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

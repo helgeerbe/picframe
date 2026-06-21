@@ -91,6 +91,7 @@ def run_picframe(
         event_bus,
         hal_adapters.display_power,
         config_repository=_config_repo,
+        event_publisher=event_bus,
     )
     from picframe.core.services.system_manager import SystemManager
     system_manager = SystemManager(event_bus, hal_adapters.system_manager)

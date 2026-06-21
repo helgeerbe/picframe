@@ -213,6 +213,13 @@ default. The main views are:
     paths, renderer options, MQTT, GPIO inputs, legacy YAML import, and
     maintenance actions.
 
+The Remote play/pause button reflects the backend playback state delivered over
+the live WebSocket. When pause is confirmed, the button switches to the play
+icon, timed image transitions stop, and active video playback is paused until
+play is sent again. Turning the display off also pauses playback; turning it
+back on resumes the slideshow. Display toggle follows the final display power
+state reported by the HAL adapter.
+
 Backend API documentation is available at:
 
 ```text

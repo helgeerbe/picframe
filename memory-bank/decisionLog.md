@@ -45,6 +45,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Helper text affordances must work by click/tap first; hover tooltips are only an enhancement for pointer devices.
 - Remote location/tag filters preserve legacy boolean syntax: English `AND`/`OR`/`NOT` operators, parentheses, and adjacent words as one phrase.
 - Remote media-selection match counts are previews only until Apply; `total_count` is the active file count in the selected subdirectory, or in `pic_dir` when no subdirectory is selected.
+- Use `State.PAUSED` as the explicit public pause state. Remote/MQTT/WebSocket clients should not infer pause from `IDLE`; `PAUSE` remains a legacy toggle when already paused, active video resume must replay the previous GStreamer presentation geometry, and display-power toggle should publish play/pause from the HAL final display state.
 - Next-gen media cache schema can be changed directly while unreleased; delete/rebuild local media DBs instead of carrying migrations for unpublished schema changes.
 - Restore legacy display statistics as rebuildable media-cache metadata (`displayed_count`, `last_displayed`) and expose it as read-only Remote media information.
 - Keep temporary missing media, explicit user deletes, and purge separate: missing media is soft-inactivated for NAS resilience, Remote delete moves the original and removes its cache row, and purge hard-deletes rows for files that remain missing.

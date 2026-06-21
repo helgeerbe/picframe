@@ -54,6 +54,7 @@ class GstVideoRenderer(IVideoPlayer):
         self._publisher = event_publisher
         self._max_software_decode_resolution = max_software_decode_resolution
         self._current_media: MediaItem | None = None
+        self._geometry: tuple[int, int, int, int] = (0, 0, 0, 0)
         self._fit_display = False
         self._host_background: list[float] | tuple[float, ...] | None = None
         self._host_backdrop_path: str | None = None
@@ -286,6 +287,7 @@ class GstVideoRenderer(IVideoPlayer):
 
         self.stop()
         self._current_media = media_item
+        self._geometry = (x, y, w, h)
         self._fit_display = fit_display
         self._host_background = host_background
         self._host_backdrop_path = host_backdrop_path
@@ -330,6 +332,10 @@ class GstVideoRenderer(IVideoPlayer):
             self._send_command(
                 PlayCommand(
                     uri=uri,
+                    x=self._geometry[0],
+                    y=self._geometry[1],
+                    w=self._geometry[2],
+                    h=self._geometry[3],
                     max_software_decode_resolution=self._max_software_decode_resolution,
                     fit_display=self._fit_display,
                     host_background=self._host_background,

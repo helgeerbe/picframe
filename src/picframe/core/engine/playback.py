@@ -366,15 +366,12 @@ class PlaybackEngine:
         elif event.command == Command.PREV:
             self._trigger_prev_media()
         elif event.command == Command.PAUSE:
-            self._change_state(State.IDLE)
-            if self._video_player and self._state == State.PLAYING:
-                self._video_player.pause()
+            if self._state == State.PAUSED:
+                self._resume_playback()
+            elif self._state == State.PLAYING:
+                self._pause_playback()
         elif event.command == Command.PLAY:
-            self._change_state(State.PLAYING)
-            # Reset timer so it doesn't immediately transition if it was paused
-            self._next_transition_time = time.time() + self._time_delay
-            if self._video_player:
-                self._video_player.resume()
+            self._resume_playback()
         elif event.command == Command.STOP:
             self.stop()
         elif event.command == Command.DELETE:
@@ -386,6 +383,24 @@ class PlaybackEngine:
         elif event.command == Command.SET_VOL:
             if self._video_player and event.payload is not None:
                 self._video_player.set_volume(float(event.payload))
+
+    def _has_active_video_playback(self) -> bool:
+        return hasattr(self, "_active_video_media")
+
+    def _pause_playback(self) -> None:
+        if self._video_player and self._has_active_video_playback():
+            self._video_player.pause()
+        self._change_state(State.PAUSED)
+
+    def _resume_playback(self) -> None:
+        active_video = self._has_active_video_playback()
+        self._change_state(State.PLAYING)
+        if active_video:
+            self._next_transition_time = float("inf")
+            if self._video_player:
+                self._video_player.resume()
+            return
+        self._next_transition_time = time.time() + self._time_delay
 
     def _handle_state_event(self, event: StateEvent) -> None:
         """React to runtime configuration changes."""
@@ -1151,6 +1166,8 @@ class PlaybackEngine:
                 else None
             ),
         )
+        self._active_video_media = media_item
+        self._active_video_uses_reveal_sandwich = False
         self._next_transition_time = float("inf")
         self._change_state(State.PLAYING)
         return True
