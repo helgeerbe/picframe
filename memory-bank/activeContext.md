@@ -1,13 +1,13 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #702 fixes a next-gen GPIO Settings trap:
-changing an input between PIR and button must remove stale type-specific flat
-config keys so backend validation does not reject the saved mapping or block the
-user from repairing GPIO settings in the UI.
+The active branch is `v2-dev`. Issue #703 fixes PIR startup semantics: GPIO PIR
+inputs with a mapped delayed `no_motion` action should start that timer when
+hardware monitoring starts or reloads, so a quiet room after boot can turn the
+display off without requiring a first motion/no-motion cycle.
 
 ## Current Repo State
-- Branch: `v2-dev`; local work targets #702 and must be committed with `#702`.
+- Branch: `v2-dev`; local work targets #703 and must be committed with `#703`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -51,6 +51,9 @@ user from repairing GPIO settings in the UI.
   Picframe removes previous `hardware_inputs.*` flat keys before writing the
   normalized section so stale PIR actions cannot survive a switch to button, and
   stale button actions cannot survive a switch to PIR.
+- Ticket #703 starts delayed PIR `no_motion` timers when hardware monitoring is
+  enabled or reloaded, while preserving motion cancellation and reload/stop
+  timer cleanup.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -77,6 +80,10 @@ user from repairing GPIO settings in the UI.
 - Preserve the #702 hardware-input persistence boundary: saving the full
   `hardware_inputs` section is a replacement operation over the flat config
   store, not a merge that leaves removed nested action keys behind.
+- Preserve the #703 PIR startup boundary: an enabled PIR input with a mapped
+  delayed `no_motion` action starts that timer on monitoring start/reload; a
+  later `motion_detected` event cancels it, and stop/reload cancels pending
+  timers.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

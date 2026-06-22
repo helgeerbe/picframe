@@ -176,6 +176,17 @@ class HardwareInputService:
         for timer in timers:
             timer.cancel()
 
+    def _schedule_initial_no_motion_commands(self) -> None:
+        with self._timer_lock:
+            scheduled_inputs = [
+                (input_id, delay_seconds)
+                for input_id, delay_seconds in self._no_motion_delays.items()
+                if self._mapping.get(input_id, {}).get("no_motion")
+            ]
+
+        for input_id, delay_seconds in scheduled_inputs:
+            self._schedule_no_motion_command(input_id, "no_motion", delay_seconds)
+
     def start(self) -> None:
         """Start the underlying hardware input adapter."""
         logger.info("HardwareInputService: Starting hardware monitoring.")
@@ -232,6 +243,7 @@ class HardwareInputService:
 
         if self._is_running and enabled:
             self._adapter.start()
+            self._schedule_initial_no_motion_commands()
             logger.info("HardwareInputService: Hardware inputs enabled.")
         else:
             logger.info("HardwareInputService: Hardware inputs disabled.")

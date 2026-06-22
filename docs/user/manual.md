@@ -417,6 +417,9 @@ one or more action mappings:
 PIR inputs can also set a no-motion delay in seconds. A value of `0` runs the
 `no_motion` command immediately. A value such as `900` waits 15 minutes before
 running it; a new `motion_detected` event cancels the pending no-motion command.
+When hardware input monitoring starts or reloads, Picframe starts the same
+delayed `no_motion` timer for configured PIR inputs so a quiet room after boot
+can still turn the display off.
 
 The backend validates mappings before saving. Duplicate pins, unsupported input
 types, invalid actions, and commands that require payloads are rejected. GPIO

@@ -150,11 +150,49 @@ def test_hardware_input_service_delays_pir_no_motion_command(monkeypatch) -> Non
     )
     service.start()
 
+    startup_timer = FakeTimer.instances[0]
     mock_adapter.simulate_event("motion", "no_motion")
 
     mock_event_bus.publish.assert_not_called()
+    assert len(FakeTimer.instances) == 2
+    assert startup_timer.cancelled is True
+    no_motion_timer = FakeTimer.instances[1]
+    assert no_motion_timer.delay == 900
+    assert no_motion_timer.started is True
+
+    no_motion_timer.fire()
+    mock_event_bus.publish.assert_called_once_with(
+        CommandEvent(command=Command.DISPLAY_OFF)
+    )
+
+    service.stop()
+
+
+def test_hardware_input_service_schedules_initial_pir_no_motion_timer(monkeypatch) -> None:
+    FakeTimer.instances.clear()
+    monkeypatch.setattr("picframe.core.services.hardware_input.threading.Timer", FakeTimer)
+    mock_event_bus = MagicMock()
+    mock_repo = MagicMock()
+    mock_repo.get_all_app_config.return_value = {
+        "hardware_inputs.enabled": True,
+        "hardware_inputs.inputs.motion.type": "pir",
+        "hardware_inputs.inputs.motion.pin": 27,
+        "hardware_inputs.inputs.motion.no_motion_delay_seconds": 60,
+        "hardware_inputs.inputs.motion.actions.motion_detected": "DISPLAY_ON",
+        "hardware_inputs.inputs.motion.actions.no_motion": "DISPLAY_OFF",
+    }
+    mock_adapter = MockHardwareInput()
+
+    service = HardwareInputService(
+        event_bus=mock_event_bus,
+        hardware_input_adapter=mock_adapter,
+        config_repository=mock_repo,
+    )
+    service.start()
+
+    mock_event_bus.publish.assert_not_called()
     assert len(FakeTimer.instances) == 1
-    assert FakeTimer.instances[0].delay == 900
+    assert FakeTimer.instances[0].delay == 60
     assert FakeTimer.instances[0].started is True
 
     FakeTimer.instances[0].fire()
