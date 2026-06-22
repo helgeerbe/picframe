@@ -4,6 +4,8 @@ from unittest.mock import MagicMock
 import pytest
 
 from picframe.core.events.dto import Command, CommandEvent, State, StateEvent
+from picframe.core.models.hardware_input import hardware_inputs_from_flat_config
+from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
 from picframe.core.services.config_service import ConfigService
 
 
@@ -72,6 +74,51 @@ def test_update_nested_config_rejects_invalid_hardware_inputs(config_service, mo
         config_service.update_nested_config(nested_config)
 
     mock_repo.set_app_config.assert_not_called()
+
+
+def test_update_nested_config_replaces_stale_hardware_input_flat_keys():
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        repo.set_app_config("hardware_inputs.enabled", True)
+        repo.set_app_config("hardware_inputs.inputs.input_1.type", "pir")
+        repo.set_app_config("hardware_inputs.inputs.input_1.pin", 17)
+        repo.set_app_config("hardware_inputs.inputs.input_1.no_motion_delay_seconds", 60)
+        repo.set_app_config(
+            "hardware_inputs.inputs.input_1.actions.motion_detected", "DISPLAY_ON"
+        )
+        repo.set_app_config("hardware_inputs.inputs.input_1.actions.no_motion", "DISPLAY_OFF")
+
+        service = ConfigService(repo, MagicMock(), MagicMock())
+        service.update_nested_config(
+            {
+                "hardware_inputs": {
+                    "enabled": True,
+                    "inputs": {
+                        "input_1": {
+                            "type": "button",
+                            "pin": 17,
+                            "actions": {"pressed": "NEXT"},
+                        }
+                    },
+                }
+            }
+        )
+
+        all_config = repo.get_all_app_config()
+        assert "hardware_inputs.inputs.input_1.actions.motion_detected" not in all_config
+        assert "hardware_inputs.inputs.input_1.actions.no_motion" not in all_config
+        assert "hardware_inputs.inputs.input_1.no_motion_delay_seconds" not in all_config
+        assert all_config["hardware_inputs.inputs.input_1.actions.pressed"] == "NEXT"
+        assert hardware_inputs_from_flat_config(all_config)["inputs"]["input_1"] == {
+            "label": "input_1",
+            "type": "button",
+            "pin": 17,
+            "actions": {"pressed": "NEXT"},
+            "bounce_time": 0.1,
+        }
+    finally:
+        repo.close()
+
 
 def test_handle_set_config_command(config_service, mock_repo, mock_publisher):
     payload = {

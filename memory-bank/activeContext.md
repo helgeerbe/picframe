@@ -1,17 +1,13 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #701 tracks the Remote pause-state and
-paused-overlay fix so the Remote play/pause icon reflects backend
-`StateEvent(PAUSED)` confirmation, still-image playback shows a pi3d `PAUSED`
-status overlay, in-flight pi3d fades freeze while paused, and active videos
-pause/resume in-place through GStreamer with a GTK video-window `PAUSED` label.
+The active branch is `v2-dev`. Issue #702 fixes a next-gen GPIO Settings trap:
+changing an input between PIR and button must remove stale type-specific flat
+config keys so backend validation does not reject the saved mapping or block the
+user from repairing GPIO settings in the UI.
 
 ## Current Repo State
-- Branch: `v2-dev`; local history includes `d73e42c` for the tablet Settings
-  header/action layout fix and the current #701 work on top.
-- Issue #701 owns the current code/docs changes; commit messages for this work
-  must include `#701`.
+- Branch: `v2-dev`; local work targets #702 and must be committed with `#702`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -51,6 +47,10 @@ pause/resume in-place through GStreamer with a GTK video-window `PAUSED` label.
 - Ticket #697 improves media selection performance for large libraries: media-cache migrations add active filepath/date indexes and a rounded-coordinate location expression index; playlist folder scope uses filepath range predicates; standard shuffle happens in Python without SQL `RANDOM()`; count queries avoid location joins unless filtering by resolved location.
 - Ticket #699 adds the Remote browser-memory boundary for videos: WebSocket media DTOs expose `media_type`, normal Remote video previews request only `/media/poster`, poster lookup can reuse existing managed-cache first frames when the exact transition key changes, missing poster caches show a lightweight play placeholder, expanded media uses native `<video preload="metadata">`, and `/media` explicitly supports single HTTP byte ranges. Browser codec support remains best-effort; GStreamer playback on the frame remains authoritative.
 - Ticket #701 makes pause state explicit and visible: Remote sends `PAUSE`/`PLAY` but updates its icon from backend `StateEvent`s; `PlaybackEngine` publishes `PAUSED` instead of using `IDLE` as a pause alias, sends a pi3d `PAUSED` status overlay for still images and in-flight pi3d fades, freezes image/video-title-card transitions while paused, defers pending first-frame video handoff until resume, pauses/resumes a pending video if GStreamer has already started before first-frame promotion, promotes the first-frame event safely while still paused, active videos call GStreamer pause/resume plus a GTK video-window `PAUSED` label, resumed videos continue the existing paused pipeline instead of replaying the clip, and display off/on/toggle map to pause/play through `DisplayPowerManager`.
+- Ticket #702 hardens GPIO config replacement: when `hardware_inputs` is saved,
+  Picframe removes previous `hardware_inputs.*` flat keys before writing the
+  normalized section so stale PIR actions cannot survive a switch to button, and
+  stale button actions cannot survive a switch to PIR.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -74,6 +74,9 @@ pause/resume in-place through GStreamer with a GTK video-window `PAUSED` label.
 - Preserve the #697 performance boundary: keep Remote/Settings APIs and playlist filter semantics unchanged while using indexable media-cache queries and Python-side shuffle.
 - Preserve the #699 browser-preview boundary: normal Remote video previews must not mount `<video>` or request the full `/media` video URL; only the expanded media modal may stream video bytes.
 - Preserve the #701 pause-state boundary: `State.PAUSED` is the public paused state for WebSocket/MQTT/Remote clients; `PAUSE` remains a legacy toggle when already paused; visible paused status is renderer-owned (`status_text` on pi3d, GTK pause label above active video); pi3d-owned image fades and video first-frame handoff fades must freeze while paused; a pending video whose GStreamer pipeline has already started must still receive pause/resume commands before first-frame promotion; active video resume must be an in-place GStreamer pipeline state change so it keeps geometry and playback position; display toggle should resolve play/pause from the HAL final `is_on()` state.
+- Preserve the #702 hardware-input persistence boundary: saving the full
+  `hardware_inputs` section is a replacement operation over the flat config
+  store, not a merge that leaves removed nested action keys behind.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

@@ -49,11 +49,16 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Ticket #697 media selection performance is closed: indexed filepath/date/location query paths speed playlist rebuilds and selected-count checks while preserving existing Remote/API behavior.
 - Ticket #698 fixes beveled/matted video handoff alignment: `content_rect` now comes from the visible video opening after frame/shadow effects instead of the larger logical source plane, transition-frame processing version 6 invalidates version-5 matted sidecars with frozen edge pixels, generated video transition frames black source-influenced pixels outside `content_rect` without changing still-image matting, manual video navigation uses the tokened first-frame handoff path, stale transition completions are ignored, direct fallback uses cached sidecar metadata when available instead of forcing fullscreen playback, and matted/edge-filled or otherwise inset video rects use an opaque GTK host so non-video regions do not reveal stale pi3d pixels on Pi/labwc.
 - Ticket #701 Remote pause-state and paused-overlay fix: `PlaybackEngine` now publishes `State.PAUSED` for pause, legacy `PAUSE` toggles back to play when already paused, still-image and in-flight pi3d fade pauses send a `PAUSED` status overlay, image/video-title-card transitions freeze while paused, pending first-frame video handoff is deferred until resume, a started-but-not-yet-promoted pending video is paused/resumed through GStreamer and promoted safely if its first-frame event arrives while paused, active videos call GStreamer pause/resume and show a GTK video-window `PAUSED` label, video resume continues the existing paused pipeline instead of replaying the clip, Remote derives its play/pause icon from backend `StateEvent`s, and display off/on/toggle publish the corresponding pause/play follow-up command.
+- Ticket #702 GPIO type-switch persistence fix: saving `hardware_inputs` now
+  replaces the old flat `hardware_inputs.*` section before writing normalized
+  values, preventing stale PIR/button actions from blocking Settings saves after
+  a GPIO input type change.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
-- Issue #699 is active on `feature/699-remote-video-streaming`: Remote video previews are being changed to poster-first browser behavior, with missing poster caches falling back to a lightweight play placeholder, full video bytes only requested from the expanded native `<video preload="metadata">` view, and `/media` gaining explicit single byte-range support.
-- #687 implementation is in verification/closeout: Settings coverage, live reloads, Remote enlargement/filtering, `model.image_attr` compatibility docs, live logging, Logs tab, three-scope Basic Auth with cookie-backed WebSocket auth plus documented password recovery, and legacy peripherals documentation are being verified before commit/issue closeout.
+- Issue #702 is in implementation/closeout: the stale GPIO action persistence
+  trap is fixed and focused backend tests pass; final commit and GitHub replies
+  are pending.
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
 - #691 is merged into `v2-dev`, pushed to `origin/v2-dev`, and closed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.

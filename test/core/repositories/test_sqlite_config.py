@@ -105,6 +105,24 @@ def test_update_existing_app_config(
     assert config_repo.get_app_config("key1") == "updated"
 
 
+def test_delete_app_config_prefix_only_removes_matching_section(
+    config_repo: SQLiteConfigRepository,
+) -> None:
+    """Test deleting a dotted config section without removing similar prefixes."""
+    config_repo.set_app_config("hardware_inputs.enabled", True)
+    config_repo.set_app_config("hardware_inputs.inputs.motion.type", "pir")
+    config_repo.set_app_config("hardware_inputs_extra.enabled", True)
+    config_repo.set_app_config("viewer.fps", 30)
+
+    config_repo.delete_app_config_prefix("hardware_inputs")
+
+    all_config = config_repo.get_all_app_config()
+    assert "hardware_inputs.enabled" not in all_config
+    assert "hardware_inputs.inputs.motion.type" not in all_config
+    assert all_config["hardware_inputs_extra.enabled"] is True
+    assert all_config["viewer.fps"] == 30
+
+
 def test_add_and_get_directories(config_repo: SQLiteConfigRepository) -> None:
     """Test adding and retrieving media directories."""
     dir_id1 = config_repo.add_directory("/path/to/photos")

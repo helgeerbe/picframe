@@ -136,6 +136,23 @@ class SQLiteConfigRepository(IConfigRepository):
                 (key, json_value),
             )
 
+    def delete_app_config_prefix(self, prefix: str) -> None:
+        """
+        Delete configuration values whose keys match a dotted section prefix.
+
+        A prefix of ``hardware_inputs`` removes both a direct ``hardware_inputs``
+        key and all nested ``hardware_inputs.*`` keys without touching similarly
+        named sections such as ``hardware_inputs_extra``.
+        """
+        with self._conn:
+            self._conn.execute(
+                """
+                DELETE FROM app_config
+                WHERE key = ? OR key LIKE ?
+                """,
+                (prefix, f"{prefix}.%"),
+            )
+
     def get_all_app_config(self) -> dict[str, Any]:
         """
         Retrieve all application configuration values.

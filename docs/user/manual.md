@@ -423,6 +423,11 @@ types, invalid actions, and commands that require payloads are rejected. GPIO
 commands are limited to payload-free commands such as playback, display power,
 text overlay refresh/toggle, sleep/wake, reboot, shutdown, and stop.
 
+Changing an input between **Button** and **PIR** replaces the stored mapping for
+that input type. Stale type-specific actions, for example old PIR
+`motion_detected` / `no_motion` actions after switching to a button, are removed
+when Settings saves `hardware_inputs`.
+
 Hardware input changes are applied at runtime after saving Settings. Picframe
 does not need to be restarted for a changed GPIO mapping.
 

@@ -55,6 +55,15 @@ class IConfigRepository(Protocol):
         """
         ...
 
+    def delete_app_config_prefix(self, prefix: str) -> None:
+        """
+        Delete application configuration values whose keys are under a prefix.
+
+        Args:
+            prefix: The dotted configuration prefix to remove, e.g. ``hardware_inputs``.
+        """
+        ...
+
     def get_all_app_config(self) -> dict[str, Any]:
         """
         Retrieve all application configuration values.

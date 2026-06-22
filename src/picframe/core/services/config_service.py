@@ -136,6 +136,8 @@ class ConfigService:
             return dict(items)
 
         flat_payload = flatten_dict(nested_config)
+        if "hardware_inputs" in nested_config:
+            self._config_repository.delete_app_config_prefix("hardware_inputs")
         for key, value in flat_payload.items():
             self._config_repository.set_app_config(key, value)
 
