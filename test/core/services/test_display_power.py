@@ -23,19 +23,22 @@ def test_display_power_manager_handles_display_on() -> None:
     """Test that the manager calls turn_on when receiving DISPLAY_ON command."""
     mock_bus = MagicMock()
     mock_adapter = MagicMock()
+    mock_adapter.is_on.return_value = False
     manager = DisplayPowerManager(mock_bus, mock_adapter)
 
     event = CommandEvent(command=Command.DISPLAY_ON)
     manager._handle_command_event(event)
 
+    mock_adapter.is_on.assert_called_once()
     mock_adapter.turn_on.assert_called_once()
     mock_adapter.turn_off.assert_not_called()
     mock_adapter.toggle.assert_not_called()
 
 
-def test_display_power_manager_display_on_publishes_play() -> None:
+def test_display_power_manager_display_on_publishes_play_when_previously_off() -> None:
     mock_bus = MagicMock()
     mock_adapter = MagicMock()
+    mock_adapter.is_on.return_value = False
     mock_publisher = MagicMock()
     manager = DisplayPowerManager(
         mock_bus,
@@ -45,27 +48,49 @@ def test_display_power_manager_display_on_publishes_play() -> None:
 
     manager._handle_command_event(CommandEvent(command=Command.DISPLAY_ON))
 
+    mock_adapter.is_on.assert_called_once()
     mock_adapter.turn_on.assert_called_once()
     mock_publisher.publish.assert_called_once_with(CommandEvent(command=Command.PLAY))
+
+
+def test_display_power_manager_display_on_noops_when_already_on() -> None:
+    mock_bus = MagicMock()
+    mock_adapter = MagicMock()
+    mock_adapter.is_on.return_value = True
+    mock_publisher = MagicMock()
+    manager = DisplayPowerManager(
+        mock_bus,
+        mock_adapter,
+        event_publisher=mock_publisher,
+    )
+
+    manager._handle_command_event(CommandEvent(command=Command.DISPLAY_ON))
+
+    mock_adapter.is_on.assert_called_once()
+    mock_adapter.turn_on.assert_not_called()
+    mock_publisher.publish.assert_not_called()
 
 
 def test_display_power_manager_handles_display_off() -> None:
     """Test that the manager calls turn_off when receiving DISPLAY_OFF command."""
     mock_bus = MagicMock()
     mock_adapter = MagicMock()
+    mock_adapter.is_on.return_value = True
     manager = DisplayPowerManager(mock_bus, mock_adapter)
 
     event = CommandEvent(command=Command.DISPLAY_OFF)
     manager._handle_command_event(event)
 
+    mock_adapter.is_on.assert_called_once()
     mock_adapter.turn_off.assert_called_once()
     mock_adapter.turn_on.assert_not_called()
     mock_adapter.toggle.assert_not_called()
 
 
-def test_display_power_manager_display_off_publishes_pause() -> None:
+def test_display_power_manager_display_off_publishes_pause_when_previously_on() -> None:
     mock_bus = MagicMock()
     mock_adapter = MagicMock()
+    mock_adapter.is_on.return_value = True
     mock_publisher = MagicMock()
     manager = DisplayPowerManager(
         mock_bus,
@@ -75,8 +100,27 @@ def test_display_power_manager_display_off_publishes_pause() -> None:
 
     manager._handle_command_event(CommandEvent(command=Command.DISPLAY_OFF))
 
+    mock_adapter.is_on.assert_called_once()
     mock_adapter.turn_off.assert_called_once()
     mock_publisher.publish.assert_called_once_with(CommandEvent(command=Command.PAUSE))
+
+
+def test_display_power_manager_display_off_noops_when_already_off() -> None:
+    mock_bus = MagicMock()
+    mock_adapter = MagicMock()
+    mock_adapter.is_on.return_value = False
+    mock_publisher = MagicMock()
+    manager = DisplayPowerManager(
+        mock_bus,
+        mock_adapter,
+        event_publisher=mock_publisher,
+    )
+
+    manager._handle_command_event(CommandEvent(command=Command.DISPLAY_OFF))
+
+    mock_adapter.is_on.assert_called_once()
+    mock_adapter.turn_off.assert_not_called()
+    mock_publisher.publish.assert_not_called()
 
 
 def test_display_power_manager_handles_display_toggle() -> None:

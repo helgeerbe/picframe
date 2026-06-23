@@ -1,13 +1,13 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #703 fixes PIR startup semantics: GPIO PIR
-inputs with a mapped delayed `no_motion` action should start that timer when
-hardware monitoring starts or reloads, so a quiet room after boot can turn the
-display off without requiring a first motion/no-motion cycle.
+The active branch is `v2-dev`. Issue #704 fixes display-power idempotency for
+PIR motion wake events: repeated `DISPLAY_ON` while the display is already live
+must not re-publish `PLAY` or poke playback, and repeated `DISPLAY_OFF` while
+already blanked must not re-publish `PAUSE`.
 
 ## Current Repo State
-- Branch: `v2-dev`; local work targets #703 and must be committed with `#703`.
+- Branch: `v2-dev`; local work targets #704 and must be committed with `#704`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -54,6 +54,10 @@ display off without requiring a first motion/no-motion cycle.
 - Ticket #703 starts delayed PIR `no_motion` timers when hardware monitoring is
   enabled or reloaded, while preserving motion cancellation and reload/stop
   timer cleanup.
+- Ticket #704 makes display power on/off idempotent: `DISPLAY_ON` only turns the
+  display on and publishes `PLAY` when the tracked display state was off, and
+  `DISPLAY_OFF` only turns it off and publishes `PAUSE` when the tracked state
+  was on. `DISPLAY_TOGGLE` continues to use the final adapter state.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -84,6 +88,9 @@ display off without requiring a first motion/no-motion cycle.
   delayed `no_motion` action starts that timer on monitoring start/reload; a
   later `motion_detected` event cancels it, and stop/reload cancels pending
   timers.
+- Preserve the #704 display-power idempotency boundary: repeated `DISPLAY_ON` or
+  `DISPLAY_OFF` commands that do not change tracked display state should not
+  forward duplicate playback `PLAY`/`PAUSE` commands.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

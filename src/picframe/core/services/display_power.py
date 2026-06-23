@@ -60,10 +60,16 @@ class DisplayPowerManager:
 
         if event.command == Command.DISPLAY_ON:
             logger.info("DisplayPowerManager: Received DISPLAY_ON command.")
+            if self._adapter.is_on():
+                logger.debug("DisplayPowerManager: Display already ON; ignoring DISPLAY_ON.")
+                return
             self._adapter.turn_on()
             self._publish_playback_command(Command.PLAY)
         elif event.command == Command.DISPLAY_OFF:
             logger.info("DisplayPowerManager: Received DISPLAY_OFF command.")
+            if not self._adapter.is_on():
+                logger.debug("DisplayPowerManager: Display already OFF; ignoring DISPLAY_OFF.")
+                return
             self._adapter.turn_off()
             self._publish_playback_command(Command.PAUSE)
         elif event.command == Command.DISPLAY_TOGGLE:

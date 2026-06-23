@@ -56,11 +56,14 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Ticket #703 PIR startup no-motion fix: enabled PIR inputs with delayed mapped
   `no_motion` actions now start that timer when hardware monitoring starts or
   reloads, so a quiet room after boot can still turn the display off.
+- Ticket #704 display-power idempotency fix: repeated `DISPLAY_ON` while the
+  display is already live no longer publishes a duplicate `PLAY`, and repeated
+  `DISPLAY_OFF` while already blanked no longer publishes a duplicate `PAUSE`.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
-- Issue #703 is in implementation/closeout: PIR startup-idle timer behavior is
-  implemented and service-level tests pass; final verification and GitHub
+- Issue #704 is in implementation/closeout: display-power on/off commands are
+  idempotent and service-level tests pass; final verification and GitHub
   closeout are pending.
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
 - #691 is merged into `v2-dev`, pushed to `origin/v2-dev`, and closed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
