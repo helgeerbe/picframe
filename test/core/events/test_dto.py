@@ -37,7 +37,7 @@ def test_command_event_priority() -> None:
 
     Expected behavior:
         Critical commands (e.g., NEXT, PAUSE) should have high priority (1).
-        Standard commands (e.g., SLEEP) should have medium priority (2).
+        Standard commands (e.g., SET_VOL) should have medium priority (2).
     """
     # High priority commands
     assert CommandEvent(Command.NEXT).priority == 1
@@ -50,13 +50,17 @@ def test_command_event_priority() -> None:
     assert CommandEvent(Command.STOP).priority == 1
 
     # Medium priority commands
-    assert CommandEvent(Command.SLEEP).priority == 2
-    assert CommandEvent(Command.WAKE).priority == 2
     assert CommandEvent(Command.SET_VOL).priority == 2
     assert CommandEvent(Command.PURGE_FILES).priority == 2
     assert CommandEvent(Command.SET_CONFIG).priority == 2
     assert CommandEvent(Command.TOGGLE_TEXT).priority == 2
     assert CommandEvent(Command.REFRESH_TEXT).priority == 2
+
+
+def test_legacy_sleep_wake_are_not_commands() -> None:
+    """Legacy sleep/wake labels are not part of the active command contract."""
+    assert "SLEEP" not in Command.__members__
+    assert "WAKE" not in Command.__members__
 
 
 def test_state_event_priority() -> None:

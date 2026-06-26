@@ -39,8 +39,6 @@ const commandOptions = [
   'DISPLAY_TOGGLE',
   'TOGGLE_TEXT',
   'REFRESH_TEXT',
-  'SLEEP',
-  'WAKE',
   'REBOOT_HOST',
   'SHUTDOWN_HOST',
   'STOP'

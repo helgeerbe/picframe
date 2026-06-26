@@ -59,12 +59,13 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Ticket #704 display-power idempotency fix: repeated `DISPLAY_ON` while the
   display is already live no longer publishes a duplicate `PLAY`, and repeated
   `DISPLAY_OFF` while already blanked no longer publishes a duplicate `PAUSE`.
+- Ticket #705 GPIO action cleanup: unsupported legacy-style `WAKE`/`SLEEP`
+  selections are removed from the active command enum and Settings GPIO dropdown
+  and rejected by backend hardware input validation; PIR screen power remains
+  `DISPLAY_ON`/`DISPLAY_OFF`.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
-- Issue #704 is in implementation/closeout: display-power on/off commands are
-  idempotent and service-level tests pass; final verification and GitHub
-  closeout are pending.
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
 - #691 is merged into `v2-dev`, pushed to `origin/v2-dev`, and closed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
@@ -90,4 +91,11 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Latest #698 target verification: `.venv/bin/python -m pytest test/core/utils/test_mat_image.py test/core/utils/test_video_frame_extractor.py test/core/engine/test_playback.py test/core/renderers/test_pi3d_renderer.py test/core/events/test_dto.py` passed with 164 tests; full `.venv/bin/python -m pytest` passed with 645 tests and 1 GI deprecation warning; targeted Ruff for touched Python files and `git diff --check` passed.
 - Latest #699 verification: full `.venv/bin/python -m pytest` passed with 662 tests and 1 GI deprecation warning; focused `.venv/bin/python -m pytest test/api/test_app.py test/test_remote_brightness_controls.py` passed with 67 tests; targeted Ruff for touched Python files passed; `npm run build` passed with the known sandbox stream-fd warnings before Vite completed; `git diff --check` passed.
 - Latest #701 paused-overlay verification: focused resume regression tests (`test_parse_resume_command`, `test_pause_resume_video`, `test_resume_request_resumes_existing_pipeline`, `test_pause_request_prevents_async_done_from_resuming_pipeline`) passed with 4 tests after adding explicit resume IPC. Focused fade-freeze and text-timer regressions for animation controller, playback pause/resume, and pi3d renderer passed with 7 tests; broader `.venv/bin/python -m pytest test/core/renderers/test_animation_controller.py test/core/renderers/test_pi3d_renderer.py test/core/engine/test_playback.py` passed with 130 tests. The expanded #701 suite `.venv/bin/python -m pytest test/core/renderers/test_animation_controller.py test/core/renderers/test_gst_worker.py test/core/renderers/components/test_text_renderer.py test/core/renderers/test_pi3d_renderer.py test/core/engine/test_playback.py test/core/renderers/test_gst_video_renderer.py test/core/renderers/test_gtk_video_presenter.py` passed with 234 tests; targeted Ruff for touched Python files passed. The latest pending-video pause race guard `.venv/bin/python -m pytest test/core/engine/test_playback.py test/core/renderers/test_animation_controller.py test/core/renderers/test_pi3d_renderer.py test/core/renderers/test_gst_video_renderer.py test/core/renderers/test_gst_worker.py test/core/renderers/test_gtk_video_presenter.py` passed with 226 tests; full `.venv/bin/python -m pytest` passed with 690 tests and 1 GI deprecation warning.
+- Latest #705 verification: backend hardware-input validation and the Settings
+  GPIO source guard reject/exclude unsupported `WAKE`/`SLEEP` selections while
+  preserving `DISPLAY_ON`/`DISPLAY_OFF`; the active `Command` enum no longer
+  includes the legacy names; focused event/hardware/API pytest passed with 101
+  tests; full `.venv/bin/python -m pytest` passed with 699 tests and 1 GI
+  deprecation warning; targeted Ruff, `npm run build`, and `git diff --check`
+  passed.
 - Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.

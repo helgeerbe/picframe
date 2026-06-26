@@ -28,8 +28,6 @@ class Command(Enum):
     PREV = auto()
     PAUSE = auto()
     PLAY = auto()
-    SLEEP = auto()
-    WAKE = auto()
     REBOOT_HOST = auto()
     SHUTDOWN_HOST = auto()
     SET_VOL = auto()
@@ -93,7 +91,7 @@ class CommandEvent(Event):
         """
         Determine priority based on the specific command.
         Critical commands (e.g., NEXT, PAUSE, STOP) get high priority (1).
-        Standard commands (e.g., SLEEP, SET_VOL) get medium priority (2).
+        Standard commands (e.g., SET_VOL, SET_CONFIG) get medium priority (2).
         """
         high_priority = {
             Command.NEXT,

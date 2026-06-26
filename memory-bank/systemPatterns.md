@@ -86,7 +86,7 @@
 ## Hardware Inputs
 - `HardwareInputService` translates HAL input events to payload-free `CommandEvent`s and reloads mappings after `hardware_inputs` config changes.
 - `IHardwareInput.configure()` is the HAL boundary for runtime GPIO mapping updates; Raspberry Pi GPIO details stay in the infrastructure adapter.
-- Hardware input mappings use BCM pin numbers and reject duplicate pins, unsupported actions, and commands that require payloads.
+- Hardware input mappings use BCM pin numbers and reject duplicate pins, unsupported actions, commands that require payloads, and unsupported legacy-style `WAKE`/`SLEEP` selections. PIR screen power uses `DISPLAY_ON`/`DISPLAY_OFF`.
 - PIR no-motion grace periods are core service timers (`no_motion_delay_seconds`), not GPIO adapter behavior. Renewed `motion_detected` cancels a pending delayed `no_motion` command.
 
 ## Testing And Quality

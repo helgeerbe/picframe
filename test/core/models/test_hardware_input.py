@@ -54,6 +54,8 @@ def test_duplicate_pins_are_rejected() -> None:
         ({"type": "switch", "pin": 17, "actions": {"pressed": "NEXT"}}, "unsupported type"),
         ({"type": "button", "pin": 17, "actions": {"motion_detected": "NEXT"}}, "invalid"),
         ({"type": "button", "pin": 17, "actions": {"pressed": "SET_BRIGHTNESS"}}, "unsupported"),
+        ({"type": "button", "pin": 17, "actions": {"pressed": "SLEEP"}}, "unsupported"),
+        ({"type": "pir", "pin": 17, "actions": {"motion_detected": "WAKE"}}, "unsupported"),
         ({"type": "button", "pin": 40, "actions": {"pressed": "NEXT"}}, "BCM"),
         ({"type": "button", "pin": 17}, "at least one action"),
         (

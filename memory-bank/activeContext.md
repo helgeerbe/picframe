@@ -1,13 +1,13 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. Issue #704 fixes display-power idempotency for
-PIR motion wake events: repeated `DISPLAY_ON` while the display is already live
-must not re-publish `PLAY` or poke playback, and repeated `DISPLAY_OFF` while
-already blanked must not re-publish `PAUSE`.
+The active branch is `v2-dev`. The latest ticketed change is #705, which removes
+unsupported legacy-style `WAKE`/`SLEEP` selections from GPIO hardware input
+configuration. PIR display power should use `DISPLAY_ON` for motion and
+`DISPLAY_OFF` for no motion.
 
 ## Current Repo State
-- Branch: `v2-dev`; local work targets #704 and must be committed with `#704`.
+- Branch: `v2-dev`; #705 is the latest local implementation/closeout context.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -58,6 +58,10 @@ already blanked must not re-publish `PAUSE`.
   display on and publishes `PLAY` when the tracked display state was off, and
   `DISPLAY_OFF` only turns it off and publishes `PAUSE` when the tracked state
   was on. `DISPLAY_TOGGLE` continues to use the final adapter state.
+- Ticket #705 removes unsupported legacy-style `WAKE`/`SLEEP` selections from
+  GPIO hardware input configuration and from the active `Command` enum.
+  GPIO-facing validation and Settings options expose only supported payload-free
+  runtime commands; PIR screen power should use `DISPLAY_ON` and `DISPLAY_OFF`.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -91,6 +95,9 @@ already blanked must not re-publish `PAUSE`.
 - Preserve the #704 display-power idempotency boundary: repeated `DISPLAY_ON` or
   `DISPLAY_OFF` commands that do not change tracked display state should not
   forward duplicate playback `PLAY`/`PAUSE` commands.
+- Preserve the #705 GPIO command boundary: `WAKE` and `SLEEP` are not supported
+  GPIO action choices; use `DISPLAY_ON`/`DISPLAY_OFF` for PIR-driven display
+  power instead.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

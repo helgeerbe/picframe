@@ -424,7 +424,9 @@ can still turn the display off.
 The backend validates mappings before saving. Duplicate pins, unsupported input
 types, invalid actions, and commands that require payloads are rejected. GPIO
 commands are limited to payload-free commands such as playback, display power,
-text overlay refresh/toggle, sleep/wake, reboot, shutdown, and stop.
+text overlay refresh/toggle, reboot, shutdown, and stop. For PIR-based screen
+control, use `DISPLAY_ON` for motion and `DISPLAY_OFF` for no motion; `WAKE`
+and `SLEEP` are not GPIO actions in the next-gen runtime.
 
 Changing an input between **Button** and **PIR** replaces the stored mapping for
 that input type. Stale type-specific actions, for example old PIR
