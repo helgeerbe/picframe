@@ -706,7 +706,9 @@ class ViewerDisplay:
             self.__in_transition = True  # set __in_transition True a few seconds *before* end of previous slide
         else:  # no transition effect safe to update database, resuffle etc
             self.__in_transition = False
-            if self.__video_path is not None and tm > self.__name_tm:
+            # Videos should start immediately after the fade transition.
+            # show_text_tm only controls the text overlay and must not delay video playback.
+            if self.__video_path is not None and self.__alpha >= 1.0:
                 # start video stream
                 if self.__video_streamer is None or not self.__video_streamer.player_alive():
                     self.__video_streamer = VideoStreamer(
