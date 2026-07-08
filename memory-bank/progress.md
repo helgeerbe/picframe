@@ -63,6 +63,11 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   selections are removed from the active command enum and Settings GPIO dropdown
   and rejected by backend hardware input validation; PIR screen power remains
   `DISPLAY_ON`/`DISPLAY_OFF`.
+- Ticket #708 config repository locking fix: `SQLiteConfigRepository` now
+  serializes all shared SQLite connection use with an `RLock`, including
+  migrations, reads, writes, directory operations, and close, preventing
+  long-running playback/API races that can surface as `sqlite3.InterfaceError`
+  during live config reads.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
@@ -97,5 +102,10 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   includes the legacy names; focused event/hardware/API pytest passed with 101
   tests; full `.venv/bin/python -m pytest` passed with 699 tests and 1 GI
   deprecation warning; targeted Ruff, `npm run build`, and `git diff --check`
+  passed.
+- Latest #708 verification: `.venv/bin/python -m pytest` passed with 700 tests
+  and 1 GI deprecation warning; targeted Ruff for
+  `src/picframe/core/repositories/sqlite_config.py` and
+  `test/core/repositories/test_sqlite_config.py` passed; `git diff --check`
   passed.
 - Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.

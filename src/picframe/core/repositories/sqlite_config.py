@@ -8,6 +8,7 @@ configuration data using a SQLite database (`config.db3`).
 import json
 import logging
 import sqlite3
+import threading
 from typing import Any
 
 from picframe.core.repositories.interfaces import IConfigRepository
@@ -50,25 +51,26 @@ class SQLiteConfigRepository(IConfigRepository):
             db_path: The file path to the SQLite database (e.g., 'config.db3').
         """
         self._db_path = db_path
-        # Use check_same_thread=False because we might share the connection
-        # across threads, but we will rely on SQLite's internal locking or
-        # explicit locks if needed. For simple CRUD, SQLite handles concurrency
-        # well if configured correctly.
+        self._lock = threading.RLock()
+        # Use check_same_thread=False because the repository is shared across
+        # service threads. Access to the connection is serialized by _lock.
         self._conn = sqlite3.connect(
             self._db_path, check_same_thread=False, isolation_level=None
         )
         self._conn.row_factory = sqlite3.Row
         
         # Enable WAL mode for better concurrency
-        self._conn.execute("PRAGMA journal_mode=WAL;")
+        with self._lock:
+            self._conn.execute("PRAGMA journal_mode=WAL;")
 
         # Run migrations
         self._run_migrations()
 
     def _run_migrations(self) -> None:
         """Execute database migrations to ensure the schema is up-to-date."""
-        manager = MigrationManager(self._conn, CONFIG_MIGRATIONS)
-        manager.migrate()
+        with self._lock:
+            manager = MigrationManager(self._conn, CONFIG_MIGRATIONS)
+            manager.migrate()
 
     def get_app_config(self, key: str, default: Any = None) -> Any:
         """
@@ -84,10 +86,11 @@ class SQLiteConfigRepository(IConfigRepository):
         Returns:
             The deserialized configuration value, or the default if not found.
         """
-        cursor = self._conn.execute(
-            "SELECT value FROM app_config WHERE key = ?", (key,)
-        )
-        row = cursor.fetchone()
+        with self._lock:
+            cursor = self._conn.execute(
+                "SELECT value FROM app_config WHERE key = ?", (key,)
+            )
+            row = cursor.fetchone()
         if row:
             if row["value"] is None:
                 logger.warning(f"Config key has NULL value, using default: {key}")
@@ -126,7 +129,7 @@ class SQLiteConfigRepository(IConfigRepository):
             value: The value to store.
         """
         json_value = json.dumps(value)
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """
                 INSERT INTO app_config (key, value)
@@ -144,7 +147,7 @@ class SQLiteConfigRepository(IConfigRepository):
         key and all nested ``hardware_inputs.*`` keys without touching similarly
         named sections such as ``hardware_inputs_extra``.
         """
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 """
                 DELETE FROM app_config
@@ -160,9 +163,11 @@ class SQLiteConfigRepository(IConfigRepository):
         Returns:
             A dictionary containing all configuration key-value pairs.
         """
-        cursor = self._conn.execute("SELECT key, value FROM app_config")
+        with self._lock:
+            cursor = self._conn.execute("SELECT key, value FROM app_config")
+            rows = cursor.fetchall()
         config = {}
-        for row in cursor.fetchall():
+        for row in rows:
             if row["value"] is None:
                 logger.warning(
                     f"Skipping config key with NULL value: {row['key']}"
@@ -181,8 +186,9 @@ class SQLiteConfigRepository(IConfigRepository):
         Returns:
             A list of dictionaries containing directory information.
         """
-        cursor = self._conn.execute("SELECT id, path FROM directories")
-        return [dict(row) for row in cursor.fetchall()]
+        with self._lock:
+            cursor = self._conn.execute("SELECT id, path FROM directories")
+            return [dict(row) for row in cursor.fetchall()]
 
     def add_directory(self, path: str) -> int:
         """
@@ -194,7 +200,7 @@ class SQLiteConfigRepository(IConfigRepository):
         Returns:
             The ID of the newly inserted directory.
         """
-        with self._conn:
+        with self._lock, self._conn:
             cursor = self._conn.execute(
                 "INSERT INTO directories (path) VALUES (?)", (path,)
             )
@@ -207,11 +213,12 @@ class SQLiteConfigRepository(IConfigRepository):
         Args:
             directory_id: The ID of the directory to remove.
         """
-        with self._conn:
+        with self._lock, self._conn:
             self._conn.execute(
                 "DELETE FROM directories WHERE id = ?", (directory_id,)
             )
 
     def close(self) -> None:
         """Close the database connection."""
-        self._conn.close()
+        with self._lock:
+            self._conn.close()

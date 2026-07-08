@@ -12,6 +12,9 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Split playlist selection from playback state orchestration.
 - Store persistent user settings in `config.db3` and rebuildable media metadata in `media_cache.db3`.
 - Version both databases and apply migrations through a standardized migration manager.
+- Serialize shared SQLite repository connection access with repository-local
+  `RLock`s; playback, API, MQTT, logging, hardware, indexing, and geocoding
+  threads must not enter the same SQLite connection concurrently.
 - Seed configuration from `default_config.yaml`; expose nested JSON through `ConfigService` and Pydantic API models.
 - Legacy `configuration.yaml` migration uses the explicit Settings UI / `/api/config/import-yaml` path, not a startup migration or CLI command; compatibility normalization maps supported renamed runtime keys and ignores startup-only HTTP fields managed by CLI/env.
 - The installed `picframe` console script belongs to the next-gen CLI (`picframe.main`) with `init` and `run`; the legacy direct `configuration.yaml` startup path is no longer public.

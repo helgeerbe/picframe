@@ -6,6 +6,9 @@
 - Strict Event-Driven Architecture: components communicate through immutable event/command DTOs on a thread-safe PriorityQueue event bus.
 - Event bus interfaces are split into `IEventPublisher` and `IEventSubscriber` to keep component permissions narrow.
 - The runtime separates configuration (`config.db3`, persistent) from media metadata (`media_cache.db3`, rebuildable).
+- SQLite repositories serialize access to their shared connections with
+  repository-local locks because playback, API, MQTT, logging, hardware,
+  indexing, and geocoding can read/write from different threads.
 - Filesystem monitoring follows ports/adapters: core services depend on `IMediaMonitor`, while the watchdog-backed adapter lives in infrastructure.
 - The package console script enters the next-gen composition root (`picframe.main`); legacy controller/model/start/viewer/HTTP/peripheral/VLC runtime modules have been removed after audited import scans.
 - Home Assistant MQTT is an infrastructure adapter that depends on the event bus, config repository, and `ISystemStateQuery`; it must not import legacy controller/model/viewer code.

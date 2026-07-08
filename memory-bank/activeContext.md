@@ -1,13 +1,12 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. The latest ticketed change is #705, which removes
-unsupported legacy-style `WAKE`/`SLEEP` selections from GPIO hardware input
-configuration. PIR display power should use `DISPLAY_ON` for motion and
-`DISPLAY_OFF` for no motion.
+The active branch is `v2-dev`. The latest ticketed change is #708, which
+hardens persistent config storage against long-running service crashes caused
+by concurrent access to the shared SQLite config connection.
 
 ## Current Repo State
-- Branch: `v2-dev`; #705 is the latest local implementation/closeout context.
+- Branch: `v2-dev`; #708 is the latest local implementation/closeout context.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -62,6 +61,10 @@ configuration. PIR display power should use `DISPLAY_ON` for motion and
   GPIO hardware input configuration and from the active `Command` enum.
   GPIO-facing validation and Settings options expose only supported payload-free
   runtime commands; PIR screen power should use `DISPLAY_ON` and `DISPLAY_OFF`.
+- Ticket #708 hardens persistent config repository threading: all
+  `SQLiteConfigRepository` connection use is serialized with an `RLock`,
+  matching the media repository pattern and preventing playback/control-plane
+  races such as `sqlite3.InterfaceError` while reading live viewer settings.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -98,6 +101,9 @@ configuration. PIR display power should use `DISPLAY_ON` for motion and
 - Preserve the #705 GPIO command boundary: `WAKE` and `SLEEP` are not supported
   GPIO action choices; use `DISPLAY_ON`/`DISPLAY_OFF` for PIR-driven display
   power instead.
+- Preserve the #708 repository boundary: shared SQLite connection access in
+  both `SQLiteConfigRepository` and `SQLiteMediaRepository` must stay serialized
+  across playback, API, MQTT, indexer, hardware, logging, and geocoding threads.
 - Use the issue #680 VLC results as diagnostic evidence only; do not reintroduce VLC as a next-gen runtime dependency.
 - Keep the GStreamer worker IPC protocol explicit and typed.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.

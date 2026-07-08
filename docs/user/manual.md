@@ -120,6 +120,26 @@ sudo systemctl stop picframe.service
 sudo systemctl disable picframe.service
 ```
 
+#### Updating an Existing Service Install
+
+For a service-based install that uses the installer-created virtual
+environment at `~/picframe_env`, stop the service, activate the environment,
+upgrade the package, then start the service again:
+
+```bash
+sudo systemctl stop picframe.service
+source ~/picframe_env/bin/activate
+python -m pip install --upgrade "git+https://github.com/helgeerbe/picframe.git@v2-dev"
+deactivate
+sudo systemctl start picframe.service
+sudo systemctl status picframe.service
+```
+
+Use `@main` instead of `@v2-dev` for the stable branch, or use
+`python -m pip install --upgrade picframe` for a PyPI install. Do not use
+`picframe init --force` for a routine update because it recreates runtime
+databases.
+
 ### Initialization (`picframe init`)
 
 When you run `picframe init`, the application bootstraps your environment (defaulting to `~/.picframe`).

@@ -6,7 +6,10 @@ and directory management using an in-memory SQLite database.
 """
 
 import sqlite3
+import threading
+import time
 from collections.abc import Generator
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -94,6 +97,53 @@ def test_null_app_config_value_uses_default_and_is_skipped(
         assert "viewer.display_x" not in repo.get_all_app_config()
     finally:
         repo.close()
+
+
+def test_get_app_config_serializes_shared_connection_access(
+    config_repo: SQLiteConfigRepository,
+) -> None:
+    """Concurrent config reads must not enter the sqlite connection together."""
+
+    class EmptyCursor:
+        def fetchone(self) -> None:
+            return None
+
+    class ContentionDetectingConnection:
+        def __init__(self) -> None:
+            self._lock = threading.Lock()
+            self._active_queries = 0
+
+        def execute(self, *_args: object) -> EmptyCursor:
+            should_raise = False
+            with self._lock:
+                self._active_queries += 1
+                should_raise = self._active_queries > 1
+            try:
+                time.sleep(0.02)
+                if should_raise:
+                    raise sqlite3.InterfaceError("concurrent sqlite connection use")
+                return EmptyCursor()
+            finally:
+                with self._lock:
+                    self._active_queries -= 1
+
+        def close(self) -> None:
+            pass
+
+    original_conn = config_repo._conn
+    fake_conn = ContentionDetectingConnection()
+    config_repo._conn = fake_conn  # type: ignore[assignment]
+    original_conn.close()
+    start = threading.Barrier(8)
+
+    def read_clock_format() -> str:
+        start.wait()
+        return str(config_repo.get_app_config("viewer.clock_format", "%H:%M"))
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        values = list(executor.map(lambda _index: read_clock_format(), range(8)))
+
+    assert values == ["%H:%M"] * 8
 
 
 def test_update_existing_app_config(
