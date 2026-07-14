@@ -27,6 +27,7 @@ def mock_subprocess_run() -> Generator[MagicMock, None, None]:
     with patch("picframe.core.utils.video_frame_extractor.subprocess.run") as mock_run:
         yield mock_run
 
+
 @pytest.fixture
 def mock_image_fromarray() -> Generator[MagicMock, None, None]:
     with patch("picframe.core.utils.video_frame_extractor.Image.fromarray") as mock_fromarray:
@@ -80,10 +81,11 @@ def test_get_first_frame_as_image_success(tmp_path: Path) -> None:
     assert result is not None
     assert result.size == (10, 10)
 
+
 def test_get_first_frame_as_image_not_found() -> None:
     with patch("picframe.core.utils.video_frame_extractor.os.path.exists", return_value=False):
         result = VideoFrameExtractor.get_first_frame_as_image("test.mp4")
-    
+
     assert result is None
 
 
@@ -102,6 +104,7 @@ def test_get_first_frame_as_image_rejects_stale_legacy_sidecar(tmp_path: Path) -
 
     assert result is None
 
+
 @patch("picframe.core.utils.video_frame_extractor.Image.open")
 def test_extract_and_save_frames_success(
     mock_image_open: MagicMock,
@@ -112,10 +115,10 @@ def test_extract_and_save_frames_success(
     video_path = tmp_path / "test.mp4"
     video_path.write_bytes(b"video")
     mock_subprocess_run.return_value = MagicMock(returncode=0, stdout=b"fake_jpeg_data_1")
-    
+
     mock_img = Image.new("RGB", (1920, 1080), "black")
     mock_image_open.return_value = mock_img
-    
+
     with patch("picframe.core.utils.video_frame_extractor.os.path.exists", return_value=False):
         with patch("picframe.core.utils.video_frame_extractor._image_file_lock", create=True):
             with patch.object(Image.Image, "save") as mock_save:
@@ -130,11 +133,12 @@ def test_extract_and_save_frames_success(
                         1920,
                         1080,
                     )
-            
+
     assert result is True
     assert mock_subprocess_run.call_count == 1
     mock_final_frame.assert_called_once_with(10.0)
     assert mock_save.call_count == 2
+
 
 def test_extract_and_save_frames_already_exists() -> None:
     with patch.object(
@@ -149,7 +153,7 @@ def test_extract_and_save_frames_already_exists() -> None:
             1080,
             cache_dir="/tmp/picframe-cache",
         )
-        
+
     assert result is True
 
 
@@ -227,15 +231,18 @@ def test_cached_frame_path_uses_managed_cache_and_media_freshness(tmp_path: Path
 
 
 def test_cached_frame_path_ignores_background_for_legacy_sidecar_path() -> None:
-    assert VideoFrameExtractor.get_cached_frame_path(
-        "test.mp4",
-        1920,
-        1080,
-        False,
-        "first",
-        background=(0.2, 0.2, 0.3, 1.0),
-        matting_config=VideoFrameMattingConfig(mat_images="on"),
-    ) == "test.1.frame"
+    assert (
+        VideoFrameExtractor.get_cached_frame_path(
+            "test.mp4",
+            1920,
+            1080,
+            False,
+            "first",
+            background=(0.2, 0.2, 0.3, 1.0),
+            matting_config=VideoFrameMattingConfig(mat_images="on"),
+        )
+        == "test.1.frame"
+    )
 
 
 def test_matting_cache_signature_normalizes_mat_images_control() -> None:
@@ -253,9 +260,7 @@ def test_matting_cache_signature_normalizes_mat_images_control() -> None:
             "mat_resource_folder": "/missing-two",
         }
     )
-    disabled_zero = VideoFrameExtractor._matting_cache_signature(
-        {"mat_images": 0.0}
-    )
+    disabled_zero = VideoFrameExtractor._matting_cache_signature({"mat_images": 0.0})
     always = VideoFrameExtractor._matting_cache_signature({"mat_images": True})
     always_string = VideoFrameExtractor._matting_cache_signature({"mat_images": "on"})
 
@@ -566,8 +571,7 @@ def test_final_decoded_frame_tries_fallback_tail_windows(
     assert image is not None
     assert image.getpixel((0, 0)) == (0, 128, 1)
     seek_times = [
-        call.args[0][call.args[0].index("-ss") + 1]
-        for call in mock_subprocess_run.call_args_list
+        call.args[0][call.args[0].index("-ss") + 1] for call in mock_subprocess_run.call_args_list
     ]
     assert seek_times == ["8.000000", "5.000000"]
 
@@ -614,26 +618,73 @@ def test_final_decoded_frame_aborts_on_tail_decode_timeout(
     with pytest.raises(_FrameExtractionTimeout):
         extractor._get_final_decoded_frame_as_image(10.0)
 
+
+def test_get_frame_as_image_passes_strict_unofficial(
+    mock_subprocess_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """The single-frame ffmpeg command must allow unofficial pixel formats."""
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    mock_subprocess_run.return_value = MagicMock(returncode=0, stdout=b"fake_jpeg")
+    extractor = VideoFrameExtractor(str(video_path), 10, 10)
+
+    with patch(
+        "picframe.core.utils.video_frame_extractor.Image.open",
+        return_value=Image.new("RGB", (10, 10), "red"),
+    ):
+        extractor._get_frame_as_image(0.0)
+
+    cmd = mock_subprocess_run.call_args.args[0]
+    assert "-strict" in cmd
+    assert cmd[cmd.index("-strict") + 1] == "unofficial"
+
+
+def test_decode_tail_last_frame_passes_strict_unofficial(
+    mock_subprocess_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """The tail-decode ffmpeg command must allow unofficial pixel formats."""
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        output_pattern = Path(cmd[-1])
+        Image.new("RGB", (10, 10), "red").save(output_pattern.parent / "frame-000001.jpg")
+        return MagicMock(returncode=0, stderr=b"")
+
+    mock_subprocess_run.side_effect = fake_run
+    extractor = VideoFrameExtractor(str(video_path), 10, 10, fit_display=True)
+
+    image = extractor._decode_tail_last_frame(0.0, 2.0)
+
+    assert image is not None
+    cmd = mock_subprocess_run.call_args.args[0]
+    assert "-strict" in cmd
+    assert cmd[cmd.index("-strict") + 1] == "unofficial"
+
+
 def test_scale_frame_portrait() -> None:
     extractor = VideoFrameExtractor("test.mp4", 1920, 1080, fit_display=False)
     # Portrait image (e.g., 1080x1920)
     portrait_img = Image.new("RGB", (1080, 1920), "red")
-    
+
     scaled_img = extractor._scale_frame(portrait_img)
-    
+
     # Should be padded to 1920x1080
     assert scaled_img.size == (1920, 1080)
-    
+
     # The actual image should be scaled to fit height (1080)
     # New width = 1080 * (1080/1920) = 607.5 -> 607
     # So the center 607 pixels should be red, the rest black
-    
+
     # Check a pixel in the black pillarbox (left)
     assert scaled_img.getpixel((10, 540)) == (0, 0, 0)
     # Check a pixel in the red image (center)
     assert scaled_img.getpixel((960, 540)) == (255, 0, 0)
     # Check a pixel in the black pillarbox (right)
     assert scaled_img.getpixel((1910, 540)) == (0, 0, 0)
+
 
 def test_scale_frame_uses_configured_background_color() -> None:
     extractor = VideoFrameExtractor(
@@ -933,26 +984,28 @@ def test_transition_metadata_round_trips_with_backdrop_path(tmp_path: Path) -> N
     assert loaded.content_rect == (10, 20, 300, 200)
     assert loaded.with_backdrop_path("first.frame").backdrop_path == "first.frame"
 
+
 def test_scale_frame_landscape() -> None:
     extractor = VideoFrameExtractor("test.mp4", 1920, 1080, fit_display=False)
     # Extremely wide landscape image (e.g., 3840x1080)
     landscape_img = Image.new("RGB", (3840, 1080), "blue")
-    
+
     scaled_img = extractor._scale_frame(landscape_img)
-    
+
     # Should be padded to 1920x1080
     assert scaled_img.size == (1920, 1080)
-    
+
     # The actual image should be scaled to fit width (1920)
     # New height = 1920 / (3840/1080) = 540
     # So the center 540 pixels should be blue, the rest black
-    
+
     # Check a pixel in the black letterbox (top)
     assert scaled_img.getpixel((960, 10)) == (0, 0, 0)
     # Check a pixel in the blue image (center)
     assert scaled_img.getpixel((960, 540)) == (0, 0, 255)
     # Check a pixel in the black letterbox (bottom)
     assert scaled_img.getpixel((960, 1070)) == (0, 0, 0)
+
 
 def test_process_video_frame_scaling() -> None:
     """Test that _process_video_frame scales the image when fit_display is False."""
@@ -964,6 +1017,7 @@ def test_process_video_frame_scaling() -> None:
     # Should return a scaled frame
     assert processed is not frame
     assert processed.size == (1920, 1080)
+
 
 def test_process_video_frame_fit_display_scales_to_display() -> None:
     """Test that fit_display frame processing produces display-sized pixels."""

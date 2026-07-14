@@ -70,9 +70,7 @@ class VideoFrameMattingConfig:
             inner_mat_use_texture=VideoFrameExtractor._as_bool(
                 value("inner_mat_use_texture", False)
             ),
-            mat_resource_folder=str(
-                value("mat_resource_folder", f"{PICFRAME_DATA_TOKEN}/mat")
-            ),
+            mat_resource_folder=str(value("mat_resource_folder", f"{PICFRAME_DATA_TOKEN}/mat")),
         )
 
 
@@ -140,7 +138,7 @@ class _ProcessedVideoFrame:
 class VideoFrameExtractor:
     """
     A utility class to extract, process, and cache the first and last frames of a video.
-    
+
     This class uses FFmpeg to extract specific frames from a video file, applies
     scaling and aspect ratio corrections, and caches the results as JPEG images
     to facilitate seamless transitions in the playback engine.
@@ -402,9 +400,7 @@ class VideoFrameExtractor:
         try:
             if len(value) < 3:
                 return None
-            return tuple(
-                max(0, min(255, int(float(value[index])))) for index in range(3)
-            )
+            return tuple(max(0, min(255, int(float(value[index])))) for index in range(3))
         except (TypeError, ValueError, IndexError):
             return None
 
@@ -418,9 +414,7 @@ class VideoFrameExtractor:
         if config is None:
             return "mat:none"
 
-        matting_enabled, matting_threshold = VideoFrameExtractor._matting_control(
-            config.mat_images
-        )
+        matting_enabled, matting_threshold = VideoFrameExtractor._matting_control(config.mat_images)
         payload = {
             "matting_control": {
                 "enabled": matting_enabled,
@@ -456,10 +450,7 @@ class VideoFrameExtractor:
         if text == PICFRAME_DATA_TOKEN:
             return str(ResourcePaths.packaged_data_dir())
         if text.startswith(f"{PICFRAME_DATA_TOKEN}/"):
-            return str(
-                ResourcePaths.packaged_data_dir()
-                / text[len(PICFRAME_DATA_TOKEN) + 1:]
-            )
+            return str(ResourcePaths.packaged_data_dir() / text[len(PICFRAME_DATA_TOKEN) + 1 :])
         return os.path.expanduser(text)
 
     @staticmethod
@@ -574,11 +565,7 @@ class VideoFrameExtractor:
                     (last_image,),
                     layout_spec=first_result.layout_spec,
                 )
-                content_rect = (
-                    first_result.content_rects[0]
-                    if first_result.content_rects
-                    else None
-                )
+                content_rect = first_result.content_rects[0] if first_result.content_rects else None
                 first_frame = first_result.image.convert("RGB")
                 content_rect = content_rect or self._full_frame_rect(first_frame)
                 last_frame = last_result.image.convert("RGB")
@@ -740,9 +727,7 @@ class VideoFrameExtractor:
             return False
         if not self._metadata_required_for_cache_validation():
             return True
-        return self._metadata_matches_current_signature(
-            self._load_transition_metadata()
-        )
+        return self._metadata_matches_current_signature(self._load_transition_metadata())
 
     @staticmethod
     def _full_frame_rect(frame: Image.Image) -> tuple[int, int, int, int]:
@@ -986,12 +971,19 @@ class VideoFrameExtractor:
         try:
             cmd = [
                 "ffmpeg",
-                "-ss", str(seek_time) if seek_time else "0",
-                "-i", self.video_path,
-                "-vframes", "1",
-                "-f", "image2pipe",
-                "-vcodec", "mjpeg",
-                "-"
+                "-ss",
+                str(seek_time) if seek_time else "0",
+                "-i",
+                self.video_path,
+                "-vframes",
+                "1",
+                "-f",
+                "image2pipe",
+                "-vcodec",
+                "mjpeg",
+                "-strict",
+                "unofficial",
+                "-",
             ]
             process = subprocess.run(
                 cmd,
@@ -1000,6 +992,7 @@ class VideoFrameExtractor:
                 timeout=self.FFMPEG_FRAME_TIMEOUT_SECONDS,
             )
             import io
+
             image = Image.open(io.BytesIO(process.stdout))
             image.load()
             return image
@@ -1074,6 +1067,8 @@ class VideoFrameExtractor:
                     "0",
                     "-q:v",
                     "2",
+                    "-strict",
+                    "unofficial",
                     output_pattern,
                 ]
                 process = subprocess.run(
@@ -1228,7 +1223,7 @@ class VideoFrameExtractor:
                 video_path,
             )
             return False
-                    
+
         if last_image is None and first_image is not None:
             last_image = first_image.copy()
 
@@ -1239,7 +1234,7 @@ class VideoFrameExtractor:
                 first_image,
                 last_image,
             )
-            
+
             try:
                 with _image_file_lock:
                     first_image.save(first_path, format="JPEG")
@@ -1264,7 +1259,7 @@ class VideoFrameExtractor:
     ) -> tuple[Image.Image, Image.Image] | None:
         """
         Retrieve the first and last frames of the video as Pillow Image objects.
-        
+
         This method will attempt to load cached frames from disk (.1.frame and .2.frame).
         If they do not exist and extract_missing is true, it will extract them, save
         them to disk, and then return them.
