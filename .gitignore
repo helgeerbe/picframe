@@ -147,4 +147,5 @@ dmypy.json
 
 
 .Codexrules
-.agents
+.cline
+.clinerules
