@@ -140,6 +140,49 @@ def test_blur_edges_returns_display_sized_composite() -> None:
     assert result.size == (200, 100)
 
 
+def test_blur_edges_upscales_smaller_foreground_to_fill_display() -> None:
+    """Regression for #712: foreground must upscale when smaller than the display.
+
+    ``PIL.Image.thumbnail`` only downscales, so a source smaller than the display
+    in both dimensions was pasted at its original size, leaving blurred bars on
+    all four sides. The foreground must instead be scaled with ``ImageOps.contain``
+    so it fills the display along the limiting axis.
+    """
+    preparer = ImagePreparer(
+        (200, 100),
+        {
+            "mat_images": "off",
+            "blur_edges": True,
+            "blur_amount": 4,
+            "blur_zoom": 1.0,
+        },
+        pair_composer,
+        matter_factory=FakeMatter,
+    )
+
+    # 50x60 source: smaller than the 200x100 display in both dimensions.
+    # Solid red center with a 5px blue border. The cover-cropped background
+    # only shows the red center (the border is cropped out), while the
+    # contained foreground keeps its blue top/bottom border after upscaling.
+    source = Image.new("RGB", (50, 60), "red")
+    for x in range(50):
+        for y in (0, 1, 2, 3, 4, 55, 56, 57, 58, 59):
+            source.putpixel((x, y), (0, 0, 255))
+    for y in range(60):
+        for x in (0, 1, 2, 3, 4, 45, 46, 47, 48, 49):
+            source.putpixel((x, y), (0, 0, 255))
+
+    result = preparer.prepare_single_image(source)
+
+    assert result.size == (200, 100)
+    # Top-center and bottom-center pixels are the upscaled foreground border
+    # (blue), proving the foreground was upscaled to fill the display height.
+    # With the buggy ``thumbnail`` path these pixels were the blurred red
+    # background because the 50x60 foreground was pasted centered at y=20.
+    assert result.getpixel((100, 0)) == (0, 0, 255)
+    assert result.getpixel((100, 99)) == (0, 0, 255)
+
+
 def test_portrait_pair_matting_passes_both_images() -> None:
     matter = FakeMatter(Image.new("RGB", (30, 30), "green"))
     preparer = ImagePreparer(

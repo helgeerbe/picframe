@@ -75,9 +75,7 @@ class ImagePreparer:
             return MattingControl(enabled=True, threshold=0.01)
 
     @staticmethod
-    def aspect_difference(
-        screen_size: tuple[int, int], image_size: tuple[int, int]
-    ) -> float:
+    def aspect_difference(screen_size: tuple[int, int], image_size: tuple[int, int]) -> float:
         screen_w, screen_h = screen_size
         image_w, image_h = image_size
         if screen_w <= 0 or screen_h <= 0 or image_w <= 0 or image_h <= 0:
@@ -131,9 +129,7 @@ class ImagePreparer:
         self._blur_edges = bool(self.config_value(config, "blur_edges", False))
         self._blur_amount = max(0, int(self.config_value(config, "blur_amount", 12)))
         self._blur_zoom = max(1.0, float(self.config_value(config, "blur_zoom", 1.0)))
-        self._control = self.parse_matting_control(
-            self.config_value(config, "mat_images", 0.01)
-        )
+        self._control = self.parse_matting_control(self.config_value(config, "mat_images", 0.01))
         self._mat_type = self.config_value(config, "mat_type", None)
         self._outer_mat_color = self.normalize_color(
             self.config_value(config, "outer_mat_color", None)
@@ -141,15 +137,9 @@ class ImagePreparer:
         self._inner_mat_color = self.normalize_color(
             self.config_value(config, "inner_mat_color", None)
         )
-        self._outer_mat_border = int(
-            self.config_value(config, "outer_mat_border", 75)
-        )
-        self._inner_mat_border = int(
-            self.config_value(config, "inner_mat_border", 40)
-        )
-        self._outer_mat_use_texture = bool(
-            self.config_value(config, "outer_mat_use_texture", True)
-        )
+        self._outer_mat_border = int(self.config_value(config, "outer_mat_border", 75))
+        self._inner_mat_border = int(self.config_value(config, "inner_mat_border", 40))
+        self._outer_mat_use_texture = bool(self.config_value(config, "outer_mat_use_texture", True))
         self._inner_mat_use_texture = bool(
             self.config_value(config, "inner_mat_use_texture", False)
         )
@@ -225,8 +215,16 @@ class ImagePreparer:
             centering=(0.5, 0.5),
         )
 
-        foreground = image.copy()
-        foreground.thumbnail((display_w, display_h), resample=Image.Resampling.LANCZOS)
+        # ``Image.thumbnail`` only downscales and never upscales, so a source
+        # smaller than the display in both dimensions was pasted at its original
+        # size, leaving blurred bars on all four sides (#712). ``ImageOps.contain``
+        # scales up or down to fit within the display while preserving aspect
+        # ratio, so the foreground always fills the limiting axis.
+        foreground = ImageOps.contain(
+            image,
+            (display_w, display_h),
+            method=Image.Resampling.LANCZOS,
+        )
         x = (display_w - foreground.width) // 2
         y = (display_h - foreground.height) // 2
         background.paste(foreground, (x, y))
@@ -269,15 +267,11 @@ class ImagePreparer:
             )
         except Exception as exc:
             self._matting_unavailable = True
-            self._logger.warning(
-                "Matting resources unavailable; using unmatted image: %s", exc
-            )
+            self._logger.warning("Matting resources unavailable; using unmatted image: %s", exc)
             return None
         return self._matter
 
-    def _mat_images(
-        self, images: tuple[Image.Image, ...], fallback: Image.Image
-    ) -> Image.Image:
+    def _mat_images(self, images: tuple[Image.Image, ...], fallback: Image.Image) -> Image.Image:
         matter = self._get_matter()
         if matter is None:
             return fallback
