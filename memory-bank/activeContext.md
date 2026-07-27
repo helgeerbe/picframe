@@ -1,12 +1,12 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. The latest ticketed change is #708, which
-hardens persistent config storage against long-running service crashes caused
-by concurrent access to the shared SQLite config connection.
+The active branch is `v2-dev`. The latest ticketed change is #714, which adds
+a file-system date fallback to the playback text overlay so images without EXIF
+datetime still show a date (Paddy's suggestion from Discussion #682).
 
 ## Current Repo State
-- Branch: `v2-dev`; #708 is the latest local implementation/closeout context.
+- Branch: `v2-dev`; #714 is the latest local implementation/closeout context.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -65,6 +65,11 @@ by concurrent access to the shared SQLite config connection.
   `SQLiteConfigRepository` connection use is serialized with an `RLock`,
   matching the media repository pattern and preventing playback/control-plane
   races such as `sqlite3.InterfaceError` while reading live viewer settings.
+- Ticket #714 fixes missing date overlay for images without EXIF datetime:
+  `PlaybackEngine._generate_text_string()` now falls back to the media item's
+  `last_modified` timestamp when `exif_datetime` is absent or None, so stock
+  images and graphics-app exports still show a date. Suggested by paddywwoof in
+  Discussion #682.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.

@@ -1,6 +1,7 @@
 """
 Unit tests for the PlaybackEngine.
 """
+
 import threading
 import time
 from pathlib import Path
@@ -52,7 +53,7 @@ def mock_event_subscriber() -> MagicMock:
 def mock_playlist_manager() -> MagicMock:
     """Mock the playlist manager."""
     manager = MagicMock()
-    
+
     # Setup default media item
     media_item = MediaItem(
         id=1,
@@ -65,7 +66,7 @@ def mock_playlist_manager() -> MagicMock:
     )
     manager.get_next.return_value = media_item
     manager.get_previous.return_value = media_item
-    
+
     return manager
 
 
@@ -99,11 +100,11 @@ def test_engine_initialization(
     engine = PlaybackEngine(
         mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
-    
+
     assert engine._state == State.IDLE
     assert engine._is_running is False
     assert engine._time_delay == 10.0
-    
+
     # Verify it subscribed to commands
     mock_event_subscriber.subscribe.assert_any_call(CommandEvent, engine._handle_command)
     mock_event_subscriber.subscribe.assert_any_call(StateEvent, engine._handle_state_event)
@@ -189,26 +190,25 @@ def test_engine_start_stop(
     engine = PlaybackEngine(
         mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
-    
+
     # Mock _run_loop to return immediately so we don't block
     with patch.object(engine, "_run_loop"):
         engine.start()
-        
+
         assert engine._is_running is True
         mock_renderer.start.assert_called_once()
-        
+
         # Should have transitioned to PLAYING
         assert engine._state == State.PLAYING
-        
+
         # Should have published state event
         mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PLAYING))
-        
+
         # Should have set next transition time to 0.0 to force immediate transition in run_loop
         assert engine._next_transition_time == 0.0
-        
-        
+
         engine.stop()
-        
+
         assert engine._is_running is False
         # renderer.stop() is now called at the end of _run_loop, not in stop()
         assert engine._state == State.IDLE
@@ -444,9 +444,7 @@ def test_engine_does_not_restart_renderer_in_process_for_backend_config_update(
     engine._next_transition_time = float("inf")
 
     engine._handle_renderer_config_event(
-        RendererConfigUpdatedEvent(
-            config=RendererConfig(use_sdl2=False, use_glx=True)
-        )
+        RendererConfigUpdatedEvent(config=RendererConfig(use_sdl2=False, use_glx=True))
     )
 
     mock_renderer.requires_restart_for_config.assert_called_once()
@@ -513,9 +511,7 @@ def test_engine_refreshes_video_decode_ceiling_on_viewer_config_change(
         )
     )
 
-    mock_video_player.set_max_software_decode_resolution.assert_called_once_with(
-        "1920x1080"
-    )
+    mock_video_player.set_max_software_decode_resolution.assert_called_once_with("1920x1080")
 
 
 def test_engine_purge_does_not_rebuild_playlist_while_renderer_blocked(
@@ -553,12 +549,11 @@ def test_engine_handle_command_next(
     engine = PlaybackEngine(
         mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
-    
+
     event = CommandEvent(command=Command.NEXT)
     engine._handle_command(event)
-    
+
     mock_playlist_manager.get_next.assert_called_once()
-    
 
 
 def test_engine_handle_command_prev(
@@ -572,12 +567,11 @@ def test_engine_handle_command_prev(
     engine = PlaybackEngine(
         mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
-    
+
     event = CommandEvent(command=Command.PREV)
     engine._handle_command(event)
-    
+
     mock_playlist_manager.get_previous.assert_called_once()
-    
 
 
 def test_engine_handle_command_prev_video_uses_handoff_content_rect(
@@ -628,9 +622,12 @@ def test_engine_handle_command_prev_video_uses_handoff_content_rect(
     )
     fake_extractor.last_transition_metadata = metadata
 
-    with patch("os.path.exists", return_value=True), patch(
-        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
-        return_value=fake_extractor,
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+            return_value=fake_extractor,
+        ),
     ):
         engine._handle_command(CommandEvent(command=Command.PREV))
 
@@ -720,12 +717,15 @@ def test_engine_ignores_stale_video_transition_completion_after_fast_next(
     first_metadata = metadata_for((100, 50, 640, 360))
     second_metadata = metadata_for((200, 60, 320, 180))
 
-    with patch("os.path.exists", return_value=True), patch(
-        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
-        side_effect=[
-            extractor_for(first_metadata),
-            extractor_for(second_metadata),
-        ],
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+            side_effect=[
+                extractor_for(first_metadata),
+                extractor_for(second_metadata),
+            ],
+        ),
     ):
         engine._handle_command(CommandEvent(command=Command.NEXT))
         stale_token = engine._pending_video_transition_token
@@ -734,15 +734,11 @@ def test_engine_ignores_stale_video_transition_completion_after_fast_next(
 
     assert stale_token != current_token
 
-    engine._handle_transition_completed(
-        TransitionCompletedEvent(transition_token=stale_token)
-    )
+    engine._handle_transition_completed(TransitionCompletedEvent(transition_token=stale_token))
     mock_video_player.play.assert_not_called()
     assert engine._state == State.PREPARING_VIDEO
 
-    engine._handle_transition_completed(
-        TransitionCompletedEvent(transition_token=current_token)
-    )
+    engine._handle_transition_completed(TransitionCompletedEvent(transition_token=current_token))
 
     mock_video_player.play.assert_called_once_with(
         second_video,
@@ -767,21 +763,21 @@ def test_engine_handle_command_pause_play(
     engine = PlaybackEngine(
         mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
-    
+
     # Start in PLAYING state
     engine._state = State.PLAYING
-    
+
     # Pause
     event = CommandEvent(command=Command.PAUSE)
     engine._handle_command(event)
-    
+
     assert engine._state == State.PAUSED
     mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PAUSED))
-    
+
     # Play
     event = CommandEvent(command=Command.PLAY)
     engine._handle_command(event)
-    
+
     assert engine._state == State.PLAYING
     mock_event_publisher.publish.assert_called_with(StateEvent(state=State.PLAYING))
 
@@ -1117,10 +1113,10 @@ def test_engine_handle_command_stop(
     )
     engine._is_running = True
     engine._renderer_started = True
-    
+
     event = CommandEvent(command=Command.STOP)
     engine._handle_command(event)
-    
+
     assert engine._is_running is False
     # renderer.stop() is now called at the end of _run_loop, not in stop()
     assert engine._state == State.IDLE
@@ -1273,6 +1269,146 @@ def test_engine_formats_overlay_date_with_model_locale(
     _, date_format, locale_value = format_datetime.call_args.args
     assert date_format == "%B %d, %Y"
     assert locale_value == "de_DE.utf8"
+
+
+def test_engine_overlay_date_falls_back_to_last_modified_when_exif_missing(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """When EXIF datetime is absent, the overlay date should use last_modified (#714)."""
+    config_repo = MagicMock()
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "viewer.show_text_enabled": True,
+    }.get(key, default)
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.text_overlay_format": "date",
+        "viewer.show_text_fm": "%B %d, %Y",
+        "model.locale": "en_US.utf8",
+    }.get(key, default)
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/image.jpg",
+        media_type=MediaType.IMAGE,
+        filename="image.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1_710_000_000.0,
+        exif_datetime=None,
+    )
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    with patch(
+        "picframe.core.engine.playback.format_datetime_for_locale",
+        return_value="March 09, 2024",
+    ) as format_datetime:
+        assert engine._generate_text_string(media_item) == "March 09, 2024"
+
+    format_datetime.assert_called_once()
+    dt_arg, date_format, locale_value = format_datetime.call_args.args
+    assert date_format == "%B %d, %Y"
+    assert locale_value == "en_US.utf8"
+    # The fallback timestamp should come from last_modified, not exif_datetime.
+    import datetime as _datetime
+
+    assert dt_arg == _datetime.datetime.fromtimestamp(1_710_000_000.0)
+
+
+def test_engine_overlay_date_prefers_exif_datetime_over_last_modified(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """When both EXIF datetime and last_modified are present, EXIF wins (#714)."""
+    config_repo = MagicMock()
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "viewer.show_text_enabled": True,
+    }.get(key, default)
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.text_overlay_format": "date",
+        "viewer.show_text_fm": "%B %d, %Y",
+        "model.locale": "en_US.utf8",
+    }.get(key, default)
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/image.jpg",
+        media_type=MediaType.IMAGE,
+        filename="image.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1_000_000_000.0,
+        exif_datetime=1_710_000_000.0,
+    )
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    with patch(
+        "picframe.core.engine.playback.format_datetime_for_locale",
+        return_value="March 09, 2024",
+    ) as format_datetime:
+        assert engine._generate_text_string(media_item) == "March 09, 2024"
+
+    format_datetime.assert_called_once()
+    dt_arg, _, _ = format_datetime.call_args.args
+    import datetime as _datetime
+
+    assert dt_arg == _datetime.datetime.fromtimestamp(1_710_000_000.0)
+
+
+def test_engine_overlay_date_omitted_when_both_exif_and_last_modified_missing(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """When neither EXIF datetime nor a usable last_modified is present, no date (#714)."""
+    config_repo = MagicMock()
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "viewer.show_text_enabled": True,
+    }.get(key, default)
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.text_overlay_format": "date",
+        "viewer.show_text_fm": "%B %d, %Y",
+        "model.locale": "en_US.utf8",
+    }.get(key, default)
+    media_item = MediaItem(
+        id=1,
+        filepath="/path/to/image.jpg",
+        media_type=MediaType.IMAGE,
+        filename="image.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=0.0,
+        exif_datetime=None,
+    )
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    assert engine._generate_text_string(media_item) == ""
 
 
 def test_engine_enqueues_missing_gps_location_with_model_locale(
@@ -1490,13 +1626,13 @@ def test_engine_run_loop_exit(
     )
     engine._is_running = True
     engine._renderer_started = True
-    
+
     # Renderer is mocked to return True then False
     engine._run_loop()
-    
+
     # Should have called render_frame twice
     assert mock_renderer.render_frame.call_count == 2
-    
+
     # Should have stopped the engine
     assert engine._is_running is False
     mock_renderer.stop.assert_called_once()
@@ -1511,10 +1647,10 @@ def test_engine_trigger_next_media_video(
 ) -> None:
     """Test that video files are correctly identified and routed to the video player."""
     mock_video_player = MagicMock()
-    
+
     # Add video_extensions to config
     config["video_extensions"] = [".mp4", ".mov", ".mkv", ".avi", ".webm"]
-    
+
     engine = PlaybackEngine(
         mock_event_publisher,
         mock_event_subscriber,
@@ -1523,7 +1659,7 @@ def test_engine_trigger_next_media_video(
         config,
         video_player=mock_video_player,
     )
-    
+
     # Setup a .mov media item
     media_item = MediaItem(
         id=1,
@@ -1538,18 +1674,21 @@ def test_engine_trigger_next_media_video(
     mock_renderer.get_display_rect.return_value = (0, 0, 1920, 1080)
     media_item.duration = 10.0
 
-    with patch("os.path.exists", return_value=True), \
-         patch(
-             "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
-             return_value=(MagicMock(), MagicMock()),
-         ) as mock_get_frames:
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+            return_value=(MagicMock(), MagicMock()),
+        ) as mock_get_frames,
+    ):
         engine._trigger_next_media()
-    
+
     # Verify state changed to PREPARING_VIDEO
     assert engine._state == State.PREPARING_VIDEO
-    
+
     # Verify renderer was sent the first frame
     from picframe.core.events.dto import RenderCommand
+
     call_args = mock_renderer.execute.call_args[0][0]
     assert isinstance(call_args, RenderCommand)
     assert call_args.image_path == "/path/to/video.1.frame"
@@ -1592,9 +1731,12 @@ def test_engine_arms_pending_video_before_first_frame_transition_can_complete(
 
     mock_renderer.execute.side_effect = complete_first_frame_immediately
 
-    with patch("os.path.exists", return_value=True), patch(
-        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
-        return_value=(MagicMock(), MagicMock()),
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+            return_value=(MagicMock(), MagicMock()),
+        ),
     ):
         engine._trigger_next_media()
 
@@ -1602,9 +1744,7 @@ def test_engine_arms_pending_video_before_first_frame_transition_can_complete(
     assert isinstance(first_render_call, RenderCommand)
     assert first_render_call.render_action == RENDER_VIDEO_FIRST_FRAME
     assert engine._state == State.PREPARING_VIDEO
-    mock_video_player.play.assert_called_once_with(
-        media_item, 0, 0, 1920, 1080, False, None
-    )
+    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 1920, 1080, False, None)
 
 
 def test_engine_trigger_next_media_video_uses_cache_dir(
@@ -1640,9 +1780,12 @@ def test_engine_trigger_next_media_video_uses_cache_dir(
     mock_playlist_manager.get_next.return_value = media_item
     mock_renderer.get_display_rect.return_value = (0, 0, 1920, 1080)
 
-    with patch("os.path.exists", return_value=True), patch(
-        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
-        return_value=(MagicMock(), MagicMock()),
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+            return_value=(MagicMock(), MagicMock()),
+        ),
     ):
         engine._trigger_next_media()
 
@@ -1749,9 +1892,12 @@ def test_engine_video_handoff_uses_matted_content_rect_and_backdrop(
     )
     fake_extractor.last_transition_metadata = metadata
 
-    with patch("os.path.exists", return_value=True), patch(
-        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
-        return_value=fake_extractor,
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+            return_value=fake_extractor,
+        ),
     ):
         engine._trigger_next_media()
         engine._handle_transition_completed(TransitionCompletedEvent())
@@ -1819,9 +1965,12 @@ def test_engine_video_handoff_uses_regenerated_metadata_after_cache_miss(
 
     fake_extractor.get_first_and_last_frames.side_effect = generate_frames
 
-    with patch("os.path.exists", return_value=False), patch(
-        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
-        return_value=fake_extractor,
+    with (
+        patch("os.path.exists", return_value=False),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+            return_value=fake_extractor,
+        ),
     ):
         engine._trigger_next_media()
 
@@ -1894,9 +2043,12 @@ def test_engine_video_handoff_uses_first_frame_path_for_backdrop_metadata_withou
 
     fake_extractor.get_first_and_last_frames.side_effect = generate_frames
 
-    with patch("os.path.exists", return_value=False), patch(
-        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
-        return_value=fake_extractor,
+    with (
+        patch("os.path.exists", return_value=False),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+            return_value=fake_extractor,
+        ),
     ):
         engine._trigger_next_media()
         engine._handle_transition_completed(TransitionCompletedEvent())
@@ -1963,9 +2115,12 @@ def test_engine_video_handoff_uses_edge_content_rect_and_backdrop(
     )
     fake_extractor.last_transition_metadata = metadata
 
-    with patch("os.path.exists", return_value=True), patch(
-        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
-        return_value=fake_extractor,
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+            return_value=fake_extractor,
+        ),
     ):
         engine._trigger_next_media()
         engine._handle_transition_completed(TransitionCompletedEvent())
@@ -2024,9 +2179,7 @@ def test_engine_trigger_next_media_video_plays_directly_without_frames(
     render_cmd = mock_renderer.execute.call_args[0][0]
     assert isinstance(render_cmd, RenderCommand)
     assert render_cmd.image_path == "RESUME"
-    mock_video_player.play.assert_called_once_with(
-        media_item, 10, 20, 1920, 1080, False, None
-    )
+    mock_video_player.play.assert_called_once_with(media_item, 10, 20, 1920, 1080, False, None)
     assert engine._state == State.PLAYING
     assert engine._next_transition_time == float("inf")
 
@@ -2076,9 +2229,12 @@ def test_engine_direct_video_fallback_uses_cached_content_rect(
     fake_extractor.get_first_and_last_frames.return_value = None
     fake_extractor.last_transition_metadata = metadata
 
-    with patch("os.path.exists", return_value=True), patch(
-        "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
-        return_value=fake_extractor,
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor",
+            return_value=fake_extractor,
+        ),
     ):
         engine._trigger_next_media()
 
@@ -2210,9 +2366,7 @@ def test_engine_trigger_next_media_video_plays_directly_when_cached_frame_load_t
     render_cmd = mock_renderer.execute.call_args[0][0]
     assert isinstance(render_cmd, RenderCommand)
     assert render_cmd.image_path == "RESUME"
-    mock_video_player.play.assert_called_once_with(
-        media_item, 10, 20, 1920, 1080, False, None
-    )
+    mock_video_player.play.assert_called_once_with(media_item, 10, 20, 1920, 1080, False, None)
     assert engine._state == State.PLAYING
     assert engine._next_transition_time == float("inf")
 
@@ -2458,9 +2612,7 @@ def test_engine_video_handoff_uses_fullscreen_for_unset_geometry(
     ):
         engine._trigger_next_media()
 
-    mock_video_player.play.assert_called_once_with(
-        media_item, 0, 0, 0, 0, False, None
-    )
+    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 0, 0, False, None)
 
 
 def test_engine_video_first_frame_timeout_completes_handoff(
@@ -2588,9 +2740,7 @@ def test_engine_transition_completed_preloads_last_frame_before_video_play(
     assert preload_cmd.image_path == "/cache/video.2.frame"
     assert preload_cmd.image_obj == last_img
     assert preload_cmd.render_action == RENDER_PRELOAD_VIDEO_REVEAL
-    mock_video_player.play.assert_called_once_with(
-        media_item, 0, 0, 1920, 1080, False, None
-    )
+    mock_video_player.play.assert_called_once_with(media_item, 0, 0, 1920, 1080, False, None)
 
 
 def test_engine_first_frame_rendered_promotes_preloaded_last_frame(
@@ -2794,8 +2944,7 @@ def test_engine_playback_completed_does_not_run_hidden_video_texture_swap(
     background_swaps = [
         call_args.args[0]
         for call_args in mock_renderer.execute.call_args_list
-        if isinstance(call_args.args[0], RenderCommand)
-        and call_args.args[0].background_only
+        if isinstance(call_args.args[0], RenderCommand) and call_args.args[0].background_only
     ]
     assert background_swaps == []
     assert not hasattr(engine, "_active_video_media")
@@ -2919,29 +3068,30 @@ def test_engine_circuit_breaker(
 ) -> None:
     """Test that the circuit breaker trips after consecutive errors."""
     from picframe.core.exceptions import MediaProcessingError
-    
+
     engine = PlaybackEngine(
         mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     engine._is_running = True
     engine._state = State.PLAYING
     engine._renderer_started = True
-    
+
     # Mock renderer to raise MediaProcessingError
     mock_renderer.render_frame.side_effect = MediaProcessingError("Test error")
-    
+
     # The loop should catch the error and eventually trip the breaker.
     # We need to patch time.sleep to avoid waiting during the test
     with patch("time.sleep"):
         engine._run_loop()
-    
+
     # The breaker should have tripped after 5 errors
     assert engine._consecutive_errors == 5
     assert engine._state == State.ERROR
     assert engine._is_running is False
-    
+
     # Verify StateEvent(ERROR) was published
     mock_event_publisher.publish.assert_any_call(StateEvent(state=State.ERROR))
+
 
 def test_playback_engine_handles_media_processing_error(
     mock_event_publisher: MagicMock,
@@ -2960,31 +3110,31 @@ def test_playback_engine_handles_media_processing_error(
     """Test that PlaybackEngine catches MediaProcessingError and skips to next media."""
     from picframe.core.events.dto import State, SystemErrorEvent
     from picframe.core.exceptions import MediaProcessingError
-    
+
     # Setup mock to raise MediaProcessingError on render
     mock_renderer.execute.side_effect = MediaProcessingError("Test error")
-    
+
     # Setup playlist manager to return a media item
     media_item = MediaItem(
-        id=1, 
+        id=1,
         filepath="/path/to/image.jpg",
         filename="image.jpg",
         directory_id=1,
         media_type="image",
         file_size=1024,
-        last_modified=1234567890.0
+        last_modified=1234567890.0,
     )
     mock_playlist_manager.get_next.return_value = media_item
-    
+
     # Trigger next media
     playback_engine._trigger_next_media()
-    
+
     # Verify error was handled
     assert playback_engine._consecutive_errors == 1
     mock_event_publisher.publish.assert_any_call(
         SystemErrorEvent(message="Test error", component="PlaybackEngine")
     )
-    
+
     # Verify it skipped to next (transition time set to 0)
     assert playback_engine._next_transition_time == 0.0
     assert playback_engine._state == State.PLAYING

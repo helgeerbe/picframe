@@ -1,6 +1,7 @@
 """
 Playback Engine for orchestrating media playback and rendering.
 """
+
 import logging
 import os
 import threading
@@ -55,7 +56,7 @@ PAUSED_STATUS_TEXT = "PAUSED"
 class PlaybackEngine:
     """
     Core state machine for media playback.
-    
+
     Listens to the Event Bus for commands, requests media from the
     PlaylistManager, and sends RenderCommands to the Renderer.
     """
@@ -75,7 +76,7 @@ class PlaybackEngine:
     ) -> None:
         """
         Initialize the PlaybackEngine.
-        
+
         Args:
             event_bus: The central event bus for publishing and subscribing.
             playlist_manager: Service for retrieving media items.
@@ -94,7 +95,7 @@ class PlaybackEngine:
         self._cache_dir = cache_dir
         self._renderer_config = renderer_config
         self._renderer_asset_validator = renderer_asset_validator or (lambda _config: [])
-        
+
         self._state = State.IDLE
         self._is_running = False
         self._renderer_started = False
@@ -114,15 +115,15 @@ class PlaybackEngine:
         self._video_reveal_park_started_at = 0.0
         self._video_handoff_sequence = 0
         self._paused_from_state: State | None = None
-        
+
         # Circuit breaker state
         self._consecutive_errors = 0
         self._max_consecutive_errors = 5
-        
+
         # Subscribe to commands
         self._event_subscriber.subscribe(CommandEvent, self._handle_command)
         self._event_subscriber.subscribe(StateEvent, self._handle_state_event)
-        
+
         # Playback events are handled directly by the EventBus worker, matching the
         # stable baseline behavior.
         self._event_subscriber.subscribe(
@@ -152,7 +153,7 @@ class PlaybackEngine:
         self._is_running = True
         if self._try_start_renderer():
             self._prepare_playback_after_renderer_start()
-        
+
         # Main render loop
         self._run_loop()
 
@@ -248,8 +249,8 @@ class PlaybackEngine:
         self._is_running = False
         self._clear_pending_video_preparation()
         self._cancel_video_reveal_parking()
-        if hasattr(self, '_active_video_media'):
-            delattr(self, '_active_video_media')
+        if hasattr(self, "_active_video_media"):
+            delattr(self, "_active_video_media")
         if self._video_player:
             self._video_player.stop()
         # We don't call renderer.stop() here because it might be called
@@ -277,30 +278,27 @@ class PlaybackEngine:
                     continue
 
                 self._handle_video_first_frame_timeout(current_time)
-                if (
-                    self._state == State.PLAYING
-                    and current_time >= self._next_transition_time
-                ):
+                if self._state == State.PLAYING and current_time >= self._next_transition_time:
                     self._trigger_next_media()
-                    
+
                 # 3. Render the frame
                 if not self._renderer.render_frame():
                     self._logger.info("Renderer requested exit")
                     self._is_running = False
                     break
                 self._update_video_reveal_parking(current_time)
-                    
+
                 # Reset error counter on successful loop iteration
                 self._consecutive_errors = 0
-                
+
             except MediaProcessingError as e:
                 self._handle_media_error(e)
             except Exception as e:
                 self._handle_system_error(e)
-                
+
             # Small sleep to prevent 100% CPU usage if renderer doesn't block
             time.sleep(0.01)
-            
+
         self._logger.info("Exiting render loop, stopping renderer")
         self._renderer.stop()
 
@@ -322,7 +320,7 @@ class PlaybackEngine:
     def _update_video_reveal_parking(self, current_time: float) -> None:
         if not self._video_reveal_park_pending:
             return
-        if self._state != State.PLAYING or not hasattr(self, '_active_video_media'):
+        if self._state != State.PLAYING or not hasattr(self, "_active_video_media"):
             self._cancel_video_reveal_parking()
             return
 
@@ -354,11 +352,12 @@ class PlaybackEngine:
         ):
             self._renderer_retry_requested = True
             return
-        
+
         # If we are preparing a video, we need to handle interruptions gracefully
-        if (
-            self._state == State.PREPARING_VIDEO
-            and event.command in (Command.NEXT, Command.PREV, Command.STOP)
+        if self._state == State.PREPARING_VIDEO and event.command in (
+            Command.NEXT,
+            Command.PREV,
+            Command.STOP,
         ):
             self._logger.info(f"Interrupting video preparation with command: {event.command}")
             self._cancel_video_reveal_parking()
@@ -426,9 +425,8 @@ class PlaybackEngine:
             self._set_video_pause_overlay(False, "")
             self._change_state(State.PLAYING)
             self._next_transition_time = float("inf")
-            if (
-                paused_from_state == State.PREPARING_VIDEO
-                and getattr(self, "_active_video_uses_reveal_sandwich", False)
+            if paused_from_state == State.PREPARING_VIDEO and getattr(
+                self, "_active_video_uses_reveal_sandwich", False
             ):
                 self._start_video_reveal_parking()
             if self._video_player:
@@ -654,16 +652,14 @@ class PlaybackEngine:
         if renderer_w > 0 and renderer_h > 0:
             if configured_rect != renderer_rect:
                 self._logger.info(
-                    "Using renderer-reported video display rect %s instead of "
-                    "configured rect %s.",
+                    "Using renderer-reported video display rect %s instead of configured rect %s.",
                     renderer_rect,
                     configured_rect,
                 )
             return renderer_rect
         if configured_rect != renderer_rect:
             self._logger.info(
-                "Using configured video display rect %s because renderer reported "
-                "invalid rect %s.",
+                "Using configured video display rect %s because renderer reported invalid rect %s.",
                 configured_rect,
                 renderer_rect,
             )
@@ -992,13 +988,15 @@ class PlaybackEngine:
             else:
                 # Fallback to placeholder if playlist is empty
                 placeholder = self._playlist_manager._get_no_images_placeholder()
-                self._event_publisher.publish(CurrentMediaChangedEvent(media_item=DisplayItem.single(placeholder)))
+                self._event_publisher.publish(
+                    CurrentMediaChangedEvent(media_item=DisplayItem.single(placeholder))
+                )
 
     def _handle_delete_command(self, payload: Any = None) -> None:
         """Handle the DELETE command by moving the current file and advancing."""
         import os
         import shutil
-        
+
         current_display = self._as_display_item(self._playlist_manager.get_current())
         if not current_display or current_display.id == 0:
             self._logger.warning("No active media to delete.")
@@ -1022,12 +1020,8 @@ class PlaybackEngine:
             )
             return
 
-        items_by_id = {
-            int(item.id): item
-            for item in current_display.items
-            if item.id is not None
-        }
-            
+        items_by_id = {int(item.id): item for item in current_display.items if item.id is not None}
+
         # Determine deleted directory
         if self._config_repository:
             deleted_dir_config = self._config_repository.get_app_config(
@@ -1036,9 +1030,9 @@ class PlaybackEngine:
             )
         else:
             deleted_dir_config = self._config.get("deleted_pictures", "~/DeletedPictures")
-            
+
         deleted_dir = os.path.expanduser(deleted_dir_config)
-        
+
         moved_ids: list[int] = []
         try:
             os.makedirs(deleted_dir, exist_ok=True)
@@ -1068,10 +1062,10 @@ class PlaybackEngine:
                 return
 
             self._playlist_manager.delete_media_ids(moved_ids)
-            
+
             # Immediately transition to next media
             self._trigger_next_media()
-            
+
         except Exception as e:
             self._logger.error(f"Failed to delete current media: {e}")
 
@@ -1080,7 +1074,7 @@ class PlaybackEngine:
         self._logger.info("Executing PURGE_FILES command.")
         purged_count = self._playlist_manager.purge_missing_files()
         self._logger.info(f"Purged {purged_count} missing files from database.")
-        
+
         if self._renderer_started:
             # Rebuild playlist to ensure we don't try to play purged items.
             self._playlist_manager.build_playlist()
@@ -1203,12 +1197,10 @@ class PlaybackEngine:
             self._pending_last_frame_path = last_frame_path
             self._pending_video_transition_metadata = metadata
             self._pending_video_transition_token = transition_token
-            self._pending_video_backdrop_path = (
-                self._video_backdrop_path_for_metadata(metadata, first_frame_path)
+            self._pending_video_backdrop_path = self._video_backdrop_path_for_metadata(
+                metadata, first_frame_path
             )
-            self._pending_video_backdrop_rect = (
-                self._video_backdrop_rect_for_metadata(metadata)
-            )
+            self._pending_video_backdrop_rect = self._video_backdrop_rect_for_metadata(metadata)
             self._next_transition_time = float("inf")
             self._change_state(State.PREPARING_VIDEO)
 
@@ -1242,9 +1234,7 @@ class PlaybackEngine:
             ),
             host_backdrop_rect=self._video_backdrop_rect_for_metadata(metadata),
             content_fit=(
-                "fill"
-                if self._video_content_rect_from_metadata(metadata) is not None
-                else None
+                "fill" if self._video_content_rect_from_metadata(metadata) is not None else None
             ),
         )
         self._active_video_media = media_item
@@ -1261,11 +1251,11 @@ class PlaybackEngine:
 
         self._cancel_video_reveal_parking()
         self._clear_pending_video_preparation()
-        if hasattr(self, '_active_video_media'):
-            delattr(self, '_active_video_media')
-        if hasattr(self, '_active_video_uses_reveal_sandwich'):
-            delattr(self, '_active_video_uses_reveal_sandwich')
-            
+        if hasattr(self, "_active_video_media"):
+            delattr(self, "_active_video_media")
+        if hasattr(self, "_active_video_uses_reveal_sandwich"):
+            delattr(self, "_active_video_uses_reveal_sandwich")
+
         display_item = self._as_display_item(self._playlist_manager.get_next())
         if display_item:
             media_item = display_item.primary
@@ -1274,9 +1264,9 @@ class PlaybackEngine:
                 ", ".join(item.filepath for item in display_item.items),
             )
             self._change_state(State.TRANSITIONING)
-            
+
             overlay_config = self._build_overlay_config(display_item)
-            
+
             if self._start_video_handoff(media_item, overlay_config):
                 pass
             else:
@@ -1296,7 +1286,7 @@ class PlaybackEngine:
                     self._change_state(State.PLAYING)
                 except MediaProcessingError as e:
                     self._handle_media_error(e)
-            
+
             # Publish media changed event
             self._event_publisher.publish(CurrentMediaChangedEvent(media_item=display_item))
         else:
@@ -1304,7 +1294,7 @@ class PlaybackEngine:
 
     def _handle_transition_completed(self, event: Any) -> None:
         """Handle the completion of a visual transition."""
-        if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
+        if self._state == State.PREPARING_VIDEO and hasattr(self, "_pending_video_media"):
             event_token = getattr(event, "transition_token", None)
             pending_token = getattr(self, "_pending_video_transition_token", None)
             if (
@@ -1352,15 +1342,13 @@ class PlaybackEngine:
         """Give fallback decoder startup a longer first-frame window."""
         if (
             self._state != State.PREPARING_VIDEO
-            or not hasattr(self, '_pending_video_media')
+            or not hasattr(self, "_pending_video_media")
             or getattr(event, "warning_type", None) != "software_fallback"
         ):
             return
 
-        current_deadline = getattr(self, '_video_first_frame_deadline', None)
-        fallback_deadline = (
-            time.time() + self._video_software_fallback_first_frame_timeout
-        )
+        current_deadline = getattr(self, "_video_first_frame_deadline", None)
+        fallback_deadline = time.time() + self._video_software_fallback_first_frame_timeout
         self._video_first_frame_deadline = max(
             current_deadline or 0.0,
             fallback_deadline,
@@ -1396,9 +1384,7 @@ class PlaybackEngine:
         if isinstance(cache_valid, bool):
             frames_missing = not cache_valid
         else:
-            frames_missing = not (
-                os.path.exists(first_path) and os.path.exists(last_path)
-            )
+            frames_missing = not (os.path.exists(first_path) and os.path.exists(last_path))
         timeout_seconds = (
             VIDEO_TRANSITION_FRAME_GENERATE_TIMEOUT_SECONDS
             if frames_missing
@@ -1441,7 +1427,7 @@ class PlaybackEngine:
 
     def _handle_video_first_frame_timeout(self, current_time: float) -> None:
         """Avoid getting stuck if GStreamer does not report first-frame readiness."""
-        deadline = getattr(self, '_video_first_frame_deadline', None)
+        deadline = getattr(self, "_video_first_frame_deadline", None)
         if (
             self._state == State.PREPARING_VIDEO
             and deadline is not None
@@ -1459,10 +1445,9 @@ class PlaybackEngine:
             and self._paused_from_state == State.PREPARING_VIDEO
             and self._has_pending_video_playback_started()
         )
-        if (
-            self._state == State.PREPARING_VIDEO
-            or handoff_paused
-        ) and hasattr(self, '_pending_video_media'):
+        if (self._state == State.PREPARING_VIDEO or handoff_paused) and hasattr(
+            self, "_pending_video_media"
+        ):
             self._logger.info("GStreamer first frame rendered, fading out pi3d.")
             media_item = self._pending_video_media
             self._active_video_media = media_item
@@ -1476,8 +1461,8 @@ class PlaybackEngine:
 
     def _preload_pending_video_reveal_frame(self) -> None:
         """Preload the cached last frame before the GTK video window covers pi3d."""
-        last_img = getattr(self, '_pending_last_img', None)
-        last_frame_path = getattr(self, '_pending_last_frame_path', None)
+        last_img = getattr(self, "_pending_last_img", None)
+        last_frame_path = getattr(self, "_pending_last_frame_path", None)
         if last_img is None or not last_frame_path:
             return
 
@@ -1492,7 +1477,7 @@ class PlaybackEngine:
 
     def _promote_pending_video_reveal_frame(self) -> bool:
         """Promote the preloaded last frame after GStreamer is visibly rendering."""
-        last_frame_path = getattr(self, '_pending_last_frame_path', "") or ""
+        last_frame_path = getattr(self, "_pending_last_frame_path", "") or ""
         if not last_frame_path:
             return False
 
@@ -1509,16 +1494,16 @@ class PlaybackEngine:
         """Handle the completion of video playback."""
         self._logger.info("Video playback completed, scheduling transition to next media.")
         self._cancel_video_reveal_parking()
-        if self._state == State.PREPARING_VIDEO and hasattr(self, '_pending_video_media'):
+        if self._state == State.PREPARING_VIDEO and hasattr(self, "_pending_video_media"):
             self._logger.warning("Video playback completed before first-frame handoff.")
             self._clear_pending_video_preparation()
             self._change_state(State.PLAYING)
 
-        uses_reveal_sandwich = getattr(self, '_active_video_uses_reveal_sandwich', False)
-        if hasattr(self, '_active_video_media'):
-            delattr(self, '_active_video_media')
-        if hasattr(self, '_active_video_uses_reveal_sandwich'):
-            delattr(self, '_active_video_uses_reveal_sandwich')
+        uses_reveal_sandwich = getattr(self, "_active_video_uses_reveal_sandwich", False)
+        if hasattr(self, "_active_video_media"):
+            delattr(self, "_active_video_media")
+        if hasattr(self, "_active_video_uses_reveal_sandwich"):
+            delattr(self, "_active_video_uses_reveal_sandwich")
 
         if uses_reveal_sandwich:
             self._renderer.execute(
@@ -1540,11 +1525,11 @@ class PlaybackEngine:
         """Fetch the previous media item and send a render command."""
         self._cancel_video_reveal_parking()
         self._clear_pending_video_preparation()
-        if hasattr(self, '_active_video_media'):
-            delattr(self, '_active_video_media')
-        if hasattr(self, '_active_video_uses_reveal_sandwich'):
-            delattr(self, '_active_video_uses_reveal_sandwich')
-            
+        if hasattr(self, "_active_video_media"):
+            delattr(self, "_active_video_media")
+        if hasattr(self, "_active_video_uses_reveal_sandwich"):
+            delattr(self, "_active_video_uses_reveal_sandwich")
+
         display_item = self._as_display_item(self._playlist_manager.get_previous())
         if display_item:
             media_item = display_item.primary
@@ -1553,9 +1538,9 @@ class PlaybackEngine:
                 ", ".join(item.filepath for item in display_item.items),
             )
             self._change_state(State.TRANSITIONING)
-            
+
             overlay_config = self._build_overlay_config(display_item)
-            
+
             if self._start_video_handoff(media_item, overlay_config):
                 pass
             else:
@@ -1575,7 +1560,7 @@ class PlaybackEngine:
                     self._handle_media_error(e)
                 else:
                     self._change_state(State.PLAYING)
-            
+
             # Publish media changed event
             self._event_publisher.publish(CurrentMediaChangedEvent(media_item=display_item))
         else:
@@ -1584,16 +1569,16 @@ class PlaybackEngine:
     def _clear_pending_video_preparation(self) -> None:
         """Clear cached first-frame handoff state for an unstarted video."""
         for attr in (
-            '_pending_video_media',
-            '_pending_first_frame_path',
-            '_pending_last_img',
-            '_pending_last_frame_path',
-            '_video_first_frame_deadline',
-            '_pending_video_transition_metadata',
-            '_pending_video_transition_token',
-            '_pending_video_backdrop_path',
-            '_pending_video_backdrop_rect',
-            '_pending_video_playback_started',
+            "_pending_video_media",
+            "_pending_first_frame_path",
+            "_pending_last_img",
+            "_pending_last_frame_path",
+            "_video_first_frame_deadline",
+            "_pending_video_transition_metadata",
+            "_pending_video_transition_token",
+            "_pending_video_backdrop_path",
+            "_pending_video_backdrop_rect",
+            "_pending_video_playback_started",
         ):
             if hasattr(self, attr):
                 delattr(self, attr)
@@ -1603,7 +1588,7 @@ class PlaybackEngine:
         # If it's the fallback image, don't show any text
         if media_item.filepath.endswith("no_pictures.jpg"):
             return ""
-            
+
         # Fetch live configuration from the repository, or use the initial config.
         if self._config_repository:
             show_text_enabled = self._config_repository.get_app_config_bool(
@@ -1628,33 +1613,40 @@ class PlaybackEngine:
             show_text_config = self._text_overlay_format()
             show_text_fm = str(self._config.get("show_text_fm", "%b %d, %Y"))
             model_locale = str(self._config.get("locale", "en_US.utf8"))
-            
+
         if not show_text_enabled or not self._text_overlay_enabled(show_text_config):
             return ""
-            
+
         parts = []
-        
+
         if "title" in show_text_config and getattr(media_item, "title", None):
             parts.append(media_item.title)
-            
+
         if "caption" in show_text_config and getattr(media_item, "caption", None):
             parts.append(media_item.caption)
-            
+
         if "name" in show_text_config and getattr(media_item, "filename", None):
             parts.append(media_item.filename)
-            
-        if "date" in show_text_config and getattr(media_item, "exif_datetime", None):
-            import datetime
-            try:
-                dt = datetime.datetime.fromtimestamp(media_item.exif_datetime)
-                parts.append(format_datetime_for_locale(dt, show_text_fm, model_locale))
-            except Exception:
-                pass
-                
+
+        if "date" in show_text_config:
+            # Prefer EXIF datetime; fall back to file last_modified (#714).
+            date_timestamp = getattr(media_item, "exif_datetime", None)
+            if not date_timestamp:
+                date_timestamp = getattr(media_item, "last_modified", None)
+            if date_timestamp:
+                import datetime
+
+                try:
+                    dt = datetime.datetime.fromtimestamp(date_timestamp)
+                    parts.append(format_datetime_for_locale(dt, show_text_fm, model_locale))
+                except Exception:
+                    pass
+
         if "folder" in show_text_config and getattr(media_item, "filepath", None):
             import os
+
             parts.append(os.path.basename(os.path.dirname(media_item.filepath)))
-            
+
         if "location" in show_text_config:
             location = getattr(media_item, "location", None)
             if (
@@ -1679,7 +1671,7 @@ class PlaybackEngine:
                         media_item.longitude,
                         language=location_language,
                     )
-            
+
             if location:
                 if self._config_repository:
                     raw_suppress_list = self._config_repository.get_app_config(
@@ -1698,18 +1690,18 @@ class PlaybackEngine:
                 location = apply_geo_suppress_list(location, suppress_list)
                 if location:
                     parts.append(location)
-            
+
         return " - ".join(parts)
 
     def _handle_media_error(self, error: Exception) -> None:
         """Handle a recoverable media processing error."""
         self._logger.error(f"Media processing error: {error}", exc_info=True)
         self._consecutive_errors += 1
-        
+
         self._event_publisher.publish(
             SystemErrorEvent(message=str(error), component="PlaybackEngine")
         )
-        
+
         if self._consecutive_errors >= self._max_consecutive_errors:
             self._logger.critical("Circuit breaker tripped: Too many consecutive media errors.")
             self._change_state(State.ERROR)

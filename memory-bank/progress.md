@@ -68,6 +68,10 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   migrations, reads, writes, directory operations, and close, preventing
   long-running playback/API races that can surface as `sqlite3.InterfaceError`
   during live config reads.
+- Ticket #714 overlay date fallback fix: `PlaybackEngine._generate_text_string()`
+  now uses the media item's `last_modified` timestamp when `exif_datetime` is
+  missing or None, so images without EXIF dates still display a date in the text
+  overlay. Raised by paddywwoof in Discussion #682.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
@@ -108,4 +112,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `src/picframe/core/repositories/sqlite_config.py` and
   `test/core/repositories/test_sqlite_config.py` passed; `git diff --check`
   passed.
+- Latest #714 verification: targeted
+  `.venv/bin/python -m pytest test/core/engine/test_playback.py` passed; ruff
+  format/check and mypy on touched files passed; `git diff --check` passed.
 - Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.

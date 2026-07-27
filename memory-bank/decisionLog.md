@@ -56,6 +56,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - `SystemErrorEvent` is the canonical poison-pill event. Subscriber callback failures are logged and converted to one `SystemErrorEvent`; failures while handling `SystemErrorEvent` are logged without recursive error publication.
 - Keep Home Assistant MQTT as a supported next-gen integration, but implement it as an infrastructure adapter over event bus/config/state-query ports. MQTT exposes reboot/shutdown and targeted delete, but not purge DB or clear-cache.
 - Remove legacy controller/model/start/viewer/HTTP/peripheral/VLC runtime modules from next-gen after import scans; keep reusable helpers only where next-gen still imports them.
+- Text overlay date falls back to the media item's `last_modified` filesystem timestamp when EXIF datetime is missing or None, so images without embedded dates (e.g., stock photos, app exports) still show a date (#714, from Discussion #682).
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.
