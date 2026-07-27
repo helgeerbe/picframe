@@ -1842,45 +1842,52 @@ http:
 
 
 def test_api_import_yaml_example_file() -> None:
+    # Inlined legacy-format YAML fixture (mirrors the former
+    # src/picframe/config/configuration_example.yaml). The on-disk file was
+    # obsolete in next-gen (default_config.yaml is the seed) and is no longer
+    # shipped; this fixture exercises the legacy import path with a compact,
+    # representative subset of legacy keys.
     mock_repo = MagicMock()
     mock_publisher = MagicMock()
-    
+
     app = create_app(
         cors_allowed_origins=["*"],
         config_repository=mock_repo,
         event_publisher=mock_publisher,
     )
     client = ASGITestClient(app)
-    
-    example_yaml_path = (
-        Path(__file__).parent.parent.parent
-        / "src"
-        / "picframe"
-        / "config"
-        / "configuration_example.yaml"
+
+    yaml_content = """
+viewer:
+  blur_amount: 12
+  display_w: null
+  display_h: null
+model:
+  pic_dir: "~/Pictures"
+http:
+  password: null
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("configuration_example.yaml", yaml_content, "application/x-yaml")},
     )
-    
-    with open(example_yaml_path, "rb") as f:
-        response = client.post(
-            "/api/config/import-yaml",
-            files={"file": ("configuration_example.yaml", f, "application/x-yaml")}
-        )
-        
+
     assert response.status_code == 200
     assert response.json() == {
         "status": "success",
         "message": "Legacy YAML configuration imported successfully",
     }
-    
+
     # Verify repository was updated
     assert mock_repo.set_app_config.call_count > 0
-    
+
     # Verify event was published
     mock_publisher.publish.assert_called_once()
     event = mock_publisher.publish.call_args[0][0]
     assert event.command.name == "SET_CONFIG"
-    
-    # Verify some specific fields from the example file
+
+    # Verify some specific fields from the example fixture
     assert event.payload["viewer"]["blur_amount"] == 12
     assert event.payload["viewer"]["display_w"] is None
     assert event.payload["viewer"]["display_h"] is None

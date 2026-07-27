@@ -80,8 +80,8 @@ datetime still show a date (Paddy's suggestion from Discussion #682).
   the source is `clock_txt`, the OverlayConfig DTO carries both fields, legacy
   `configuration.yaml` import maps `viewer.clock_extra_source`/`clock_extra_text`
   and `viewer.clock_extra_text`, `playback.py` propagates the source/text into
-  renderer config, `configuration_example.yaml` documents the new keys, and the
-  frontend `configSchema.json` exposes them as advanced viewer settings.
+  renderer config, and the frontend `configSchema.json` exposes them as
+  advanced viewer settings.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.

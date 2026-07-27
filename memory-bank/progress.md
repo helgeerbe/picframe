@@ -75,8 +75,8 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Ticket #716 clock extra text support: `viewer.clock_extra_source`
   (off/clock_txt/ui_text) and `viewer.clock_extra_text` are added to the Viewer
   Pydantic model, OverlayConfig DTO, renderer config propagation, clock renderer
-  implementation, legacy YAML import mapping, `default_config.yaml`,
-  `configuration_example.yaml`, and frontend `configSchema.json`. The clock
+  implementation, legacy YAML import mapping, `default_config.yaml`, and
+  frontend `configSchema.json`. The clock
   renderer reads `/dev/shm/clock.txt` when the source is `clock_txt` and shows
   the UI-configured string when the source is `ui_text`; `off` shows no extra
   line. Tests cover DTO propagation, renderer behavior for all three sources,
