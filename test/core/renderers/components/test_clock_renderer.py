@@ -1,8 +1,10 @@
-import pytest
 from unittest.mock import MagicMock, patch
-from picframe.core.renderers.components.clock_renderer import ClockRenderer
+
+import pytest
+
 from picframe.core.events.dto import OverlayConfig
-import time
+from picframe.core.renderers.components.clock_renderer import ClockRenderer
+
 
 @pytest.fixture
 def mock_display():
@@ -11,20 +13,28 @@ def mock_display():
     display.height = 1080
     return display
 
+
 @pytest.fixture
 def mock_shader():
     return MagicMock()
 
+
 @pytest.fixture
 def clock_renderer(mock_display, mock_shader):
-    with patch('picframe.core.renderers.components.clock_renderer.pi3d.FixedString') as mock_fixed_string:
+    with patch(
+        "picframe.core.renderers.components.clock_renderer.pi3d.FixedString"
+    ) as mock_fixed_string:
         mock_fixed_string.return_value.sprite = MagicMock()
-        return ClockRenderer(mock_display, mock_shader, "src/picframe/data/fonts/NotoSans-Regular.ttf")
+        return ClockRenderer(
+            mock_display, mock_shader, "src/picframe/data/fonts/NotoSans-Regular.ttf"
+        )
+
 
 def test_clock_renderer_initialization(clock_renderer, mock_display):
     assert clock_renderer._display == mock_display
     assert clock_renderer._clock_block is None
     assert clock_renderer._current_time_str == ""
+
 
 def test_clock_renderer_update_config_show_clock(clock_renderer):
     config = OverlayConfig(show_clock=True, clock_format="%H:%M")
@@ -32,35 +42,38 @@ def test_clock_renderer_update_config_show_clock(clock_renderer):
     # It doesn't create the block until draw() is called
     assert clock_renderer._clock_block is None
 
+
 def test_clock_renderer_update_config_hide_clock(clock_renderer):
     config = OverlayConfig(show_clock=False, clock_format="%H:%M")
     clock_renderer.update_config(config)
     assert clock_renderer._clock_block is None
 
+
 def test_clock_renderer_draw_updates_time(clock_renderer):
     config = OverlayConfig(show_clock=True, clock_format="%H:%M")
     clock_renderer.update_config(config)
-    
+
     # Mock time to return a specific string
-    with patch('picframe.core.renderers.components.clock_renderer.datetime') as mock_datetime:
+    with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
         mock_datetime.now.return_value.strftime.return_value = "12:00"
         # Mock the draw method to avoid pi3d Camera issues
-        with patch('pi3d.Sprite.draw') as mock_draw:
+        with patch("pi3d.Sprite.draw") as mock_draw:
             clock_renderer.draw()
             assert clock_renderer._current_time_str == "12:00"
             # The sprite is created inside draw, so we check the mocked class method
             mock_draw.assert_called_once()
 
+
 def test_clock_renderer_draw_no_update_if_time_same(clock_renderer):
     config = OverlayConfig(show_clock=True, clock_format="%H:%M")
     clock_renderer.update_config(config)
-    
-    with patch('picframe.core.renderers.components.clock_renderer.datetime') as mock_datetime:
+
+    with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
         mock_datetime.now.return_value.strftime.return_value = "12:00"
-        with patch('pi3d.Sprite.draw') as mock_draw:
+        with patch("pi3d.Sprite.draw") as mock_draw:
             clock_renderer.draw()
             mock_draw.reset_mock()
-            
+
             # Draw again with same time
             clock_renderer.draw()
             # It should still draw, but not recreate the sprite
@@ -68,7 +81,9 @@ def test_clock_renderer_draw_no_update_if_time_same(clock_renderer):
 
 
 def test_clock_renderer_applies_overlay_style(mock_display, mock_shader):
-    with patch('picframe.core.renderers.components.clock_renderer.pi3d.FixedString') as mock_fixed_string:
+    with patch(
+        "picframe.core.renderers.components.clock_renderer.pi3d.FixedString"
+    ) as mock_fixed_string:
         mock_fixed_string.return_value.sprite = MagicMock()
         renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
         renderer.update_config(
@@ -83,7 +98,7 @@ def test_clock_renderer_applies_overlay_style(mock_display, mock_shader):
                 clock_hgt_offset_pct=10,
             )
         )
-        with patch('picframe.core.renderers.components.clock_renderer.datetime') as mock_datetime:
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
             mock_datetime.now.return_value.strftime.return_value = "12:00"
             renderer.draw()
 
@@ -95,7 +110,9 @@ def test_clock_renderer_applies_overlay_style(mock_display, mock_shader):
 
 
 def test_clock_renderer_positions_clock_inside_render_rect(mock_display, mock_shader):
-    with patch('picframe.core.renderers.components.clock_renderer.pi3d.FixedString') as mock_fixed_string:
+    with patch(
+        "picframe.core.renderers.components.clock_renderer.pi3d.FixedString"
+    ) as mock_fixed_string:
         sprite = MagicMock()
         sprite.height = 60
         mock_fixed_string.return_value.sprite = sprite
@@ -113,7 +130,7 @@ def test_clock_renderer_positions_clock_inside_render_rect(mock_display, mock_sh
                 clock_hgt_offset_pct=10,
             )
         )
-        with patch('picframe.core.renderers.components.clock_renderer.datetime') as mock_datetime:
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
             mock_datetime.now.return_value.strftime.return_value = "12:00"
             renderer.draw()
 
@@ -123,11 +140,13 @@ def test_clock_renderer_positions_clock_inside_render_rect(mock_display, mock_sh
 
 
 def test_clock_renderer_rebuilds_when_style_changes_at_same_time(mock_display, mock_shader):
-    with patch('picframe.core.renderers.components.clock_renderer.pi3d.FixedString') as mock_fixed_string:
+    with patch(
+        "picframe.core.renderers.components.clock_renderer.pi3d.FixedString"
+    ) as mock_fixed_string:
         mock_fixed_string.return_value.sprite = MagicMock()
         renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
 
-        with patch('picframe.core.renderers.components.clock_renderer.datetime') as mock_datetime:
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
             mock_datetime.now.return_value.strftime.return_value = "12:00"
 
             renderer.update_config(OverlayConfig(show_clock=True, clock_text_sz=72))
@@ -139,3 +158,67 @@ def test_clock_renderer_rebuilds_when_style_changes_at_same_time(mock_display, m
     assert mock_fixed_string.call_count == 2
     assert mock_fixed_string.call_args_list[0].kwargs["font_size"] == 72
     assert mock_fixed_string.call_args_list[1].kwargs["font_size"] == 96
+
+
+def test_clock_renderer_draw_appends_extra_text(mock_display, mock_shader):
+    with patch(
+        "picframe.core.renderers.components.clock_renderer.pi3d.FixedString"
+    ) as mock_fixed_string:
+        mock_fixed_string.return_value.sprite = MagicMock()
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_extra_text="Hello World",
+            )
+        )
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "12:00"
+            with patch("pi3d.Sprite.draw"):
+                renderer.draw()
+
+    assert renderer._current_extra_text == "Hello World"
+    assert mock_fixed_string.call_args.args[1] == "12:00\nHello World"
+
+
+def test_clock_renderer_draw_without_extra_text(mock_display, mock_shader):
+    with patch(
+        "picframe.core.renderers.components.clock_renderer.pi3d.FixedString"
+    ) as mock_fixed_string:
+        mock_fixed_string.return_value.sprite = MagicMock()
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_extra_text="",
+            )
+        )
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "12:00"
+            with patch("pi3d.Sprite.draw"):
+                renderer.draw()
+
+    assert renderer._current_extra_text == ""
+    assert mock_fixed_string.call_args.args[1] == "12:00"
+
+
+def test_clock_renderer_has_changed_when_extra_text_changes(mock_display, mock_shader):
+    with patch("picframe.core.renderers.components.clock_renderer.pi3d.FixedString"):
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(show_clock=True, clock_format="%H:%M", clock_extra_text="")
+        )
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "12:00"
+            with patch("pi3d.Sprite.draw"):
+                renderer.draw()
+            assert renderer.has_changed() is False
+
+        renderer.update_config(
+            OverlayConfig(show_clock=True, clock_format="%H:%M", clock_extra_text="Updated")
+        )
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "12:00"
+            assert renderer.has_changed() is True

@@ -148,6 +148,17 @@
     "clock_format": {
       "type": "string"
     },
+    "clock_extra_source": {
+      "type": "select",
+      "options": [
+        "off",
+        "clock_txt",
+        "ui_text"
+      ]
+    },
+    "clock_extra_text": {
+      "type": "string"
+    },
     "clock_opacity": {
       "type": "float"
     },

@@ -4,9 +4,9 @@ Clock Renderer Component.
 Responsible for rendering the live clock overlay using pi3d.
 """
 import logging
-import time
 from datetime import datetime
 from typing import Any
+
 import pi3d
 
 from picframe.core.events.dto import OverlayConfig
@@ -29,6 +29,7 @@ class ClockRenderer:
         self._render_rect = render_rect
         self._clock_block: pi3d.FixedString | None = None
         self._current_time_str = ""
+        self._current_extra_text = ""
         self._config: OverlayConfig | None = None
         self._brightness = 1.0
         self._visual_signature: tuple[Any, ...] | None = None
@@ -52,6 +53,7 @@ class ClockRenderer:
         if visual_signature != self._visual_signature:
             self._clock_block = None
             self._current_time_str = ""
+            self._current_extra_text = ""
             self._visual_signature = visual_signature
 
         self._config = config
@@ -59,6 +61,7 @@ class ClockRenderer:
         if not config.show_clock:
             self._clock_block = None
             self._current_time_str = ""
+            self._current_extra_text = ""
 
     def _build_visual_signature(self, config: OverlayConfig, brightness: float) -> tuple[Any, ...]:
         return (
@@ -78,13 +81,20 @@ class ClockRenderer:
         """Check if the clock string needs to be updated based on the current time."""
         if not self._config or not self._config.show_clock:
             return False
-            
+
         try:
             now_str = datetime.now().strftime(self._config.clock_format)
         except Exception:
             now_str = datetime.now().strftime("%H:%M")
-            
-        return now_str != self._current_time_str
+
+        extra_text = self._current_extra_text_from_config()
+        return now_str != self._current_time_str or extra_text != self._current_extra_text
+
+    def _current_extra_text_from_config(self) -> str:
+        """Return the cached extra text from the current config, stripped."""
+        if not self._config:
+            return ""
+        return str(getattr(self._config, "clock_extra_text", "") or "").strip()
 
     def set_alpha(self, alpha: float) -> None:
         """Set the alpha transparency of the clock."""
@@ -102,8 +112,15 @@ class ClockRenderer:
             self._logger.error(f"Invalid clock format '{self._config.clock_format}': {e}")
             now_str = datetime.now().strftime("%H:%M")
         
-        if now_str != self._current_time_str or self._clock_block is None:
+        extra_text = self._current_extra_text_from_config()
+        if (
+            now_str != self._current_time_str
+            or extra_text != self._current_extra_text
+            or self._clock_block is None
+        ):
             self._current_time_str = now_str
+            self._current_extra_text = extra_text
+            display_text = f"{now_str}\n{extra_text}" if extra_text else now_str
 
             font_size = max(8, int(self._config.clock_text_sz))
             _, _, render_w, render_h = self._render_bounds()
@@ -120,7 +137,7 @@ class ClockRenderer:
             try:
                 self._clock_block = pi3d.FixedString(
                     self._font_file,
-                    self._current_time_str,
+                    display_text,
                     font_size=font_size,
                     shadow_radius=3,
                     shader=self._shader,

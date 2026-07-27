@@ -233,6 +233,9 @@
     "clock12Hour": "12-hour",
     "clockCustom": "Custom",
     "clockCustomFormat": "Custom clock format",
+    "clockExtraSourceOff": "Off",
+    "clockExtraSourceClockTxt": "From clock.txt file",
+    "clockExtraSourceUiText": "From text field",
     "auth": {
       "title": "Access protection",
       "scope": "Password protection",

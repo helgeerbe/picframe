@@ -903,6 +903,17 @@ def _normalize_legacy_yaml_config(yaml_data: dict[str, Any]) -> dict[str, Any]:
         if "display_power" in viewer:
             viewer["display_power"] = str(viewer["display_power"])
 
+        # Legacy configs predate clock_extra_source. When the clock is enabled,
+        # preserve the legacy behavior of reading extra text from /dev/shm/clock.txt.
+        if "clock_extra_source" not in viewer:
+            show_clock = viewer.get("show_clock")
+            if isinstance(show_clock, bool) and show_clock:
+                viewer["clock_extra_source"] = "clock_txt"
+            elif isinstance(show_clock, str) and show_clock.strip().lower() in {
+                "1", "true", "yes", "on", "t", "y"
+            }:
+                viewer["clock_extra_source"] = "clock_txt"
+
     http = yaml_data.get("http")
     if isinstance(http, dict):
         if "password" in http and http["password"] is None:

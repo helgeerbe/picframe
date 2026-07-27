@@ -72,6 +72,15 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   now uses the media item's `last_modified` timestamp when `exif_datetime` is
   missing or None, so images without EXIF dates still display a date in the text
   overlay. Raised by paddywwoof in Discussion #682.
+- Ticket #716 clock extra text support: `viewer.clock_extra_source`
+  (off/clock_txt/ui_text) and `viewer.clock_extra_text` are added to the Viewer
+  Pydantic model, OverlayConfig DTO, renderer config propagation, clock renderer
+  implementation, legacy YAML import mapping, `default_config.yaml`,
+  `configuration_example.yaml`, and frontend `configSchema.json`. The clock
+  renderer reads `/dev/shm/clock.txt` when the source is `clock_txt` and shows
+  the UI-configured string when the source is `ui_text`; `off` shows no extra
+  line. Tests cover DTO propagation, renderer behavior for all three sources,
+  legacy import mapping, and frontend schema presence.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
@@ -115,4 +124,10 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Latest #714 verification: targeted
   `.venv/bin/python -m pytest test/core/engine/test_playback.py` passed; ruff
   format/check and mypy on touched files passed; `git diff --check` passed.
+- Latest #716 verification: full `.venv/bin/python -m pytest` passed with 721
+  tests and 1 GI deprecation warning; targeted
+  `.venv/bin/python -m pytest test/core/renderers/components/test_clock_renderer.py
+  test/core/events/test_dto.py test/core/engine/test_playback.py test/api/test_app.py`
+  passed; ruff format/check passed after import ordering fix; `git diff --check`
+  passed.
 - Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.

@@ -51,6 +51,9 @@ viewer:
   clock_top_bottom: "T"                   # default="T" ("T", "B"), whether to display clock at top or bottom of screen
   clock_wdt_offset_pct: 3.0               # default=3.0 (1.0-10.0), used to calclate pixels between clock text and side of screen
   clock_hgt_offset_pct: 3.0               # default=3.0 (1.0-10.0), used to calclate pixels between clock text and top/bottom of screen
+  clock_extra_source: "off"               # default="off", choices={"off", "clock_txt", "ui_text"}, source of extra text shown below the clock
+                                         # off => no extra text, clock_txt => read /dev/shm/clock.txt, ui_text => use clock_extra_text
+  clock_extra_text: ""                    # default="", extra text shown below the clock when clock_extra_source="ui_text"
                                           # If text is found in the ramdisk /dev/shm/clock.txt then it will be displayed under the time
 
   menu_text_sz: 40                        # default=40, menu character size

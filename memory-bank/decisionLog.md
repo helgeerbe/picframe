@@ -57,6 +57,10 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Keep Home Assistant MQTT as a supported next-gen integration, but implement it as an infrastructure adapter over event bus/config/state-query ports. MQTT exposes reboot/shutdown and targeted delete, but not purge DB or clear-cache.
 - Remove legacy controller/model/start/viewer/HTTP/peripheral/VLC runtime modules from next-gen after import scans; keep reusable helpers only where next-gen still imports them.
 - Text overlay date falls back to the media item's `last_modified` filesystem timestamp when EXIF datetime is missing or None, so images without embedded dates (e.g., stock photos, app exports) still show a date (#714, from Discussion #682).
+- Clock overlay extra text is source-driven by `viewer.clock_extra_source`:
+  `off` shows nothing, `clock_txt` reads `/dev/shm/clock.txt` on each clock
+  refresh, and `ui_text` shows `viewer.clock_extra_text`. The extra line shares
+  the clock font/size/opacity/justification and only draws when non-empty (#716).
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

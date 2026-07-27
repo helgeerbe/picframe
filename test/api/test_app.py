@@ -1726,6 +1726,86 @@ viewer:
     assert "show_text" not in event.payload["viewer"]
 
 
+def test_api_import_yaml_maps_legacy_show_clock_to_clock_extra_source() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_clock: true
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["clock_extra_source"] == "clock_txt"
+
+
+def test_api_import_yaml_preserves_explicit_clock_extra_source() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_clock: true
+  clock_extra_source: "off"
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["clock_extra_source"] == "off"
+
+
+def test_api_import_yaml_no_clock_extra_source_when_clock_disabled() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_clock: false
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    # clock_extra_source should NOT be injected when clock is off
+    assert "clock_extra_source" not in event.payload["viewer"]
+
+
 def test_api_import_yaml_imports_mqtt_port_and_ignores_startup_only_http_keys() -> None:
     mock_repo = MagicMock()
     mock_publisher = MagicMock()

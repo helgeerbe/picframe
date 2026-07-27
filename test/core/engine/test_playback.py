@@ -7,7 +7,7 @@ import time
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -2312,7 +2312,7 @@ def test_engine_trigger_next_media_video_plays_directly_when_cached_frame_load_t
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, Any],
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     mock_video_player = MagicMock()
     engine = PlaybackEngine(
@@ -2377,7 +2377,7 @@ def test_engine_missing_video_frames_wait_for_generation_budget(
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, Any],
-    monkeypatch,
+    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
     engine = PlaybackEngine(
@@ -3120,7 +3120,7 @@ def test_playback_engine_handles_media_processing_error(
         filepath="/path/to/image.jpg",
         filename="image.jpg",
         directory_id=1,
-        media_type="image",
+        media_type=MediaType.IMAGE,
         file_size=1024,
         last_modified=1234567890.0,
     )
@@ -3138,3 +3138,219 @@ def test_playback_engine_handles_media_processing_error(
     # Verify it skipped to next (transition time set to 0)
     assert playback_engine._next_transition_time == 0.0
     assert playback_engine._state == State.PLAYING
+
+
+def test_read_clock_extra_text_returns_file_contents(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """_read_clock_extra_text returns stripped file contents when /dev/shm/clock.txt exists."""
+    config["clock_extra_source"] = "clock_txt"
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+
+    m_open = mock_open(read_data="  Hello World  \n")
+    with patch("os.path.isfile", return_value=True), patch("builtins.open", m_open):
+        result = engine._read_clock_extra_text()
+
+    assert result == "Hello World"
+    m_open.assert_called_once_with("/dev/shm/clock.txt", encoding="utf-8", errors="replace")
+
+
+def test_read_clock_extra_text_returns_empty_when_file_missing(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """_read_clock_extra_text returns empty string when /dev/shm/clock.txt does not exist."""
+    config["clock_extra_source"] = "clock_txt"
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+
+    with patch("os.path.isfile", return_value=False):
+        result = engine._read_clock_extra_text()
+
+    assert result == ""
+
+
+def test_read_clock_extra_text_returns_empty_on_oserror(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """_read_clock_extra_text returns empty string when reading raises OSError."""
+    config["clock_extra_source"] = "clock_txt"
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+
+    with (
+        patch("os.path.isfile", return_value=True),
+        patch("builtins.open", side_effect=OSError("permission denied")),
+    ):
+        result = engine._read_clock_extra_text()
+
+    assert result == ""
+
+
+def test_read_clock_extra_text_off_source_returns_empty(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """_read_clock_extra_text returns empty string when source is 'off'."""
+    config_repo = MagicMock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.clock_extra_source": "off",
+    }.get(key, default)
+
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    result = engine._read_clock_extra_text()
+    assert result == ""
+
+
+def test_read_clock_extra_text_ui_source_returns_config_text(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """_read_clock_extra_text returns UI-configured text when source is 'ui_text'."""
+    config_repo = MagicMock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.clock_extra_source": "ui_text",
+        "viewer.clock_extra_text": "  Happy Birthday!  ",
+    }.get(key, default)
+
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    result = engine._read_clock_extra_text()
+    assert result == "Happy Birthday!"
+
+
+def test_read_clock_extra_text_ui_source_empty_returns_empty(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """_read_clock_extra_text returns empty when ui_text configured but text is empty."""
+    config_repo = MagicMock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.clock_extra_source": "ui_text",
+        "viewer.clock_extra_text": "",
+    }.get(key, default)
+
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    result = engine._read_clock_extra_text()
+    assert result == ""
+
+
+def test_read_clock_extra_text_clock_txt_source_reads_file(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """_read_clock_extra_text reads /dev/shm/clock.txt when source is 'clock_txt'."""
+    config_repo = MagicMock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.clock_extra_source": "clock_txt",
+    }.get(key, default)
+
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    m_open = mock_open(read_data="File content\n")
+    with patch("os.path.isfile", return_value=True), patch("builtins.open", m_open):
+        result = engine._read_clock_extra_text()
+
+    assert result == "File content"
+
+
+def test_read_clock_extra_text_source_case_insensitive(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """_read_clock_extra_text normalizes source to lowercase."""
+    config_repo = MagicMock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.clock_extra_source": "OFF",
+    }.get(key, default)
+
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    result = engine._read_clock_extra_text()
+    assert result == ""
+
+
+def test_read_clock_extra_text_ui_source_without_repo_uses_config_dict(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """_read_clock_extra_text falls back to config dict when no repository is set."""
+    config["clock_extra_source"] = "ui_text"
+    config["clock_extra_text"] = "From config dict"
+
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+
+    result = engine._read_clock_extra_text()
+    assert result == "From config dict"

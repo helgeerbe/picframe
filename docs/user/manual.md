@@ -336,6 +336,21 @@ The clock hour mode is an explicit Settings choice, independent of
 12-hour preset stores `viewer.clock_format=%-I:%M %p`, and Custom keeps the raw
 strftime pattern editable for advanced layouts.
 
+The clock overlay can optionally show a line of extra text below the time.
+`viewer.clock_extra_source` selects the source:
+
+*   **off** (default): no extra text is shown.
+*   **clock_txt**: Picframe reads `/dev/shm/clock.txt` on each clock refresh
+    and displays its contents. External scripts can write short status lines
+    there (e.g., temperature, weather, or system messages).
+*   **ui_text**: the string stored in `viewer.clock_extra_text` is shown
+    directly. This is useful for static labels or manually edited status
+    text from the Settings UI.
+
+When the source is `ui_text` and `viewer.clock_extra_text` is empty, no extra
+line is drawn. The extra text shares the clock font, size, opacity, and
+justification settings.
+
 Settings Apply prefers live component reloads. Renderer settings publish an
 in-process renderer config update; MQTT reconnects when `mqtt.*` changes; the
 media monitor reloads `pic_dir`, link-following, and media extensions; GPIO

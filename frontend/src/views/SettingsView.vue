@@ -783,6 +783,16 @@ function setBackgroundColor(event: Event) {
                   >
                 </div>
               </FieldRow>
+              <FieldRow :label="formatLabel('clock_extra_source')" :help="sectionHelp('viewer', 'clock_extra_source')">
+                <select v-model="localConfig.viewer.clock_extra_source" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+                  <option value="off">{{ t('settings.clockExtraSourceOff') }}</option>
+                  <option value="clock_txt">{{ t('settings.clockExtraSourceClockTxt') }}</option>
+                  <option value="ui_text">{{ t('settings.clockExtraSourceUiText') }}</option>
+                </select>
+              </FieldRow>
+              <FieldRow v-if="localConfig.viewer.clock_extra_source === 'ui_text'" :label="formatLabel('clock_extra_text')" :help="sectionHelp('viewer', 'clock_extra_text')">
+                <input v-model="localConfig.viewer.clock_extra_text" type="text" class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white">
+              </FieldRow>
               <FieldRow :label="formatLabel('clock_top_bottom')" :help="sectionHelp('viewer', 'clock_top_bottom')">
                 <SegmentedControl v-model="localConfig.viewer.clock_top_bottom" :options="[{ value: 'T', label: 'Top' }, { value: 'B', label: 'Bottom' }]" />
               </FieldRow>

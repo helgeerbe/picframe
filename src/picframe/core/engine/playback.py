@@ -853,6 +853,7 @@ class PlaybackEngine:
 
         show_clock = config_bool("viewer.show_clock", "show_clock", False)
         clock_format = str(config_value("viewer.clock_format", "clock_format", "%H:%M"))
+        clock_extra_text = self._read_clock_extra_text()
         show_text = config_bool(
             "viewer.show_text_enabled",
             "show_text_enabled",
@@ -863,6 +864,7 @@ class PlaybackEngine:
         return OverlayConfig(
             show_clock=show_clock,
             clock_format=clock_format,
+            clock_extra_text=clock_extra_text,
             clock_justify=str(config_value("viewer.clock_justify", "clock_justify", "R")),
             clock_text_sz=int(config_value("viewer.clock_text_sz", "clock_text_sz", 120)),
             clock_opacity=float(config_value("viewer.clock_opacity", "clock_opacity", 1.0)),
@@ -883,6 +885,52 @@ class PlaybackEngine:
             text_x_margin=int(config_value("viewer.text_x_margin", "text_x_margin", 100)),
             text_y_margin=int(config_value("viewer.text_y_margin", "text_y_margin", 0)),
         )
+
+    def _read_clock_extra_text(self) -> str:
+        """Return extra clock text based on the ``viewer.clock_extra_source`` setting.
+
+        Tri-state behavior:
+        - ``off`` (default): no extra text.
+        - ``clock_txt``: read text from the ramdisk file
+          ``/dev/shm/clock.txt`` on each frame, mirroring legacy behavior where
+          external scripts could push arbitrary text below the clock.
+        - ``ui_text``: use the user-configured ``viewer.clock_extra_text`` string.
+        """
+        source = str(self._config.get("clock_extra_source", "off")).strip().lower()
+        if self._config_repository:
+            source = (
+                str(
+                    self._config_repository.get_app_config(
+                        "viewer.clock_extra_source",
+                        self._config.get("clock_extra_source", "off"),
+                    )
+                )
+                .strip()
+                .lower()
+            )
+
+        if source == "off":
+            return ""
+        if source == "ui_text":
+            if self._config_repository:
+                return str(
+                    self._config_repository.get_app_config(
+                        "viewer.clock_extra_text",
+                        self._config.get("clock_extra_text", ""),
+                    )
+                ).strip()
+            return str(self._config.get("clock_extra_text", "")).strip()
+
+        # Default: read from ramdisk file /dev/shm/clock.txt
+        path = "/dev/shm/clock.txt"
+        try:
+            if not os.path.isfile(path):
+                return ""
+            with open(path, encoding="utf-8", errors="replace") as fh:
+                return fh.read().strip()
+        except OSError as exc:
+            self._logger.debug("Could not read clock extra text from %s: %s", path, exc)
+            return ""
 
     def _overlay_config_for_current_status(self, status_text: str) -> Any:
         """Build a status overlay without forcing metadata text on."""
@@ -1127,7 +1175,7 @@ class PlaybackEngine:
     def _start_video_handoff(
         self,
         media_item: MediaItem,
-        overlay_config: dict[str, Any] | None,
+        overlay_config: Any,
     ) -> bool:
         if not self._video_player or not self._is_video_media(
             media_item,

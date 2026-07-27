@@ -1,12 +1,15 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. The latest ticketed change is #714, which adds
+The active branch is `v2-dev`. The latest ticketed change is #716, which ports
+`/dev/shm/clock.txt` support to v2 and adds `clock_extra_source`/`clock_extra_text`
+viewer settings so the clock overlay can optionally show a line of extra text
+below the time from an external file or a UI-configured string. Issue #714 added
 a file-system date fallback to the playback text overlay so images without EXIF
 datetime still show a date (Paddy's suggestion from Discussion #682).
 
 ## Current Repo State
-- Branch: `v2-dev`; #714 is the latest local implementation/closeout context.
+- Branch: `v2-dev`; #716 is the latest local implementation context.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -70,6 +73,15 @@ datetime still show a date (Paddy's suggestion from Discussion #682).
   `last_modified` timestamp when `exif_datetime` is absent or None, so stock
   images and graphics-app exports still show a date. Suggested by paddywwoof in
   Discussion #682.
+- Ticket #716 ports `/dev/shm/clock.txt` support to v2 and adds
+  `viewer.clock_extra_source` (off/clock_txt/ui_text) and
+  `viewer.clock_extra_text` so the clock overlay can optionally show a line of
+  extra text below the time. `clock_renderer.py` reads `/dev/shm/clock.txt` when
+  the source is `clock_txt`, the OverlayConfig DTO carries both fields, legacy
+  `configuration.yaml` import maps `viewer.clock_extra_source`/`clock_extra_text`
+  and `viewer.clock_extra_text`, `playback.py` propagates the source/text into
+  renderer config, `configuration_example.yaml` documents the new keys, and the
+  frontend `configSchema.json` exposes them as advanced viewer settings.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.

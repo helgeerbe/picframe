@@ -212,6 +212,8 @@ class ViewerConfig(BaseModel):
     clock_top_bottom: str = "T"
     clock_wdt_offset_pct: float = 3.0
     clock_hgt_offset_pct: float = 3.0
+    clock_extra_source: str = "off"
+    clock_extra_text: str = ""
     menu_text_sz: int = 40
     menu_autohide_tm: float = 10.0
     geo_suppress_list: list[Any] = Field(default_factory=list)

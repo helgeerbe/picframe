@@ -130,6 +130,7 @@ class OverlayConfig:
     """
     Configuration for dynamic overlays (text and clock) to be rendered on top of the image.
     """
+
     show_clock: bool = False
     clock_format: str = "%H:%M"
     clock_justify: str = "R"
@@ -138,6 +139,8 @@ class OverlayConfig:
     clock_top_bottom: str = "T"
     clock_wdt_offset_pct: float = 3.0
     clock_hgt_offset_pct: float = 3.0
+    clock_extra_source: str = "off"
+    clock_extra_text: str = ""
     show_text: bool = False
     text_string: str = ""
     text_strings: tuple[str, ...] = field(default_factory=tuple)
@@ -155,6 +158,7 @@ class RendererConfig:
     """
     Strongly-typed configuration for the Pi3dRenderer.
     """
+
     display_x: int = 0
     display_y: int = 0
     display_w: int | None = None
@@ -184,15 +188,15 @@ class RendererConfig:
     text_x_margin: int = 100
     text_y_margin: int = 0
     geo_suppress_list: list[str] = field(default_factory=list)
-    
+
     # Animation settings
     time_fade: float = 2.0
     time_delay: float = 200.0
     show_text_tm: float = 10.0
-    
+
     # Font settings
     font_file: str = ""
-    
+
     # Image Renderer settings
     blend_type: str = "blend"
     blur_amount: int = 12
@@ -218,6 +222,7 @@ class RendererConfigUpdatedEvent(Event):
     """
     An event notifying the renderer that its configuration has been updated.
     """
+
     config: RendererConfig
 
     @property
@@ -311,6 +316,7 @@ class TransitionCompletedEvent(Event):
 @dataclass(frozen=True)
 class VideoFirstFrameRenderedEvent(Event):
     """Event emitted when the video player has rendered its first frame."""
+
     @property
     def priority(self) -> int:
         return 10
