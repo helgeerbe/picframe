@@ -78,6 +78,7 @@ class ClockRenderer:
             float(config.clock_wdt_offset_pct),
             float(config.clock_hgt_offset_pct),
             str(config.clock_extra_source or "off").lower(),
+            str(getattr(config, "clock_extra_text", "") or ""),
             float(brightness),
             self._render_rect,
         )

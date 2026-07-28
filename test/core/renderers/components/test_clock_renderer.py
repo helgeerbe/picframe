@@ -319,6 +319,45 @@ def test_clock_renderer_clock_txt_source_missing_file_returns_empty(mock_display
     assert mock_fs.call_args.args[1] == "12:00"
 
 
+def test_clock_renderer_rebuilds_when_only_extra_text_changes(mock_display, mock_shader):
+    """Visual signature includes clock_extra_text so the clock block is invalidated
+    when only the text changes (not the source)."""
+    with patch(
+        "picframe.core.renderers.components.clock_renderer.pi3d.FixedString"
+    ) as mock_fixed_string:
+        mock_fixed_string.return_value.sprite = MagicMock()
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "12:00"
+            with patch("pi3d.Sprite.draw"):
+                # First draw with "Hello"
+                renderer.update_config(
+                    OverlayConfig(
+                        show_clock=True,
+                        clock_format="%H:%M",
+                        clock_extra_source="ui_text",
+                        clock_extra_text="Hello",
+                    )
+                )
+                renderer.draw()
+                assert mock_fixed_string.call_count == 1
+                assert mock_fixed_string.call_args.args[1] == "12:00\nHello"
+
+                # Same time, same source, but different text — should rebuild
+                renderer.update_config(
+                    OverlayConfig(
+                        show_clock=True,
+                        clock_format="%H:%M",
+                        clock_extra_source="ui_text",
+                        clock_extra_text="World",
+                    )
+                )
+                renderer.draw()
+                assert mock_fixed_string.call_count == 2
+                assert mock_fixed_string.call_args.args[1] == "12:00\nWorld"
+
+
 def test_clock_renderer_off_source_ignores_clock_extra_text(mock_display, mock_shader):
     """When source is 'off', clock_extra_text is ignored even if set."""
     with (

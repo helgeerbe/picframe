@@ -61,6 +61,19 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   `off` shows nothing, `clock_txt` reads `/dev/shm/clock.txt` on each clock
   refresh, and `ui_text` shows `viewer.clock_extra_text`. The extra line shares
   the clock font/size/opacity/justification and only draws when non-empty (#716).
+- Clock renderer visual signature must include `clock_extra_text` so changing
+  only the text (not the source) invalidates and rebuilds the clock block (#719
+  follow-up fix).
+- Text overlay gradient sprite must set z via `position()` only (not the
+  constructor), pass numpy arrays directly to `pi3d.Texture` (no PIL
+  conversion), and use a 1px-wide texture scaled on the GPU (#719).
+- `clock_extra_source` must propagate through `OverlayConfig` in `playback.py`,
+  and `ClockRenderer` must re-read `/dev/shm/clock.txt` dynamically on each
+  `has_changed()`/`draw()` call (#719).
+- `ImageMetadataStrategy` and `VideoMetadataStrategy` must fall back to
+  `last_modified` at indexing time when no EXIF/creation date is found, so the
+  DB always stores a valid `exif_datetime` and date-range SQL filters work
+  without runtime fallbacks (#719).
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

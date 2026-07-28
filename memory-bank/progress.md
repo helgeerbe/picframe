@@ -92,6 +92,9 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   no EXIF/creation date is found, so the DB always has a valid `exif_datetime`
   and date-range SQL filters work without runtime fallbacks. Tests updated for
   text renderer, clock renderer, image strategy, video strategy, and playback.
+  A follow-up fix added `clock_extra_text` to the clock renderer's visual
+  signature so the clock block is invalidated when only the text changes (not
+  just the source); test coverage added for the rebuild-on-text-change case.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
@@ -142,6 +145,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   passed; ruff format/check passed after import ordering fix; `git diff --check`
   passed.
 - Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.
-- Latest #719 verification: focused
-  `.venv/bin/python -m pytest test/core/renderers/components/test_text_renderer.py test/core/renderers/components/test_clock_renderer.py test/core/metadata/test_image_strategy.py test/core/metadata/test_video_strategy.py test/core/engine/test_playback.py`
-  passed with 138 tests; `ruff check` and `ruff format --check` passed for all touched source/test files; mypy errors on touched files are all pre-existing (14 errors, identical before and after the change, only line numbers shifted).
+- Latest #719 verification: full `.venv/bin/python -m pytest` passed with 744
+  tests and 1 GI deprecation warning; focused clock renderer tests passed
+  with 16 tests including the new rebuild-on-text-change case; `ruff check`
+  and `mypy` passed clean on touched files; `git diff --check` passed.

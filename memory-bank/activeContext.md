@@ -84,7 +84,9 @@ functional after the #719 fixes.
   `configuration.yaml` import maps `viewer.clock_extra_source`/`clock_extra_text`
   and `viewer.clock_extra_text`, `playback.py` propagates the source/text into
   renderer config, and the frontend `configSchema.json` exposes them as
-  advanced viewer settings.
+  advanced viewer settings. A follow-up fix added `clock_extra_text` to the
+  clock renderer's visual signature so the clock block is invalidated when
+  only the text changes (not just the source).
 - Ticket #719 fixes three alpha-test bugs reported by Paddy (@paddywwoof):
   (1) `text_renderer.py` gradient sprite z-order (z only in `position()`, not the
   constructor), PIL conversion removed (numpy array passed directly to
