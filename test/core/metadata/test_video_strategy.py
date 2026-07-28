@@ -10,6 +10,7 @@ from picframe.core.models.media import MediaType
 def strategy() -> VideoMetadataStrategy:
     return VideoMetadataStrategy()
 
+
 @patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
 @patch("picframe.core.metadata.video_strategy.subprocess.run")
 @patch("picframe.core.metadata.video_strategy.os.stat")
@@ -176,6 +177,7 @@ def test_extract_passes_cache_dir_and_fit_mode(
         cache_dir="/tmp/picframe-cache",
     )
 
+
 @patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
 @patch("picframe.core.metadata.video_strategy.subprocess.run")
 @patch("picframe.core.metadata.video_strategy.os.stat")
@@ -186,6 +188,7 @@ def test_extract_ffprobe_failure_returns_none(
     strategy: VideoMetadataStrategy,
 ) -> None:
     import subprocess
+
     mock_run.side_effect = subprocess.CalledProcessError(1, "ffprobe")
     mock_stat_result = MagicMock()
     mock_stat_result.st_size = 4096
@@ -293,6 +296,44 @@ def test_extract_keeps_valid_video_when_frame_cache_fails(
     assert media_item.media_type == MediaType.VIDEO
     assert media_item.codec == "h264"
     mock_extract.assert_called_once_with("/path/to/video.mp4", 10.0, 1920, 1080)
+
+
+@patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
+@patch("picframe.core.metadata.video_strategy.subprocess.run")
+@patch("picframe.core.metadata.video_strategy.os.stat")
+def test_extract_falls_back_to_last_modified_when_no_creation_time(
+    mock_stat: MagicMock,
+    mock_run: MagicMock,
+    mock_extract: MagicMock,
+    strategy: VideoMetadataStrategy,
+) -> None:
+    """When ffprobe has no creation_time, exif_datetime falls back to last_modified (#719)."""
+    mock_stat_result = MagicMock()
+    mock_stat_result.st_size = 1024
+    mock_stat_result.st_mtime = 1600000000.0
+    mock_stat.return_value = mock_stat_result
+    mock_run_result = MagicMock()
+    mock_run_result.stdout = """
+    {
+        "format": {"duration": "10.0"},
+        "streams": [
+            {
+                "codec_type": "video",
+                "codec_name": "h264",
+                "width": 1920,
+                "height": 1080
+            }
+        ]
+    }
+    """
+    mock_run.return_value = mock_run_result
+
+    media_item = strategy.extract("/path/to/video.mp4", 1)
+
+    assert media_item is not None
+    assert media_item.exif_datetime == 1600000000.0
+    assert media_item.last_modified == 1600000000.0
+
 
 @patch("picframe.core.metadata.video_strategy.os.stat")
 def test_extract_os_error(mock_stat: MagicMock, strategy: VideoMetadataStrategy) -> None:

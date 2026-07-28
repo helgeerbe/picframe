@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class VideoMetadataStrategy(IMetadataStrategy):
     """
     Strategy for extracting metadata from video files.
-    
+
     This strategy uses the legacy get_video_meta function to extract
     duration, dimensions, and rotation, and maps them to the unified
     MediaItem model.
@@ -55,12 +55,12 @@ class VideoMetadataStrategy(IMetadataStrategy):
             width = None
             height = None
             duration = 0.0
-            orientation = 1 # Default orientation
+            orientation = 1  # Default orientation
             codec = None
             pixel_format = None
             framerate = None
             bitrate = None
-            
+
             # Additional fields for parity with image EXIF
             exif_datetime = None
             latitude = None
@@ -75,11 +75,13 @@ class VideoMetadataStrategy(IMetadataStrategy):
             # video stream, the file is not safe to include in the playlist.
             cmd = [
                 "ffprobe",
-                "-v", "quiet",
-                "-print_format", "json",
+                "-v",
+                "quiet",
+                "-print_format",
+                "json",
                 "-show_format",
                 "-show_streams",
-                filepath
+                filepath,
             ]
             try:
                 result = subprocess.run(cmd, capture_output=True, text=True, check=True)
@@ -109,8 +111,9 @@ class VideoMetadataStrategy(IMetadataStrategy):
                 if creation_time:
                     try:
                         from datetime import datetime
+
                         # ffprobe usually returns ISO 8601: 2023-10-27T15:30:00.000000Z
-                        dt = datetime.fromisoformat(creation_time.replace('Z', '+00:00'))
+                        dt = datetime.fromisoformat(creation_time.replace("Z", "+00:00"))
                         exif_datetime = dt.timestamp()
                     except ValueError:
                         pass
@@ -120,7 +123,8 @@ class VideoMetadataStrategy(IMetadataStrategy):
                 if location:
                     # Example format: +37.7749-122.4194/
                     import re
-                    match = re.match(r'([+-]\d+\.\d+)([+-]\d+\.\d+)', location)
+
+                    match = re.match(r"([+-]\d+\.\d+)([+-]\d+\.\d+)", location)
                     if match:
                         latitude = float(match.group(1))
                         longitude = float(match.group(2))
@@ -187,6 +191,7 @@ class VideoMetadataStrategy(IMetadataStrategy):
             if width and height and duration > 0:
                 try:
                     from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
+
                     # We don't have sample_aspect_ratio easily available here, default to 1:1
                     # It could be extracted from ffprobe output if needed
                     target_w = self.display_w if self.display_w > 0 else width
@@ -290,7 +295,10 @@ class VideoMetadataStrategy(IMetadataStrategy):
                 pixel_format=pixel_format,
                 framerate=framerate,
                 bitrate=bitrate,
-                exif_datetime=exif_datetime,
+                # Legacy behavior: when no creation date is found, fall back to the
+                # file's modification time so the DB always has a valid timestamp.
+                # This keeps date-range SQL filters working on exif_datetime.
+                exif_datetime=exif_datetime if exif_datetime is not None else modified_time,
                 latitude=latitude,
                 longitude=longitude,
                 make=make,

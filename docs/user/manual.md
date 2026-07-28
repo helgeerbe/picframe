@@ -595,6 +595,13 @@ scopes, common date ordering, and locale-aware resolved locations are indexed,
 and Remote's selected-media count avoids resolved-location work unless the
 current filters include a location expression.
 
+When images or videos are indexed, Picframe extracts the date from EXIF
+metadata (images) or the creation date (videos). If no date is found in the
+media metadata, Picframe falls back to the file's last-modified timestamp at
+indexing time so the media cache always has a valid `exif_datetime` value. This
+keeps date-range filters in Remote working for all media, including scanned
+images or video clips that lack embedded dates.
+
 When `model.portrait_pairs` is enabled from Appearance, portrait image pairs
 are displayed as one slideshow slot with two original image files. Videos are
 never paired and always remain fullscreen. In Remote, pair metadata can be

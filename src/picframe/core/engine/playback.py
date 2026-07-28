@@ -854,6 +854,11 @@ class PlaybackEngine:
         show_clock = config_bool("viewer.show_clock", "show_clock", False)
         clock_format = str(config_value("viewer.clock_format", "clock_format", "%H:%M"))
         clock_extra_text = self._read_clock_extra_text()
+        clock_extra_source = (
+            str(config_value("viewer.clock_extra_source", "clock_extra_source", "off"))
+            .strip()
+            .lower()
+        )
         show_text = config_bool(
             "viewer.show_text_enabled",
             "show_text_enabled",
@@ -865,6 +870,7 @@ class PlaybackEngine:
             show_clock=show_clock,
             clock_format=clock_format,
             clock_extra_text=clock_extra_text,
+            clock_extra_source=clock_extra_source,
             clock_justify=str(config_value("viewer.clock_justify", "clock_justify", "R")),
             clock_text_sz=int(config_value("viewer.clock_text_sz", "clock_text_sz", 120)),
             clock_opacity=float(config_value("viewer.clock_opacity", "clock_opacity", 1.0)),

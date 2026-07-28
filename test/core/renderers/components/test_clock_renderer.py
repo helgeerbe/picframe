@@ -1,4 +1,4 @@
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
@@ -170,6 +170,7 @@ def test_clock_renderer_draw_appends_extra_text(mock_display, mock_shader):
             OverlayConfig(
                 show_clock=True,
                 clock_format="%H:%M",
+                clock_extra_source="ui_text",
                 clock_extra_text="Hello World",
             )
         )
@@ -208,7 +209,12 @@ def test_clock_renderer_has_changed_when_extra_text_changes(mock_display, mock_s
     with patch("picframe.core.renderers.components.clock_renderer.pi3d.FixedString"):
         renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
         renderer.update_config(
-            OverlayConfig(show_clock=True, clock_format="%H:%M", clock_extra_text="")
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_extra_source="ui_text",
+                clock_extra_text="",
+            )
         )
         with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
             mock_datetime.now.return_value.strftime.return_value = "12:00"
@@ -217,8 +223,121 @@ def test_clock_renderer_has_changed_when_extra_text_changes(mock_display, mock_s
             assert renderer.has_changed() is False
 
         renderer.update_config(
-            OverlayConfig(show_clock=True, clock_format="%H:%M", clock_extra_text="Updated")
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_extra_source="ui_text",
+                clock_extra_text="Updated",
+            )
         )
         with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
             mock_datetime.now.return_value.strftime.return_value = "12:00"
             assert renderer.has_changed() is True
+
+
+def test_clock_renderer_clock_txt_source_reads_file(mock_display, mock_shader):
+    """When clock_extra_source is 'clock_txt', the renderer reads /dev/shm/clock.txt."""
+    with (
+        patch("picframe.core.renderers.components.clock_renderer.pi3d.FixedString") as mock_fs,
+        patch(
+            "picframe.core.renderers.components.clock_renderer.os.path.isfile",
+            return_value=True,
+        ),
+        patch("builtins.open", mock_open(read_data="Hello from ramdisk")),
+    ):
+        mock_fs.return_value.sprite = MagicMock()
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_extra_source="clock_txt",
+            )
+        )
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_dt:
+            mock_dt.now.return_value.strftime.return_value = "12:00"
+            with patch("pi3d.Sprite.draw"):
+                renderer.draw()
+
+    assert renderer._current_extra_text == "Hello from ramdisk"
+    assert mock_fs.call_args.args[1] == "12:00\nHello from ramdisk"
+
+
+def test_clock_renderer_clock_txt_source_re_reads_on_has_changed(mock_display, mock_shader):
+    """has_changed() returns True when the file content changes between calls."""
+    with (
+        patch("picframe.core.renderers.components.clock_renderer.pi3d.FixedString"),
+        patch(
+            "picframe.core.renderers.components.clock_renderer.os.path.isfile",
+            return_value=True,
+        ),
+        patch("builtins.open", mock_open(read_data="First")),
+    ):
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_extra_source="clock_txt",
+            )
+        )
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_dt:
+            mock_dt.now.return_value.strftime.return_value = "12:00"
+            with patch("pi3d.Sprite.draw"):
+                renderer.draw()
+            assert renderer.has_changed() is False
+
+        # File content changes
+        with patch("builtins.open", mock_open(read_data="Second")):
+            assert renderer.has_changed() is True
+
+
+def test_clock_renderer_clock_txt_source_missing_file_returns_empty(mock_display, mock_shader):
+    """When /dev/shm/clock.txt doesn't exist, extra text is empty."""
+    with (
+        patch("picframe.core.renderers.components.clock_renderer.pi3d.FixedString") as mock_fs,
+        patch(
+            "picframe.core.renderers.components.clock_renderer.os.path.isfile",
+            return_value=False,
+        ),
+    ):
+        mock_fs.return_value.sprite = MagicMock()
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_extra_source="clock_txt",
+            )
+        )
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_dt:
+            mock_dt.now.return_value.strftime.return_value = "12:00"
+            with patch("pi3d.Sprite.draw"):
+                renderer.draw()
+
+    assert renderer._current_extra_text == ""
+    assert mock_fs.call_args.args[1] == "12:00"
+
+
+def test_clock_renderer_off_source_ignores_clock_extra_text(mock_display, mock_shader):
+    """When source is 'off', clock_extra_text is ignored even if set."""
+    with (
+        patch("picframe.core.renderers.components.clock_renderer.pi3d.FixedString") as mock_fs,
+        patch("pi3d.Sprite.draw"),
+    ):
+        mock_fs.return_value.sprite = MagicMock()
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_extra_source="off",
+                clock_extra_text="Should be ignored",
+            )
+        )
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_dt:
+            mock_dt.now.return_value.strftime.return_value = "12:00"
+            renderer.draw()
+
+    assert renderer._current_extra_text == ""
+    assert mock_fs.call_args.args[1] == "12:00"

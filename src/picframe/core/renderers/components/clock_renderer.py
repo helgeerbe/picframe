@@ -3,13 +3,17 @@ Clock Renderer Component.
 
 Responsible for rendering the live clock overlay using pi3d.
 """
+
 import logging
+import os
 from datetime import datetime
 from typing import Any
 
 import pi3d
 
 from picframe.core.events.dto import OverlayConfig
+
+CLOCK_EXTRA_TXT_PATH = "/dev/shm/clock.txt"
 
 
 class ClockRenderer:
@@ -73,6 +77,7 @@ class ClockRenderer:
             str(config.clock_top_bottom or "T").upper(),
             float(config.clock_wdt_offset_pct),
             float(config.clock_hgt_offset_pct),
+            str(config.clock_extra_source or "off").lower(),
             float(brightness),
             self._render_rect,
         )
@@ -91,10 +96,31 @@ class ClockRenderer:
         return now_str != self._current_time_str or extra_text != self._current_extra_text
 
     def _current_extra_text_from_config(self) -> str:
-        """Return the cached extra text from the current config, stripped."""
+        """Return extra text based on the tri-state ``clock_extra_source`` setting.
+
+        - ``off``: no extra text.
+        - ``ui_text``: use the ``clock_extra_text`` string from the config.
+        - ``clock_txt``: re-read ``/dev/shm/clock.txt`` on each call for dynamic updates.
+        """
         if not self._config:
             return ""
+        source = str(getattr(self._config, "clock_extra_source", "off") or "off").strip().lower()
+        if source == "off":
+            return ""
+        if source == "clock_txt":
+            return self._read_clock_extra_file()
         return str(getattr(self._config, "clock_extra_text", "") or "").strip()
+
+    @staticmethod
+    def _read_clock_extra_file() -> str:
+        """Read the clock extra text from the ramdisk file, returning empty on failure."""
+        try:
+            if not os.path.isfile(CLOCK_EXTRA_TXT_PATH):
+                return ""
+            with open(CLOCK_EXTRA_TXT_PATH, encoding="utf-8", errors="replace") as fh:
+                return fh.read().strip()
+        except OSError:
+            return ""
 
     def set_alpha(self, alpha: float) -> None:
         """Set the alpha transparency of the clock."""
@@ -111,7 +137,7 @@ class ClockRenderer:
         except Exception as e:
             self._logger.error(f"Invalid clock format '{self._config.clock_format}': {e}")
             now_str = datetime.now().strftime("%H:%M")
-        
+
         extra_text = self._current_extra_text_from_config()
         if (
             now_str != self._current_time_str
@@ -127,13 +153,11 @@ class ClockRenderer:
             render_center_x, render_center_y = self._render_center()
             x_margin = int(render_w * max(0.0, self._config.clock_wdt_offset_pct) / 100)
             y_margin = int(render_h * max(0.0, self._config.clock_hgt_offset_pct) / 100)
-            opacity = int(
-                255 * max(0.0, min(1.0, self._config.clock_opacity)) * self._brightness
-            )
+            opacity = int(255 * max(0.0, min(1.0, self._config.clock_opacity)) * self._brightness)
             justify = str(self._config.clock_justify or "R").upper()
             if justify not in {"L", "C", "R"}:
                 justify = "R"
-            
+
             try:
                 self._clock_block = pi3d.FixedString(
                     self._font_file,
@@ -143,7 +167,7 @@ class ClockRenderer:
                     shader=self._shader,
                     justify=justify,
                     width=max(font_size * 4, render_w - (x_margin * 2)),
-                    color=(255, 255, 255, opacity)
+                    color=(255, 255, 255, opacity),
                 )
 
                 x = render_center_x
@@ -165,6 +189,6 @@ class ClockRenderer:
             except Exception as e:
                 self._logger.error(f"Failed to create clock FixedString: {e}")
                 self._clock_block = None
-            
+
         if self._clock_block:
             self._clock_block.sprite.draw()

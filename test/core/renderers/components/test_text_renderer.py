@@ -297,6 +297,174 @@ def test_text_renderer_creates_gradient_sprite_when_bkg_enabled(mock_display, mo
     assert len(renderer._background_sprites) == 1
 
 
+def test_text_renderer_gradient_sprite_no_z_in_constructor(mock_display, mock_shader):
+    """Bug 1a: z must not be set in the Sprite constructor — only via position()."""
+    with (
+        mock_pi3d_text_components(),
+        patch(SPRITE_PATCH) as mock_sprite,
+    ):
+        mock_sprite.return_value = MagicMock()
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Z Test",
+                text_bkg_hgt=0.25,
+            )
+        )
+
+    # Sprite constructor must not receive a z kwarg
+    kwargs = mock_sprite.call_args.kwargs
+    assert "z" not in kwargs
+    # position() must set z=0.05 (behind text at z=0.1)
+    mock_sprite.return_value.position.assert_called_once()
+    assert mock_sprite.return_value.position.call_args.args[2] == 0.05
+
+
+def test_text_renderer_gradient_texture_passes_numpy_directly(mock_display, mock_shader):
+    """Bug 1b: numpy array passed directly to pi3d.Texture (no PIL conversion)."""
+    with (
+        mock_pi3d_text_components(),
+        patch(TEXTURE_PATCH) as mock_texture,
+    ):
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Numpy",
+                text_bkg_hgt=0.2,
+            )
+        )
+
+    tex_arg = mock_texture.call_args.args[0]
+    assert isinstance(tex_arg, np.ndarray)
+    # RGBA: last dimension is 4
+    assert tex_arg.shape[2] == 4
+
+
+def test_text_renderer_gradient_texture_is_1px_wide(mock_display, mock_shader):
+    """Bug 1c: gradient texture is 1px wide; width is applied via GPU sprite.scale()."""
+    with (
+        mock_pi3d_text_components(),
+        patch(TEXTURE_PATCH) as mock_texture,
+    ):
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="1px",
+                text_bkg_hgt=0.2,
+            )
+        )
+
+    tex_arg = mock_texture.call_args.args[0]
+    # Shape is (height, 1, 4) — 1px wide
+    assert tex_arg.shape[1] == 1
+
+
+def test_text_renderer_gradient_sprite_uses_gpu_scaling(mock_display, mock_shader):
+    """Bug 1c: sprite is created at w=1,h=1 and scaled via GPU to full band size."""
+    with (
+        mock_pi3d_text_components(),
+        patch(SPRITE_PATCH) as mock_sprite,
+    ):
+        mock_sprite.return_value = MagicMock()
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Scale",
+                text_bkg_hgt=0.2,
+            )
+        )
+
+    # Sprite created at 1x1
+    kwargs = mock_sprite.call_args.kwargs
+    assert kwargs["w"] == 1
+    assert kwargs["h"] == 1
+    # scale() called with full band dimensions
+    mock_sprite.return_value.scale.assert_called_once()
+    sx, sy, sz = mock_sprite.return_value.scale.call_args.args
+    assert sz == 1.0
+    assert sx == 1920  # render_w for non-pair
+    assert sy == int(1080 * 0.2)  # band_height
+
+
+def test_text_renderer_reuses_gradient_sprite_across_updates(mock_display, mock_shader):
+    """Bug 1c: sprite is reused (not recreated) when only text changes but style is the same."""
+    with (
+        mock_pi3d_text_components(),
+        patch(SPRITE_PATCH) as mock_sprite,
+        patch(TEXTURE_PATCH) as mock_texture,
+    ):
+        mock_sprite.return_value = MagicMock()
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="First",
+                text_bkg_hgt=0.2,
+            )
+        )
+        first_sprite = renderer._background_sprites[0]
+        first_texture_count = mock_texture.call_count
+        first_sprite_count = mock_sprite.call_count
+
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Second",
+                text_bkg_hgt=0.2,
+            )
+        )
+
+    # Same style signature → texture not rebuilt
+    assert mock_texture.call_count == first_texture_count
+    # Sprite reused (same instance), not recreated
+    assert renderer._background_sprites[0] is first_sprite
+    assert mock_sprite.call_count == first_sprite_count
+
+
+def test_text_renderer_rebuilds_gradient_texture_when_brightness_changes(mock_display, mock_shader):
+    """Bug 1c: texture is rebuilt only when brightness (signature) changes."""
+    with (
+        mock_pi3d_text_components(),
+        patch(TEXTURE_PATCH) as mock_texture,
+    ):
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="B1",
+                text_bkg_hgt=0.2,
+            ),
+            brightness=0.8,
+        )
+        first_count = mock_texture.call_count
+
+        # Same brightness → no rebuild
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="B2",
+                text_bkg_hgt=0.2,
+            ),
+            brightness=0.8,
+        )
+        assert mock_texture.call_count == first_count
+
+        # Different brightness → rebuild
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="B3",
+                text_bkg_hgt=0.2,
+            ),
+            brightness=0.5,
+        )
+        assert mock_texture.call_count == first_count + 1
+
+
 def test_text_renderer_no_gradient_sprite_when_bkg_disabled(mock_display, mock_shader):
     with (
         mock_pi3d_text_components(),
@@ -343,6 +511,10 @@ def test_text_renderer_gradient_texture_uses_numpy_linspace(mock_display, mock_s
     # Height of band = int(1080 * 0.2) = 216
     assert args[2] == 216
     mock_texture.assert_called_once()
+    # Bug 1b: Texture receives numpy array, not PIL Image
+    assert isinstance(mock_texture.call_args.args[0], np.ndarray)
+    # Bug 1c: Texture is 1px wide (height, 1, 4)
+    assert mock_texture.call_args.args[0].shape == (216, 1, 4)
 
 
 def test_text_renderer_gradient_sprite_uses_uv_flat_shader(mock_display, mock_shader):

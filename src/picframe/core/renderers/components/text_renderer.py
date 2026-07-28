@@ -9,7 +9,6 @@ from typing import Any
 
 import numpy as np
 import pi3d
-from PIL import Image
 
 from picframe.core.events.dto import OverlayConfig
 
@@ -32,6 +31,8 @@ class TextRenderer:
         self._text_block: pi3d.FixedString | None = None
         self._text_blocks: list[pi3d.FixedString] = []
         self._background_sprites: list[Any] = []
+        self._gradient_texture: Any = None
+        self._gradient_texture_sig: tuple[Any, ...] | None = None
         self._current_text = ""
         self._current_texts: tuple[str, ...] = ()
         self._current_status_text = ""
@@ -49,43 +50,66 @@ class TextRenderer:
 
     def _build_gradient_texture(
         self,
-        width: int,
         height: int,
         max_alpha: float,
         brightness: float,
     ) -> Any:
-        """Build a numpy-generated RGBA gradient texture with vertical alpha fade."""
+        """Build a 1px-wide RGBA gradient texture with vertical alpha fade.
+
+        Bug 1b: pass numpy array directly to ``pi3d.Texture`` (no PIL conversion).
+        Bug 1c: texture is 1px wide; width is applied via GPU ``sprite.scale()``.
+        """
         height = max(1, int(height))
-        width = max(1, int(width))
         alpha_values = np.linspace(0.0, max_alpha * brightness, height, dtype=np.float32)
         alpha = np.clip(alpha_values, 0.0, 255.0).astype(np.uint8)
-        rgba = np.zeros((height, width, 4), dtype=np.uint8)
+        rgba = np.zeros((height, 1, 4), dtype=np.uint8)
         rgba[:, :, 3] = alpha[:, np.newaxis]
-        img = Image.fromarray(rgba, "RGBA")
-        return pi3d.Texture(img, blend=True, free_after_load=True)
+        return pi3d.Texture(rgba, blend=True, free_after_load=True)
 
-    def _build_gradient_sprite(
+    def _get_gradient_texture(
         self,
-        sprite_width: int,
         band_height: int,
         max_alpha: float,
         brightness: float,
-        center_x: float,
-        center_y: float,
     ) -> Any:
-        """Build a pi3d.Sprite with a vertical alpha-fade gradient texture."""
-        texture = self._build_gradient_texture(sprite_width, band_height, max_alpha, brightness)
-        sprite = pi3d.Sprite(
-            camera=self._get_camera(),
-            w=sprite_width,
-            h=band_height,
-            z=0.05,
-        )
-        sprite.set_shader(self._shader)
-        sprite.set_textures([texture])
-        sprite.position(center_x, center_y, 0.05)
-        sprite.set_alpha(0.0)
-        return sprite
+        """Return cached gradient texture, rebuilding only when signature changes (Bug 1c)."""
+        sig = (int(band_height), int(max_alpha), round(float(brightness), 6))
+        if self._gradient_texture is not None and sig == self._gradient_texture_sig:
+            return self._gradient_texture
+        self._gradient_texture = self._build_gradient_texture(band_height, max_alpha, brightness)
+        self._gradient_texture_sig = sig
+        return self._gradient_texture
+
+    def _adjust_gradient_sprites(
+        self,
+        texture: Any,
+        specs: list[tuple[int, float, float]],
+        band_height: int,
+    ) -> list[Any]:
+        """Reuse cached gradient sprites, creating/removing only as needed (Bug 1c).
+
+        *specs* is a list of ``(sprite_width, center_x, center_y)`` tuples.
+        Sprites are created with ``w=1, h=1`` and scaled via GPU (Bug 1a/1c).
+        """
+        sprites = self._background_sprites
+        needed = len(specs)
+
+        while len(sprites) > needed:
+            sprites.pop()
+
+        while len(sprites) < needed:
+            # Bug 1a: no z in constructor — z is set only via position()
+            sprite = pi3d.Sprite(camera=self._get_camera(), w=1, h=1)
+            sprite.set_shader(self._shader)
+            sprite.set_alpha(0.0)
+            sprites.append(sprite)
+
+        for sprite, (sprite_width, cx, cy) in zip(sprites, specs):
+            sprite.set_textures([texture])
+            sprite.position(cx, cy, 0.05)  # Bug 1a: z only in position()
+            sprite.scale(sprite_width, band_height, 1.0)  # Bug 1c: GPU scaling
+
+        return sprites
 
     def _render_bounds(self) -> tuple[int, int, int, int]:
         if self._render_rect is not None:
@@ -165,7 +189,7 @@ class TextRenderer:
                     justify_x_offset = render_w * 0.02
 
             self._text_blocks = []
-            self._background_sprites = []
+            gradient_specs: list[tuple[int, float, float]] = []
 
             for index, text in enumerate(text_strings):
                 if not text:
@@ -201,15 +225,7 @@ class TextRenderer:
                     grad_width = render_w // 2 if pair_mode else render_w
                     grad_x = x if pair_mode else render_center_x
                     grad_y = render_center_y - render_h // 2 + band_height // 2
-                    bg_sprite = self._build_gradient_sprite(
-                        sprite_width=grad_width,
-                        band_height=band_height,
-                        max_alpha=int(255 * 0.45),
-                        brightness=brightness,
-                        center_x=grad_x,
-                        center_y=grad_y,
-                    )
-                    self._background_sprites.append(bg_sprite)
+                    gradient_specs.append((grad_width, grad_x, grad_y))
 
             if status_text:
                 status_block = pi3d.FixedString(
@@ -229,15 +245,15 @@ class TextRenderer:
                 self._text_blocks.append(status_block)
 
                 if use_gradient:
-                    bg_sprite = self._build_gradient_sprite(
-                        sprite_width=render_w,
-                        band_height=band_height,
-                        max_alpha=int(255 * 0.45),
-                        brightness=brightness,
-                        center_x=render_center_x,
-                        center_y=render_center_y,
-                    )
-                    self._background_sprites.append(bg_sprite)
+                    gradient_specs.append((render_w, render_center_x, render_center_y))
+
+            if use_gradient and gradient_specs:
+                texture = self._get_gradient_texture(band_height, int(255 * 0.45), brightness)
+                self._background_sprites = self._adjust_gradient_sprites(
+                    texture, gradient_specs, band_height
+                )
+            else:
+                self._background_sprites = []
 
             self._text_block = self._text_blocks[0] if self._text_blocks else None
 

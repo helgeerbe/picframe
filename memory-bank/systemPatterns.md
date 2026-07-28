@@ -25,6 +25,8 @@
 - Portrait pairs are composed in memory for rendering; they do not create persistent generated files.
 - Shuffle mode is applied after display slots are built so portrait pairs remain one shuffled slot; `fewer_repeats` uses existing `last_displayed` history and creates no new media DB fields.
 - Matting is a renderer image-preparation concern. It wraps EXIF-corrected single images or image-only portrait pairs before pi3d texture creation, creates no persistent files in the current implementation, and never applies to videos.
+- `TextRenderer` draws overlay text at a 1px font width and lets the GPU scale it to the target display dimensions. This avoids PIL text rasterization, keeps text crisp at any resolution, and maintains a consistent z-order by drawing text above (after) the clock on the pi3d sprite stack.
+- `ClockRenderer` re-reads the `clock_extra_source` value on each clock refresh, not just at config-load time, so switching between `off`, `clock_txt`, and `ui_text` takes effect on the next clock tick without a renderer restart. When the source is `clock_txt`, the renderer re-reads `/dev/shm/clock.txt` on every refresh so external scripts can update the extra line dynamically.
 
 ## Video Handoff
 - The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:
@@ -80,6 +82,7 @@
 - Temporary missing files are marked inactive and skipped during playback; purge is the explicit operation that hard-deletes missing-file rows.
 - User-initiated Remote delete moves the original file to `model.deleted_pictures` and then removes the corresponding media cache row.
 - Display statistics live in `media_cache.db3` and are preserved on metadata refresh; only actual display recording updates `displayed_count` and `last_displayed`.
+- `ImageMetadataStrategy` and `VideoMetadataStrategy` fall back to the file's `last_modified` timestamp when no date is found in EXIF/container metadata, so `exif_datetime` is always populated for date-range filters and date ordering.
 
 ## Filesystem Monitoring
 - `WatchdogMediaMonitor` is the infrastructure adapter for create/modify/delete/move events and differential sync.
