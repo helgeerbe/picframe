@@ -66,7 +66,10 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   follow-up fix).
 - Text overlay gradient sprite must set z via `position()` only (not the
   constructor), pass numpy arrays directly to `pi3d.Texture` (no PIL
-  conversion), and use a 1px-wide texture scaled on the GPU (#719).
+  conversion), and use a full-render-height texture scaled on the GPU (#719).
+  Z-order convention: status overlay z=0.05 (front), text z=0.1, gradient
+  z=0.3 (behind text), image z=5.0. The gradient is drawn behind the text so it
+  no longer occludes it; the status overlay sits in front of text.
 - `clock_extra_source` must propagate through `OverlayConfig` in `playback.py`,
   and `ClockRenderer` must re-read `/dev/shm/clock.txt` dynamically on each
   `has_changed()`/`draw()` call (#719).

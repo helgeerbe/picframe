@@ -16,6 +16,60 @@ from picframe.core.repositories.migrations import Migration, MigrationManager
 
 logger = logging.getLogger(__name__)
 
+# The canonical keyword selector for the text overlay. Must match the seed in
+# `default_config.yaml` and the `RendererConfig` DTO default.
+_TEXT_OVERLAY_FORMAT_KEYWORDS = "title caption name date folder location"
+_TEXT_OVERLAY_KEYWORDS = ("title", "caption", "name", "date", "folder", "location")
+
+
+def _normalize_text_overlay_format_v2(conn: sqlite3.Connection) -> None:
+    """Rewrite legacy strftime ``text_overlay_format`` values to keyword format.
+
+    Picframe 1.x stored a strftime string (e.g. ``"%b %d, %Y"``) in
+    ``viewer.text_overlay_format``. Picframe 2.0 expects a space-separated list
+    of keywords (``title caption name date folder location``) and renders each
+    element by matching the keywords in :func:`_generate_text_string`. A legacy
+    strftime value matches none of the keywords, so the overlay is always
+    empty. This migration rewrites such values to the canonical keyword string
+    so existing installs show text again without requiring a manual re-toggle.
+    Values that already contain keywords (user choices) are left untouched.
+
+    The stored value may be JSON-encoded (picframe 2.0 repository, written via
+    :func:`SQLiteConfigRepository.set_app_config`) or a plain string (picframe
+    1.x legacy). Decode JSON when possible to inspect the logical value; the
+    replacement is always written JSON-encoded so the repository can read it.
+    """
+    cursor = conn.execute(
+        "SELECT value FROM app_config WHERE key = ?",
+        ("viewer.text_overlay_format",),
+    )
+    row = cursor.fetchone()
+    if row is None:
+        return
+    raw = row[0] if not isinstance(row, sqlite3.Row) else row["value"]
+    if not isinstance(raw, str):
+        return
+    try:
+        logical = json.loads(raw)
+        if not isinstance(logical, str):
+            return
+    except (TypeError, json.JSONDecodeError):
+        logical = raw
+    lowered = logical.lower()
+    has_keyword = any(kw in lowered for kw in _TEXT_OVERLAY_KEYWORDS)
+    has_strftime = "%" in logical
+    if has_strftime and not has_keyword:
+        conn.execute(
+            "UPDATE app_config SET value = ? WHERE key = ?",
+            (json.dumps(_TEXT_OVERLAY_FORMAT_KEYWORDS), "viewer.text_overlay_format"),
+        )
+        logger.info(
+            "Migrated legacy strftime text_overlay_format to keyword format: %r -> %r",
+            logical,
+            _TEXT_OVERLAY_FORMAT_KEYWORDS,
+        )
+
+
 # Define the initial schema migration for config.db3
 CONFIG_MIGRATIONS = [
     Migration(
@@ -31,7 +85,11 @@ CONFIG_MIGRATIONS = [
             path TEXT UNIQUE NOT NULL
         );
         """,
-    )
+    ),
+    Migration(
+        version=2,
+        up_script=_normalize_text_overlay_format_v2,
+    ),
 ]
 
 
@@ -54,11 +112,9 @@ class SQLiteConfigRepository(IConfigRepository):
         self._lock = threading.RLock()
         # Use check_same_thread=False because the repository is shared across
         # service threads. Access to the connection is serialized by _lock.
-        self._conn = sqlite3.connect(
-            self._db_path, check_same_thread=False, isolation_level=None
-        )
+        self._conn = sqlite3.connect(self._db_path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
-        
+
         # Enable WAL mode for better concurrency
         with self._lock:
             self._conn.execute("PRAGMA journal_mode=WAL;")
@@ -87,9 +143,7 @@ class SQLiteConfigRepository(IConfigRepository):
             The deserialized configuration value, or the default if not found.
         """
         with self._lock:
-            cursor = self._conn.execute(
-                "SELECT value FROM app_config WHERE key = ?", (key,)
-            )
+            cursor = self._conn.execute("SELECT value FROM app_config WHERE key = ?", (key,))
             row = cursor.fetchone()
         if row:
             if row["value"] is None:
@@ -169,9 +223,7 @@ class SQLiteConfigRepository(IConfigRepository):
         config = {}
         for row in rows:
             if row["value"] is None:
-                logger.warning(
-                    f"Skipping config key with NULL value: {row['key']}"
-                )
+                logger.warning(f"Skipping config key with NULL value: {row['key']}")
                 continue
             try:
                 config[row["key"]] = json.loads(row["value"])
@@ -201,9 +253,7 @@ class SQLiteConfigRepository(IConfigRepository):
             The ID of the newly inserted directory.
         """
         with self._lock, self._conn:
-            cursor = self._conn.execute(
-                "INSERT INTO directories (path) VALUES (?)", (path,)
-            )
+            cursor = self._conn.execute("INSERT INTO directories (path) VALUES (?)", (path,))
             return cursor.lastrowid or 0
 
     def remove_directory(self, directory_id: int) -> None:
@@ -214,9 +264,7 @@ class SQLiteConfigRepository(IConfigRepository):
             directory_id: The ID of the directory to remove.
         """
         with self._lock, self._conn:
-            self._conn.execute(
-                "DELETE FROM directories WHERE id = ?", (directory_id,)
-            )
+            self._conn.execute("DELETE FROM directories WHERE id = ?", (directory_id,))
 
     def close(self) -> None:
         """Close the database connection."""

@@ -82,19 +82,20 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   line. Tests cover DTO propagation, renderer behavior for all three sources,
   legacy import mapping, and frontend schema presence.
 - Ticket #719 alpha-test bug fixes (reported by Paddy/@paddywwoof):
-  (1) `text_renderer.py` gradient sprite: z is set only via `position()` (not
-  the constructor), PIL conversion removed (numpy array passed directly to
-  `pi3d.Texture`), 1px-wide texture cached and scaled via GPU `sprite.scale()`;
-  (2) `clock_extra_source` is now propagated through `OverlayConfig` in
-  `playback.py`, and `ClockRenderer` re-reads `/dev/shm/clock.txt` dynamically
-  on each `has_changed()`/`draw()` call; (3) `ImageMetadataStrategy` and
-  `VideoMetadataStrategy` fall back to `last_modified` at indexing time when
-  no EXIF/creation date is found, so the DB always has a valid `exif_datetime`
-  and date-range SQL filters work without runtime fallbacks. Tests updated for
-  text renderer, clock renderer, image strategy, video strategy, and playback.
-  A follow-up fix added `clock_extra_text` to the clock renderer's visual
-  signature so the clock block is invalidated when only the text changes (not
-  just the source); test coverage added for the rebuild-on-text-change case.
+  (1) `text_renderer.py` gradient sprite z-order fixed — gradient moved behind
+  text (z=0.3 vs text z=0.1; status overlay z=0.05 in front), full-render-height
+  texture scaled on GPU via `sprite.scale()` so it is not rebuilt when band
+  height changes; (2) `clock_extra_source` is now propagated through
+  `OverlayConfig` in `playback.py`, and `ClockRenderer` re-reads
+  `/dev/shm/clock.txt` dynamically on each `has_changed()`/`draw()` call; (3)
+  `ImageMetadataStrategy` and `VideoMetadataStrategy` fall back to
+  `last_modified` at indexing time when no EXIF/creation date is found, so the
+  DB always has a valid `exif_datetime` and date-range SQL filters work
+  without runtime fallbacks. Tests updated for text renderer, clock renderer,
+  image strategy, video strategy, and playback. A follow-up fix added
+  `clock_extra_text` to the clock renderer's visual signature so the clock
+  block is invalidated when only the text changes (not just the source); test
+  coverage added for the rebuild-on-text-change case.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
@@ -145,7 +146,9 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   passed; ruff format/check passed after import ordering fix; `git diff --check`
   passed.
 - Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.
-- Latest #719 verification: full `.venv/bin/python -m pytest` passed with 744
-  tests and 1 GI deprecation warning; focused clock renderer tests passed
-  with 16 tests including the new rebuild-on-text-change case; `ruff check`
-  and `mypy` passed clean on touched files; `git diff --check` passed.
+- Latest #719 verification: full `.venv/bin/python -m pytest` passed with 753
+  tests and 1 GI deprecation warning; focused text/clock renderer tests passed
+  with 30 tests including the z-order fix and the rebuild-on-text-change case;
+  `ruff check` and `mypy` passed clean on touched files; `git diff --check`
+  passed. Remaining: docs z-order convention, frontend rebuild, commit, push,
+  ticket close, and Discussion #682 comment.

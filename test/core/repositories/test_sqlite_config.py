@@ -5,6 +5,7 @@ This module verifies the CRUD operations for application configuration
 and directory management using an in-memory SQLite database.
 """
 
+import json
 import sqlite3
 import threading
 import time
@@ -31,11 +32,9 @@ def test_repository_initialization_runs_migrations(
 ) -> None:
     """Test that initializing the repository creates the required tables."""
     # Access the underlying connection to verify tables
-    cursor = config_repo._conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    )
+    cursor = config_repo._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = [row["name"] for row in cursor.fetchall()]
-    
+
     assert "app_config" in tables
     assert "directories" in tables
     assert "schema_version" in tables
@@ -59,10 +58,7 @@ def test_set_and_get_app_config(config_repo: SQLiteConfigRepository) -> None:
 
 def test_get_app_config_default(config_repo: SQLiteConfigRepository) -> None:
     """Test retrieving a non-existent key returns the default value."""
-    assert (
-        config_repo.get_app_config("missing_key", "default_val")
-        == "default_val"
-    )
+    assert config_repo.get_app_config("missing_key", "default_val") == "default_val"
     assert config_repo.get_app_config("missing_key") is None
 
 
@@ -183,7 +179,7 @@ def test_add_and_get_directories(config_repo: SQLiteConfigRepository) -> None:
 
     directories = config_repo.get_all_directories()
     assert len(directories) == 2
-    
+
     paths = [d["path"] for d in directories]
     assert "/path/to/photos" in paths
     assert "/path/to/videos" in paths
@@ -201,12 +197,122 @@ def test_add_duplicate_directory_raises_error(
 def test_remove_directory(config_repo: SQLiteConfigRepository) -> None:
     """Test removing a directory by ID."""
     dir_id = config_repo.add_directory("/path/to/remove")
-    
+
     # Verify it was added
     assert len(config_repo.get_all_directories()) == 1
-    
+
     # Remove it
     config_repo.remove_directory(dir_id)
-    
+
     # Verify it was removed
     assert len(config_repo.get_all_directories()) == 0
+
+
+def _legacy_config_db(tmp_path: Path, text_overlay_format: str, *, raw: bool = False) -> Path:
+    """Create a v1 config db seeded with a legacy ``text_overlay_format``.
+
+    By default the value is stored JSON-encoded the way
+    :meth:`SQLiteConfigRepository.set_app_config` would write it. When
+    ``raw`` is true the value is stored as a plain string to emulate a
+    picframe 1.x database that was never touched by the 2.0 repository.
+    """
+    db_path = tmp_path / "config.db3"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE app_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        CREATE TABLE directories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT UNIQUE NOT NULL
+        );
+        CREATE TABLE schema_version (
+            version INTEGER PRIMARY KEY
+        );
+        INSERT INTO schema_version (version) VALUES (1);
+        """
+    )
+    stored = text_overlay_format if raw else json.dumps(text_overlay_format)
+    conn.execute(
+        "INSERT INTO app_config (key, value) VALUES (?, ?)",
+        ("viewer.text_overlay_format", stored),
+    )
+    conn.execute(
+        "INSERT INTO app_config (key, value) VALUES (?, ?)",
+        ("viewer.show_text_enabled", json.dumps(False)),
+    )
+    conn.commit()
+    conn.close()
+    return db_path
+
+
+def test_v2_migration_rewrites_legacy_strftime_text_overlay_format(
+    tmp_path: Path,
+) -> None:
+    """Legacy strftime values are rewritten to canonical keyword format on open."""
+    db_path = _legacy_config_db(tmp_path, "%b %d, %Y")
+    repo = SQLiteConfigRepository(str(db_path))
+    try:
+        migrated = repo.get_app_config("viewer.text_overlay_format")
+        assert migrated == "title caption name date folder location"
+        version = repo._conn.execute("SELECT version FROM schema_version").fetchone()["version"]
+        assert version == 2
+    finally:
+        repo.close()
+
+
+def test_v2_migration_rewrites_raw_legacy_strftime_value(tmp_path: Path) -> None:
+    """Plain (non-JSON) picframe 1.x strftime values are also migrated."""
+    db_path = _legacy_config_db(tmp_path, "%b %d, %Y", raw=True)
+    repo = SQLiteConfigRepository(str(db_path))
+    try:
+        assert (
+            repo.get_app_config("viewer.text_overlay_format")
+            == "title caption name date folder location"
+        )
+    finally:
+        repo.close()
+
+
+def test_v2_migration_preserves_keyword_text_overlay_format(
+    tmp_path: Path,
+) -> None:
+    """User-selected keyword values are left untouched by the migration."""
+    user_value = "title location"
+    db_path = _legacy_config_db(tmp_path, user_value)
+    repo = SQLiteConfigRepository(str(db_path))
+    try:
+        assert repo.get_app_config("viewer.text_overlay_format") == user_value
+    finally:
+        repo.close()
+
+
+def test_v2_migration_skips_when_key_absent(tmp_path: Path) -> None:
+    """Missing ``text_overlay_format`` does not raise during migration."""
+    db_path = tmp_path / "config.db3"
+    conn = sqlite3.connect(db_path)
+    conn.executescript(
+        """
+        CREATE TABLE app_config (
+            key TEXT PRIMARY KEY,
+            value TEXT NOT NULL
+        );
+        CREATE TABLE directories (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            path TEXT UNIQUE NOT NULL
+        );
+        CREATE TABLE schema_version (
+            version INTEGER PRIMARY KEY
+        );
+        INSERT INTO schema_version (version) VALUES (1);
+        """
+    )
+    conn.commit()
+    conn.close()
+    repo = SQLiteConfigRepository(str(db_path))
+    try:
+        assert repo.get_app_config("viewer.text_overlay_format", "fallback") == ("fallback")
+    finally:
+        repo.close()

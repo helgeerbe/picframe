@@ -87,16 +87,18 @@ functional after the #719 fixes.
   advanced viewer settings. A follow-up fix added `clock_extra_text` to the
   clock renderer's visual signature so the clock block is invalidated when
   only the text changes (not just the source).
-- Ticket #719 fixes three alpha-test bugs reported by Paddy (@paddywwoof):
-  (1) `text_renderer.py` gradient sprite z-order (z only in `position()`, not the
-  constructor), PIL conversion removed (numpy array passed directly to
-  `pi3d.Texture`), and 1px-wide texture with GPU `sprite.scale()` caching; (2)
+- Ticket #719 fixes alpha-test bugs reported by Paddy (@paddywwoof):
+  (1) `text_renderer.py` gradient sprite z-order — gradient moved behind text
+  (z=0.3 vs text z=0.1; status overlay z=0.05 in front), full-render-height
+  texture scaled on GPU so it is not rebuilt when band height changes; (2)
   `clock_extra_source` is now propagated through `OverlayConfig` in
   `playback.py` and `ClockRenderer` re-reads `/dev/shm/clock.txt` on each
   `has_changed()`/`draw()` call for dynamic updates; (3) `ImageMetadataStrategy`
   and `VideoMetadataStrategy` now fall back to `last_modified` at indexing time
   when no EXIF/creation date is found, so the DB always has a valid
   `exif_datetime` and date-range SQL filters work without runtime fallbacks.
+  The z-order fix (Paddy's Discussion #682 feedback) resolved the default
+  gradient (`text_bkg_hgt=0.25`) occluding the text overlay.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.

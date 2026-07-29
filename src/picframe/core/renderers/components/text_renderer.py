@@ -58,6 +58,8 @@ class TextRenderer:
 
         Bug 1b: pass numpy array directly to ``pi3d.Texture`` (no PIL conversion).
         Bug 1c: texture is 1px wide; width is applied via GPU ``sprite.scale()``.
+        Paddy's #719 feedback: texture is built at full render height for a
+        smoother gradient; the sprite is scaled down to ``band_height`` via GPU.
         """
         height = max(1, int(height))
         alpha_values = np.linspace(0.0, max_alpha * brightness, height, dtype=np.float32)
@@ -68,15 +70,20 @@ class TextRenderer:
 
     def _get_gradient_texture(
         self,
-        band_height: int,
+        texture_height: int,
         max_alpha: float,
         brightness: float,
     ) -> Any:
-        """Return cached gradient texture, rebuilding only when signature changes (Bug 1c)."""
-        sig = (int(band_height), int(max_alpha), round(float(brightness), 6))
+        """Return cached gradient texture, rebuilding only when signature changes (Bug 1c).
+
+        *texture_height* is the full render height (not band height); the sprite
+        is scaled to ``band_height`` via GPU so the texture is not rebuilt when
+        only the band height changes.
+        """
+        sig = (int(texture_height), int(max_alpha), round(float(brightness), 6))
         if self._gradient_texture is not None and sig == self._gradient_texture_sig:
             return self._gradient_texture
-        self._gradient_texture = self._build_gradient_texture(band_height, max_alpha, brightness)
+        self._gradient_texture = self._build_gradient_texture(texture_height, max_alpha, brightness)
         self._gradient_texture_sig = sig
         return self._gradient_texture
 
@@ -104,9 +111,11 @@ class TextRenderer:
             sprite.set_alpha(0.0)
             sprites.append(sprite)
 
+        # z increases away from the camera (Paddy's #719 feedback).
+        # Gradient must be BEHIND text (z=0.3 > text z=0.1) so text is visible.
         for sprite, (sprite_width, cx, cy) in zip(sprites, specs):
             sprite.set_textures([texture])
-            sprite.position(cx, cy, 0.05)  # Bug 1a: z only in position()
+            sprite.position(cx, cy, 0.3)  # Bug 1a: z only in position(); #719 z-order
             sprite.scale(sprite_width, band_height, 1.0)  # Bug 1c: GPU scaling
 
         return sprites
@@ -240,7 +249,9 @@ class TextRenderer:
                     color=(255, 255, 255, opacity),
                     background_color=None,
                 )
-                status_block.sprite.position(render_center_x, render_center_y, 0.2)
+                # z increases away from camera: status (z=0.05) is closest to
+                # camera, in front of text (z=0.1) and gradient (z=0.3).
+                status_block.sprite.position(render_center_x, render_center_y, 0.05)
                 status_block.sprite.set_alpha(0.0)
                 self._text_blocks.append(status_block)
 
@@ -248,7 +259,9 @@ class TextRenderer:
                     gradient_specs.append((render_w, render_center_x, render_center_y))
 
             if use_gradient and gradient_specs:
-                texture = self._get_gradient_texture(band_height, int(255 * 0.45), brightness)
+                # Paddy's #719 feedback: build texture at full render height for
+                # a smoother gradient; sprite is scaled to band_height via GPU.
+                texture = self._get_gradient_texture(render_h, int(255 * 0.45), brightness)
                 self._background_sprites = self._adjust_gradient_sprites(
                     texture, gradient_specs, band_height
                 )

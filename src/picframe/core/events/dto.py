@@ -177,8 +177,10 @@ class RendererConfig:
     clock_top_bottom: str = "T"
     clock_wdt_offset_pct: float = 3.0
     clock_hgt_offset_pct: float = 3.0
-    show_text_enabled: bool = False
-    text_overlay_format: str = "%b %d, %Y"
+    clock_extra_source: str = "off"
+    clock_extra_text: str = ""
+    show_text_enabled: bool = True
+    text_overlay_format: str = "title caption name date folder location"
     show_text_fm: str = "%b %d, %Y"
     model_locale: str = "en_US.utf8"
     text_justify: str = "L"

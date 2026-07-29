@@ -41,7 +41,7 @@ def build_renderer_config(
         fps=int(config_repository.get_app_config("viewer.fps", 20)),
         background=tuple(
             config_repository.get_app_config("viewer.background", [0.0, 0.0, 0.0, 1.0])
-        ),  # type: ignore[arg-type]
+        ),
         use_glx=config_repository.get_app_config_bool("viewer.use_glx", False),
         use_sdl2=config_repository.get_app_config_bool("viewer.use_sdl2", False),
         shader_path=paths.resolve(
@@ -62,15 +62,17 @@ def build_renderer_config(
         clock_hgt_offset_pct=float(
             config_repository.get_app_config("viewer.clock_hgt_offset_pct", 3.0)
         ),
-        show_text_enabled=config_repository.get_app_config_bool(
-            "viewer.show_text_enabled", False
+        clock_extra_source=str(
+            config_repository.get_app_config("viewer.clock_extra_source", "off")
         ),
+        clock_extra_text=str(config_repository.get_app_config("viewer.clock_extra_text", "")),
+        show_text_enabled=config_repository.get_app_config_bool("viewer.show_text_enabled", True),
         text_overlay_format=str(
-            config_repository.get_app_config("viewer.text_overlay_format", "%b %d, %Y")
+            config_repository.get_app_config(
+                "viewer.text_overlay_format", "title caption name date folder location"
+            )
         ),
-        show_text_fm=str(
-            config_repository.get_app_config("viewer.show_text_fm", "%b %d, %Y")
-        ),
+        show_text_fm=str(config_repository.get_app_config("viewer.show_text_fm", "%b %d, %Y")),
         model_locale=str(config_repository.get_app_config("model.locale", "en_US.utf8")),
         text_justify=str(config_repository.get_app_config("viewer.text_justify", "L")),
         show_text_sz=int(config_repository.get_app_config("viewer.show_text_sz", 40)),
@@ -96,9 +98,7 @@ def build_renderer_config(
         blur_edges=config_repository.get_app_config_bool("viewer.blur_edges", False),
         edge_alpha=float(config_repository.get_app_config("viewer.edge_alpha", 0.5)),
         fit=config_repository.get_app_config_bool("viewer.fit", False),
-        video_fit_display=config_repository.get_app_config_bool(
-            "viewer.video_fit_display", False
-        ),
+        video_fit_display=config_repository.get_app_config_bool("viewer.video_fit_display", False),
         video_extensions=config_repository.get_app_config(
             "model.video_extensions", [".mp4", ".mov", ".avi", ".mkv"]
         ),
@@ -106,12 +106,8 @@ def build_renderer_config(
         mat_type=config_repository.get_app_config("viewer.mat_type", None),
         outer_mat_color=config_repository.get_app_config("viewer.outer_mat_color", None),
         inner_mat_color=config_repository.get_app_config("viewer.inner_mat_color", None),
-        outer_mat_border=int(
-            config_repository.get_app_config("viewer.outer_mat_border", 75)
-        ),
-        inner_mat_border=int(
-            config_repository.get_app_config("viewer.inner_mat_border", 40)
-        ),
+        outer_mat_border=int(config_repository.get_app_config("viewer.outer_mat_border", 75)),
+        inner_mat_border=int(config_repository.get_app_config("viewer.inner_mat_border", 40)),
         outer_mat_use_texture=config_repository.get_app_config_bool(
             "viewer.outer_mat_use_texture", True
         ),

@@ -1,6 +1,7 @@
 """
 Pi3d implementation of the IRenderer interface.
 """
+
 import logging
 import os
 import queue
@@ -54,7 +55,7 @@ class PrioritizedRenderTask:
 class Pi3dRenderer(IRenderer):
     """
     Renderer implementation using the pi3d library.
-    
+
     Responsible for managing the OpenGL/EGL context, loading textures,
     and executing image transitions (alpha blending, Ken Burns).
     """
@@ -117,7 +118,7 @@ class Pi3dRenderer(IRenderer):
     ) -> None:
         """
         Initialize the renderer with configuration.
-        
+
         Args:
             config: Strongly-typed configuration for the renderer.
             event_subscriber: Optional event subscriber to listen for config changes.
@@ -126,26 +127,26 @@ class Pi3dRenderer(IRenderer):
         self._config = config
         self._event_subscriber = event_subscriber
         self._event_publisher = event_publisher
-        
+
         if self._event_subscriber:
             self._event_subscriber.subscribe(RendererConfigUpdatedEvent, self._handle_config_event)
             self._event_subscriber.subscribe(CurrentMediaChangedEvent, self._handle_state_event)
-        
+
         # Display settings
         self._display_x = config.display_x
         self._display_y = config.display_y
         self._display_w = config.display_w
         self._display_h = config.display_h
-            
+
         self._fps = config.fps
         self._background = config.background
         self._use_glx = config.use_glx
         self._use_sdl2 = config.use_sdl2
-        
+
         # Rendering settings
         self._shader_path = os.path.expanduser(config.shader_path)
         self._kenburns = config.kenburns
-        
+
         # State
         self._display: Any | None = None
         self._image_renderer: ImageRenderer | None = None
@@ -154,15 +155,15 @@ class Pi3dRenderer(IRenderer):
         self._video_reveal_parked = False
         self._video_first_frame_transition = False
         self._transition_token: int | None = None
-        
+
         # Text Overlay State
         self._overlay_config = self._build_overlay_config(text_string="")
         self._text_renderer: TextRenderer | None = None
         self._clock_renderer: ClockRenderer | None = None
-        
+
         self._animation_controller = AnimationController(self._animation_config())
         self._animation_controller.update_text_config(self._overlay_config.show_text, False)
-        
+
         self._local_queue: queue.PriorityQueue[PrioritizedRenderTask] = queue.PriorityQueue()
         self._current_media: Any | None = None
 
@@ -182,13 +183,13 @@ class Pi3dRenderer(IRenderer):
             media_item = media_item.primary
         if not media_item or getattr(media_item, "filepath", "").endswith("no_pictures.jpg"):
             return ""
-            
+
         if not self._config.show_text_enabled:
             return ""
-            
+
         show_text_config = self._config.text_overlay_format.lower()
         show_text_fm = self._config.show_text_fm
-            
+
         parts = []
         if "title" in show_text_config and getattr(media_item, "title", None):
             parts.append(media_item.title)
@@ -198,6 +199,7 @@ class Pi3dRenderer(IRenderer):
             parts.append(media_item.filename)
         if "date" in show_text_config and getattr(media_item, "exif_datetime", None):
             import datetime
+
             try:
                 dt = datetime.datetime.fromtimestamp(media_item.exif_datetime)
                 parts.append(
@@ -218,7 +220,7 @@ class Pi3dRenderer(IRenderer):
             )
             if location:
                 parts.append(location)
-            
+
         return " - ".join(parts)
 
     def _generate_text_strings(self, media_item: Any) -> tuple[str, ...]:
@@ -231,7 +233,7 @@ class Pi3dRenderer(IRenderer):
     def _handle_config_event(self, event: Any) -> None:
         if not isinstance(event, RendererConfigUpdatedEvent):
             return
-            
+
         self._logger.info("Renderer received RendererConfigUpdatedEvent. Updating state.")
         old_config = self._config
         restart_required = self.requires_restart_for_config(old_config, event.config)
@@ -263,29 +265,28 @@ class Pi3dRenderer(IRenderer):
         self._animation_controller.update_config(self._animation_config())
         if self._image_renderer:
             self._image_renderer.update_config(self._config)
-        
+
         old_text_string = self._overlay_config.text_string
         new_text_string = old_text_string
         new_text_strings: tuple[str, ...] = ()
-        
+
         if self._current_media:
             new_text_strings = self._generate_text_strings(self._current_media)
             new_text_string = new_text_strings[0] if new_text_strings else ""
-            
+
         self._overlay_config = self._build_overlay_config(
             text_string=new_text_string,
             text_strings=new_text_strings if len(new_text_strings) == 2 else (),
         )
-        
+
         if self._text_renderer:
             self._text_renderer.update_config(self._overlay_config)
         if self._clock_renderer:
             self._clock_renderer.update_config(self._overlay_config)
-            
+
         self._animation_controller.force_redraw(2)
         self._animation_controller.update_text_config(
-            self._overlay_config.show_text,
-            self._overlay_config.text_string != old_text_string
+            self._overlay_config.show_text, self._overlay_config.text_string != old_text_string
         )
 
     def _apply_live_display_settings(self) -> None:
@@ -300,7 +301,7 @@ class Pi3dRenderer(IRenderer):
     def _handle_state_event(self, event: Any) -> None:
         if isinstance(event, CurrentMediaChangedEvent):
             self._current_media = event.media_item
-            
+
             # Update text string when media changes
             if self._config.show_text_enabled:
                 new_text_strings = self._generate_text_strings(self._current_media)
@@ -360,6 +361,8 @@ class Pi3dRenderer(IRenderer):
             clock_top_bottom=self._config.clock_top_bottom,
             clock_wdt_offset_pct=self._config.clock_wdt_offset_pct,
             clock_hgt_offset_pct=self._config.clock_hgt_offset_pct,
+            clock_extra_source=self._config.clock_extra_source,
+            clock_extra_text=self._config.clock_extra_text,
             show_text=self._config.show_text_enabled,
             text_string=text_string,
             text_strings=text_strings,
@@ -397,9 +400,7 @@ class Pi3dRenderer(IRenderer):
             os.kill(labwc_pid, signal.SIGHUP)
             time.sleep(0.05)
             if geometry is None:
-                self._logger.info(
-                    "Configured labwc fullscreen/default rules for pi3d."
-                )
+                self._logger.info("Configured labwc fullscreen/default rules for pi3d.")
             else:
                 self._logger.info(
                     "Configured labwc geometry for pi3d at %s,%s %sx%s.",
@@ -468,16 +469,15 @@ class Pi3dRenderer(IRenderer):
         if self._display is None:
             return False
         old_config = old_config or self._config
-        if self._component_rebuild_signature(
-            old_config
-        ) != self._component_rebuild_signature(new_config):
+        if self._component_rebuild_signature(old_config) != self._component_rebuild_signature(
+            new_config
+        ):
             return True
         if self._geometry_signature(old_config) == self._geometry_signature(new_config):
             return False
-        return (
-            self._uses_fullscreen_host_for_config(old_config)
-            and self._uses_fullscreen_host_for_config(new_config)
-        )
+        return self._uses_fullscreen_host_for_config(
+            old_config
+        ) and self._uses_fullscreen_host_for_config(new_config)
 
     def requires_restart_for_config(
         self,
@@ -488,9 +488,9 @@ class Pi3dRenderer(IRenderer):
         if self._display is None:
             return False
         old_config = old_config or self._config
-        if self._service_restart_signature(
-            old_config
-        ) != self._service_restart_signature(new_config):
+        if self._service_restart_signature(old_config) != self._service_restart_signature(
+            new_config
+        ):
             return True
         if self._geometry_signature(old_config) == self._geometry_signature(new_config):
             return False
@@ -581,7 +581,7 @@ class Pi3dRenderer(IRenderer):
             match_value=VIDEO_WINDOW_TITLE,
         )
         return (
-            "<?xml version=\"1.0\"?>\n"
+            '<?xml version="1.0"?>\n'
             "<labwc_config>\n"
             "  <windowRules>\n"
             f"{pi3d_identifier_rule}\n"
@@ -635,14 +635,14 @@ class Pi3dRenderer(IRenderer):
         pi3d.Camera(is_3d=False)
         shader = pi3d.Shader(self._shader_path)
         flat_shader = pi3d.Shader("uv_flat")
-        
+
         self._image_renderer = ImageRenderer(
             self._display,
             shader,
             self._config,
             render_rect=self._render_rect,
         )
-        
+
         font_file = os.path.expanduser(self._config.font_file)
         self._text_renderer = TextRenderer(
             self._display,
@@ -788,7 +788,7 @@ class Pi3dRenderer(IRenderer):
         return any(self._overlay_config.text_strings)
 
     def _transition_completed_ready(self, anim_state: Any) -> bool:
-        if not getattr(self, '_was_transitioning', False):
+        if not getattr(self, "_was_transitioning", False):
             return False
         if anim_state.render_state != RenderState.STATIC:
             return False
@@ -819,7 +819,7 @@ class Pi3dRenderer(IRenderer):
         if self._image_renderer is None:
             self._logger.warning("Renderer image component not ready, ignoring command")
             return
-            
+
         if command.overlay:
             self._overlay_config = replace(
                 self._overlay_config,
@@ -827,7 +827,7 @@ class Pi3dRenderer(IRenderer):
                 text_strings=command.overlay.text_strings,
                 status_text=command.overlay.status_text,
             )
-            
+
         try:
             if command.image_path == "SUSPEND":
                 self._animation_controller.suspend()
@@ -912,10 +912,12 @@ class Pi3dRenderer(IRenderer):
                     self._animation_controller.force_redraw(2)
                     # Ensure we wake up from SUSPENDED state to process the redraw
                     from picframe.core.renderers.animation_controller import RenderState
+
                     if self._animation_controller._state == RenderState.SUSPENDED:
                         self._animation_controller.resume()
                         # We need to suspend again after drawing the background
                         import threading
+
                         threading.Timer(0.5, self._animation_controller.suspend).start()
                 else:
                     self._video_first_frame_transition = is_video_first_frame
@@ -926,7 +928,7 @@ class Pi3dRenderer(IRenderer):
                         self._overlay_has_visible_text(),
                         True,
                     )
-                    
+
                     if self._text_renderer:
                         self._text_renderer.update_config(self._overlay_config)
                     if self._clock_renderer:
@@ -934,7 +936,7 @@ class Pi3dRenderer(IRenderer):
             else:
                 self._video_first_frame_transition = False
                 self._transition_token = None
-                
+
         except Exception as e:
             self._logger.error(f"Failed to execute RenderCommand: {e}")
 
@@ -948,9 +950,9 @@ class Pi3dRenderer(IRenderer):
             return self._render_rect
         if self._display is None:
             return (self._display_x, self._display_y, self._display_w or 0, self._display_h or 0)
-        
-        x = getattr(self._display, 'left', self._display_x)
-        y = getattr(self._display, 'top', self._display_y)
+
+        x = getattr(self._display, "left", self._display_x)
+        y = getattr(self._display, "top", self._display_y)
         return (int(x), int(y), int(self._display.width), int(self._display.height))
 
     def render_frame(self) -> bool:
@@ -963,7 +965,7 @@ class Pi3dRenderer(IRenderer):
             self._rebuild_components_for_existing_display()
         if self._image_renderer is None:
             return False
-            
+
         tm = time.time()
         anim_state = self._animation_controller.update(tm)
         previous_text_alpha = getattr(self, "_last_text_alpha", -1.0)
@@ -993,29 +995,31 @@ class Pi3dRenderer(IRenderer):
             return True
 
         needs_redraw = False
-        
+
         # 1. Check animation and transition states
-        if (anim_state.render_state in (RenderState.TRANSITIONING, RenderState.TEXT_ANIMATING) or
-            self._kenburns or
-            anim_state.frames_to_render > 0 or
-            anim_state.text_alpha != previous_text_alpha):
+        if (
+            anim_state.render_state in (RenderState.TRANSITIONING, RenderState.TEXT_ANIMATING)
+            or self._kenburns
+            or anim_state.frames_to_render > 0
+            or anim_state.text_alpha != previous_text_alpha
+        ):
             needs_redraw = True
-            
+
         # 2. Check dynamic overlays (Clock)
         elif self._clock_renderer:
             if self._clock_renderer.has_changed():
                 needs_redraw = True
-                
+
         # 3. OS Keepalive (prevent Wayland/X11 "Not Responding" hangs)
-        elif (tm - getattr(self, '_last_redraw_time', 0)) > 10.0:
+        elif (tm - getattr(self, "_last_redraw_time", 0)) > 10.0:
             needs_redraw = True
 
         # --- STATIC BYPASS ---
         if not needs_redraw:
             # If we just finished a transition, we need to emit the event
             self._publish_transition_completed_if_ready(anim_state)
-            time.sleep(0.05) # Yield CPU to OS
-            return True      # Keep PlaybackEngine loop alive
+            time.sleep(0.05)  # Yield CPU to OS
+            return True  # Keep PlaybackEngine loop alive
 
         # --- ACTIVE RENDER BLOCK ---
         loop_running = self._display.loop_running()
@@ -1037,20 +1041,20 @@ class Pi3dRenderer(IRenderer):
         self._image_renderer.set_alpha(anim_state.image_alpha)
         if self._kenburns:
             self._image_renderer.set_kenburns_offsets(anim_state.kenburns_x, anim_state.kenburns_y)
-            
+
         if self._text_renderer:
             self._text_renderer.set_alpha(anim_state.text_alpha)
 
         # Draw components
         self._image_renderer.draw()
-        
+
         if (
             self._text_renderer
             and self._overlay_has_visible_text()
             and anim_state.text_alpha > TEXT_VISIBLE_ALPHA_THRESHOLD
         ):
             self._text_renderer.draw()
-            
+
         if self._clock_renderer and self._overlay_config.show_clock:
             self._clock_renderer.draw()
 

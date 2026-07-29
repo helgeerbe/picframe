@@ -131,7 +131,8 @@ def test_text_renderer_status_text_is_single_center_overlay_for_pairs(
 
     rendered_texts = [call.args[1] for call in mock_fixed_string.call_args_list]
     assert rendered_texts == ["Left", "Right", "PAUSED"]
-    text_blocks[2].sprite.position.assert_called_once_with(0.0, 0.0, 0.2)
+    # z=0.05: status is closest to camera (in front of text z=0.1, gradient z=0.3)
+    text_blocks[2].sprite.position.assert_called_once_with(0.0, 0.0, 0.05)
 
 
 def test_text_renderer_set_alpha(text_renderer):
@@ -316,9 +317,9 @@ def test_text_renderer_gradient_sprite_no_z_in_constructor(mock_display, mock_sh
     # Sprite constructor must not receive a z kwarg
     kwargs = mock_sprite.call_args.kwargs
     assert "z" not in kwargs
-    # position() must set z=0.05 (behind text at z=0.1)
+    # position() must set z=0.3 (behind text at z=0.1 per #719 z-order fix)
     mock_sprite.return_value.position.assert_called_once()
-    assert mock_sprite.return_value.position.call_args.args[2] == 0.05
+    assert mock_sprite.return_value.position.call_args.args[2] == 0.3
 
 
 def test_text_renderer_gradient_texture_passes_numpy_directly(mock_display, mock_shader):
@@ -486,8 +487,10 @@ def test_text_renderer_no_gradient_sprite_when_bkg_disabled(mock_display, mock_s
 
 
 def test_text_renderer_gradient_texture_uses_numpy_linspace(mock_display, mock_shader):
+    # Paddy's #719 feedback: texture is built at full render height (1080), not
+    # band_height. The sprite is scaled to band_height via GPU.
     # Compute the return value before patching np.linspace
-    preset_values = np.linspace(0, 255, 216, dtype=np.float32)
+    preset_values = np.linspace(0, 255, 1080, dtype=np.float32)
     with (
         mock_pi3d_text_components(),
         patch(TEXTURE_PATCH) as mock_texture,
@@ -508,13 +511,89 @@ def test_text_renderer_gradient_texture_uses_numpy_linspace(mock_display, mock_s
     assert args[0] == 0.0
     # max_alpha * brightness = int(255 * 0.45) * 1.0 = 114
     assert args[1] == 114
-    # Height of band = int(1080 * 0.2) = 216
-    assert args[2] == 216
+    # Full render height = 1080 (not band_height=216)
+    assert args[2] == 1080
     mock_texture.assert_called_once()
     # Bug 1b: Texture receives numpy array, not PIL Image
     assert isinstance(mock_texture.call_args.args[0], np.ndarray)
-    # Bug 1c: Texture is 1px wide (height, 1, 4)
-    assert mock_texture.call_args.args[0].shape == (216, 1, 4)
+    # Bug 1c: Texture is 1px wide (height, 1, 4) at full render height
+    assert mock_texture.call_args.args[0].shape == (1080, 1, 4)
+
+
+def test_text_renderer_gradient_z_order_behind_text(mock_display, mock_shader):
+    """#719 z-order fix: gradient (z=0.3) must be behind text (z=0.1).
+
+    z increases away from the camera, so a larger z means farther from camera.
+    The gradient background must have a larger z than the text so the text
+    passes the depth test and is visible.
+    """
+    with (
+        mock_pi3d_text_components(),
+        patch(SPRITE_PATCH) as mock_sprite,
+    ):
+        mock_sprite.return_value = MagicMock()
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Z Order",
+                text_bkg_hgt=0.25,
+            )
+        )
+
+    gradient_z = mock_sprite.return_value.position.call_args.args[2]
+    text_z = renderer._text_blocks[0].sprite.position.call_args.args[2]
+    assert gradient_z > text_z, (
+        f"Gradient z={gradient_z} must be > text z={text_z} (farther from camera)"
+    )
+
+
+def test_text_renderer_status_z_in_front_of_text(mock_display, mock_shader):
+    """#719 z-order fix: status (z=0.05) must be in front of text (z=0.1).
+
+    z increases away from the camera, so a smaller z means closer to camera.
+    The status overlay must have a smaller z than the text so it is always
+    visible on top of the text and gradient.
+    """
+    with mock_pi3d_text_components() as mock_fixed_string:
+        text_block = MagicMock()
+        text_block.sprite = MagicMock()
+        text_block.sprite.height = 40
+        status_block = MagicMock()
+        status_block.sprite = MagicMock()
+        status_block.sprite.height = 40
+        mock_fixed_string.side_effect = [text_block, status_block]
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Text",
+                status_text="PAUSED",
+            )
+        )
+
+    status_z = status_block.sprite.position.call_args.args[2]
+    text_z = text_block.sprite.position.call_args.args[2]
+    assert status_z < text_z, f"Status z={status_z} must be < text z={text_z} (closer to camera)"
+
+
+def test_text_renderer_gradient_texture_not_rebuilt_when_band_height_changes(
+    mock_display, mock_shader
+):
+    """#719: texture is built at full render height, so changing band_height
+    (via text_bkg_hgt) does not rebuild the texture — only the sprite scale changes.
+    """
+    with (
+        mock_pi3d_text_components(),
+        patch(TEXTURE_PATCH) as mock_texture,
+    ):
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(OverlayConfig(show_text=True, text_string="T1", text_bkg_hgt=0.2))
+        first_count = mock_texture.call_count
+
+        # Different band_height, same render height → texture NOT rebuilt
+        renderer.update_config(OverlayConfig(show_text=True, text_string="T2", text_bkg_hgt=0.3))
+        assert mock_texture.call_count == first_count
 
 
 def test_text_renderer_gradient_sprite_uses_uv_flat_shader(mock_display, mock_shader):

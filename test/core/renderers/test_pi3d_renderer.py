@@ -1,4 +1,5 @@
 """Unit tests for the Pi3dRenderer."""
+
 import os
 import signal
 from collections.abc import Generator
@@ -45,12 +46,12 @@ def mock_pi3d() -> Generator[MagicMock, None, None]:
         mock_display.height = 1080
         mock_display.loop_running.return_value = True
         mock.Display.create.return_value = mock_display
-        
+
         # Mock Camera
         mock_camera = MagicMock()
         mock.Camera.instance.return_value = mock_camera
         mock.Camera.return_value = mock_camera
-        
+
         # Mock ImageRenderer's pi3d import
         with patch("picframe.core.renderers.components.image_renderer.pi3d", mock):
             yield mock
@@ -93,12 +94,47 @@ def config() -> RendererConfig:
 
 
 def test_renderer_initialization(config: RendererConfig) -> None:
-    """Test that the renderer initializes with the correct configuration."""
+    """Test that the renderer initializes with the correct configuration.
+
+    With ``show_text_enabled`` defaulting to true, the animation controller
+    begins in :data:`RenderState.TEXT_ANIMATING` so the overlay fades in on
+    the first rendered frame.
+    """
     renderer = Pi3dRenderer(config)
     assert renderer._display_w == 1920
     assert renderer._display_h == 1080
     assert renderer._fps == 60
-    assert renderer._animation_controller._state == RenderState.STATIC
+    assert renderer._animation_controller._state == RenderState.TEXT_ANIMATING
+
+
+def test_build_overlay_config_forwards_clock_extra_fields(config: RendererConfig) -> None:
+    """_build_overlay_config must forward clock_extra_source/text from RendererConfig.
+
+    Regression test for ticket #719: these fields were dropped, so the
+    ClockRenderer always saw the DTO defaults ("off" / "") in production
+    even though the UI/config service set them correctly.
+    """
+    cfg = replace(
+        config,
+        clock_extra_source="text",
+        clock_extra_text="Hello World",
+    )
+    renderer = Pi3dRenderer(cfg)
+
+    overlay = renderer._build_overlay_config()
+
+    assert overlay.clock_extra_source == "text"
+    assert overlay.clock_extra_text == "Hello World"
+
+
+def test_build_overlay_config_defaults_when_unset(config: RendererConfig) -> None:
+    """_build_overlay_config keeps DTO defaults when config is unset."""
+    renderer = Pi3dRenderer(config)
+
+    overlay = renderer._build_overlay_config()
+
+    assert overlay.clock_extra_source == "off"
+    assert overlay.clock_extra_text == ""
 
 
 def test_renderer_formats_overlay_date_with_model_locale(config: RendererConfig) -> None:
@@ -139,7 +175,7 @@ def test_renderer_start_stop(
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
-    mock_clock_renderer: MagicMock
+    mock_clock_renderer: MagicMock,
 ) -> None:
     """Test starting and stopping the renderer."""
     renderer = Pi3dRenderer(config)
@@ -423,8 +459,7 @@ def test_renderer_clears_labwc_geometry_rules_for_fullscreen_default(
 
 
 def test_renderer_execute_without_start(
-    config: RendererConfig,
-    mock_image_renderer: MagicMock
+    config: RendererConfig, mock_image_renderer: MagicMock
 ) -> None:
     """Test executing a command before starting the renderer."""
     renderer = Pi3dRenderer(config)
@@ -435,9 +470,7 @@ def test_renderer_execute_without_start(
 
 
 def test_renderer_execute(
-    config: RendererConfig,
-    mock_pi3d: MagicMock,
-    mock_image_renderer: MagicMock
+    config: RendererConfig, mock_pi3d: MagicMock, mock_image_renderer: MagicMock
 ) -> None:
     """Test executing a render command."""
     renderer = Pi3dRenderer(config)
@@ -447,10 +480,10 @@ def test_renderer_execute(
         image_path="/path/to/image.jpg",
         overlay=OverlayConfig(show_clock=True, show_text=True, text_string="Test"),
     )
-    
+
     # Mock ImageRenderer.execute to return success and kb steps
     mock_image_renderer.execute.return_value = (True, 0.0, 0.0)
-    
+
     renderer.execute(command)
 
     mock_image_renderer.execute.assert_called_once_with(command)
@@ -459,9 +492,7 @@ def test_renderer_execute(
 
 
 def test_renderer_execute_video(
-    config: RendererConfig,
-    mock_pi3d: MagicMock,
-    mock_image_renderer: MagicMock
+    config: RendererConfig, mock_pi3d: MagicMock, mock_image_renderer: MagicMock
 ) -> None:
     """Test executing a render command for a video."""
     renderer = Pi3dRenderer(config)
@@ -1127,16 +1158,16 @@ def test_renderer_render_frame(
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
-    mock_clock_renderer: MagicMock
+    mock_clock_renderer: MagicMock,
 ) -> None:
     """Test rendering a frame."""
     renderer = Pi3dRenderer(config)
     renderer.start()
-    
+
     # Set state to transitioning
     renderer._animation_controller._state = RenderState.TRANSITIONING
-    renderer._animation_controller._image_alpha = 0.99 # Almost done
-    renderer._animation_controller._fade_time = 0.01 # Fast fade
+    renderer._animation_controller._image_alpha = 0.99  # Almost done
+    renderer._animation_controller._fade_time = 0.01  # Fast fade
 
     renderer._animation_controller._show_text = True
 
@@ -1212,7 +1243,7 @@ def test_renderer_render_frame_not_running(
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
-    mock_clock_renderer: MagicMock
+    mock_clock_renderer: MagicMock,
 ) -> None:
     """Test rendering when the display loop is not running."""
     renderer = Pi3dRenderer(config)
@@ -1231,7 +1262,7 @@ def test_renderer_render_frame_suspended(
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
-    mock_clock_renderer: MagicMock
+    mock_clock_renderer: MagicMock,
 ) -> None:
     """Test rendering when suspended (e.g., playing video)."""
     renderer = Pi3dRenderer(config)
@@ -1251,7 +1282,7 @@ def test_renderer_render_frame_static(
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
-    mock_clock_renderer: MagicMock
+    mock_clock_renderer: MagicMock,
 ) -> None:
     """Test rendering when static (no transitions)."""
     renderer = Pi3dRenderer(config)
@@ -1426,7 +1457,7 @@ def test_renderer_enqueue_task(
     mock_pi3d: MagicMock,
     mock_image_renderer: MagicMock,
     mock_text_renderer: MagicMock,
-    mock_clock_renderer: MagicMock
+    mock_clock_renderer: MagicMock,
 ) -> None:
     """Test enqueueing a task and processing it."""
     renderer = Pi3dRenderer(config)
@@ -1435,7 +1466,7 @@ def test_renderer_enqueue_task(
     renderer._animation_controller._frames_to_render = 0
 
     renderer.enqueue_task(1, "clock_tick")
-    
+
     # Process the queue in render_frame
     with patch("time.sleep"):
         renderer.render_frame()
