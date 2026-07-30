@@ -98,9 +98,7 @@ def validate_renderer_assets(
     if no_files_img:
         fallback_image = Path(no_files_img).expanduser()
         packaged_fallback = (
-            Path(packaged_no_files_img).expanduser()
-            if packaged_no_files_img
-            else None
+            Path(packaged_no_files_img).expanduser() if packaged_no_files_img else None
         )
         if not fallback_image.is_file() and not (
             packaged_fallback is not None and packaged_fallback.is_file()

@@ -8,27 +8,29 @@ from picframe.core.models.hardware_input import (
 
 
 def test_normalize_valid_button_and_pir_config() -> None:
-    config = normalize_hardware_inputs_config({
-        "enabled": True,
-        "inputs": {
-            "next_button": {
-                "label": "Next",
-                "type": "button",
-                "pin": "17",
-                "bounce_time": "0.2",
-                "actions": {"pressed": "next"},
-            },
-            "motion": {
-                "type": "pir",
-                "pin": 27,
-                "no_motion_delay_seconds": "900",
-                "actions": {
-                    "motion_detected": "DISPLAY_ON",
-                    "no_motion": "DISPLAY_OFF",
+    config = normalize_hardware_inputs_config(
+        {
+            "enabled": True,
+            "inputs": {
+                "next_button": {
+                    "label": "Next",
+                    "type": "button",
+                    "pin": "17",
+                    "bounce_time": "0.2",
+                    "actions": {"pressed": "next"},
+                },
+                "motion": {
+                    "type": "pir",
+                    "pin": 27,
+                    "no_motion_delay_seconds": "900",
+                    "actions": {
+                        "motion_detected": "DISPLAY_ON",
+                        "no_motion": "DISPLAY_OFF",
+                    },
                 },
             },
-        },
-    })
+        }
+    )
 
     assert config["enabled"] is True
     assert config["inputs"]["next_button"]["pin"] == 17
@@ -40,12 +42,14 @@ def test_normalize_valid_button_and_pir_config() -> None:
 
 def test_duplicate_pins_are_rejected() -> None:
     with pytest.raises(HardwareInputConfigError, match="duplicate pin"):
-        normalize_hardware_inputs_config({
-            "inputs": {
-                "a": {"type": "button", "pin": 17, "actions": {"pressed": "NEXT"}},
-                "b": {"type": "pir", "pin": 17, "actions": {"motion_detected": "DISPLAY_ON"}},
-            },
-        })
+        normalize_hardware_inputs_config(
+            {
+                "inputs": {
+                    "a": {"type": "button", "pin": 17, "actions": {"pressed": "NEXT"}},
+                    "b": {"type": "pir", "pin": 17, "actions": {"motion_detected": "DISPLAY_ON"}},
+                },
+            }
+        )
 
 
 @pytest.mark.parametrize(
@@ -94,43 +98,45 @@ def test_invalid_input_settings_are_rejected(settings: dict[str, object], match:
 
 def test_derive_runtime_config_splits_adapter_and_command_mapping() -> None:
     enabled, adapter_config, command_mapping, no_motion_delays = (
-        derive_hardware_input_runtime_config({
-            "enabled": True,
-            "inputs": {
-                "next_button": {
-                    "type": "button",
-                    "pin": 17,
-                    "bounce_time": 0.2,
-                    "actions": {"pressed": "NEXT"},
-                }
-            },
-        })
+        derive_hardware_input_runtime_config(
+            {
+                "enabled": True,
+                "inputs": {
+                    "next_button": {
+                        "type": "button",
+                        "pin": 17,
+                        "bounce_time": 0.2,
+                        "actions": {"pressed": "NEXT"},
+                    }
+                },
+            }
+        )
     )
 
     assert enabled is True
-    assert adapter_config == {
-        "next_button": {"type": "button", "pin": 17, "bounce_time": 0.2}
-    }
+    assert adapter_config == {"next_button": {"type": "button", "pin": 17, "bounce_time": 0.2}}
     assert command_mapping == {"next_button": {"pressed": "NEXT"}}
     assert no_motion_delays == {}
 
 
 def test_derive_runtime_config_returns_pir_no_motion_delay() -> None:
     enabled, adapter_config, command_mapping, no_motion_delays = (
-        derive_hardware_input_runtime_config({
-            "enabled": True,
-            "inputs": {
-                "motion": {
-                    "type": "pir",
-                    "pin": 27,
-                    "no_motion_delay_seconds": 900,
-                    "actions": {
-                        "motion_detected": "DISPLAY_ON",
-                        "no_motion": "DISPLAY_OFF",
-                    },
-                }
-            },
-        })
+        derive_hardware_input_runtime_config(
+            {
+                "enabled": True,
+                "inputs": {
+                    "motion": {
+                        "type": "pir",
+                        "pin": 27,
+                        "no_motion_delay_seconds": 900,
+                        "actions": {
+                            "motion_detected": "DISPLAY_ON",
+                            "no_motion": "DISPLAY_OFF",
+                        },
+                    }
+                },
+            }
+        )
     )
 
     assert enabled is True

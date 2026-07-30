@@ -106,7 +106,7 @@ def test_wayland_power_handles_subprocess_error(mock_run: Any) -> None:
     adapter.turn_off()
     # State should remain unchanged if the command failed
     assert adapter.is_on() is True
-    
+
     # Verify event was published
     mock_publisher.publish.assert_called_once()
     event = mock_publisher.publish.call_args[0][0]
@@ -126,7 +126,7 @@ def test_wayland_power_handles_file_not_found(mock_run: Any) -> None:
     adapter.turn_off()
     # State should remain unchanged if the command failed
     assert adapter.is_on() is True
-    
+
     # Verify event was published
     mock_publisher.publish.assert_called_once()
     event = mock_publisher.publish.call_args[0][0]

@@ -31,9 +31,7 @@ def test_next_gen_paths_do_not_import_removed_legacy_modules() -> None:
         SRC_ROOT / "infrastructure",
         SRC_ROOT / "main.py",
     ]
-    legacy_import_tokens = {
-        f"picframe.{module_name}" for module_name in REMOVED_LEGACY_MODULES
-    } | {
+    legacy_import_tokens = {f"picframe.{module_name}" for module_name in REMOVED_LEGACY_MODULES} | {
         f"from picframe import {module_name}" for module_name in REMOVED_LEGACY_MODULES
     }
 

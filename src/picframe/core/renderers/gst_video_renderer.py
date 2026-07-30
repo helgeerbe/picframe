@@ -1,6 +1,7 @@
 """
 GStreamer Video Renderer implementation (IPC Client).
 """
+
 from __future__ import annotations
 
 import logging
@@ -12,6 +13,7 @@ import time
 from collections import deque
 from multiprocessing.connection import Client, Connection
 from pathlib import Path
+from typing import Any
 
 from picframe.core.events.dto import (
     PlaybackCompletedEvent,
@@ -43,6 +45,7 @@ logger = logging.getLogger(__name__)
 _WORKER_SOCKET_TIMEOUT_SECONDS = 20.0
 _WORKER_SOCKET_POLL_SECONDS = 0.1
 
+
 class GstVideoRenderer(IVideoPlayer):
     """
     Video player implementation using an out-of-process GStreamer worker via IPC.
@@ -63,23 +66,23 @@ class GstVideoRenderer(IVideoPlayer):
         self._host_backdrop_rect: tuple[int, int, int, int] | list[int] | None = None
         self._content_fit: str | None = None
         self._volume: float = 1.0
-        
+
         self._socket_path = f"/tmp/picframe_gst_{os.getpid()}.sock"
-        self._worker_process: subprocess.Popen[bytes] | None = None
+        self._worker_process: subprocess.Popen[str] | None = None
         self._conn: Connection | None = None
         self._running = False
         self._listener_thread: threading.Thread | None = None
         self._worker_log_thread: threading.Thread | None = None
         self._worker_log_tail: deque[str] = deque(maxlen=20)
-        
+
         self._start_worker()
 
     def _start_worker(self) -> None:
         """Spawn the GStreamer worker subprocess and establish IPC connection."""
         worker_script = Path(__file__).parent / "gst_worker.py"
-        
+
         env = self._worker_environment()
-        
+
         try:
             self._worker_process = subprocess.Popen(
                 [sys.executable, str(worker_script), "--socket", self._socket_path],
@@ -90,9 +93,10 @@ class GstVideoRenderer(IVideoPlayer):
                 bufsize=1,
             )
             self._start_worker_log_reader()
-            
+
             # Wait for the worker to finish importing GStreamer and create the
             # IPC socket. This can be slow on small Pis immediately after boot.
+            assert self._worker_process is not None
             deadline = time.monotonic() + _WORKER_SOCKET_TIMEOUT_SECONDS
             while time.monotonic() < deadline and not os.path.exists(self._socket_path):
                 return_code = self._worker_process.poll()
@@ -102,22 +106,22 @@ class GstVideoRenderer(IVideoPlayer):
                         f"(exit code {return_code}).{self._worker_log_summary()}"
                     )
                 time.sleep(_WORKER_SOCKET_POLL_SECONDS)
-                
+
             if not os.path.exists(self._socket_path):
                 raise RuntimeError(
                     "Worker failed to create IPC socket within "
                     f"{_WORKER_SOCKET_TIMEOUT_SECONDS:.0f} seconds."
                     f"{self._worker_log_summary()}"
                 )
-                
-            self._conn = Client(self._socket_path, family='AF_UNIX')
+
+            self._conn = Client(self._socket_path, family="AF_UNIX")
             self._running = True
-            
+
             self._listener_thread = threading.Thread(target=self._listen_for_events, daemon=True)
             self._listener_thread.start()
-            
+
             logger.info("Successfully connected to GStreamer worker subprocess.")
-            
+
         except Exception as e:
             logger.error(f"Failed to start GStreamer worker: {e}")
             self._cleanup()
@@ -133,7 +137,7 @@ class GstVideoRenderer(IVideoPlayer):
         )
         self._worker_log_thread.start()
 
-    def _log_worker_output(self, stream: object) -> None:
+    def _log_worker_output(self, stream: Any) -> None:
         for raw_line in stream:
             line = str(raw_line).rstrip()
             if not line:
@@ -149,10 +153,7 @@ class GstVideoRenderer(IVideoPlayer):
     def _worker_environment(self) -> dict[str, str]:
         """Return the environment used for the GStreamer worker process."""
         env = os.environ.copy()
-        if (
-            "GST_V4L2_ENABLE_PROBE" not in env
-            and self._is_raspberry_pi_hardware()
-        ):
+        if "GST_V4L2_ENABLE_PROBE" not in env and self._is_raspberry_pi_hardware():
             env["GST_V4L2_ENABLE_PROBE"] = "1"
         return env
 
@@ -297,7 +298,7 @@ class GstVideoRenderer(IVideoPlayer):
         self._content_fit = content_fit
 
         uri = Path(media_item.filepath).absolute().as_uri()
-        
+
         # Send play command
         self._send_command(
             PlayCommand(

@@ -75,7 +75,7 @@ class ConfigService:
         """
         if not self._config_repository:
             return {}
-            
+
         config: dict[str, Any] = {
             "viewer": {},
             "model": {},
@@ -84,7 +84,7 @@ class ConfigService:
             "peripherals": {},
             "hardware_inputs": {},
         }
-        
+
         if hasattr(self._config_repository, "get_all_app_config"):
             all_config = self._config_repository.get_all_app_config()
             for key, value in all_config.items():
@@ -108,7 +108,7 @@ class ConfigService:
                 "peripherals": self._config_repository.get_app_config("peripherals", {}),
                 "hardware_inputs": self._config_repository.get_app_config("hardware_inputs", {}),
             }
-            
+
         return config
 
     def update_nested_config(self, nested_config: dict[str, Any]) -> None:
@@ -124,8 +124,8 @@ class ConfigService:
             nested_config["hardware_inputs"] = normalize_hardware_inputs_config(
                 nested_config["hardware_inputs"]
             )
-            
-        def flatten_dict(d: dict[str, Any], parent_key: str = '') -> dict[str, Any]:
+
+        def flatten_dict(d: dict[str, Any], parent_key: str = "") -> dict[str, Any]:
             items: list[tuple[str, Any]] = []
             for k, v in d.items():
                 new_key = f"{parent_key}.{k}" if parent_key else k
@@ -162,11 +162,10 @@ class ConfigService:
                 # Publish state change event
                 self._event_publisher.publish(
                     StateEvent(
-                        state=State.CONFIG_CHANGED,
-                        payload={"updated_sections": updated_sections}
+                        state=State.CONFIG_CHANGED, payload={"updated_sections": updated_sections}
                     )
                 )
-                
+
                 if (
                     "viewer" in updated_sections
                     or "model" in updated_sections
@@ -183,7 +182,7 @@ class ConfigService:
         """
         if not self._config_repository:
             return
-            
+
         try:
             config = build_renderer_config(self._config_repository, self._resource_paths)
             self._event_publisher.publish(RendererConfigUpdatedEvent(config=config))

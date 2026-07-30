@@ -44,15 +44,15 @@ def test_ensure_cache_dir(temp_cache_dir: str) -> None:
 
 def test_process_image_fit(temp_cache_dir: str, sample_media_item: MediaItem) -> None:
     service = ImageProcessingService(cache_dir=temp_cache_dir)
-    
+
     # Process image to fit within 50x50
     cached_path = service.process_image(
         sample_media_item, target_width=50, target_height=50, fit=True
     )
-    
+
     assert cached_path is not None
     assert os.path.exists(cached_path)
-    
+
     # Verify dimensions
     with Image.open(cached_path) as img:
         assert img.size == (50, 50)
@@ -60,15 +60,15 @@ def test_process_image_fit(temp_cache_dir: str, sample_media_item: MediaItem) ->
 
 def test_process_image_crop(temp_cache_dir: str, sample_media_item: MediaItem) -> None:
     service = ImageProcessingService(cache_dir=temp_cache_dir)
-    
+
     # Process image to fill 50x25 (should crop)
     cached_path = service.process_image(
         sample_media_item, target_width=50, target_height=25, fit=False
     )
-    
+
     assert cached_path is not None
     assert os.path.exists(cached_path)
-    
+
     # Verify dimensions
     with Image.open(cached_path) as img:
         assert img.size == (50, 25)
@@ -76,7 +76,7 @@ def test_process_image_crop(temp_cache_dir: str, sample_media_item: MediaItem) -
 
 def test_process_image_not_found(temp_cache_dir: str) -> None:
     service = ImageProcessingService(cache_dir=temp_cache_dir)
-    
+
     bad_item = MediaItem(
         filepath="/path/to/nowhere.jpg",
         filename="nowhere.jpg",
@@ -85,65 +85,57 @@ def test_process_image_not_found(temp_cache_dir: str) -> None:
         file_size=0,
         last_modified=0.0,
     )
-    
-    cached_path = service.process_image(
-        bad_item, target_width=50, target_height=50
-    )
-    
+
+    cached_path = service.process_image(bad_item, target_width=50, target_height=50)
+
     assert cached_path is None
 
 
 def test_extract_metadata_async(temp_cache_dir: str, sample_media_item: MediaItem) -> None:
     service = ImageProcessingService(cache_dir=temp_cache_dir)
-    
+
     class MockStrategy:
         def extract(self, filepath: str, directory_id: int) -> MediaItem:
             return sample_media_item
-            
+
     strategy = MockStrategy()
-    
+
     # Test without callback
     future = service.extract_metadata_async(
-        filepath=sample_media_item.filepath,
-        directory_id=1,
-        strategy=strategy
+        filepath=sample_media_item.filepath, directory_id=1, strategy=strategy
     )
-    
+
     result = future.result(timeout=2.0)
     assert result == sample_media_item
-    
+
     # Test with callback
     callback_result = None
+
     def callback(item: MediaItem | None) -> None:
         nonlocal callback_result
         callback_result = item
-        
+
     future = service.extract_metadata_async(
-        filepath=sample_media_item.filepath,
-        directory_id=1,
-        strategy=strategy,
-        callback=callback
+        filepath=sample_media_item.filepath, directory_id=1, strategy=strategy, callback=callback
     )
-    
+
     future.result(timeout=2.0)
     assert callback_result == sample_media_item
-    
+
     service.shutdown()
 
 
 def test_clear_cache(temp_cache_dir: str, sample_media_item: MediaItem) -> None:
     service = ImageProcessingService(cache_dir=temp_cache_dir)
-    
+
     # Create a cached image
-    cached_path = service.process_image(
-        sample_media_item, target_width=50, target_height=50
-    )
+    cached_path = service.process_image(sample_media_item, target_width=50, target_height=50)
     assert cached_path is not None
     assert os.path.exists(cached_path)
-    
+
     # Clear cache
     service.clear_cache()
-    
+
     # Verify cache is empty
     assert not os.path.exists(cached_path)
     assert len(os.listdir(temp_cache_dir)) == 0

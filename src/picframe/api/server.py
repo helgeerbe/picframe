@@ -7,10 +7,12 @@ it to be run in a background thread alongside the main pi3d render loop.
 
 import logging
 import threading
+
 import uvicorn
 from fastapi import FastAPI
 
 logger = logging.getLogger(__name__)
+
 
 class WebServer:
     """
@@ -37,7 +39,7 @@ class WebServer:
         Start the Uvicorn server in a background thread.
         """
         logger.info(f"Starting web server on {self._host}:{self._port}")
-        
+
         config = uvicorn.Config(
             app=self._app,
             host=self._host,
@@ -47,7 +49,7 @@ class WebServer:
             access_log=False,
         )
         self._server = uvicorn.Server(config=config)
-        
+
         self._thread = threading.Thread(target=self._server.run, daemon=True)
         self._thread.start()
 

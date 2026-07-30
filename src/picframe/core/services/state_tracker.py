@@ -1,11 +1,12 @@
 """
 Service for tracking system state and exposing it via the ISystemStateQuery port.
 """
+
 import logging
 from typing import Any, cast
 
-from picframe.core.events.bus import IEventSubscriber
 from picframe.core.events.dto import CurrentMediaChangedEvent, State, StateEvent
+from picframe.core.events.interfaces import IEventSubscriber
 from picframe.core.ports.state import ISystemStateQuery
 
 logger = logging.getLogger(__name__)

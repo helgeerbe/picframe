@@ -48,9 +48,7 @@ def test_ensure_gtk_retries_after_transient_init_failure(monkeypatch) -> None:
 
 
 def test_initialize_gtk_falls_back_to_legacy_init_check_argument() -> None:
-    fake_gtk = SimpleNamespace(
-        init_check=MagicMock(side_effect=[TypeError("old signature"), True])
-    )
+    fake_gtk = SimpleNamespace(init_check=MagicMock(side_effect=[TypeError("old signature"), True]))
 
     GtkVideoPresenter._initialize_gtk(fake_gtk)
 

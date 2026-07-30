@@ -36,9 +36,7 @@ class MigrationManager:
     and that the database schema version is tracked accurately.
     """
 
-    def __init__(
-        self, connection: sqlite3.Connection, migrations: list[Migration]
-    ) -> None:
+    def __init__(self, connection: sqlite3.Connection, migrations: list[Migration]) -> None:
         """
         Initialize the MigrationManager.
 
@@ -63,9 +61,7 @@ class MigrationManager:
             # Initialize version to 0 if the table is empty
             cursor = self._conn.execute("SELECT COUNT(*) FROM schema_version")
             if cursor.fetchone()[0] == 0:
-                self._conn.execute(
-                    "INSERT INTO schema_version (version) VALUES (0)"
-                )
+                self._conn.execute("INSERT INTO schema_version (version) VALUES (0)")
 
     def get_current_version(self) -> int:
         """
@@ -86,9 +82,7 @@ class MigrationManager:
             version: The new schema version.
         """
         with self._conn:
-            self._conn.execute(
-                "UPDATE schema_version SET version = ?", (version,)
-            )
+            self._conn.execute("UPDATE schema_version SET version = ?", (version,))
 
     def migrate(self) -> None:
         """
@@ -102,9 +96,7 @@ class MigrationManager:
 
         for migration in self._migrations:
             if migration.version > current_version:
-                logger.info(
-                    f"Applying migration to version {migration.version}..."
-                )
+                logger.info(f"Applying migration to version {migration.version}...")
                 try:
                     with self._conn:
                         if isinstance(migration.up_script, str):
@@ -112,13 +104,7 @@ class MigrationManager:
                         else:
                             migration.up_script(self._conn)
                     self._set_current_version(migration.version)
-                    logger.info(
-                        f"Successfully migrated to version "
-                        f"{migration.version}."
-                    )
+                    logger.info(f"Successfully migrated to version {migration.version}.")
                 except Exception as e:
-                    logger.error(
-                        f"Failed to apply migration to version "
-                        f"{migration.version}: {e}"
-                    )
+                    logger.error(f"Failed to apply migration to version {migration.version}: {e}")
                     raise

@@ -88,9 +88,7 @@ def test_mat_image_with_layout_reports_visible_opening_rects_for_all_styles() ->
             inner_mat_use_texture=False,
         )
 
-        result = matter.mat_image_with_layout(
-            (Image.new("RGB", (160, 90), source_color),)
-        )
+        result = matter.mat_image_with_layout((Image.new("RGB", (160, 90), source_color),))
 
         assert result.content_rects[0] == _color_bbox(result.image, source_color), mat_type
 

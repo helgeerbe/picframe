@@ -14,6 +14,7 @@ from typing import Any
 
 class RenderState(Enum):
     """Enumeration of possible rendering states."""
+
     IDLE = auto()
     TRANSITIONING = auto()
     KEN_BURNS = auto()
@@ -21,9 +22,11 @@ class RenderState(Enum):
     STATIC = auto()
     SUSPENDED = auto()
 
+
 @dataclass
 class AnimationState:
     """Data Transfer Object representing the current state of all animations."""
+
     render_state: RenderState
     image_alpha: float
     text_alpha: float
@@ -36,6 +39,7 @@ class AnimationController:
     """
     Manages the animation state machine and tweening logic for the renderer.
     """
+
     def __init__(self, config: dict[str, Any]) -> None:
         """
         Initialize the AnimationController with configuration settings.
@@ -51,19 +55,19 @@ class AnimationController:
         self._text_fade_time = 1.0
         self._text_show_time = float(config.get("show_text_tm", 10.0))
         self._kenburns = bool(config.get("kenburns", False))
-        
+
         self._state = RenderState.STATIC
         self._image_alpha = 1.0
         self._text_alpha = 0.0
         self._text_timer = 0.0
         self._frames_to_render = 0
-        
+
         self._kb_xstep = 0.0
         self._kb_ystep = 0.0
         self._kb_x = 0.0
         self._kb_y = 0.0
         self._next_tm = 0.0
-        
+
         self._show_text = False
         self._paused = False
 
@@ -151,7 +155,7 @@ class AnimationController:
         """
         old_show_text = self._show_text
         self._show_text = show_text
-        
+
         if self._state == RenderState.STATIC:
             if show_text and (not old_show_text or text_changed):
                 self._state = RenderState.TEXT_ANIMATING
@@ -182,7 +186,7 @@ class AnimationController:
                 text_alpha=self._text_alpha,
                 kenburns_x=self._kb_x,
                 kenburns_y=self._kb_y,
-                frames_to_render=current_frames_to_render
+                frames_to_render=current_frames_to_render,
             )
 
         # Image Transition
@@ -231,5 +235,5 @@ class AnimationController:
             text_alpha=self._text_alpha,
             kenburns_x=self._kb_x,
             kenburns_y=self._kb_y,
-            frames_to_render=current_frames_to_render
+            frames_to_render=current_frames_to_render,
         )

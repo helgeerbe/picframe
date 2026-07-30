@@ -119,9 +119,7 @@ def test_hardware_input_service_loads_enabled_config_from_repository() -> None:
     )
     service.start()
 
-    assert mock_adapter.config == {
-        "next_button": {"type": "button", "pin": 17, "bounce_time": 0.1}
-    }
+    assert mock_adapter.config == {"next_button": {"type": "button", "pin": 17, "bounce_time": 0.1}}
     mock_adapter.simulate_event("next_button", "pressed")
     mock_event_bus.publish.assert_called_with(CommandEvent(command=Command.NEXT))
 
@@ -161,9 +159,7 @@ def test_hardware_input_service_delays_pir_no_motion_command(monkeypatch) -> Non
     assert no_motion_timer.started is True
 
     no_motion_timer.fire()
-    mock_event_bus.publish.assert_called_once_with(
-        CommandEvent(command=Command.DISPLAY_OFF)
-    )
+    mock_event_bus.publish.assert_called_once_with(CommandEvent(command=Command.DISPLAY_OFF))
 
     service.stop()
 
@@ -196,9 +192,7 @@ def test_hardware_input_service_schedules_initial_pir_no_motion_timer(monkeypatc
     assert FakeTimer.instances[0].started is True
 
     FakeTimer.instances[0].fire()
-    mock_event_bus.publish.assert_called_once_with(
-        CommandEvent(command=Command.DISPLAY_OFF)
-    )
+    mock_event_bus.publish.assert_called_once_with(CommandEvent(command=Command.DISPLAY_OFF))
 
     service.stop()
 

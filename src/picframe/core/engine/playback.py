@@ -668,9 +668,11 @@ class PlaybackEngine:
     def _video_fit_display(self) -> bool:
         """Return whether videos should be scaled to the display dimensions."""
         if self._config_repository:
-            return self._config_repository.get_app_config_bool(
-                "viewer.video_fit_display",
-                bool(self._config.get("video_fit_display", False)),
+            return bool(
+                self._config_repository.get_app_config_bool(
+                    "viewer.video_fit_display",
+                    bool(self._config.get("video_fit_display", False)),
+                )
             )
         return bool(self._config.get("video_fit_display", False))
 
@@ -702,6 +704,8 @@ class PlaybackEngine:
         metadata: Any | None,
     ) -> tuple[int, int, int, int] | None:
         content_rect = getattr(metadata, "content_rect", None)
+        if content_rect is None:
+            return None
         try:
             content_x, content_y, content_w, content_h = (
                 int(content_rect[0]),
@@ -842,9 +846,11 @@ class PlaybackEngine:
 
         def config_bool(key: str, legacy_key: str, default: bool) -> bool:
             if self._config_repository:
-                return self._config_repository.get_app_config_bool(
-                    key,
-                    bool(self._config.get(legacy_key, default)),
+                return bool(
+                    self._config_repository.get_app_config_bool(
+                        key,
+                        bool(self._config.get(legacy_key, default)),
+                    )
                 )
             raw_value = self._config.get(legacy_key, default)
             if isinstance(raw_value, str):

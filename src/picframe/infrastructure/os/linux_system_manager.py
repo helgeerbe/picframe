@@ -89,8 +89,7 @@ class LinuxSystemManager(ISystemManager):
             stderr = (e.stderr or "").strip()
             detail = f": {stderr}" if stderr else ""
             logger.error(
-                "LinuxSystemManager: Failed to restart %s. "
-                "Passwordless sudo may be missing%s",
+                "LinuxSystemManager: Failed to restart %s. Passwordless sudo may be missing%s",
                 PICFRAME_SERVICE_NAME,
                 detail,
             )
@@ -111,8 +110,7 @@ class LinuxSystemManager(ISystemManager):
             stderr = (e.stderr or "").strip()
             detail = f": {stderr}" if stderr else ""
             logger.error(
-                "LinuxSystemManager: Failed to execute %s. "
-                "Passwordless sudo may be missing%s",
+                "LinuxSystemManager: Failed to execute %s. Passwordless sudo may be missing%s",
                 action,
                 detail,
             )

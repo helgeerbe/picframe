@@ -1,4 +1,5 @@
 """Unit tests for the ImageRenderer component."""
+
 from collections.abc import Generator
 from pathlib import Path
 from typing import Any
@@ -8,6 +9,7 @@ import pytest
 from PIL import Image
 
 from picframe.core.events.dto import RenderCommand
+from picframe.core.exceptions import MediaProcessingError
 from picframe.core.renderers.components.image_renderer import ImageRenderer
 
 
@@ -19,12 +21,12 @@ def mock_pi3d() -> Generator[MagicMock, None, None]:
         mock_camera.mtrx_made = True
         mock.Camera.instance.return_value = mock_camera
         mock.Camera.return_value = mock_camera
-        
+
         mock_sprite = MagicMock()
         mock_sprite.unif = [0.0] * 60
         mock.Sprite.return_value = mock_sprite
         mock.Texture.return_value = MagicMock(ix=1920, iy=1080)
-        
+
         # Mock Display.INSTANCE to avoid AttributeError in Camera initialization
         mock_display_instance = MagicMock()
         mock_display_instance.near = 1.0
@@ -33,7 +35,7 @@ def mock_pi3d() -> Generator[MagicMock, None, None]:
         mock_display_instance.width = 1920
         mock_display_instance.height = 1080
         mock.Display.INSTANCE = mock_display_instance
-        
+
         # Also patch the global pi3d module to catch the internal import in _init_slide
         with patch.dict("sys.modules", {"pi3d": mock}):
             yield mock
@@ -59,7 +61,7 @@ def config() -> dict[str, Any]:
         "time_fade": 2.0,
         "time_delay": 200.0,
         "fps": 20,
-        "video_extensions": [".mp4", ".mov", ".avi", ".mkv"]
+        "video_extensions": [".mp4", ".mov", ".avi", ".mkv"],
     }
 
 
@@ -74,7 +76,7 @@ def test_image_renderer_initialization(
     assert renderer._edge_alpha == 0.5
     assert renderer._fit is False
     assert renderer._kenburns is False
-    
+
     mock_pi3d.Sprite.assert_called_once()
     if renderer._slide:
         renderer._slide.set_shader.assert_called_once_with(shader)
@@ -174,14 +176,12 @@ def test_image_renderer_execute_video(
     """Test executing a command with a video file."""
     shader = MagicMock()
     renderer = ImageRenderer(mock_display, shader, config)
-    
+
     command = RenderCommand(image_path="/path/to/video.mp4")
     result = renderer.execute(command)
-    
+
     assert result == (False, 0.0, 0.0)
 
-
-from picframe.core.exceptions import MediaProcessingError
 
 @patch("picframe.core.renderers.components.image_preparer.Image.open")
 def test_image_renderer_execute_image_error(
@@ -202,6 +202,7 @@ def test_image_renderer_execute_image_error(
         renderer.execute(command)
 
     assert "Failed to load image /path/to/image.jpg" in str(exc_info.value)
+
 
 def test_image_renderer_execute_image(
     mock_pi3d: MagicMock,
@@ -373,9 +374,9 @@ def test_image_renderer_set_alpha(
     """Test setting the alpha value."""
     shader = MagicMock()
     renderer = ImageRenderer(mock_display, shader, config)
-    
+
     renderer.set_alpha(0.6)
-    
+
     if renderer._slide:
         assert renderer._slide.unif[44] == pytest.approx(0.6 * 0.6 * (3.0 - 2.0 * 0.6))
 
@@ -386,8 +387,8 @@ def test_image_renderer_draw(
     """Test drawing the image."""
     shader = MagicMock()
     renderer = ImageRenderer(mock_display, shader, config)
-    
+
     renderer.draw()
-    
+
     if renderer._slide:
         renderer._slide.draw.assert_called_once()

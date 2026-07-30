@@ -75,9 +75,7 @@ class DisplayPowerManager:
         elif event.command == Command.DISPLAY_TOGGLE:
             logger.info("DisplayPowerManager: Received DISPLAY_TOGGLE command.")
             self._adapter.toggle()
-            self._publish_playback_command(
-                Command.PLAY if self._adapter.is_on() else Command.PAUSE
-            )
+            self._publish_playback_command(Command.PLAY if self._adapter.is_on() else Command.PAUSE)
         elif event.command == Command.SET_BRIGHTNESS:
             if event.payload is not None:
                 try:

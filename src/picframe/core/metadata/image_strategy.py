@@ -331,25 +331,25 @@ class ImageMetadataStrategy(IMetadataStrategy):
                     # (2, 5) Object Name / Title
                     # (2, 105) Headline
                     if (2, 5) in iptc:
-                        val: Any = iptc[(2, 5)]
-                        if isinstance(val, list) and len(val) > 0:
-                            iptc_data["title"] = val[0].decode("utf-8", errors="ignore")
-                        elif isinstance(val, bytes):
-                            iptc_data["title"] = val.decode("utf-8", errors="ignore")
+                        title_val: Any = iptc[(2, 5)]
+                        if isinstance(title_val, list) and len(title_val) > 0:
+                            iptc_data["title"] = title_val[0].decode("utf-8", errors="ignore")
+                        elif isinstance(title_val, bytes):
+                            iptc_data["title"] = title_val.decode("utf-8", errors="ignore")
                     elif (2, 105) in iptc:
-                        val: Any = iptc[(2, 105)]
-                        if isinstance(val, list) and len(val) > 0:
-                            iptc_data["title"] = val[0].decode("utf-8", errors="ignore")
-                        elif isinstance(val, bytes):
-                            iptc_data["title"] = val.decode("utf-8", errors="ignore")
+                        headline_val: Any = iptc[(2, 105)]
+                        if isinstance(headline_val, list) and len(headline_val) > 0:
+                            iptc_data["title"] = headline_val[0].decode("utf-8", errors="ignore")
+                        elif isinstance(headline_val, bytes):
+                            iptc_data["title"] = headline_val.decode("utf-8", errors="ignore")
 
                     # (2, 120) Caption/Abstract
                     if (2, 120) in iptc:
-                        val: Any = iptc[(2, 120)]
-                        if isinstance(val, list) and len(val) > 0:
-                            iptc_data["caption"] = val[0].decode("utf-8", errors="ignore")
-                        elif isinstance(val, bytes):
-                            iptc_data["caption"] = val.decode("utf-8", errors="ignore")
+                        caption_val: Any = iptc[(2, 120)]
+                        if isinstance(caption_val, list) and len(caption_val) > 0:
+                            iptc_data["caption"] = caption_val[0].decode("utf-8", errors="ignore")
+                        elif isinstance(caption_val, bytes):
+                            iptc_data["caption"] = caption_val.decode("utf-8", errors="ignore")
 
                     # (2, 25) Keywords
                     if (2, 25) in iptc:

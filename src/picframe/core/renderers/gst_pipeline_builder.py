@@ -42,9 +42,7 @@ class GstPipelineBuilder:
         video_sink = self._gst.ElementFactory.make("gtk4paintablesink", "sink")
         audio_sink = self._gst.ElementFactory.make("fakesink", "audiosink")
         if playbin is None or video_sink is None or audio_sink is None:
-            logger.warning(
-                "Could not create playbin/gtk4paintablesink/fakesink elements."
-            )
+            logger.warning("Could not create playbin/gtk4paintablesink/fakesink elements.")
             self.last_failure = "Could not create playbin, gtk4paintablesink, or fakesink"
             return None
 

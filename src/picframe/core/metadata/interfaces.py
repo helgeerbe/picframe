@@ -13,7 +13,7 @@ from picframe.core.models.media import MediaItem
 class IMetadataStrategy(Protocol):
     """
     Protocol defining the interface for metadata extraction strategies.
-    
+
     Implementations of this protocol are responsible for parsing specific
     file formats and populating a MediaItem object with the extracted data.
     """

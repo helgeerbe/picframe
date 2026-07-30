@@ -118,7 +118,11 @@ class ImagePreparer:
             return None
 
         try:
-            channels = tuple(max(0, min(255, int(float(value[index])))) for index in range(3))
+            channels = (
+                max(0, min(255, int(float(value[0])))),
+                max(0, min(255, int(float(value[1])))),
+                max(0, min(255, int(float(value[2])))),
+            )
         except (TypeError, ValueError):
             return None
         return channels

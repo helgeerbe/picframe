@@ -140,7 +140,7 @@ class PlaylistManager:
             slot_data = self._display_playlist[self._current_index]
             self._current_index += 1
             attempts += 1
-            
+
             prepared_slot = self._prepare_slot_for_display(slot_data)
             if prepared_slot:
                 self._history.append(prepared_slot)
@@ -151,13 +151,13 @@ class PlaylistManager:
     def get_current(self) -> DisplayItem | None:
         """
         Get the currently playing display item.
-        
+
         Returns:
             The current DisplayItem, or None if no item is playing.
         """
         if not self._history:
             return None
-            
+
         # Fetch latest data so geocoding and display stats stay fresh.
         current_slot = self._history[-1]
         fresh_slot: list[dict[str, Any]] = []
@@ -214,9 +214,7 @@ class PlaylistManager:
             return []
 
         current_ids = [
-            int(item.id)
-            for item in current.items
-            if item.id is not None and item.id != 0
+            int(item.id) for item in current.items if item.id is not None and item.id != 0
         ]
         if not current_ids:
             return []
@@ -246,11 +244,11 @@ class PlaylistManager:
                 return []
 
         return selected_ids
-            
+
     def purge_missing_files(self) -> int:
         """
         Purge missing files from the repository.
-        
+
         Returns:
             The number of purged records.
         """
@@ -269,7 +267,7 @@ class PlaylistManager:
             self._history.pop()
             # Get the previous item (now the last item in history)
             slot_data = self._history[-1]
-            
+
             # Adjust current index so get_next() works correctly
             # after get_previous()
             if self._current_index > 0:
@@ -282,7 +280,7 @@ class PlaylistManager:
             else:
                 logger.warning("Previous display slot has no existing files, skipping.")
                 # Continue loop to try the next previous item
-                
+
         return None
 
     def _get_no_images_placeholder(self) -> MediaItem:
@@ -290,7 +288,7 @@ class PlaylistManager:
         Returns a placeholder MediaItem when no images are available.
         """
         import os
-        
+
         configured_path = None
         if self._config_repo is not None:
             configured_path = self._config_repo.get_app_config(
@@ -303,7 +301,7 @@ class PlaylistManager:
 
         if not os.path.exists(no_pic_path):
             no_pic_path = str(ResourcePaths.packaged_no_files_img())
-        
+
         return MediaItem(
             id=0,
             filepath=no_pic_path,
@@ -315,7 +313,7 @@ class PlaylistManager:
             width=0,
             height=0,
             orientation=1,
-            is_deleted=False
+            is_deleted=False,
         )
 
     def _advance_playlist_cycle(self) -> None:
@@ -359,13 +357,14 @@ class PlaylistManager:
     def _get_playlist_criteria(self, shuffle_override: bool | None = None) -> PlaylistCriteria:
         """Build playlist criteria from the live configuration repository."""
         assert self._config_repo is not None
+        config_repo = self._config_repo
 
         def config_value(key: str, default: Any) -> Any:
-            return self._config_repo.get_app_config(key, default)
+            return config_repo.get_app_config(key, default)
 
         def config_bool(key: str, default: bool) -> bool:
-            if hasattr(self._config_repo, "get_app_config_bool"):
-                return self._config_repo.get_app_config_bool(key, default)
+            if hasattr(config_repo, "get_app_config_bool"):
+                return config_repo.get_app_config_bool(key, default)
             value = config_value(key, default)
             if isinstance(value, str):
                 return value.lower() in {"1", "true", "yes", "on"}
@@ -387,9 +386,7 @@ class PlaylistManager:
             date_to=config_value("model.date_to", ""),
             location_filter=str(config_value("model.location_filter", "")),
             tags_filter=str(config_value("model.tags_filter", "")),
-            location_language=language_from_locale(
-                config_value("model.locale", "en_US.utf8")
-            ),
+            location_language=language_from_locale(config_value("model.locale", "en_US.utf8")),
             shuffle=shuffle,
             shuffle_mode=shuffle_mode,
             sort_cols=str(config_value("model.sort_cols", "fname ASC")),
@@ -399,9 +396,7 @@ class PlaylistManager:
     def _location_language(self) -> str:
         if self._config_repo is None:
             return "en"
-        return language_from_locale(
-            self._config_repo.get_app_config("model.locale", "en_US.utf8")
-        )
+        return language_from_locale(self._config_repo.get_app_config("model.locale", "en_US.utf8"))
 
     def _build_display_playlist(
         self,
@@ -501,9 +496,8 @@ class PlaylistManager:
     @staticmethod
     def _is_pairable_portrait(item: dict[str, Any]) -> bool:
         """Return True when a row can participate in a portrait pair."""
-        return (
-            str(item.get("media_type", "image")).lower() == MediaType.IMAGE.value
-            and bool(item.get("is_portrait"))
+        return str(item.get("media_type", "image")).lower() == MediaType.IMAGE.value and bool(
+            item.get("is_portrait")
         )
 
     def _prepare_slot_for_display(
@@ -579,9 +573,7 @@ class PlaylistManager:
 
     def _request_reindex(self, filepath: str) -> None:
         if self._event_publisher is not None:
-            self._event_publisher.publish(
-                FileChangeEvent(event_type="modified", path=filepath)
-            )
+            self._event_publisher.publish(FileChangeEvent(event_type="modified", path=filepath))
 
     def _slot_to_display_item(self, slot_data: list[dict[str, Any]]) -> DisplayItem:
         """Convert one display slot from repository rows to a DisplayItem."""
@@ -607,24 +599,24 @@ class PlaylistManager:
         # Extract enum value
         media_type_str = data.get("media_type", "image")
         media_type = MediaType(media_type_str)
-        
+
         # Create a copy to avoid modifying the original dict
         kwargs = dict(data)
         kwargs["media_type"] = media_type
-        
+
         # Handle boolean conversion for is_portrait
         if "is_portrait" in kwargs and kwargs["is_portrait"] is not None:
             kwargs["is_portrait"] = bool(kwargs["is_portrait"])
-            
+
         # Handle boolean conversion for is_deleted
         if "is_deleted" in kwargs and kwargs["is_deleted"] is not None:
             kwargs["is_deleted"] = bool(kwargs["is_deleted"])
-            
+
         import dataclasses
-        
+
         # Remove fields that are not part of the MediaItem dataclass
         # (e.g., created_at, updated_at from the database schema)
         valid_keys = {f.name for f in dataclasses.fields(MediaItem)}
         filtered_kwargs = {k: v for k, v in kwargs.items() if k in valid_keys}
-        
+
         return MediaItem(**filtered_kwargs)

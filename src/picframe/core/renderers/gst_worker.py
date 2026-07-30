@@ -84,9 +84,11 @@ class PlayRequest:
 
 try:
     import gi
-    gi.require_version('Gst', '1.0')
-    gi.require_version('GstPbutils', '1.0')
+
+    gi.require_version("Gst", "1.0")
+    gi.require_version("GstPbutils", "1.0")
     from gi.repository import GLib, Gst, GstPbutils
+
     Gst.init(None)
     GST_AVAILABLE = True
 except ImportError as exc:
@@ -167,14 +169,14 @@ class GstWorker:
 
         # Ensure socket path directory exists
         os.makedirs(os.path.dirname(self.socket_path), exist_ok=True)
-        
+
         # Remove existing socket if it exists
         if os.path.exists(self.socket_path):
             os.remove(self.socket_path)
 
         logger.info(f"Starting IPC listener on {self.socket_path}")
-        self.listener = Listener(self.socket_path, family='AF_UNIX')
-        
+        self.listener = Listener(self.socket_path, family="AF_UNIX")
+
         # Accept the initial connection
         self._accept_connection()
 
@@ -194,7 +196,7 @@ class GstWorker:
                 self.conn = self.listener.accept()
                 logger.info("Main process connected.")
                 # Add the connection's file descriptor to the GLib main loop
-                if self.conn and hasattr(self.conn, 'fileno'):
+                if self.conn and hasattr(self.conn, "fileno"):
                     GLib.io_add_watch(
                         self.conn.fileno(),
                         GLib.IO_IN | GLib.IO_HUP | GLib.IO_ERR,
@@ -208,7 +210,7 @@ class GstWorker:
         if condition & (GLib.IO_HUP | GLib.IO_ERR):
             logger.info("IPC connection closed or errored.")
             self._handle_disconnect()
-            return False # Remove the watch
+            return False  # Remove the watch
 
         if condition & GLib.IO_IN:
             try:
@@ -222,13 +224,13 @@ class GstWorker:
             except EOFError:
                 logger.info("IPC connection closed by main process (EOF).")
                 self._handle_disconnect()
-                return False # Remove the watch
+                return False  # Remove the watch
             except Exception as e:
                 logger.error(f"Error reading IPC message: {e}")
                 self._handle_disconnect()
-                return False # Remove the watch
+                return False  # Remove the watch
 
-        return True # Keep the watch active
+        return True  # Keep the watch active
 
     def _handle_disconnect(self) -> None:
         """Handle disconnection from the main process."""
@@ -236,7 +238,7 @@ class GstWorker:
         if self.conn:
             self.conn.close()
             self.conn = None
-        
+
         # In a robust system, we might want to wait for a new connection here.
         # For now, we exit the worker so the main process can respawn it cleanly.
         logger.info("Exiting worker due to disconnect.")
@@ -277,6 +279,8 @@ class GstWorker:
 
         if isinstance(stats, dict):
             value = stats.get("rendered")
+            if value is None:
+                return None
             try:
                 return int(value)
             except (TypeError, ValueError):
@@ -498,11 +502,7 @@ class GstWorker:
                 decision = PlaybackDecision(
                     pipeline_variant=pipeline_variant,
                     force_software_decoders=force_software_decoders,
-                    decision=(
-                        "software_fallback"
-                        if force_software_decoders
-                        else pipeline_variant
-                    ),
+                    decision=("software_fallback" if force_software_decoders else pipeline_variant),
                     fallback_reason=fallback_reason,
                     hardware_limit=self._format_hardware_limit(
                         self._known_hardware_decode_limit(stream_facts)
@@ -512,10 +512,10 @@ class GstWorker:
                     ),
                 )
 
-            if (
-                fit_display
-                and pipeline_variant in {PIPELINE_HARDWARE_DIRECT, PIPELINE_HARDWARE_PLAYBIN}
-            ):
+            if fit_display and pipeline_variant in {
+                PIPELINE_HARDWARE_DIRECT,
+                PIPELINE_HARDWARE_PLAYBIN,
+            }:
                 pipeline_variant = PIPELINE_COMPATIBLE
                 fallback_reason = fallback_reason or "video_fit_display"
 
@@ -653,18 +653,18 @@ class GstWorker:
                 stage="pipeline",
                 fallback_reason=fallback_reason,
             )
-            
+
             try:
                 self.pipeline.set_property("volume", self.volume)
             except TypeError:
                 pass
-                
+
             self.bus = self.pipeline.get_bus()
             self.bus.add_signal_watch()
             self.bus.connect("message::eos", self._on_eos)
             self.bus.connect("message::error", self._on_error)
             self.bus.connect("message::async-done", self._on_async_done)
-            
+
             ret = self.pipeline.set_state(Gst.State.PLAYING)
             if ret == Gst.StateChangeReturn.FAILURE:
                 logger.error(f"Failed to set pipeline state to PLAYING for {uri}")
@@ -687,9 +687,7 @@ class GstWorker:
             self._handle_stop()
 
     def _select_sink_name(self) -> str:
-        sink_name = find_best_element(
-            ["waylandsink", "glimagesink", "ximagesink", "autovideosink"]
-        )
+        sink_name = find_best_element(["waylandsink", "glimagesink", "ximagesink", "autovideosink"])
         return sink_name or "autovideosink"
 
     @staticmethod
@@ -727,13 +725,10 @@ class GstWorker:
 
         is_raspberry_pi = self._raspberry_pi_model_family(self._hardware_model) is not None
         if is_raspberry_pi:
-            return (
-                not force_software_decoders
-                and pipeline_variant in {
-                    PIPELINE_HARDWARE_DIRECT,
-                    PIPELINE_HARDWARE_PLAYBIN,
-                }
-            )
+            return not force_software_decoders and pipeline_variant in {
+                PIPELINE_HARDWARE_DIRECT,
+                PIPELINE_HARDWARE_PLAYBIN,
+            }
 
         return False
 
@@ -1256,9 +1251,7 @@ class GstWorker:
         self,
         stream_facts: VideoStreamFacts | None,
     ) -> bool:
-        return self._playback_policy().requires_compatible_hardware_presentation(
-            stream_facts
-        )
+        return self._playback_policy().requires_compatible_hardware_presentation(stream_facts)
 
     def _requires_pi_hardware_only(
         self,
@@ -1566,9 +1559,7 @@ class GstWorker:
         self._send_video_diagnostics(stage="decoder")
 
         if not self._selected_decoder_is_hardware:
-            self._send_event(
-                WarningEvent(warning_type="software_fallback", decoder=factory_name)
-            )
+            self._send_event(WarningEvent(warning_type="software_fallback", decoder=factory_name))
 
     def _record_decoder_src_caps(self, element: Any) -> None:
         try:
@@ -1625,7 +1616,7 @@ class GstWorker:
         caps = pad.get_current_caps()
         if not caps:
             caps = pad.query_caps()
-            
+
         if caps:
             name = self._caps_structure_name(caps)
             logger.debug("Decoded pad added with caps: %s", caps.to_string())
@@ -1730,13 +1721,11 @@ class GstWorker:
         try:
             stream_facts, _reason = self._discover_video_stream_facts(uri)
             hardware_limit = self._known_hardware_decode_limit(stream_facts)
-            supported = (
-                self._hardware_limit_rejection_reason(stream_facts, hardware_limit)
-                is None
-                and self._hardware_decode_available_for_facts(stream_facts)
-            )
+            supported = self._hardware_limit_rejection_reason(
+                stream_facts, hardware_limit
+            ) is None and self._hardware_decode_available_for_facts(stream_facts)
             self._send_event(CapsResultEvent(supported=supported))
-            
+
         except Exception as e:
             logger.error(f"Caps discovery failed for {uri}: {e}")
             self._send_event(CapsResultEvent(supported=False))
@@ -1757,7 +1746,7 @@ class GstWorker:
     def _gst_time_seconds(value: Any) -> float | None:
         if not GstWorker._valid_gst_time(value):
             return None
-        return int(value) / Gst.SECOND
+        return float(int(value) / Gst.SECOND)
 
     def _last_sample_diagnostics(self) -> tuple[float | None, float | None, str | None]:
         sink = self._gtk_video_sink
@@ -1899,9 +1888,7 @@ class GstWorker:
             message,
             debug,
         )
-        software_limit = self._software_decode_limit(
-            self._current_max_software_decode_resolution
-        )
+        software_limit = self._software_decode_limit(self._current_max_software_decode_resolution)
         if self._within_resolution_limit(
             self._current_stream_facts,
             software_limit,
@@ -1946,6 +1933,7 @@ class GstWorker:
         if os.path.exists(self.socket_path):
             os.remove(self.socket_path)
 
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="GStreamer IPC Worker")
     parser.add_argument(
@@ -1955,6 +1943,6 @@ if __name__ == "__main__":
         help="Path to the Unix domain socket",
     )
     args = parser.parse_args()
-    
+
     worker = GstWorker(args.socket)
     worker.start()

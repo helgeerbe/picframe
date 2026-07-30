@@ -21,9 +21,7 @@ class SystemManager:
     Service responsible for managing system-level operations.
     """
 
-    def __init__(
-        self, event_bus: IEventSubscriber, system_manager_adapter: ISystemManager
-    ) -> None:
+    def __init__(self, event_bus: IEventSubscriber, system_manager_adapter: ISystemManager) -> None:
         """
         Initialize the SystemManager.
 
