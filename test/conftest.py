@@ -3,8 +3,14 @@
 import sys
 from collections.abc import Callable
 from typing import Any, TypeVar
+from unittest.mock import MagicMock
 
 import pytest
+
+# pi3d requires OpenGL/EGL which is not available on headless CI.
+# Install a mock in sys.modules before any test module imports picframe modules.
+if "pi3d" not in sys.modules:
+    sys.modules["pi3d"] = MagicMock()
 
 T = TypeVar("T")
 
