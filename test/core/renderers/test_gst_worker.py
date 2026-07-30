@@ -26,6 +26,9 @@ if not gst_worker.GST_AVAILABLE:
         State=SimpleNamespace(PLAYING="playing", NULL="null", PAUSED="paused"),
         StateChangeReturn=SimpleNamespace(SUCCESS="success", FAILURE="failure"),
         PadLinkReturn=SimpleNamespace(OK="ok"),
+        ELEMENT_METADATA_KLASS="klass",
+        CLOCK_TIME_NONE=0xFFFFFFFFFFFFFFFF,
+        SECOND=1000000000,
         parse_launch=MagicMock(),
     )
 
