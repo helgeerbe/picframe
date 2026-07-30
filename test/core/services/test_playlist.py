@@ -17,8 +17,12 @@ from picframe.core.services.playlist import PlaylistManager
 def _stat_for_rows(rows: list[dict[str, Any]]) -> Mock:
     rows_by_path = {str(row["filepath"]): row for row in rows}
 
-    def stat_side_effect(filepath: str) -> SimpleNamespace:
-        row = rows_by_path[str(filepath)]
+    def stat_side_effect(filepath: str, **kwargs: Any) -> SimpleNamespace:
+        # Python 3.11+ pathlib.Path.resolve() calls os.stat(path, follow_symlinks=True).
+        # Paths outside the media table (e.g. ~/.picframe) fall back to a default stat.
+        row = rows_by_path.get(str(filepath))
+        if row is None:
+            return SimpleNamespace(st_size=0, st_mtime=0.0)
         return SimpleNamespace(
             st_size=row.get("file_size", 0),
             st_mtime=row.get("last_modified", 0.0),

@@ -17,6 +17,18 @@ from picframe.core.renderers.gst_worker import (
     VideoStreamFacts,
 )
 
+# On CI without GStreamer installed, gst_worker.Gst is typing.Any which lacks
+# the enums/constants the production code references (Gst.State.PLAYING, etc.).
+# Install a fake Gst namespace with the needed attributes so tests can exercise
+# the production code paths.
+if not gst_worker.GST_AVAILABLE:
+    gst_worker.Gst = SimpleNamespace(
+        State=SimpleNamespace(PLAYING="playing", NULL="null", PAUSED="paused"),
+        StateChangeReturn=SimpleNamespace(SUCCESS="success", FAILURE="failure"),
+        PadLinkReturn=SimpleNamespace(OK="ok"),
+        parse_launch=MagicMock(),
+    )
+
 
 class FakeGstError:
     def __init__(self, message: str) -> None:
