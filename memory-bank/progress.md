@@ -106,8 +106,11 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   uses Conventional Commit type categories and PR links.
   `PULL_REQUEST_TEMPLATE.md` documents Conventional Commit titles and ticket
   linking. `docs/dev/workflow.md` is the developer workflow reference and is
-  linked from `docs/README.md`. Branch protection rules must be configured
-  manually on GitHub.
+  linked from `docs/README.md`. Branch protection rules are configured on
+  GitHub: `helgeerbe` is a bypass actor (always) on both the
+  `dev (incl v2-dev)` and `main` rulesets so the owner can self-merge PRs
+  without review, while other maintainers still require 1 approving review;
+  CI status checks remain required for all actors.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.

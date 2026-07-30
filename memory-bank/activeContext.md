@@ -108,8 +108,11 @@ functional after the #719 fixes.
   changelog builder now uses PR-title Conventional Commit categories and PR
   links. `PULL_REQUEST_TEMPLATE.md` documents Conventional Commit titles and
   ticket linking. `docs/dev/workflow.md` is the developer workflow reference
-  and is linked from `docs/README.md`. Branch protection rules (PR-required,
-  CI status checks) must be configured manually on GitHub.
+  and is linked from `docs/README.md`. Branch protection rules are configured
+  on GitHub: `helgeerbe` is a bypass actor (always) on both the
+  `dev (incl v2-dev)` and `main` rulesets so the owner can self-merge PRs
+  without review, while other maintainers still require 1 approving review;
+  CI status checks remain required for all actors.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.

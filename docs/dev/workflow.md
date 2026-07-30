@@ -173,10 +173,10 @@ python -m build
 twine check --strict dist/*
 ```
 
-## Required Branch Protection Rules
+## Branch Protection Rules
 
-The following GitHub branch protection rules must be configured for `dev`
-and `main`:
+The following GitHub branch protection rules are configured for `dev`
+(including `v2-dev`) and `main`:
 
 - **Require a pull request before merging**
 - **Require status checks to pass:**
@@ -187,6 +187,13 @@ and `main`:
 - **Require branches to be up to date before merging**
 - **Restrict pushes that create matching branches** (for `main`)
 
-These are configured in **Settings → Branches → Branch protection rules**
-on GitHub, not in the repository itself.
-<!-- CI test -->
+### Bypass Actor
+
+`helgeerbe` (repo owner, user ID 59169507) is configured as a **bypass actor**
+(`bypass_mode: always`) on both the `dev (incl v2-dev)` and `main` rulesets.
+This allows the owner to self-merge PRs without an approving review while CI
+status checks remain required. Other maintainers still need at least 1
+approving review.
+
+Branch protection is managed in **Settings → Branches → Branch protection
+rules** on GitHub (Rulesets API), not in the repository itself.
