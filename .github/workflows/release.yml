@@ -1,0 +1,76 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  id-token: write  # PyPI trusted publishing
+
+jobs:
+  release:
+    name: Build, publish, and release
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/p/picframe
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for changelog + setuptools_scm
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Determine calendar-version tag
+        id: tag
+        run: |
+          BASE_TAG=$(date -u +"%Y.%m.%d")
+          TAG="$BASE_TAG"
+          N=1
+          while git rev-parse "refs/tags/$TAG" >/dev/null 2>&1; do
+            TAG="${BASE_TAG}.post${N}"
+            N=$((N + 1))
+          done
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Determined release tag: $TAG"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package metadata
+        run: twine check --strict dist/*
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
+      - name: Build changelog
+        id: changelog
+        uses: mikepenz/release-changelog-builder-action@v5
+        with:
+          failOnError: true
+          configuration: ".github/workflows/config/release-notes-config.json"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          body: ${{ steps.changelog.outputs.changelog }}
+          draft: false
+          prerelease: false
+          files: |
+            dist/picframe-*.tar.gz
+            dist/picframe-*.whl

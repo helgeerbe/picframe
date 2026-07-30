@@ -96,6 +96,18 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `clock_extra_text` to the clock renderer's visual signature so the clock
   block is invalidated when only the text changes (not just the source); test
   coverage added for the rebuild-on-text-change case.
+- Ticket #706 CI/CD and developer workflow modernization: legacy
+  `test.yml` (flake8 push), `python-publish.yml` (tag-triggered), and the
+  placeholder `pr-checks.yml` are replaced by `ci.yml` (ruff, mypy, pytest,
+  frontend bundle drift, package build, Conventional Commit PR title
+  validation on PRs to `dev`/`v2-dev`) and `release.yml` (calendar-version
+  `YYYY.MM.DD[.postN]` tag, PyPI trusted publishing, GitHub Release with
+  PR-title changelog from `dev → main` merges). The changelog builder config
+  uses Conventional Commit type categories and PR links.
+  `PULL_REQUEST_TEMPLATE.md` documents Conventional Commit titles and ticket
+  linking. `docs/dev/workflow.md` is the developer workflow reference and is
+  linked from `docs/README.md`. Branch protection rules must be configured
+  manually on GitHub.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.

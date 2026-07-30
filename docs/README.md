@@ -35,6 +35,7 @@ FastAPI backend, and API docs are available at `/docs`.
 
 ## Developer Docs
 
+- [Developer workflow](dev/workflow.md)
 - [Architecture overview](dev/architecture/overview.md)
 - [Frontend architecture notes](dev/architecture/frontend.md)
 - [GStreamer hardware discovery notes](dev/architecture/video-gst-hw-discovery.md)

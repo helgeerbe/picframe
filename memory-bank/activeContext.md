@@ -99,6 +99,17 @@ functional after the #719 fixes.
   `exif_datetime` and date-range SQL filters work without runtime fallbacks.
   The z-order fix (Paddy's Discussion #682 feedback) resolved the default
   gradient (`text_bkg_hgt=0.25`) occluding the text overlay.
+- Ticket #706 modernizes CI/CD and developer workflow: the legacy
+  `test.yml` (flake8 push) and `python-publish.yml` (tag-triggered) workflows
+  and the placeholder `pr-checks.yml` are replaced by `ci.yml` (ruff, mypy,
+  pytest, frontend drift, package build, Conventional Commit PR title check on
+  PRs to `dev`/`v2-dev`) and `release.yml` (calendar-version `YYYY.MM.DD[.postN]`
+  tag + PyPI publish + GitHub Release from `dev → main` merges). The
+  changelog builder now uses PR-title Conventional Commit categories and PR
+  links. `PULL_REQUEST_TEMPLATE.md` documents Conventional Commit titles and
+  ticket linking. `docs/dev/workflow.md` is the developer workflow reference
+  and is linked from `docs/README.md`. Branch protection rules (PR-required,
+  CI status checks) must be configured manually on GitHub.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
