@@ -77,6 +77,20 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   `last_modified` at indexing time when no EXIF/creation date is found, so the
   DB always stores a valid `exif_datetime` and date-range SQL filters work
   without runtime fallbacks (#719).
+- CI/CD and developer workflow decisions (#706):
+  - CI pipeline (`ci.yml`) runs ruff, mypy, pytest, frontend bundle drift,
+    package build, and Conventional Commit PR-title validation on PRs to
+    `dev`/`v2-dev`; it replaces legacy `test.yml`/`python-publish.yml`.
+  - Releases (`release.yml`) use calendar-version tags `YYYY.MM.DD[.postN]`,
+    PyPI trusted publishing, and GitHub Releases with PR-title changelog
+    categories from `dev → main` merges.
+  - PR titles must follow Conventional Commits; the PR body must reference the
+    tracking ticket via `Closes`/`Fixes`/`Refs`.
+  - `docs/dev/workflow.md` is the developer workflow reference.
+  - Branch protection: `helgeerbe` is a bypass actor (always) on both the
+    `dev (incl v2-dev)` and `main` rulesets so the owner can self-merge PRs
+    without review; other maintainers still require 1 approving review; CI
+    status checks remain required for all actors.
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.
