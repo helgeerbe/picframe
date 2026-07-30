@@ -56,12 +56,10 @@ def test_clock_renderer_draw_updates_time(clock_renderer):
     # Mock time to return a specific string
     with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
         mock_datetime.now.return_value.strftime.return_value = "12:00"
-        # Mock the draw method to avoid pi3d Camera issues
-        with patch("pi3d.Sprite.draw") as mock_draw:
-            clock_renderer.draw()
-            assert clock_renderer._current_time_str == "12:00"
-            # The sprite is created inside draw, so we check the mocked class method
-            mock_draw.assert_called_once()
+        clock_renderer.draw()
+        assert clock_renderer._current_time_str == "12:00"
+        # The sprite is a MagicMock from the fixture; verify its draw was called
+        clock_renderer._clock_block.sprite.draw.assert_called_once()
 
 
 def test_clock_renderer_draw_no_update_if_time_same(clock_renderer):
@@ -70,14 +68,14 @@ def test_clock_renderer_draw_no_update_if_time_same(clock_renderer):
 
     with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
         mock_datetime.now.return_value.strftime.return_value = "12:00"
-        with patch("pi3d.Sprite.draw") as mock_draw:
-            clock_renderer.draw()
-            mock_draw.reset_mock()
+        clock_renderer.draw()
+        sprite_draw = clock_renderer._clock_block.sprite.draw
+        sprite_draw.reset_mock()
 
-            # Draw again with same time
-            clock_renderer.draw()
-            # It should still draw, but not recreate the sprite
-            mock_draw.assert_called_once()
+        # Draw again with same time
+        clock_renderer.draw()
+        # It should still draw, but not recreate the sprite
+        sprite_draw.assert_called_once()
 
 
 def test_clock_renderer_applies_overlay_style(mock_display, mock_shader):
