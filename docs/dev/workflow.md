@@ -189,3 +189,4 @@ and `main`:
 
 These are configured in **Settings → Branches → Branch protection rules**
 on GitHub, not in the repository itself.
+<!-- CI test -->
