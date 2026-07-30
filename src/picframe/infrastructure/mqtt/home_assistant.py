@@ -598,7 +598,7 @@ class HomeAssistantMqttAdapter:
             media = dict(media_item.__dict__)
         else:
             media = {"raw": str(media_item)}
-        return media
+        return dict(media)
 
     def _publish_entity_state(self, entity_id: str, value: Any) -> None:
         self._publish_raw(self._entity_state_topic(entity_id), str(value), retain=True)

@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import unquote, urlparse
 
 from picframe.core.renderers.gst_utils import find_best_element
@@ -143,9 +144,7 @@ class GstHardwareSupport:
 
     def hardware_decode_available_for_caps(self, caps: Any) -> bool:
         caps_str = caps.to_string()
-        if "video/x-h264" in caps_str and self._find_element(
-            ["v4l2h264dec", "v4l2slh264dec"]
-        ):
+        if "video/x-h264" in caps_str and self._find_element(["v4l2h264dec", "v4l2slh264dec"]):
             return True
         if "video/x-h265" in caps_str and self._find_element(["v4l2slh265dec"]):
             return True
@@ -354,10 +353,9 @@ class PlaybackPolicy:
         self,
         stream_facts: VideoStreamFacts | None,
     ) -> bool:
-        return (
-            self.raspberry_pi_model_family(self._hardware_model) is not None
-            and self.requires_compatible_hardware_presentation(stream_facts)
-        )
+        return self.raspberry_pi_model_family(
+            self._hardware_model
+        ) is not None and self.requires_compatible_hardware_presentation(stream_facts)
 
     def uses_playbin_hardware_presentation(
         self,
@@ -382,9 +380,7 @@ class PlaybackPolicy:
 
         model = self._hardware_model.lower()
         is_pi4_like = (
-            "raspberry pi 4" in model
-            or "raspberry pi 400" in model
-            or "compute module 4" in model
+            "raspberry pi 4" in model or "raspberry pi 400" in model or "compute module 4" in model
         )
         if not is_pi4_like:
             return None
@@ -623,11 +619,7 @@ class PlaybackPolicy:
 
     @staticmethod
     def format_stream_dimensions(stream_facts: VideoStreamFacts | None) -> str:
-        if (
-            stream_facts is None
-            or stream_facts.width is None
-            or stream_facts.height is None
-        ):
+        if stream_facts is None or stream_facts.width is None or stream_facts.height is None:
             return "with unknown resolution"
         return f"{stream_facts.width}x{stream_facts.height}"
 

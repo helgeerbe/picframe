@@ -34,9 +34,7 @@ def test_apply_string_migration(db_connection: sqlite3.Connection) -> None:
     migrations = [
         Migration(
             version=1,
-            up_script=(
-                "CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT);"
-            ),
+            up_script=("CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT);"),
         )
     ]
     manager = MigrationManager(db_connection, migrations)
@@ -46,8 +44,7 @@ def test_apply_string_migration(db_connection: sqlite3.Connection) -> None:
 
     # Verify the table was created
     cursor = db_connection.execute(
-        "SELECT name FROM sqlite_master "
-        "WHERE type='table' AND name='test_table'"
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'"
     )
     assert cursor.fetchone() is not None
 
@@ -56,9 +53,7 @@ def test_apply_callable_migration(db_connection: sqlite3.Connection) -> None:
     """Test applying a migration defined as a Python callable."""
 
     def migration_func(conn: sqlite3.Connection) -> None:
-        conn.execute(
-            "CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT);"
-        )
+        conn.execute("CREATE TABLE test_table (id INTEGER PRIMARY KEY, name TEXT);")
 
     migrations = [Migration(version=1, up_script=migration_func)]
     manager = MigrationManager(db_connection, migrations)
@@ -68,8 +63,7 @@ def test_apply_callable_migration(db_connection: sqlite3.Connection) -> None:
 
     # Verify the table was created
     cursor = db_connection.execute(
-        "SELECT name FROM sqlite_master "
-        "WHERE type='table' AND name='test_table'"
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='test_table'"
     )
     assert cursor.fetchone() is not None
 

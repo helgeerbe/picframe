@@ -5,6 +5,7 @@ This module tests the core functionality of the event bus, including
 subscribing, unsubscribing, publishing events, priority-based ordering,
 and thread-safe execution of callbacks.
 """
+
 import threading
 import time
 from typing import Any

@@ -30,7 +30,7 @@ class IDisplayPower(Protocol):
     def set_brightness(self, value: float) -> None:
         """
         Set the display brightness.
-        
+
         Args:
             value: Brightness level between 0.0 and 1.0.
         """

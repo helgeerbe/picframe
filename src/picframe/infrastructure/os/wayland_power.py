@@ -134,7 +134,7 @@ class WaylandDisplayPower(IDisplayPower):
     def set_brightness(self, value: float) -> None:
         """Set the display brightness (0.0 to 1.0)."""
         percent_int = max(0, min(100, round(value * 100)))
-        
+
         if self.is_external:
             # Use ddcutil for HDMI/DP monitors
             if not self._ensure_ddc_brightness_supported():
@@ -243,9 +243,7 @@ class WaylandDisplayPower(IDisplayPower):
             cls._append_output_details(details, error.output, error.stderr)
             return " ".join(details)
 
-        details = [
-            f"Command exited {error.returncode}: {cls._format_command(error.cmd)}."
-        ]
+        details = [f"Command exited {error.returncode}: {cls._format_command(error.cmd)}."]
         cls._append_output_details(details, error.stdout, error.stderr)
         return " ".join(details)
 

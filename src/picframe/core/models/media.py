@@ -67,7 +67,7 @@ class MediaItem:
     id: int | None = None
     is_deleted: bool = False
 
-    def to_dict(self) -> dict[str, str | int | float | bool | None]:
+    def to_dict(self) -> dict[str, object]:
         """
         Convert the MediaItem to a dictionary suitable for database insertion.
 
@@ -99,9 +99,7 @@ class MediaItem:
             "title": self.title,
             "caption": self.caption,
             "tags": self.tags,
-            "is_portrait": (
-                int(self.is_portrait) if self.is_portrait is not None else None
-            ),
+            "is_portrait": (int(self.is_portrait) if self.is_portrait is not None else None),
             "location": self.location,
             "duration": self.duration,
             "codec": self.codec,

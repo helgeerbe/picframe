@@ -6,6 +6,7 @@ including the thread-safe PriorityQueueEventBus, immutable Event DTOs, and
 the publisher/subscriber interfaces. It facilitates decoupled communication
 between the asynchronous control plane and the synchronous render loop.
 """
+
 from .bus import PriorityQueueEventBus
 from .dto import (
     Command,

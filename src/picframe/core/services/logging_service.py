@@ -118,9 +118,7 @@ class PicframeLoggingService:
         self._file_handler: RotatingFileHandler | None = None
         self._file_path: Path | None = None
         self._buffer_handler = LogEventHandler(self.buffer)
-        self._formatter = logging.Formatter(
-            "%(asctime)s %(levelname)s [%(name)s] %(message)s"
-        )
+        self._formatter = logging.Formatter("%(asctime)s %(levelname)s [%(name)s] %(message)s")
         self._buffer_handler.setFormatter(self._formatter)
 
         if self._buffer_handler not in self._root_logger.handlers:
@@ -165,9 +163,7 @@ class PicframeLoggingService:
     def _normalize_level(raw_level: Any) -> tuple[str, int]:
         level_name = str(raw_level or "WARNING").strip().upper()
         if level_name not in LOG_LEVELS:
-            logging.getLogger(__name__).warning(
-                "Unknown log level %r; using WARNING", raw_level
-            )
+            logging.getLogger(__name__).warning("Unknown log level %r; using WARNING", raw_level)
             level_name = "WARNING"
         return level_name, LOG_LEVELS[level_name]
 

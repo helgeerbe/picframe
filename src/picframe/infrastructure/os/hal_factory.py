@@ -10,9 +10,9 @@ import os
 import shutil
 import sys
 from dataclasses import dataclass
-from typing import Any, Optional
-from picframe.core.events.interfaces import IEventPublisher
+from typing import Any
 
+from picframe.core.events.interfaces import IEventPublisher
 from picframe.core.ports import IDisplayPower, IHardwareInput, ISystemManager
 from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
 from picframe.infrastructure.os.mock_adapters import (
@@ -66,7 +66,7 @@ class HALFactory:
     def create_adapters(
         display_output: str = "HDMI-A-1",
         hardware_input_config: dict[str, dict[str, Any]] | None = None,
-        publisher: Optional[IEventPublisher] = None
+        publisher: IEventPublisher | None = None,
     ) -> HALAdapters:
         """
         Detect the host OS and instantiate the appropriate HAL adapters.
@@ -96,12 +96,12 @@ class HALFactory:
 
         # Linux environment detection
         is_rpi = HALFactory._is_raspberry_pi()
-        
+
         # Refined Display Server Detection
         xdg_session_type = str(os.environ.get("XDG_SESSION_TYPE", "")).lower()
         is_wayland = xdg_session_type == "wayland" or HALFactory._is_wayland()
         is_x11 = xdg_session_type == "x11" or HALFactory._is_x11()
-        
+
         has_wlr_randr = HALFactory._has_wlr_randr()
 
         logger.info(
@@ -135,6 +135,7 @@ class HALFactory:
         if is_rpi and hardware_input_config is not None:
             logger.info("HALFactory: Raspberry Pi detected. Injecting RPiGPIOAdapter.")
             from picframe.infrastructure.os.rpi_gpio_adapter import RPiGPIOAdapter
+
             hardware_input = RPiGPIOAdapter(config=hardware_input_config)
         elif is_rpi:
             logger.warning(

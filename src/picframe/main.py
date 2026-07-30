@@ -60,7 +60,7 @@ def run_picframe(
     data_dir = str(resource_paths.data_dir)
     config_db_path = config_db_path or os.path.join(data_dir, "config.db3")
     media_db_path = media_db_path or os.path.join(data_dir, "media_cache.db3")
-    
+
     _config_repo = SQLiteConfigRepository(config_db_path)
     repair_legacy_resource_defaults(_config_repo)
     media_repo = SQLiteMediaRepository(media_db_path)
@@ -80,13 +80,14 @@ def run_picframe(
     hal_adapters = HALFactory.create_adapters(
         display_output=display_output,
         hardware_input_config=hardware_input_config,
-        publisher=event_bus
+        publisher=event_bus,
     )
     logger.info(f"HAL Adapters injected: {hal_adapters}")
 
     # 5. Initialize Services
     playlist_manager = PlaylistManager(media_repo, _config_repo, event_bus, resource_paths)
     from picframe.core.services.display_power import DisplayPowerManager
+
     display_power_manager = DisplayPowerManager(
         event_bus,
         hal_adapters.display_power,
@@ -94,6 +95,7 @@ def run_picframe(
         event_publisher=event_bus,
     )
     from picframe.core.services.system_manager import SystemManager
+
     system_manager = SystemManager(event_bus, hal_adapters.system_manager)
     hardware_input_service = HardwareInputService(
         event_bus=event_bus,
@@ -101,44 +103,44 @@ def run_picframe(
         config_repository=_config_repo,
         event_subscriber=event_bus,
     )
-    
+
     # Initialize ImageProcessingService
     cache_dir = os.path.join(data_dir, "cache")
     image_processing_service = ImageProcessingService(cache_dir=cache_dir)
-    
+
     # Initialize media monitor infrastructure adapter
     model_config = nested_config.get("model", {})
-    
+
     pic_dir = resource_paths.resolve(model_config.get("pic_dir", os.path.join(data_dir, "media")))
     media_directories = [pic_dir]
-    
+
     logger.info(f"Configured media directories: {media_directories}")
-    
-    image_extensions = model_config.get("image_extensions", [
-        ".jpg", ".jpeg", ".png", ".heic", ".heif"
-    ])
-    video_extensions = model_config.get("video_extensions", [
-        ".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"
-    ])
+
+    image_extensions = model_config.get(
+        "image_extensions", [".jpg", ".jpeg", ".png", ".heic", ".heif"]
+    )
+    video_extensions = model_config.get(
+        "video_extensions", [".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"]
+    )
     allowed_extensions = set(image_extensions + video_extensions)
     follow_links = model_config.get("follow_links", False)
-    
+
     media_monitor_service = WatchdogMediaMonitor(
         publisher=event_bus,
         directories=media_directories,
         allowed_extensions=allowed_extensions,
-        follow_links=follow_links
+        follow_links=follow_links,
     )
 
     from picframe.core.metadata.image_strategy import ImageMetadataStrategy
     from picframe.core.metadata.video_strategy import VideoMetadataStrategy
     from picframe.core.services.media_indexer import MediaIndexerService
-    
+
     display_w_val = _config_repo.get_app_config("viewer.display_w", 0)
     display_w = int(display_w_val) if display_w_val else 0
     display_h_val = _config_repo.get_app_config("viewer.display_h", 0)
     display_h = int(display_h_val) if display_h_val else 0
-    
+
     media_indexer_service = MediaIndexerService(
         event_subscriber=event_bus,
         media_repository=media_repo,
@@ -151,15 +153,17 @@ def run_picframe(
             display_h=display_h,
             config_repository=_config_repo,
             cache_dir=cache_dir,
-        )
+        ),
     )
 
     # 5. Initialize Renderer
     from picframe.core.services.renderer_config import build_renderer_config
+
     renderer_config = build_renderer_config(_config_repo, resource_paths)
     renderer = Pi3dRenderer(renderer_config, event_subscriber=event_bus, event_publisher=event_bus)
-    
+
     from picframe.core.renderers.gst_video_renderer import GstVideoRenderer
+
     max_software_decode_resolution = str(
         _config_repo.get_app_config("viewer.max_software_decode_resolution", "1280x720")
     )
@@ -249,7 +253,7 @@ def run_picframe(
 
     logger.info("Starting MQTT Adapter...")
     mqtt_adapter.start()
-    
+
     logger.info("Starting Media Monitor Service...")
     media_monitor_service.perform_differential_sync()
     media_monitor_service.start()
@@ -264,9 +268,11 @@ def run_picframe(
     except Exception as e:
         logger.critical(f"Fatal error in main thread: {e}", exc_info=True)
         from picframe.core.events.dto import SystemErrorEvent
+
         event_bus.publish(SystemErrorEvent(message=f"Fatal Error: {e}", component="MainThread"))
         # Give the event bus a moment to broadcast the error before shutting down
         import time
+
         time.sleep(1.0)
     finally:
         logger.info("Cleaning up...")
@@ -303,8 +309,7 @@ def main() -> None:
         "--config-db",
         default=os.environ.get("PICFRAME_CONFIG_DB"),
         help=(
-            "Path to config database "
-            "(default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)"
+            "Path to config database (default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)"
         ),
     )
     init_parser.add_argument(
@@ -339,8 +344,7 @@ def main() -> None:
         "--config-db",
         default=os.environ.get("PICFRAME_CONFIG_DB"),
         help=(
-            "Path to config database "
-            "(default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)"
+            "Path to config database (default: <dir>/data/config.db3 or PICFRAME_CONFIG_DB env var)"
         ),
     )
     run_parser.add_argument(
@@ -377,6 +381,7 @@ def main() -> None:
         )
     else:
         parser.print_help()
+
 
 if __name__ == "__main__":
     main()

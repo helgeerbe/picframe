@@ -22,11 +22,12 @@ logger = logging.getLogger(__name__)
 class MediaIndexerService:
     """
     Listens to FileChangeEvents and updates the MediaRepository.
-    
+
     This service acts as the bridge between the file system monitor and the
     database, ensuring that the media cache is kept up-to-date with the
     actual files on disk.
     """
+
     def __init__(
         self,
         event_subscriber: IEventSubscriber,
@@ -35,7 +36,7 @@ class MediaIndexerService:
         image_processing_service: ImageProcessingService,
         media_monitor_service: IMediaMonitor,
         image_strategy: IMetadataStrategy,
-        video_strategy: IMetadataStrategy
+        video_strategy: IMetadataStrategy,
     ) -> None:
         self.media_repository = media_repository
         self.config_repository = config_repository
@@ -45,13 +46,13 @@ class MediaIndexerService:
         self.video_strategy = video_strategy
         self._paused = False
         self._stopped = False
-        
+
         # Initialize and start the geocoding worker
         self.geocoding_worker = GeocodingWorker(
             media_repository, config_repository, event_subscriber
         )
         self.geocoding_worker.start()
-        
+
         event_subscriber.subscribe(FileChangeEvent, self._handle_file_change)
         event_subscriber.subscribe(CommandEvent, self._handle_command)
 
@@ -61,11 +62,11 @@ class MediaIndexerService:
         """
         dir_path = os.path.dirname(filepath)
         directories = self.config_repository.get_all_directories()
-        
+
         for d in directories:
             if d["path"] == dir_path:
                 return int(d["id"])
-                
+
         # If not found, add it
         return self.config_repository.add_directory(dir_path)
 
@@ -77,25 +78,26 @@ class MediaIndexerService:
         try:
             if event.event_type in ("created", "modified"):
                 ext = os.path.splitext(event.path)[1].lower()
-                
+
                 # Get extensions from config
-                image_exts = self.config_repository.get_app_config("model.image_extensions", [
-                    ".jpg", ".jpeg", ".png", ".heic", ".heif"
-                ])
-                video_exts = self.config_repository.get_app_config("model.video_extensions", [
-                    ".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"
-                ])
-                
+                image_exts = self.config_repository.get_app_config(
+                    "model.image_extensions", [".jpg", ".jpeg", ".png", ".heic", ".heif"]
+                )
+                video_exts = self.config_repository.get_app_config(
+                    "model.video_extensions",
+                    [".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"],
+                )
+
                 # Ensure extensions are lowercase for comparison
                 image_exts = [e.lower() for e in image_exts]
                 video_exts = [e.lower() for e in video_exts]
-                
+
                 strategy = None
                 if ext in image_exts:
                     strategy = self.image_strategy
                 elif ext in video_exts:
                     strategy = self.video_strategy
-                    
+
                 if not strategy:
                     logger.debug(f"Skipping file with unsupported extension: {event.path}")
                     return
@@ -117,13 +119,13 @@ class MediaIndexerService:
                 logger.debug(f"Indexing file: {event.path}")
                 # Extract metadata
                 directory_id = self._get_or_create_directory_id(event.path)
-                
+
                 # For initial sync, we need this to be synchronous so the DB is populated
                 # before the playlist is built.
                 media_item = strategy.extract(event.path, directory_id)
                 if media_item:
                     self.media_repository.add_media_item(media_item.to_dict())
-                    
+
                     # Queue coordinates for reverse geocoding if present
                     if media_item.latitude is not None and media_item.longitude is not None:
                         self.geocoding_worker.queue_lookup(
@@ -176,10 +178,7 @@ class MediaIndexerService:
     ) -> bool:
         if not is_video_file and str(existing.get("media_type", "")).lower() != "video":
             return False
-        return (
-            existing.get("duration") in (None, 0, 0.0, "")
-            or existing.get("codec") in (None, "")
-        )
+        return existing.get("duration") in (None, 0, 0.0, "") or existing.get("codec") in (None, "")
 
     def _handle_command(self, event: CommandEvent) -> None:
         if self._stopped:
@@ -238,8 +237,7 @@ class MediaIndexerService:
                 self.media_monitor_service.perform_differential_sync()
 
                 logger.info(
-                    "Media directory sync complete; purge remains an explicit "
-                    "maintenance action."
+                    "Media directory sync complete; purge remains an explicit maintenance action."
                 )
 
     def pause(self) -> None:

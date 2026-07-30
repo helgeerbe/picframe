@@ -6,6 +6,7 @@ It allows asynchronous background threads (like MQTT or FastAPI) to safely
 publish events to the synchronous main render loop, ensuring that critical
 commands preempt standard state updates.
 """
+
 import logging
 import queue
 import threading
@@ -29,17 +30,13 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
     def __init__(self) -> None:
         """Initialize the event bus with an empty queue and subscriber dict."""
         self._subscribers: dict[type, list[Callable[[Any], None]]] = {}
-        self._queue: queue.PriorityQueue[tuple[int, int, Any]] = (
-            queue.PriorityQueue()
-        )
+        self._queue: queue.PriorityQueue[tuple[int, int, Any]] = queue.PriorityQueue()
         self._lock = threading.Lock()
         self._running = False
         self._worker_thread: threading.Thread | None = None
         self._counter = 0
 
-    def subscribe(
-        self, event_type: type, callback: Callable[[Any], None]
-    ) -> None:
+    def subscribe(self, event_type: type, callback: Callable[[Any], None]) -> None:
         """Register a callback for a specific event type."""
         with self._lock:
             if event_type not in self._subscribers:
@@ -47,9 +44,7 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
             if callback not in self._subscribers[event_type]:
                 self._subscribers[event_type].append(callback)
 
-    def unsubscribe(
-        self, event_type: type, callback: Callable[[Any], None]
-    ) -> None:
+    def unsubscribe(self, event_type: type, callback: Callable[[Any], None]) -> None:
         """Remove a registered callback for a specific event type."""
         with self._lock:
             if event_type in self._subscribers:
@@ -72,9 +67,7 @@ class PriorityQueueEventBus(IEventPublisher, IEventSubscriber):
             if self._running:
                 return
             self._running = True
-            self._worker_thread = threading.Thread(
-                target=self._process_events, daemon=True
-            )
+            self._worker_thread = threading.Thread(target=self._process_events, daemon=True)
             self._worker_thread.start()
 
     def stop(self) -> None:

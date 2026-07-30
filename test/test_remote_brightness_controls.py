@@ -30,7 +30,7 @@ def test_remote_video_preview_is_poster_first_and_expanded_video_only() -> None:
     assert '@click.stop="openExpandedVideo"' in remote_view
     assert ':autoplay="expandedVideoAutoplay"' in remote_view
     assert "remote.playVideo" in remote_view
-    assert "preload=\"metadata\"" in remote_view
+    assert 'preload="metadata"' in remote_view
     assert "fixed right-5 top-5" not in remote_view
     assert "mb-3 flex h-12 shrink-0 justify-end" in remote_view
     assert "min-h-0 flex-1 w-full" in remote_view
@@ -38,8 +38,9 @@ def test_remote_video_preview_is_poster_first_and_expanded_video_only() -> None:
     assert remote_view.count('@error="handleVideoPosterError(item)"') >= 3
 
     preview_section = remote_view[
-        remote_view.index("<!-- Image Preview Area -->"):
-        remote_view.index("<!-- Controls Area -->")
+        remote_view.index("<!-- Image Preview Area -->") : remote_view.index(
+            "<!-- Controls Area -->"
+        )
     ]
     assert "isVideoMedia(selectedMediaItem)" in preview_section
     assert preview_section.index("mediaPosterSrc(selectedMediaItem)") < (

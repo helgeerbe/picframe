@@ -1,6 +1,7 @@
 """
 Interfaces for the Presentation Layer (Renderers).
 """
+
 from typing import Protocol
 
 from picframe.core.events.dto import RenderCommand, RendererConfig
@@ -47,7 +48,7 @@ class IVideoPlayer(Protocol):
     def set_volume(self, level: float) -> None:
         """
         Set the audio volume level.
-        
+
         Args:
             level: Volume level between 0.0 and 1.0.
         """
@@ -61,7 +62,7 @@ class IVideoPlayer(Protocol):
 class IRenderer(Protocol):
     """
     Protocol defining the contract for a Presentation Layer renderer.
-    
+
     The renderer is a "dumb" component responsible only for drawing pixels
     to the screen based on received RenderCommands.
     """
@@ -82,7 +83,7 @@ class IRenderer(Protocol):
     def execute(self, command: RenderCommand) -> None:
         """
         Process a new render command (e.g., load a new image texture).
-        
+
         Args:
             command: The RenderCommand with image path and overlay data.
         """
@@ -112,7 +113,7 @@ class IRenderer(Protocol):
         """
         Draw a single frame to the display.
         Must be called continuously in the main thread loop.
-        
+
         Returns:
             bool: True to continue the render loop, False to exit.
         """

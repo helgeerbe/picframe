@@ -314,11 +314,9 @@ class SQLiteMediaRepository(IMediaRepository):
         """
         self._db_path = db_path
         self._lock = threading.RLock()
-        self._conn = sqlite3.connect(
-            self._db_path, check_same_thread=False, isolation_level=None
-        )
+        self._conn = sqlite3.connect(self._db_path, check_same_thread=False, isolation_level=None)
         self._conn.row_factory = sqlite3.Row
-        
+
         # Enable WAL mode for better concurrency
         self._conn.execute("PRAGMA journal_mode=WAL;")
 
@@ -376,10 +374,10 @@ class SQLiteMediaRepository(IMediaRepository):
 
         columns = ", ".join(media_data.keys())
         placeholders = ", ".join("?" for _ in media_data)
-        
+
         # Use INSERT OR REPLACE to handle unique constraint on filepath
         query = f"INSERT OR REPLACE INTO media ({columns}) VALUES ({placeholders})"
-        
+
         with self._lock, self._conn:
             cursor = self._conn.execute(query, tuple(media_data.values()))
             return cursor.lastrowid or 0
@@ -400,10 +398,15 @@ class SQLiteMediaRepository(IMediaRepository):
                 """
                 SELECT m.*, COALESCE(l.address, m.location) as resolved_location
                 FROM media m
-                """ + location_join + """
+                """
+                + location_join
+                + """
                 WHERE m.filepath = ?
                 """,
-                (*location_params, filepath,)
+                (
+                    *location_params,
+                    filepath,
+                ),
             )
             row = cursor.fetchone()
         return self._media_row_to_dict(row) if row else None
@@ -417,8 +420,7 @@ class SQLiteMediaRepository(IMediaRepository):
         """
         with self._lock, self._conn:
             self._conn.execute(
-                "UPDATE media SET is_deleted = 1, updated_at = julianday('now') "
-                "WHERE filepath = ?",
+                "UPDATE media SET is_deleted = 1, updated_at = julianday('now') WHERE filepath = ?",
                 (filepath,),
             )
 
@@ -440,10 +442,15 @@ class SQLiteMediaRepository(IMediaRepository):
                 """
                 SELECT m.*, COALESCE(l.address, m.location) as resolved_location
                 FROM media m
-                """ + location_join + """
+                """
+                + location_join
+                + """
                 WHERE m.id = ?
                 """,
-                (*location_params, media_id,)
+                (
+                    *location_params,
+                    media_id,
+                ),
             )
             row = cursor.fetchone()
         return self._media_row_to_dict(row) if row else None
@@ -462,17 +469,16 @@ class SQLiteMediaRepository(IMediaRepository):
         # Automatically update the updated_at timestamp
         if "updated_at" not in updates:
             updates["updated_at"] = "julianday('now')"
-            
+
         set_clause = ", ".join(
-            f"{k} = ?" if k != "updated_at" else f"{k} = {v}" 
-            for k, v in updates.items()
+            f"{k} = ?" if k != "updated_at" else f"{k} = {v}" for k, v in updates.items()
         )
-        
+
         # Filter out the raw SQL values from the parameters
         params = tuple(v for k, v in updates.items() if k != "updated_at") + (media_id,)
-        
+
         query = f"UPDATE media SET {set_clause} WHERE id = ?"
-        
+
         with self._lock, self._conn:
             self._conn.execute(query, params)
 
@@ -485,8 +491,7 @@ class SQLiteMediaRepository(IMediaRepository):
         """
         with self._lock, self._conn:
             self._conn.execute(
-                "UPDATE media SET is_deleted = 1, updated_at = julianday('now') "
-                "WHERE id = ?",
+                "UPDATE media SET is_deleted = 1, updated_at = julianday('now') WHERE id = ?",
                 (media_id,),
             )
 
@@ -513,7 +518,9 @@ class SQLiteMediaRepository(IMediaRepository):
                 """
                 SELECT m.*, COALESCE(l.address, m.location) as resolved_location
                 FROM media m
-                """ + location_join + """
+                """
+                + location_join
+                + """
                 WHERE m.is_deleted = 0
                 """,
                 location_params,
@@ -925,33 +932,32 @@ class SQLiteMediaRepository(IMediaRepository):
             The number of purged records.
         """
         import os
-        
+
         with self._lock:
             cursor = self._conn.execute("SELECT id, filepath FROM media")
             rows = cursor.fetchall()
-        
+
         missing_ids = []
         for row in rows:
             if not os.path.exists(row["filepath"]):
                 missing_ids.append(row["id"])
-                
+
         if not missing_ids:
             return 0
-            
+
         # Delete in batches to avoid SQLite limits
         batch_size = 999
         purged_count = 0
-        
+
         with self._lock, self._conn:
             for i in range(0, len(missing_ids), batch_size):
-                batch = missing_ids[i:i + batch_size]
+                batch = missing_ids[i : i + batch_size]
                 placeholders = ",".join("?" * len(batch))
                 cursor = self._conn.execute(
-                    f"DELETE FROM media WHERE id IN ({placeholders})",
-                    batch
+                    f"DELETE FROM media WHERE id IN ({placeholders})", batch
                 )
                 purged_count += cursor.rowcount
-                
+
         return purged_count
 
     def close(self) -> None:

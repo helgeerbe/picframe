@@ -208,9 +208,7 @@ class GtkVideoPresenter:
             except TypeError:
                 init_result = Gtk.init_check([])
             gtk_initialized = (
-                bool(init_result[0])
-                if isinstance(init_result, tuple)
-                else bool(init_result)
+                bool(init_result[0]) if isinstance(init_result, tuple) else bool(init_result)
             )
             if not gtk_initialized:
                 raise RuntimeError("Gtk.init_check returned False")
@@ -253,9 +251,7 @@ class GtkVideoPresenter:
         has_backdrop = bool(host_backdrop_path)
         fullscreen_video = self._gtk_geometry_is_fullscreen(x, y, w, h)
         transparent_host = (
-            self._gtk_video_host_uses_transparency()
-            and fullscreen_video
-            and not has_backdrop
+            self._gtk_video_host_uses_transparency() and fullscreen_video and not has_backdrop
         )
         fixed_host = True
         _, _, widget_w, widget_h = self._gtk_video_widget_geometry(
@@ -552,9 +548,7 @@ class GtkVideoPresenter:
         )
         logger.info(
             "GTK video host background=%s.",
-            "transparent"
-            if transparent
-            else self._gtk_opaque_host_background_css(host_background),
+            "transparent" if transparent else self._gtk_opaque_host_background_css(host_background),
         )
 
     def _set_gtk_video_host_background(
@@ -599,9 +593,7 @@ class GtkVideoPresenter:
                 css_provider,
                 Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
             )
-            selected_class = (
-                GTK_TRANSPARENT_HOST_CLASS if transparent else GTK_OPAQUE_HOST_CLASS
-            )
+            selected_class = GTK_TRANSPARENT_HOST_CLASS if transparent else GTK_OPAQUE_HOST_CLASS
             remove_css_class = getattr(widget, "remove_css_class", None)
             if callable(remove_css_class):
                 remove_css_class(GTK_TRANSPARENT_HOST_CLASS)
@@ -677,8 +669,8 @@ class GtkVideoPresenter:
                 fallback_size=(host_w, host_h),
             )
             if backdrop is not None:
-                backdrop_x, backdrop_y, backdrop_w, backdrop_h = (
-                    self._normalize_gtk_rect(host_backdrop_rect, (0, 0, host_w, host_h))
+                backdrop_x, backdrop_y, backdrop_w, backdrop_h = self._normalize_gtk_rect(
+                    host_backdrop_rect, (0, 0, host_w, host_h)
                 )
                 try:
                     backdrop.set_size_request(backdrop_w, backdrop_h)
@@ -1075,15 +1067,13 @@ class GtkVideoPresenter:
                 return True
             if widget is None:
                 return False
-            expected_x, expected_y, expected_w, expected_h = (
-                self._gtk_fixed_host_child_rect(
-                    x,
-                    y,
-                    w,
-                    h,
-                    fullscreen=fullscreen,
-                    transparent=host_transparent,
-                )
+            expected_x, expected_y, expected_w, expected_h = self._gtk_fixed_host_child_rect(
+                x,
+                y,
+                w,
+                h,
+                fullscreen=fullscreen,
+                transparent=host_transparent,
             )
             try:
                 allocation = widget.get_allocation()

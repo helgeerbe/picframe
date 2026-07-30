@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import subprocess
+from typing import Any
 
 from picframe.core.metadata.interfaces import IMetadataStrategy
 from picframe.core.models.media import MediaItem, MediaType
@@ -26,7 +27,7 @@ class VideoMetadataStrategy(IMetadataStrategy):
         self,
         display_w: int = 0,
         display_h: int = 0,
-        config_repository=None,
+        config_repository: Any = None,
         cache_dir: str | None = None,
     ):
         self.display_w = display_w
@@ -196,10 +197,10 @@ class VideoMetadataStrategy(IMetadataStrategy):
                     # It could be extracted from ffprobe output if needed
                     target_w = self.display_w if self.display_w > 0 else width
                     target_h = self.display_h if self.display_h > 0 else height
-                    fit_display = False
-                    background = None
-                    matting_config = None
-                    edge_config = None
+                    fit_display: bool = False
+                    background: Any = None
+                    matting_config: Any = None
+                    edge_config: Any = None
                     if self._config_repository is not None:
                         fit_display = self._config_repository.get_app_config_bool(
                             "viewer.video_fit_display", False
@@ -250,7 +251,7 @@ class VideoMetadataStrategy(IMetadataStrategy):
                                 "viewer.mat_resource_folder", "${PICFRAME_DATA}/mat"
                             ),
                         }
-                    frame_cache_kwargs = {}
+                    frame_cache_kwargs: dict[str, Any] = {}
                     if fit_display:
                         frame_cache_kwargs["fit_display"] = fit_display
                     if background is not None:

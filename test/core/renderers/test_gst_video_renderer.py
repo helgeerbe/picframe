@@ -58,8 +58,9 @@ def media_item() -> MediaItem:
         location="",
         tags="",
         is_portrait=False,
-        codec="h264"
+        codec="h264",
     )
+
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
@@ -145,13 +146,13 @@ def test_play_video(
 ) -> None:
     mock_conn = MagicMock()
     mock_client.return_value = mock_conn
-    
+
     renderer = GstVideoRenderer(mock_publisher)
     renderer.play(media_item)
-    
+
     assert renderer._current_media == media_item
     assert mock_conn.send.call_count == 2
-    
+
     # Verify the sent commands
     stop_json = mock_conn.send.call_args_list[0][0][0]
     stop_dict = json.loads(stop_json)
@@ -310,18 +311,19 @@ def test_stop_video(
 ) -> None:
     mock_conn = MagicMock()
     mock_client.return_value = mock_conn
-    
+
     renderer = GstVideoRenderer(mock_publisher)
     renderer.play(media_item, fit_display=True)
     mock_conn.send.reset_mock()
-    
+
     renderer.stop()
-    
+
     mock_conn.send.assert_called_once()
     sent_json = mock_conn.send.call_args[0][0]
     sent_dict = json.loads(sent_json)
     assert sent_dict["type"] == "stop"
     assert renderer._current_media is None
+
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
@@ -335,7 +337,7 @@ def test_pause_resume_video(
 ) -> None:
     mock_conn = MagicMock()
     mock_client.return_value = mock_conn
-    
+
     renderer = GstVideoRenderer(mock_publisher)
     renderer.play(
         media_item,
@@ -350,12 +352,12 @@ def test_pause_resume_video(
         content_fit="fill",
     )
     mock_conn.send.reset_mock()
-    
+
     renderer.pause()
     mock_conn.send.assert_called_once()
     sent_json = mock_conn.send.call_args[0][0]
     assert json.loads(sent_json)["type"] == "pause"
-    
+
     mock_conn.send.reset_mock()
     renderer.resume()
     mock_conn.send.assert_called_once()
@@ -402,25 +404,26 @@ def test_set_volume(
 ) -> None:
     mock_conn = MagicMock()
     mock_client.return_value = mock_conn
-    
+
     renderer = GstVideoRenderer(mock_publisher)
-    
+
     renderer.set_volume(0.5)
     mock_conn.send.assert_called_once()
     sent_json = mock_conn.send.call_args[0][0]
     sent_dict = json.loads(sent_json)
     assert sent_dict["type"] == "set_volume"
     assert sent_dict["level"] == 0.5
-    
+
     mock_conn.send.reset_mock()
     renderer.set_volume(1.5)
     sent_json = mock_conn.send.call_args[0][0]
     assert json.loads(sent_json)["level"] == 1.0
-    
+
     mock_conn.send.reset_mock()
     renderer.set_volume(-0.5)
     sent_json = mock_conn.send.call_args[0][0]
     assert json.loads(sent_json)["level"] == 0.0
+
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
@@ -432,10 +435,10 @@ def test_handle_eos_event(
     mock_publisher: MagicMock,
 ) -> None:
     renderer = GstVideoRenderer(mock_publisher)
-    
+
     event = EosEvent()
     renderer._handle_event(event)
-    
+
     mock_publisher.publish.assert_called_once()
     assert isinstance(mock_publisher.publish.call_args[0][0], PlaybackCompletedEvent)
 
@@ -457,6 +460,7 @@ def test_parse_eos_event_with_last_sample_diagnostics() -> None:
     assert event.last_sample_duration_seconds == 0.04
     assert event.last_sample_caps == "video/x-raw(memory:DMABuf)"
 
+
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
 @patch("picframe.core.renderers.gst_video_renderer.Client")
 @patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
@@ -467,10 +471,10 @@ def test_handle_error_event(
     mock_publisher: MagicMock,
 ) -> None:
     renderer = GstVideoRenderer(mock_publisher)
-    
+
     event = ErrorEvent(details="Test Error", code="pipeline_failed")
     renderer._handle_event(event)
-    
+
     assert mock_publisher.publish.call_count == 2
     assert isinstance(mock_publisher.publish.call_args_list[0][0][0], SystemErrorEvent)
     assert mock_publisher.publish.call_args_list[0][0][0].message == "Test Error"
@@ -536,9 +540,7 @@ def test_handle_warning_event_publishes_video_playback_warning(
 ) -> None:
     renderer = GstVideoRenderer(mock_publisher)
 
-    renderer._handle_event(
-        WarningEvent(warning_type="software_fallback", decoder="avdec_h264")
-    )
+    renderer._handle_event(WarningEvent(warning_type="software_fallback", decoder="avdec_h264"))
 
     mock_publisher.publish.assert_called_once()
     published_event = mock_publisher.publish.call_args[0][0]

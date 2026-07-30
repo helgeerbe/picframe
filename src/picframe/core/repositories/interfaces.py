@@ -14,7 +14,7 @@ from picframe.core.models.playlist import PlaylistCriteria
 class IConfigRepository(Protocol):
     """
     Protocol defining the data access methods for persistent configuration.
-    
+
     This repository manages application settings, monitored directories,
     and MQTT configuration.
     """
@@ -107,7 +107,7 @@ class IConfigRepository(Protocol):
 class IMediaRepository(Protocol):
     """
     Protocol defining the data access methods for the ephemeral media cache.
-    
+
     This repository manages metadata for images and videos, as well as
     playlist definitions.
     """
@@ -138,9 +138,7 @@ class IMediaRepository(Protocol):
         """
         ...
 
-    def update_media_item(
-        self, media_id: int, updates: dict[str, Any]
-    ) -> None:
+    def update_media_item(self, media_id: int, updates: dict[str, Any]) -> None:
         """
         Update specific fields of an existing media item.
 
@@ -252,6 +250,7 @@ class IMediaRepository(Protocol):
         self,
         query: str = "",
         limit: int = 25,
+        location_language: str | None = None,
     ) -> list[dict[str, Any]]:
         """
         Return a capped list of distinct location options matching a search query.
@@ -259,6 +258,7 @@ class IMediaRepository(Protocol):
         Args:
             query: Case-insensitive substring to match against resolved locations.
             limit: Maximum number of location rows to return.
+            location_language: Optional language filter for localized location names.
 
         Returns:
             A list of dictionaries with `value` and `count` keys.

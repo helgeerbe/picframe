@@ -12,7 +12,7 @@ import mimetypes
 import subprocess
 from collections.abc import Iterable, Iterator
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Literal, cast
 
 from fastapi import (
     Body,
@@ -49,6 +49,7 @@ from picframe.api.models import (
     LogSnapshotMessage,
     MediaChangedWebSocketMessage,
     MediaFilterOptionsResponse,
+    MediaLocationOptionDTO,
     MediaLocationOptionsResponse,
     MediaResponseDTO,
     MediaSelectionCountRequest,
@@ -74,11 +75,29 @@ logger = logging.getLogger(__name__)
 
 STARTUP_ONLY_LEGACY_HTTP_KEYS = {"use_http", "path", "port"}
 MEDIA_DTO_EXIF_KEYS = [
-    "make", "model", "lens", "f_number", "exposure_time", "iso",
-    "focal_length", "exif_datetime", "caption", "tags", "location",
-    "title", "rating", "width", "height", "orientation",
-    "duration", "codec", "pixel_format", "framerate", "bitrate",
-    "displayed_count", "last_displayed"
+    "make",
+    "model",
+    "lens",
+    "f_number",
+    "exposure_time",
+    "iso",
+    "focal_length",
+    "exif_datetime",
+    "caption",
+    "tags",
+    "location",
+    "title",
+    "rating",
+    "width",
+    "height",
+    "orientation",
+    "duration",
+    "codec",
+    "pixel_format",
+    "framerate",
+    "bitrate",
+    "displayed_count",
+    "last_displayed",
 ]
 DEFAULT_IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".gif", ".heic", ".heif"}
 DEFAULT_VIDEO_EXTENSIONS = {".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".hevc"}
@@ -104,19 +123,19 @@ OPENAPI_TAGS = [
     {"name": "Media", "description": "Media selection helpers and media file serving."},
     {"name": "Hardware Inputs", "description": "GPIO button and PIR sensor configuration."},
 ]
-BAD_REQUEST_RESPONSE = {
+BAD_REQUEST_RESPONSE: dict[int | str, dict[str, Any]] = {
     400: {"model": APIErrorResponse, "description": "Invalid request for the endpoint."},
 }
-FORBIDDEN_RESPONSE = {
+FORBIDDEN_RESPONSE: dict[int | str, dict[str, Any]] = {
     403: {"model": APIErrorResponse, "description": "Path or media access is not allowed."},
 }
-NOT_FOUND_RESPONSE = {
+NOT_FOUND_RESPONSE: dict[int | str, dict[str, Any]] = {
     404: {"model": APIErrorResponse, "description": "Requested path or media was not found."},
 }
-VALIDATION_RESPONSE = {
+VALIDATION_RESPONSE: dict[int | str, dict[str, Any]] = {
     422: {"model": APIErrorResponse, "description": "Request validation failed."},
 }
-SERVER_ERROR_RESPONSE = {
+SERVER_ERROR_RESPONSE: dict[int | str, dict[str, Any]] = {
     500: {"model": APIErrorResponse, "description": "Unexpected server-side processing error."},
 }
 WEBSOCKET_DOCUMENTATION_MODELS = (
@@ -175,8 +194,7 @@ def _requires_basic_auth(path: str, method: str, scope: str) -> bool:
     if path == "/logs" or path.startswith("/logs/"):
         return True
     return any(
-        path == prefix or path.startswith(f"{prefix}/")
-        for prefix in AUTH_PROTECTED_API_PREFIXES
+        path == prefix or path.startswith(f"{prefix}/") for prefix in AUTH_PROTECTED_API_PREFIXES
     )
 
 
@@ -223,7 +241,7 @@ def _workflow_config_from_app_config(config: AppConfig) -> dict[str, dict[str, A
     }
 
 
-def _normalize_media_type(value: Any) -> str:
+def _normalize_media_type(value: Any) -> Literal["image", "video"]:
     raw_value = getattr(value, "value", value)
     return "video" if str(raw_value or "").lower() == "video" else "image"
 
@@ -265,9 +283,7 @@ def _configured_media_directories(config_repository: IConfigRepository | None) -
         return []
 
     directories = [
-        Path(
-            config_repository.get_app_config("model.pic_dir", "~/Pictures")
-        ).expanduser().resolve()
+        Path(config_repository.get_app_config("model.pic_dir", "~/Pictures")).expanduser().resolve()
     ]
     for directory in config_repository.get_all_directories():
         path_value = directory.get("path")
@@ -748,13 +764,15 @@ def _validate_path_request(
 
 def system_error_websocket_message(event: Any) -> str:
     """Serialize a SystemErrorEvent-compatible object for websocket clients."""
-    return json.dumps({
-        "type": "SystemErrorEvent",
-        "message": getattr(event, "message", "Unknown Error"),
-        "component": getattr(event, "component", "Unknown"),
-        "sticky": bool(getattr(event, "sticky", False)),
-        "code": getattr(event, "code", None),
-    })
+    return json.dumps(
+        {
+            "type": "SystemErrorEvent",
+            "message": getattr(event, "message", "Unknown Error"),
+            "component": getattr(event, "component", "Unknown"),
+            "sticky": bool(getattr(event, "sticky", False)),
+            "code": getattr(event, "code", None),
+        }
+    )
 
 
 def _coerce_media_item_dict(media_item: Any) -> dict[str, Any]:
@@ -781,10 +799,7 @@ def _media_item_to_dto(
     location = None
     if "latitude" in item_dict and "longitude" in item_dict:
         if item_dict["latitude"] is not None and item_dict["longitude"] is not None:
-            location = {
-                "lat": item_dict["latitude"],
-                "lon": item_dict["longitude"]
-            }
+            location = {"lat": item_dict["latitude"], "lon": item_dict["longitude"]}
 
     exif_data: dict[str, Any] = {}
     if "exif" in item_dict and isinstance(item_dict["exif"], dict):
@@ -879,9 +894,7 @@ def _location_language_from_config(
 ) -> str:
     if config_repository is None:
         return "en"
-    return language_from_locale(
-        config_repository.get_app_config("model.locale", "en_US.utf8")
-    )
+    return language_from_locale(config_repository.get_app_config("model.locale", "en_US.utf8"))
 
 
 def _normalize_legacy_yaml_config(yaml_data: dict[str, Any]) -> dict[str, Any]:
@@ -910,7 +923,12 @@ def _normalize_legacy_yaml_config(yaml_data: dict[str, Any]) -> dict[str, Any]:
             if isinstance(show_clock, bool) and show_clock:
                 viewer["clock_extra_source"] = "clock_txt"
             elif isinstance(show_clock, str) and show_clock.strip().lower() in {
-                "1", "true", "yes", "on", "t", "y"
+                "1",
+                "true",
+                "yes",
+                "on",
+                "t",
+                "y",
             }:
                 viewer["clock_extra_source"] = "clock_txt"
 
@@ -939,7 +957,7 @@ def _install_openapi_documentation(app: FastAPI) -> None:
 
     def custom_openapi() -> dict[str, Any]:
         if app.openapi_schema:
-            return cast(dict[str, Any], app.openapi_schema)
+            return app.openapi_schema
 
         schema = get_openapi(
             title=app.title,
@@ -1015,7 +1033,7 @@ def create_app(
     )
     auth_store = auth_store or BasicAuthStore(resource_paths)
     log_event_buffer = log_event_buffer or LogEventBuffer()
-    
+
     app = FastAPI(
         title="Picframe Web Control Plane",
         description=OPENAPI_DESCRIPTION,
@@ -1047,7 +1065,7 @@ def create_app(
                 request.cookies.get(AUTH_COOKIE_NAME),
             ):
                 return _basic_auth_challenge()
-            response = await call_next(request)
+            response: Response = await call_next(request)
             response.set_cookie(
                 AUTH_COOKIE_NAME,
                 auth_store.session_token(),
@@ -1056,10 +1074,10 @@ def create_app(
                 secure=request.url.scheme == "https",
             )
             return response
-        response = await call_next(request)
+        unauth_response: Response = await call_next(request)
         if auth_settings.scope == "none":
-            response.delete_cookie(AUTH_COOKIE_NAME)
-        return response
+            unauth_response.delete_cookie(AUTH_COOKIE_NAME)
+        return unauth_response
 
     @app.get(
         "/health",
@@ -1172,13 +1190,13 @@ def create_app(
             await websocket.close(code=1008)
             return
         await websocket.accept()
-        
+
         # Queue for sending messages to the websocket from the event bus
         send_queue: asyncio.Queue[str] = asyncio.Queue()
-        
+
         # Capture the event loop here, in the main thread
         loop = asyncio.get_running_loop()
-        
+
         def handle_media_changed(event: CurrentMediaChangedEvent) -> None:
             dto = media_event_to_response_dto(
                 event.media_item,
@@ -1200,8 +1218,9 @@ def create_app(
             capacity = int(
                 config_repository.get_app_config("http.websocket_broadcast_capacity", 20)
             )
-            
+
         from picframe.core.utils.rate_limit import TokenBucket
+
         state_rate_limiter = TokenBucket(capacity=capacity, refill_rate=rate_limit)
 
         def handle_state_changed(event: StateEvent) -> None:
@@ -1227,14 +1246,15 @@ def create_app(
         if event_subscriber:
             event_subscriber.subscribe(CurrentMediaChangedEvent, handle_media_changed)
             event_subscriber.subscribe(StateEvent, handle_state_changed)
-            
+
             # Try to subscribe to SystemErrorEvent if it exists
             try:
                 from picframe.core.events.dto import SystemErrorEvent
+
                 event_subscriber.subscribe(SystemErrorEvent, handle_system_error)
             except ImportError:
                 pass
-            
+
             # Request the current state and media immediately upon connection
             if event_publisher:
                 event_publisher.publish(CommandEvent(command=Command.REQUEST_STATE))
@@ -1243,8 +1263,9 @@ def create_app(
         debounce_ms = 200
         if config_repository:
             debounce_ms = int(config_repository.get_app_config("http.command_debounce_ms", 200))
-            
+
         from picframe.core.utils.debounce import Debouncer
+
         command_debouncer = Debouncer(delay_ms=debounce_ms)
 
         async def receive_messages() -> None:
@@ -1261,7 +1282,7 @@ def create_app(
                                 if not command_debouncer.should_execute(command_str):
                                     logger.debug(f"Debounced command: {command_str}")
                                     continue
-                                    
+
                             if command_str == "NEXT":
                                 event_publisher.publish(CommandEvent(command=Command.NEXT))
                             elif command_str == "PREV":
@@ -1312,7 +1333,7 @@ def create_app(
                                     config_payload = {
                                         k: v for k, v in payload.items() if k != "command"
                                     }
-                                
+
                                 if config_payload:
                                     if auth_store.load().scope == "settings":
                                         try:
@@ -1367,6 +1388,7 @@ def create_app(
                 event_subscriber.unsubscribe(StateEvent, handle_state_changed)
                 try:
                     from picframe.core.events.dto import SystemErrorEvent
+
                     event_subscriber.unsubscribe(SystemErrorEvent, handle_system_error)
                 except ImportError:
                     pass
@@ -1420,9 +1442,7 @@ def create_app(
             "active": status == "active",
             "restart_available": status == "active",
             "message": (
-                None
-                if status == "active"
-                else "Restart requires an active picframe.service."
+                None if status == "active" else "Restart requires an active picframe.service."
             ),
         }
 
@@ -1502,11 +1522,7 @@ def create_app(
                 timeout=5.0,
             )
             locales = sorted(
-                {
-                    line.strip()
-                    for line in result.stdout.splitlines()
-                    if line.strip()
-                },
+                {line.strip() for line in result.stdout.splitlines() if line.strip()},
                 key=str.casefold,
             )
         except (OSError, subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
@@ -1613,23 +1629,30 @@ def create_app(
         """Get the full application configuration."""
         if not config_repository:
             return {}
-            
+
         # Use ConfigService to handle the unflattening logic
         # We create a temporary instance here since the API layer doesn't have
         # direct access to the long-running ConfigService instance.
         # In a more complex setup, this would be injected.
         class DummyPublisher(IEventPublisher):
-            def publish(self, event: Any) -> None: pass
+            def publish(self, event: Any) -> None:
+                pass
+
         class DummySubscriber(IEventSubscriber):
-            def subscribe(self, event_type: type, callback: Any) -> None: pass
-            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
-            
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
         from picframe.core.services.config_service import ConfigService
+
         temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
         nested_config = temp_service.get_nested_config()
-        
+
         # Pass through Pydantic model to populate default values
         from picframe.api.models import AppConfig
+
         app_config = AppConfig(**nested_config)
         return app_config.model_dump()
 
@@ -1650,12 +1673,18 @@ def create_app(
             return _workflow_config_from_app_config(AppConfig())
 
         class DummyPublisher(IEventPublisher):
-            def publish(self, event: Any) -> None: pass
+            def publish(self, event: Any) -> None:
+                pass
+
         class DummySubscriber(IEventSubscriber):
-            def subscribe(self, event_type: type, callback: Any) -> None: pass
-            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
 
         from picframe.core.services.config_service import ConfigService
+
         temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
         nested_config = temp_service.get_nested_config()
         app_config = AppConfig(**nested_config)
@@ -1682,12 +1711,18 @@ def create_app(
         config_dict = _filter_public_workflow_config(payload)
 
         class DummyPublisher(IEventPublisher):
-            def publish(self, event: Any) -> None: pass
+            def publish(self, event: Any) -> None:
+                pass
+
         class DummySubscriber(IEventSubscriber):
-            def subscribe(self, event_type: type, callback: Any) -> None: pass
-            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
 
         from picframe.core.services.config_service import ConfigService
+
         temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
         temp_service.update_nested_config(config_dict)
 
@@ -1741,11 +1776,14 @@ def create_app(
         """Return searchable media location options without loading every location."""
         if not media_repository:
             return {"locations": []}
-        locations = media_repository.search_location_options(
+        raw_locations = media_repository.search_location_options(
             q,
             limit,
             location_language=_location_language_from_config(config_repository),
         )
+        locations = [
+            MediaLocationOptionDTO(**loc) if isinstance(loc, dict) else loc for loc in raw_locations
+        ]
         return MediaLocationOptionsResponse(locations=locations).model_dump()
 
     @app.post(
@@ -1804,12 +1842,18 @@ def create_app(
             return HardwareInputsConfig().model_dump()
 
         class DummyPublisher(IEventPublisher):
-            def publish(self, event: Any) -> None: pass
+            def publish(self, event: Any) -> None:
+                pass
+
         class DummySubscriber(IEventSubscriber):
-            def subscribe(self, event_type: type, callback: Any) -> None: pass
-            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
 
         from picframe.core.services.config_service import ConfigService
+
         temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
         nested_config = temp_service.get_nested_config()
         return HardwareInputsConfig(**nested_config.get("hardware_inputs", {})).model_dump()
@@ -1821,8 +1865,7 @@ def create_app(
         tags=["Hardware Inputs"],
         summary="Update hardware input configuration",
         description=(
-            "Validate, persist, and broadcast GPIO button and PIR sensor input "
-            "configuration."
+            "Validate, persist, and broadcast GPIO button and PIR sensor input configuration."
         ),
         responses={**VALIDATION_RESPONSE},
     )
@@ -1832,12 +1875,18 @@ def create_app(
             return {"status": "error", "message": "Config repository not available"}
 
         class DummyPublisher(IEventPublisher):
-            def publish(self, event: Any) -> None: pass
+            def publish(self, event: Any) -> None:
+                pass
+
         class DummySubscriber(IEventSubscriber):
-            def subscribe(self, event_type: type, callback: Any) -> None: pass
-            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
 
         from picframe.core.services.config_service import ConfigService
+
         temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
 
         config_dict = payload.model_dump()
@@ -1872,46 +1921,54 @@ def create_app(
         """Import legacy configuration.yaml file."""
         if not config_repository:
             return {"status": "error", "message": "Config repository not available"}
-            
+
         try:
             content = await file.read()
             import yaml
+
             yaml_data = yaml.safe_load(content)
-            
+
             if not isinstance(yaml_data, dict):
                 raise ValueError("Invalid YAML format: expected a dictionary")
-                
+
             # Use ConfigService to handle the flattening logic
             class DummyPublisher(IEventPublisher):
-                def publish(self, event: Any) -> None: pass
+                def publish(self, event: Any) -> None:
+                    pass
+
             class DummySubscriber(IEventSubscriber):
-                def subscribe(self, event_type: type, callback: Any) -> None: pass
-                def unsubscribe(self, event_type: type, callback: Any) -> None: pass
-                
+                def subscribe(self, event_type: type, callback: Any) -> None:
+                    pass
+
+                def unsubscribe(self, event_type: type, callback: Any) -> None:
+                    pass
+
             from picframe.core.services.config_service import ConfigService
+
             temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
-            
+
             yaml_data = _normalize_legacy_yaml_config(yaml_data)
 
             # Validate against AppConfig, ignoring unknown fields
             # Pydantic v2 ignores extra fields by default unless configured otherwise
             from picframe.api.models import AppConfig
+
             app_config = AppConfig(**yaml_data)
-            
+
             config_dict = app_config.model_dump(exclude_unset=True)
             temp_service.update_nested_config(config_dict)
-            
+
             # Publish a SET_CONFIG event to notify other components
             if event_publisher:
                 event_publisher.publish(
                     CommandEvent(command=Command.SET_CONFIG, payload=config_dict)
                 )
-                
+
             return {
                 "status": "success",
                 "message": "Legacy YAML configuration imported successfully",
             }
-            
+
         except yaml.YAMLError as e:
             raise HTTPException(status_code=400, detail=f"Invalid YAML file: {e}")
         except Exception as e:
@@ -1934,26 +1991,32 @@ def create_app(
         """Update the application configuration."""
         if not config_repository:
             return {"status": "error", "message": "Config repository not available"}
-            
+
         # Use ConfigService to handle the flattening logic
         class DummyPublisher(IEventPublisher):
-            def publish(self, event: Any) -> None: pass
+            def publish(self, event: Any) -> None:
+                pass
+
         class DummySubscriber(IEventSubscriber):
-            def subscribe(self, event_type: type, callback: Any) -> None: pass
-            def unsubscribe(self, event_type: type, callback: Any) -> None: pass
-            
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
         from picframe.core.services.config_service import ConfigService
+
         temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
-        
+
         # Convert Pydantic model to dict, excluding unset values to avoid overwriting
         # existing config with None values if the frontend didn't send them.
         config_dict = payload.model_dump(exclude_unset=True)
         temp_service.update_nested_config(config_dict)
-                
+
         # Publish a SET_CONFIG event to notify other components
         if event_publisher:
             event_publisher.publish(CommandEvent(command=Command.SET_CONFIG, payload=config_dict))
-            
+
         return {"status": "success"}
 
     @app.get(
@@ -2060,9 +2123,10 @@ def create_app(
             [str(requested_video_path), str(video_path)],
             media_repository,
         )
-        if media_record is not None and _normalize_media_type(
-            media_record.get("media_type")
-        ) != "video":
+        if (
+            media_record is not None
+            and _normalize_media_type(media_record.get("media_type")) != "video"
+        ):
             raise HTTPException(status_code=400, detail="Poster is only available for videos")
 
         from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
@@ -2074,8 +2138,9 @@ def create_app(
             image_processing_service,
         )
         extractor = VideoFrameExtractor(**cache_kwargs)
-        poster_path = Path(extractor.get_frame_path("first"))
-        if not extractor.cached_transition_frames_valid() or not poster_path.is_file():
+        initial_poster = Path(extractor.get_frame_path("first"))
+        poster_path: Path | None = initial_poster
+        if not extractor.cached_transition_frames_valid() or not initial_poster.is_file():
             poster_path = _find_managed_video_poster_candidate(
                 Path(str(cache_kwargs["video_path"])),
                 cache_kwargs.get("cache_dir"),

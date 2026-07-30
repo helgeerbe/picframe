@@ -64,22 +64,18 @@ def test_repository_initialization_runs_migrations(
     media_repo: SQLiteMediaRepository,
 ) -> None:
     """Test that initializing the repository creates the required tables."""
-    cursor = media_repo._conn.execute(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-    )
+    cursor = media_repo._conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
     tables = [row["name"] for row in cursor.fetchall()]
-    
+
     assert "media" in tables
     assert "schema_version" in tables
     columns = [
-        row["name"]
-        for row in media_repo._conn.execute("PRAGMA table_info(media)").fetchall()
+        row["name"] for row in media_repo._conn.execute("PRAGMA table_info(media)").fetchall()
     ]
     assert "displayed_count" in columns
     assert "last_displayed" in columns
     location_columns = [
-        row["name"]
-        for row in media_repo._conn.execute("PRAGMA table_info(locations)").fetchall()
+        row["name"] for row in media_repo._conn.execute("PRAGMA table_info(locations)").fetchall()
     ]
     queue_columns = [
         row["name"]
@@ -124,10 +120,10 @@ def test_update_media_item(
 ) -> None:
     """Test updating specific fields of a media item."""
     media_id = media_repo.add_media_item(sample_media_data)
-    
+
     updates = {"width": 800, "height": 600}
     media_repo.update_media_item(media_id, updates)
-    
+
     retrieved_item = media_repo.get_media_item(media_id)
     assert retrieved_item is not None
     assert retrieved_item["width"] == 800
@@ -141,9 +137,9 @@ def test_delete_media_item(
 ) -> None:
     """Test marking a media item inactive."""
     media_id = media_repo.add_media_item(sample_media_data)
-    
+
     media_repo.delete_media_item(media_id)
-    
+
     retrieved_item = media_repo.get_media_item(media_id)
     assert retrieved_item is not None
     assert retrieved_item["is_deleted"] == 1
@@ -165,20 +161,20 @@ def test_get_all_media(
     """Test retrieving all active media items."""
     # Add active item
     media_repo.add_media_item(sample_media_data)
-    
+
     # Add deleted item
     deleted_data = sample_media_data.copy()
     deleted_data["filepath"] = "/path/to/deleted.jpg"
     deleted_id = media_repo.add_media_item(deleted_data)
     media_repo.delete_media_item(deleted_id)
-    
+
     # Add another active item
     active_data = sample_media_data.copy()
     active_data["filepath"] = "/path/to/another.jpg"
     media_repo.add_media_item(active_data)
-    
+
     all_media = media_repo.get_all_media()
-    
+
     # Should only return the 2 active items
     assert len(all_media) == 2
     paths = [item["filepath"] for item in all_media]
@@ -192,12 +188,12 @@ def test_add_duplicate_filepath_updates_existing(
 ) -> None:
     """Test that adding a duplicate filepath updates the existing record."""
     media_repo.add_media_item(sample_media_data)
-    
+
     # Modify data and add again
     updated_data = sample_media_data.copy()
     updated_data["file_size"] = 2048
     media_repo.add_media_item(updated_data)
-    
+
     # Verify it was updated, not duplicated
     all_media = media_repo.get_all_media()
     assert len(all_media) == 1
@@ -362,9 +358,7 @@ def test_query_media_uses_legacy_boolean_filter_phrases(
     media_repo.add_media_item(_media_record(root / "separate.jpg", tags="family, beach"))
     media_repo.add_media_item(_media_record(root / "family.jpg", tags="family"))
     media_repo.add_media_item(_media_record(root / "city.jpg", tags="city"))
-    media_repo.add_media_item(
-        _media_record(root / "friends-holiday.jpg", tags="friends, holiday")
-    )
+    media_repo.add_media_item(_media_record(root / "friends-holiday.jpg", tags="friends, holiday"))
 
     def names_for(tags_filter: str) -> set[str]:
         result = media_repo.query_media(
@@ -389,12 +383,8 @@ def test_query_media_location_filter_matches_unquoted_and_quoted_phrases(
 ) -> None:
     root = tmp_path / "Pictures"
     root.mkdir()
-    media_repo.add_media_item(
-        _media_record(root / "new-york.jpg", location="New York City")
-    )
-    media_repo.add_media_item(
-        _media_record(root / "york-new.jpg", location="York New")
-    )
+    media_repo.add_media_item(_media_record(root / "new-york.jpg", location="New York City"))
+    media_repo.add_media_item(_media_record(root / "york-new.jpg", location="York New"))
 
     for expression in ("New York", '"New York"'):
         result = media_repo.query_media(
@@ -482,9 +472,7 @@ def test_count_media_uses_selected_folder_scope_and_selection_filters(
         "scope_label": "holiday",
     }
 
-    all_counts = media_repo.count_media(
-        PlaylistCriteria(pic_dir=str(root), tags_filter="family")
-    )
+    all_counts = media_repo.count_media(PlaylistCriteria(pic_dir=str(root), tags_filter="family"))
 
     assert all_counts["selected_count"] == 3
     assert all_counts["total_count"] == 4
@@ -544,14 +532,10 @@ def test_search_location_options_returns_capped_counts(
     media_repo.add_media_item(_media_record(root / "berlin-2.jpg", location="Berlin"))
     media_repo.add_media_item(_media_record(root / "bern.jpg", location="Bern"))
     media_repo.add_media_item(_media_record(root / "barcelona.jpg", location="Barcelona"))
-    deleted_id = media_repo.add_media_item(
-        _media_record(root / "deleted.jpg", location="Berlin")
-    )
+    deleted_id = media_repo.add_media_item(_media_record(root / "deleted.jpg", location="Berlin"))
     media_repo.delete_media_item(deleted_id)
 
-    assert media_repo.search_location_options("ber", limit=1) == [
-        {"value": "Berlin", "count": 2}
-    ]
+    assert media_repo.search_location_options("ber", limit=1) == [{"value": "Berlin", "count": 2}]
     assert media_repo.search_location_options("ber", limit=10) == [
         {"value": "Berlin", "count": 2},
         {"value": "Bern", "count": 1},
@@ -566,9 +550,7 @@ def test_search_location_options_escapes_like_wildcards(
     media_repo.add_media_item(_media_record(root / "percent.jpg", location="100% City"))
     media_repo.add_media_item(_media_record(root / "plain.jpg", location="100x City"))
 
-    assert media_repo.search_location_options("%", limit=10) == [
-        {"value": "100% City", "count": 1}
-    ]
+    assert media_repo.search_location_options("%", limit=10) == [{"value": "100% City", "count": 1}]
 
 
 def test_location_cache_is_language_aware(
@@ -651,16 +633,12 @@ def test_count_media_skips_location_join_without_location_filter(
     statements: list[str] = []
     media_repo._conn.set_trace_callback(statements.append)
     try:
-        counts = media_repo.count_media(
-            PlaylistCriteria(pic_dir=str(root), tags_filter="family")
-        )
+        counts = media_repo.count_media(PlaylistCriteria(pic_dir=str(root), tags_filter="family"))
     finally:
         media_repo._conn.set_trace_callback(None)
 
     count_selects = [
-        statement.upper()
-        for statement in statements
-        if "SELECT COUNT" in statement.upper()
+        statement.upper() for statement in statements if "SELECT COUNT" in statement.upper()
     ]
     assert counts["selected_count"] == 1
     assert counts["total_count"] == 1
@@ -684,9 +662,7 @@ def test_count_media_joins_location_only_for_location_filter(
         media_repo._conn.set_trace_callback(None)
 
     count_selects = [
-        statement.upper()
-        for statement in statements
-        if "SELECT COUNT" in statement.upper()
+        statement.upper() for statement in statements if "SELECT COUNT" in statement.upper()
     ]
     assert counts["selected_count"] == 1
     assert counts["total_count"] == 1
@@ -711,25 +687,34 @@ def test_location_search_and_counts_use_requested_language(
         limit=10,
         location_language="de",
     ) == [{"value": "Berlin, Deutschland", "count": 1}]
-    assert media_repo.search_location_options(
-        "deutsch",
-        limit=10,
-        location_language="en",
-    ) == []
-    assert media_repo.count_media(
-        PlaylistCriteria(
-            pic_dir=str(root),
-            location_filter="Deutschland",
-            location_language="de",
-        )
-    )["selected_count"] == 1
-    assert media_repo.count_media(
-        PlaylistCriteria(
-            pic_dir=str(root),
-            location_filter="Deutschland",
+    assert (
+        media_repo.search_location_options(
+            "deutsch",
+            limit=10,
             location_language="en",
         )
-    )["selected_count"] == 0
+        == []
+    )
+    assert (
+        media_repo.count_media(
+            PlaylistCriteria(
+                pic_dir=str(root),
+                location_filter="Deutschland",
+                location_language="de",
+            )
+        )["selected_count"]
+        == 1
+    )
+    assert (
+        media_repo.count_media(
+            PlaylistCriteria(
+                pic_dir=str(root),
+                location_filter="Deutschland",
+                location_language="en",
+            )
+        )["selected_count"]
+        == 0
+    )
 
 
 def test_geocoding_queue_is_language_aware(media_repo: SQLiteMediaRepository) -> None:

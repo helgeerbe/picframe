@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Iterable
+from collections.abc import Iterable
 
 
 def apply_geo_suppress_list(location: object, suppress_list: Iterable[object] | None) -> str:

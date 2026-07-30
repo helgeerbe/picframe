@@ -4,6 +4,7 @@ Unit tests for Event Data Transfer Objects (DTOs).
 This module verifies the priority levels assigned to different event types
 and ensures that the event objects are immutable to guarantee thread safety.
 """
+
 import pytest
 
 from picframe.core.events import (

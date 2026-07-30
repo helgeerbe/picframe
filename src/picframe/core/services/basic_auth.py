@@ -139,7 +139,7 @@ class BasicAuthStore:
         if not settings.enabled or not settings.password:
             return ""
         return hashlib.sha256(
-            f"{settings.scope}\0{settings.username}\0{settings.password}".encode("utf-8")
+            f"{settings.scope}\0{settings.username}\0{settings.password}".encode()
         ).hexdigest()
 
     def verify_request_credentials(
@@ -153,10 +153,9 @@ class BasicAuthStore:
         if self._verify_authorization_header(settings, header):
             return True
         expected_token = self.session_token()
-        return bool(session_token and expected_token) and secrets.compare_digest(
-            session_token,
-            expected_token,
-        )
+        if not session_token or not expected_token:
+            return False
+        return secrets.compare_digest(session_token, expected_token)
 
     def _verify_authorization_header(
         self,

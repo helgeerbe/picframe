@@ -120,9 +120,7 @@ def media_config_repo(media_root: Path) -> MagicMock:
     }
     repo = MagicMock()
     repo.get_app_config.side_effect = lambda key, default=None: values.get(key, default)
-    repo.get_app_config_bool.side_effect = lambda key, default=False: bool(
-        values.get(key, default)
-    )
+    repo.get_app_config_bool.side_effect = lambda key, default=False: bool(values.get(key, default))
     repo.get_all_directories.return_value = []
     return repo
 
@@ -172,9 +170,9 @@ def test_openapi_documents_rest_response_models(client: ASGITestClient) -> None:
         response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
         assert response_schema["$ref"] == f"#/components/schemas/{model_name}"
 
-    config_response_schema = (
-        paths["/api/config"]["get"]["responses"]["200"]["content"]["application/json"]["schema"]
-    )
+    config_response_schema = paths["/api/config"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
     assert {"$ref": "#/components/schemas/AppConfig"} in config_response_schema["anyOf"]
     assert {"$ref": "#/components/schemas/EmptyConfigResponse"} in config_response_schema["anyOf"]
 
@@ -262,29 +260,30 @@ def test_cors_headers(client: ASGITestClient) -> None:
     # when a specific origin is requested.
     assert response.headers["access-control-allow-origin"] == "http://localhost:8080"
 
+
 def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
     # Create a mock html directory structure
     html_dir = tmp_path / "html"
     html_dir.mkdir()
     (html_dir / "index.html").write_text("<h1>Index</h1>")
-    
+
     assets_dir = html_dir / "assets"
     assets_dir.mkdir()
     (assets_dir / "app.js").write_text("console.log('app');")
 
     app = create_app(cors_allowed_origins=["*"], html_dir=str(html_dir))
     client = ASGITestClient(app)
-    
+
     # Test root route returns index.html
     response = client.get("/")
     assert response.status_code == 200
     assert response.text == "<h1>Index</h1>"
-    
+
     # Test non-existent route falls back to index.html
     response = client.get("/some/vue/route")
     assert response.status_code == 200
     assert response.text == "<h1>Index</h1>"
-    
+
     # Test assets route
     response = client.get("/assets/app.js")
     assert response.status_code == 200
@@ -805,6 +804,7 @@ def test_api_get_config(client: ASGITestClient) -> None:
     assert response.status_code == 200
     assert response.json() == {}
 
+
 def test_api_get_config_with_repo() -> None:
     mock_repo = MagicMock()
     mock_repo.get_all_app_config.return_value = {
@@ -813,13 +813,12 @@ def test_api_get_config_with_repo() -> None:
         "model.date_from": "2024-01-01",
         "model.date_to": "2024-02-01",
         "mqtt.use_mqtt": False,
-        
         "peripherals.enable": True,
     }
 
     app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
     client = ASGITestClient(app)
-    
+
     response = client.get("/api/config")
     assert response.status_code == 200
     data = response.json()
@@ -828,13 +827,14 @@ def test_api_get_config_with_repo() -> None:
     assert data["model"]["date_from"] == "2024-01-01"
     assert data["model"]["date_to"] == "2024-02-01"
     assert data["mqtt"]["use_mqtt"] is False
-    
+
     assert data["peripherals"]["enable"] is True
+
 
 def test_api_put_config() -> None:
     mock_repo = MagicMock()
     mock_publisher = MagicMock()
-    
+
     # Setup mock to return existing config
     mock_repo.get_app_config.return_value = {"fps": 30, "blur_amount": 12}
 
@@ -844,20 +844,17 @@ def test_api_put_config() -> None:
         event_publisher=mock_publisher,
     )
     client = ASGITestClient(app)
-    
-    payload = {
-        "viewer": {"fps": 60},
-        "model": {"pic_dir": "/new/path", "date_from": "2024-01-01"}
-    }
-    
+
+    payload = {"viewer": {"fps": 60}, "model": {"pic_dir": "/new/path", "date_from": "2024-01-01"}}
+
     response = client.put("/api/config", json=payload)
     assert response.status_code == 200
     assert response.json() == {"status": "success"}
-    
+
     # Verify repository was updated
     assert mock_repo.set_app_config.call_count == 3
     mock_repo.set_app_config.assert_any_call("model.date_from", "2024-01-01")
-    
+
     # Verify event was published
     mock_publisher.publish.assert_called_once()
     event = mock_publisher.publish.call_args[0][0]
@@ -1513,10 +1510,7 @@ def test_api_put_hardware_inputs_persists_pir_no_motion_delay() -> None:
         "hardware_inputs.inputs.motion.no_motion_delay_seconds", 900.0
     )
     event = mock_publisher.publish.call_args[0][0]
-    assert (
-        event.payload["hardware_inputs"]["inputs"]["motion"]["no_motion_delay_seconds"]
-        == 900.0
-    )
+    assert event.payload["hardware_inputs"]["inputs"]["motion"]["no_motion_delay_seconds"] == 900.0
 
 
 def test_api_put_hardware_inputs_rejects_duplicate_pins() -> None:
@@ -1600,14 +1594,14 @@ def test_api_clear_cache_calls_image_processing_service() -> None:
 def test_api_import_yaml() -> None:
     mock_repo = MagicMock()
     mock_publisher = MagicMock()
-    
+
     app = create_app(
         cors_allowed_origins=["*"],
         config_repository=mock_repo,
         event_publisher=mock_publisher,
     )
     client = ASGITestClient(app)
-    
+
     yaml_content = """
 viewer:
   fps: 45
@@ -1616,21 +1610,21 @@ viewer:
 model:
   pic_dir: "/new/yaml/path"
 """
-    
+
     response = client.post(
         "/api/config/import-yaml",
-        files={"file": ("config.yaml", yaml_content, "application/x-yaml")}
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
     )
-    
+
     assert response.status_code == 200
     assert response.json() == {
         "status": "success",
         "message": "Legacy YAML configuration imported successfully",
     }
-    
+
     # Verify repository was updated
     assert mock_repo.set_app_config.call_count > 0
-    
+
     # Verify event was published
     mock_publisher.publish.assert_called_once()
     event = mock_publisher.publish.call_args[0][0]
@@ -1894,28 +1888,30 @@ http:
     assert event.payload["model"]["pic_dir"] == "~/Pictures"
     assert event.payload["http"]["password"] == ""
 
+
 def test_api_import_yaml_invalid_format() -> None:
     mock_repo = MagicMock()
     app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
     client = ASGITestClient(app)
-    
+
     yaml_content = """
 - just a list
 - not a dict
 """
-    
+
     response = client.post(
         "/api/config/import-yaml",
-        files={"file": ("config.yaml", yaml_content, "application/x-yaml")}
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
     )
-    
+
     assert response.status_code == 500
     assert "Error importing configuration" in response.json()["detail"]
+
 
 def test_spa_routing_without_html_dir(tmp_path: Path) -> None:
     app = create_app(cors_allowed_origins=["*"], html_dir=str(tmp_path / "nonexistent"))
     client = ASGITestClient(app)
-    
+
     # Test root route returns 404 since SPA is not mounted
     response = client.get("/")
     assert response.status_code == 404

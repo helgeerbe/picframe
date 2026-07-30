@@ -349,7 +349,11 @@ class VideoFrameExtractor:
             rgb = tuple(float(background[index]) for index in range(3))
         except (TypeError, ValueError, IndexError):
             return (0, 0, 0)
-        return tuple(round(max(0.0, min(1.0, value)) * 255) for value in rgb)
+        return (
+            round(max(0.0, min(1.0, rgb[0])) * 255),
+            round(max(0.0, min(1.0, rgb[1])) * 255),
+            round(max(0.0, min(1.0, rgb[2])) * 255),
+        )
 
     @staticmethod
     def _background_cache_signature(background: Any) -> str:
@@ -400,7 +404,11 @@ class VideoFrameExtractor:
         try:
             if len(value) < 3:
                 return None
-            return tuple(max(0, min(255, int(float(value[index])))) for index in range(3))
+            return (
+                max(0, min(255, int(float(value[0])))),
+                max(0, min(255, int(float(value[1])))),
+                max(0, min(255, int(float(value[2])))),
+            )
         except (TypeError, ValueError, IndexError):
             return None
 
@@ -415,7 +423,7 @@ class VideoFrameExtractor:
             return "mat:none"
 
         matting_enabled, matting_threshold = VideoFrameExtractor._matting_control(config.mat_images)
-        payload = {
+        payload: dict[str, Any] = {
             "matting_control": {
                 "enabled": matting_enabled,
                 "threshold": matting_threshold,
@@ -545,15 +553,15 @@ class VideoFrameExtractor:
     ) -> tuple[Image.Image, Image.Image, VideoTransitionFrameMetadata]:
         """Process first/last frames together so video matting can share one layout."""
         if self.fit_display:
-            first_frame = self._fit_display_frame(first_image)
-            last_frame = self._fit_display_frame(last_image)
+            first_processed = self._fit_display_frame(first_image)
+            last_processed = self._fit_display_frame(last_image)
             metadata = VideoTransitionFrameMetadata(
-                frame_size=first_frame.image.size,
-                content_rect=first_frame.content_rect,
+                frame_size=first_processed.image.size,
+                content_rect=first_processed.content_rect,
             )
             return (
-                first_frame.image,
-                last_frame.image,
+                first_processed.image,
+                last_processed.image,
                 metadata,
             )
 
@@ -566,9 +574,9 @@ class VideoFrameExtractor:
                     layout_spec=first_result.layout_spec,
                 )
                 content_rect = first_result.content_rects[0] if first_result.content_rects else None
-                first_frame = first_result.image.convert("RGB")
+                first_frame: Image.Image = first_result.image.convert("RGB")
                 content_rect = content_rect or self._full_frame_rect(first_frame)
-                last_frame = last_result.image.convert("RGB")
+                last_frame: Image.Image = last_result.image.convert("RGB")
                 first_frame, last_frame = self._black_matted_gap_pixels(
                     matter,
                     first_image,
@@ -595,17 +603,17 @@ class VideoFrameExtractor:
                     exc,
                 )
 
-        first_frame = self._process_video_frame_with_rect(first_image)
-        last_frame = self._process_video_frame_with_rect(last_image)
+        first_processed = self._process_video_frame_with_rect(first_image)
+        last_processed = self._process_video_frame_with_rect(last_image)
         metadata = VideoTransitionFrameMetadata(
-            frame_size=first_frame.image.size,
-            content_rect=first_frame.content_rect,
+            frame_size=first_processed.image.size,
+            content_rect=first_processed.content_rect,
             matted=False,
             backdrop=self._edge_backdrop_enabled(),
         )
         return (
-            first_frame.image,
-            last_frame.image,
+            first_processed.image,
+            last_processed.image,
             metadata,
         )
 
@@ -630,8 +638,8 @@ class VideoFrameExtractor:
         try:
             with open(path, encoding="utf-8") as metadata_file:
                 data = json.load(metadata_file)
-            content_rect = self._int_tuple(data.get("content_rect"), 4)
-            frame_size = self._int_tuple(data.get("frame_size"), 2)
+            content_rect = self._int_tuple_4(data.get("content_rect"))
+            frame_size = self._int_tuple_2(data.get("frame_size"))
             return VideoTransitionFrameMetadata(
                 version=int(data.get("version", 1)),
                 frame_size=frame_size,
@@ -659,6 +667,20 @@ class VideoFrameExtractor:
             return tuple(int(item) for item in value)
         except (TypeError, ValueError):
             return None
+
+    @staticmethod
+    def _int_tuple_2(value: Any) -> tuple[int, int] | None:
+        result = VideoFrameExtractor._int_tuple(value, 2)
+        if result is None:
+            return None
+        return (result[0], result[1])
+
+    @staticmethod
+    def _int_tuple_4(value: Any) -> tuple[int, int, int, int] | None:
+        result = VideoFrameExtractor._int_tuple(value, 4)
+        if result is None:
+            return None
+        return (result[0], result[1], result[2], result[3])
 
     def _processing_signature(self) -> str:
         return self.processing_signature(

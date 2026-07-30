@@ -135,33 +135,45 @@ def best_element(*available: str):
 
 
 def test_caps_structure_name_supports_gi_structure_variants() -> None:
-    assert GstWorker._caps_structure_name(
-        FakeCapsWithStructure(
-            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
-            SimpleNamespace(get_name=lambda: "video/x-raw"),
+    assert (
+        GstWorker._caps_structure_name(
+            FakeCapsWithStructure(
+                "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
+                SimpleNamespace(get_name=lambda: "video/x-raw"),
+            )
         )
-    ) == "video/x-raw"
+        == "video/x-raw"
+    )
 
-    assert GstWorker._caps_structure_name(
-        FakeCapsWithStructure(
-            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
-            SimpleNamespace(name="video/x-raw(memory:DMABuf)"),
+    assert (
+        GstWorker._caps_structure_name(
+            FakeCapsWithStructure(
+                "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
+                SimpleNamespace(name="video/x-raw(memory:DMABuf)"),
+            )
         )
-    ) == "video/x-raw(memory:DMABuf)"
+        == "video/x-raw(memory:DMABuf)"
+    )
 
-    assert GstWorker._caps_structure_name(
-        FakeCapsWithStructure(
-            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
-            FakeStringStructure("video/x-raw(memory:DMABuf), format=(string)DMA_DRM"),
+    assert (
+        GstWorker._caps_structure_name(
+            FakeCapsWithStructure(
+                "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
+                FakeStringStructure("video/x-raw(memory:DMABuf), format=(string)DMA_DRM"),
+            )
         )
-    ) == "video/x-raw(memory:DMABuf)"
+        == "video/x-raw(memory:DMABuf)"
+    )
 
-    assert GstWorker._caps_structure_name(
-        FakeCapsWithStructure(
-            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
-            FakeStringStructure("<StructureWrapper object>"),
+    assert (
+        GstWorker._caps_structure_name(
+            FakeCapsWithStructure(
+                "video/x-raw(memory:DMABuf), format=(string)DMA_DRM",
+                FakeStringStructure("<StructureWrapper object>"),
+            )
         )
-    ) == "video/x-raw(memory:DMABuf)"
+        == "video/x-raw(memory:DMABuf)"
+    )
 
 
 def test_raspberry_pi_model_family_detection() -> None:
@@ -188,34 +200,44 @@ def test_known_hardware_decode_limits_by_model() -> None:
     worker = GstWorker("/tmp/picframe-test-gst.sock")
 
     worker._hardware_model = "Raspberry Pi 5 Model B Rev 1.0"
-    assert worker._format_hardware_limit(
-        worker._known_hardware_decode_limit(h265_main_facts(3840, 2160))
-    ) == "3840x2160@60"
+    assert (
+        worker._format_hardware_limit(
+            worker._known_hardware_decode_limit(h265_main_facts(3840, 2160))
+        )
+        == "3840x2160@60"
+    )
     assert worker._known_hardware_decode_limit(h264_facts(1920, 1080)) is None
 
     worker._hardware_model = "Raspberry Pi 4 Model B Rev 1.2"
-    assert worker._format_hardware_limit(
-        worker._known_hardware_decode_limit(h264_facts(1920, 1080))
-    ) == "1920x1080@60"
-    assert worker._format_hardware_limit(
-        worker._known_hardware_decode_limit(h265_main_facts(3840, 2160))
-    ) == "3840x2160@60"
+    assert (
+        worker._format_hardware_limit(worker._known_hardware_decode_limit(h264_facts(1920, 1080)))
+        == "1920x1080@60"
+    )
+    assert (
+        worker._format_hardware_limit(
+            worker._known_hardware_decode_limit(h265_main_facts(3840, 2160))
+        )
+        == "3840x2160@60"
+    )
 
     worker._hardware_model = "Raspberry Pi 3 Model B Rev 1.2"
-    assert worker._format_hardware_limit(
-        worker._known_hardware_decode_limit(h264_facts(1920, 1080))
-    ) == "1920x1080@30"
+    assert (
+        worker._format_hardware_limit(worker._known_hardware_decode_limit(h264_facts(1920, 1080)))
+        == "1920x1080@30"
+    )
     assert worker._known_hardware_decode_limit(h265_main_facts(1280, 720)) is None
 
     worker._hardware_model = "Raspberry Pi Zero 2 W Rev 1.0"
-    assert worker._format_hardware_limit(
-        worker._known_hardware_decode_limit(h264_facts(1920, 1080))
-    ) == "1920x1080@30"
+    assert (
+        worker._format_hardware_limit(worker._known_hardware_decode_limit(h264_facts(1920, 1080)))
+        == "1920x1080@30"
+    )
 
     worker._hardware_model = "Raspberry Pi Zero W Rev 1.1"
-    assert worker._format_hardware_limit(
-        worker._known_hardware_decode_limit(h264_facts(1920, 1080))
-    ) == "1920x1080@30"
+    assert (
+        worker._format_hardware_limit(worker._known_hardware_decode_limit(h264_facts(1920, 1080)))
+        == "1920x1080@30"
+    )
 
 
 def test_handle_play_skips_uri_without_video_stream(monkeypatch) -> None:
@@ -1234,8 +1256,7 @@ def test_start_pipeline_publishes_skip_error_for_oversized_pi4_h264(
 def test_caps_uses_dmabuf_detects_dmabuf_caps() -> None:
     caps = SimpleNamespace(
         to_string=lambda: (
-            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM, "
-            "drm-format=(string)YU12"
+            "video/x-raw(memory:DMABuf), format=(string)DMA_DRM, drm-format=(string)YU12"
         )
     )
 

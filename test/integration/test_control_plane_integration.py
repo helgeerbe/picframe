@@ -104,9 +104,7 @@ def test_api_config_media_and_maintenance_with_temp_repositories(tmp_path: Path)
 
 def test_websocket_system_error_payload_shape() -> None:
     payload = json.loads(
-        system_error_websocket_message(
-            SystemErrorEvent(message="boom", component="integration")
-        )
+        system_error_websocket_message(SystemErrorEvent(message="boom", component="integration"))
     )
     assert payload == {
         "type": "SystemErrorEvent",

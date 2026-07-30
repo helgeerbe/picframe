@@ -3,6 +3,7 @@ Image Renderer Component.
 
 Responsible for rendering images, managing textures, and executing Ken Burns transitions using pi3d.
 """
+
 import logging
 import time
 from pathlib import Path
@@ -30,20 +31,26 @@ class ImageRenderer:
         self._shader = shader
         self._render_rect = render_rect
         self._render_width, self._render_height = self._resolve_render_size()
-        
+
         # State
         self._slide: Any | None = None
         self._sfg: Any | None = None
         self._sbg: Any | None = None
         self._video_reveal_texture: Any | None = None
         self._video_reveal_scale: tuple[float, float, float, float] | None = None
-        
+
         self._alpha = 1.0
         self._delta_alpha = 1.0
         self._xstep = 0.0
         self._ystep = 0.0
         self._next_tm = 0.0
-        
+        self._image_preparer: ImagePreparer = ImagePreparer(
+            (self._render_width, self._render_height),
+            config,
+            self._create_portrait_pair_image,
+            logger=self._logger,
+        )
+
         self.update_config(config)
         self._init_slide()
 
@@ -69,17 +76,9 @@ class ImageRenderer:
         self._fade_time = float(self._config_value(config, "time_fade", 2.0))
         self._time_delay = float(self._config_value(config, "time_delay", 200.0))
         self._fps = int(self._config_value(config, "fps", 20))
-        if hasattr(self, "_image_preparer"):
-            self._image_preparer.update_config(config)
-        else:
-            self._image_preparer = ImagePreparer(
-                (self._render_width, self._render_height),
-                config,
-                self._create_portrait_pair_image,
-                logger=self._logger,
-            )
+        self._image_preparer.update_config(config)
 
-        if getattr(self, "_slide", None):
+        if self._slide is not None:
             self._slide.unif[47] = self._edge_alpha
             self._slide.unif[54] = float(self._blend_type)
             self._apply_texture_scale()
@@ -87,21 +86,17 @@ class ImageRenderer:
     def _init_slide(self) -> None:
         """Initialize the pi3d Sprite for the slide."""
         import pi3d
+
         try:
             camera = pi3d.Camera.instance()
         except AttributeError:
             # Fallback for testing when Display.INSTANCE is not fully mocked
             camera = pi3d.Camera(is_3d=False)
-            
+
         if camera is None:
             camera = pi3d.Camera(is_3d=False)
-            
-        self._slide = pi3d.Sprite(
-            camera=camera,
-            w=self._render_width,
-            h=self._render_height,
-            z=5.0
-        )
+
+        self._slide = pi3d.Sprite(camera=camera, w=self._render_width, h=self._render_height, z=5.0)
         self._slide.set_shader(self._shader)
         self._slide.unif[47] = self._edge_alpha
         self._slide.unif[54] = float(self._blend_type)
@@ -114,7 +109,9 @@ class ImageRenderer:
         if self._slide is None:
             return
         try:
-            image = Image.new("RGB", (self._render_width, self._render_height), self._background_rgb)
+            image = Image.new(
+                "RGB", (self._render_width, self._render_height), self._background_rgb
+            )
             texture = pi3d.Texture(image, blend=True, m_repeat=True, free_after_load=True)
             self._sfg = texture
             self._sbg = texture
@@ -131,7 +128,9 @@ class ImageRenderer:
                 return int(width), int(height)
         return int(self._display.width), int(self._display.height)
 
-    def _background_rgb_from_config(self, config: RendererConfig | dict[str, Any]) -> tuple[int, int, int]:
+    def _background_rgb_from_config(
+        self, config: RendererConfig | dict[str, Any]
+    ) -> tuple[int, int, int]:
         raw_background = self._config_value(config, "background", (0.0, 0.0, 0.0, 1.0))
         if not isinstance(raw_background, (list, tuple)) or len(raw_background) < 3:
             return (0, 0, 0)
@@ -167,39 +166,41 @@ class ImageRenderer:
         if self._slide is None:
             self._logger.warning("ImageRenderer not initialized properly")
             return False, 0.0, 0.0
-            
+
         # Check if it's a video file based on extension
         ext = Path(command.image_path).suffix.lower()
-        video_extensions = getattr(self._config, "video_extensions", [".mp4", ".mov", ".avi", ".mkv"])
+        video_extensions = getattr(
+            self._config, "video_extensions", [".mp4", ".mov", ".avi", ".mkv"]
+        )
         # Ensure extensions start with a dot
         video_extensions = [ext if ext.startswith(".") else f".{ext}" for ext in video_extensions]
-        
+
         if ext in video_extensions:
             return False, 0.0, 0.0
 
         self.clear_video_reveal_texture()
         im = self._load_command_image(command)
-            
+
         try:
             new_sfg = pi3d.Texture(im, blend=True, m_repeat=True, free_after_load=True)
-            
+
             tm = time.time()
             self._next_tm = tm + self._time_delay
-            
+
             self._sbg = self._sfg
             self._sfg = new_sfg
-            
+
             if self._sbg is None:
                 self._sbg = self._sfg
-                
+
             self._slide.set_textures([self._sfg, self._sbg])
-            
+
             self._copy_front_scale_to_back()
-            
+
             xstep, ystep = self._apply_texture_scale()
-                
+
             return True, xstep, ystep
-                
+
         except Exception as e:
             self._logger.error(f"Failed to execute RenderCommand in ImageRenderer: {e}")
             return False, 0.0, 0.0
@@ -259,6 +260,7 @@ class ImageRenderer:
         except Exception as e:
             self._logger.error(f"Failed to load image {command.image_path}: {e}")
             from picframe.core.exceptions import MediaProcessingError
+
             raise MediaProcessingError(f"Failed to load image {command.image_path}: {e}") from e
 
     def _copy_front_scale_to_back(self) -> None:

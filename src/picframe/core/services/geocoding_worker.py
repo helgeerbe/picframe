@@ -53,16 +53,19 @@ class GeocodingWorker:
         locale_value = str(self._config_repo.get_app_config("model.locale", "en_US.utf8"))
         language = self._language_from_locale(language_override or locale_value)
         self._language = language
-        key_list = self._config_repo.get_app_config("model.key_list", [
-            ['tourism', 'amenity', 'isolated_dwelling'],
-            ['suburb', 'village'],
-            ['city', 'county'],
-            ['region', 'state', 'province'],
-            ['country']
-        ])
-        
+        key_list = self._config_repo.get_app_config(
+            "model.key_list",
+            [
+                ["tourism", "amenity", "isolated_dwelling"],
+                ["suburb", "village"],
+                ["city", "county"],
+                ["region", "state", "province"],
+                ["country"],
+            ],
+        )
+
         if load_geoloc and geo_key != "this_needs_to@be_changed":
-            self._geo_reverse = GeoReverse(  # type: ignore[no-untyped-call]
+            self._geo_reverse = GeoReverse(
                 load_geoloc=True,
                 geo_key=geo_key,
                 key_list=key_list,
@@ -86,7 +89,9 @@ class GeocodingWorker:
 
         self._is_running = True
         self._init_geo_reverse()
-        self._thread = threading.Thread(target=self._worker_loop, daemon=True, name="GeocodingWorker")
+        self._thread = threading.Thread(
+            target=self._worker_loop, daemon=True, name="GeocodingWorker"
+        )
         self._thread.start()
         logger.info("GeocodingWorker started.")
 
@@ -155,20 +160,18 @@ class GeocodingWorker:
 
                 # Perform the lookup
                 logger.debug(f"GeocodingWorker: Looking up {lat}, {lon}")
-                address = self._geo_reverse.get_address(lat, lon)  # type: ignore[no-untyped-call]
-                
+                address = self._geo_reverse.get_address(lat, lon)
+
                 if address:
                     self._media_repo.save_location(lat, lon, address, language=language)
                     logger.debug(f"GeocodingWorker: Resolved {lat}, {lon} to '{address}'")
-                    
+
                     # Publish an event to notify the system that a location was resolved
                     # This allows the UI to update if it's currently displaying this media
-                    if hasattr(self, '_event_publisher') and self._event_publisher:
+                    if hasattr(self, "_event_publisher") and self._event_publisher:
                         from picframe.core.events.dto import Command, CommandEvent
 
-                        self._event_publisher.publish(
-                            CommandEvent(command=Command.REQUEST_STATE)
-                        )
+                        self._event_publisher.publish(CommandEvent(command=Command.REQUEST_STATE))
                 else:
                     logger.warning(f"GeocodingWorker: Failed to resolve {lat}, {lon}")
 

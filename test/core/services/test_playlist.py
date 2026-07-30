@@ -100,7 +100,8 @@ def test_build_playlist_empty(mock_media_repo: Mock) -> None:
     assert len(manager._playlist) == 0
     assert manager._current_index == -1
 
-@patch('os.path.isfile', return_value=True)
+
+@patch("os.path.isfile", return_value=True)
 def test_get_next(mock_isfile: Mock, mock_media_repo: Mock) -> None:
     with patch("os.stat", _stat_for_rows(mock_media_repo.get_all_media.return_value)):
         manager = PlaylistManager(mock_media_repo)
@@ -131,7 +132,7 @@ def test_get_next(mock_isfile: Mock, mock_media_repo: Mock) -> None:
         assert item4.id == 1
 
 
-@patch('os.path.isfile', return_value=True)
+@patch("os.path.isfile", return_value=True)
 def test_get_previous(mock_isfile: Mock, mock_media_repo: Mock) -> None:
     with patch("os.stat", _stat_for_rows(mock_media_repo.get_all_media.return_value)):
         manager = PlaylistManager(mock_media_repo)
@@ -140,12 +141,12 @@ def test_get_previous(mock_isfile: Mock, mock_media_repo: Mock) -> None:
         # No history yet
         assert manager.get_previous() is None
 
-        manager.get_next() # id 1
+        manager.get_next()  # id 1
         # Only 1 item in history, no previous
         assert manager.get_previous() is None
 
-        manager.get_next() # id 2
-        manager.get_next() # id 3
+        manager.get_next()  # id 2
+        manager.get_next()  # id 3
 
         # Now we have history: [1, 2, 3]
         # Current item is 3, previous should be 2
@@ -164,17 +165,17 @@ def test_get_previous(mock_isfile: Mock, mock_media_repo: Mock) -> None:
         assert manager.get_previous() is None
 
 
-@patch('os.path.isfile', return_value=True)
+@patch("os.path.isfile", return_value=True)
 def test_get_next_after_previous(mock_isfile: Mock, mock_media_repo: Mock) -> None:
     with patch("os.stat", _stat_for_rows(mock_media_repo.get_all_media.return_value)):
         manager = PlaylistManager(mock_media_repo)
         manager.build_playlist(shuffle=False)
 
-        manager.get_next() # id 1
-        manager.get_next() # id 2
-        manager.get_next() # id 3
+        manager.get_next()  # id 1
+        manager.get_next()  # id 2
+        manager.get_next()  # id 3
 
-        manager.get_previous() # returns 2
+        manager.get_previous()  # returns 2
 
         # Next should be 3 again
         next_item = manager.get_next()
@@ -384,7 +385,7 @@ def test_fewer_repeats_preserves_portrait_pair_slots(mock_media_repo: Mock) -> N
     assert pair_ids == {(1, 2), (3, 4)}
 
 
-@patch('os.path.isfile', return_value=True)
+@patch("os.path.isfile", return_value=True)
 def test_portrait_pairs_pair_only_images_and_exclude_videos(
     mock_isfile: Mock,
     mock_media_repo: Mock,
@@ -489,7 +490,7 @@ def test_portrait_pairs_pair_only_images_and_exclude_videos(
     assert mock_media_repo.record_media_displayed.call_args_list[1].args == (3,)
 
 
-@patch('os.path.isfile', return_value=True)
+@patch("os.path.isfile", return_value=True)
 def test_delete_current_pair_validates_target_ids(
     mock_isfile: Mock,
     mock_media_repo: Mock,
@@ -546,7 +547,7 @@ def test_delete_current_pair_validates_target_ids(
     assert manager.resolve_current_delete_ids("right", [1]) == []
 
 
-@patch('os.path.isfile', return_value=False)
+@patch("os.path.isfile", return_value=False)
 def test_get_next_marks_missing_file_inactive_and_does_not_count(
     mock_isfile: Mock,
     mock_media_repo: Mock,
@@ -563,7 +564,7 @@ def test_get_next_marks_missing_file_inactive_and_does_not_count(
     mock_media_repo.record_media_displayed.assert_not_called()
 
 
-@patch('os.path.isfile', return_value=True)
+@patch("os.path.isfile", return_value=True)
 def test_get_next_skips_changed_file_and_requests_reindex(
     mock_isfile: Mock,
     mock_media_repo: Mock,
@@ -589,7 +590,7 @@ def test_get_next_skips_changed_file_and_requests_reindex(
     assert event.path == "/path/to/image1.jpg"
 
 
-@patch('os.path.isfile', return_value=True)
+@patch("os.path.isfile", return_value=True)
 def test_portrait_pair_with_missing_side_displays_remaining_image(
     mock_isfile: Mock,
     mock_media_repo: Mock,

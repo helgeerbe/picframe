@@ -49,9 +49,7 @@ class ImageProcessingService:
         try:
             self._cache_dir.mkdir(parents=True, exist_ok=True)
         except Exception as e:
-            logger.error(
-                f"Failed to create cache directory {self._cache_dir}: {e}"
-            )
+            logger.error(f"Failed to create cache directory {self._cache_dir}: {e}")
 
     def process_image(
         self,
@@ -99,7 +97,7 @@ class ImageProcessingService:
             with Image.open(media_item.filepath) as img_file:
                 # Apply EXIF orientation
                 img: Image.Image = ImageOps.exif_transpose(img_file)
-                
+
                 # Convert to RGB if necessary (e.g., for RGBA or P modes)
                 if img.mode != "RGB":
                     img = img.convert("RGB")
@@ -112,14 +110,12 @@ class ImageProcessingService:
                     img.thumbnail(target_size, Image.Resampling.LANCZOS)
                 else:
                     # Crop to fill the target dimensions
-                    img = ImageOps.fit(
-                        img, target_size, Image.Resampling.LANCZOS
-                    )
+                    img = ImageOps.fit(img, target_size, Image.Resampling.LANCZOS)
 
                 # Save to cache
                 img.save(cache_path, format="JPEG", quality=90)
                 logger.debug(f"Saved processed image to cache: {cache_path}")
-                
+
                 return str(cache_path)
 
         except Exception as e:
@@ -131,8 +127,8 @@ class ImageProcessingService:
         filepath: str,
         directory_id: int,
         strategy: IMetadataStrategy,
-        callback: Callable[[MediaItem | None], None] | None = None
-    ) -> "Future[MediaItem | None]":  # type: ignore[type-arg]
+        callback: Callable[[MediaItem | None], None] | None = None,
+    ) -> "Future[MediaItem | None]":
         """
         Extract metadata from a file asynchronously using the worker pool.
 
@@ -190,7 +186,7 @@ class ImageProcessingService:
     def shutdown(self, wait: bool = True) -> None:
         """
         Shutdown the worker pool.
-        
+
         Args:
             wait: If True, wait for all pending tasks to complete.
         """
