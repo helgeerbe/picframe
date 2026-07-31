@@ -18,12 +18,12 @@ jobs:
         name: 'Stale'
         runs-on: ubuntu-24.04
         steps:
-          - uses: actions/stale@v9
+          - uses: actions/stale@v11
             with:
                 operations-per-run: 300
                 remove-stale-when-updated: true
                 days-before-issue-stale: 14
-                days-before-issue-close: 14 # days after the issue is marked as stale
+                days-before-issue-close: -1 # days after the issue is marked as stale
                 stale-issue-message: >
                     This issue has been automatically marked as stale because it has not had
                     recent activity. It will be closed if no further activity occurs. Thank you
@@ -47,7 +47,7 @@ jobs:
         name: 'Lock Old Threads'
         runs-on: ubuntu-24.04
         steps:
-          - uses: dessant/lock-threads@v5
+          - uses: dessant/lock-threads@v6
             with:
                 issue-inactive-days: '30'
                 pr-inactive-days: '30'
