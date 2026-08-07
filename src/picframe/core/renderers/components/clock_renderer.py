@@ -171,7 +171,19 @@ class ClockRenderer:
                     color=(255, 255, 255, opacity),
                 )
 
+                # #728: edge-based x positioning for L/R clock justify — the clock
+                # sits at the render-area edge rather than horizontally centered.
                 x = render_center_x
+                if justify in ("L", "R"):
+                    x_offset = (
+                        max(font_size * 4, render_w - (x_margin * 2)) // 2
+                        - self._clock_block.sprite.width // 2
+                    )
+                    if justify == "L":
+                        x -= x_offset
+                    else:
+                        x += x_offset
+
                 if str(self._config.clock_top_bottom or "T").upper() == "B":
                     y = (
                         render_center_y

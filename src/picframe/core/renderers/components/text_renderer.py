@@ -189,14 +189,6 @@ class TextRenderer:
             width = render_w // 2 - (margin * 2) if pair_mode else render_w - (margin * 2)
             width = max(font_size * 4, width)
 
-            # Justify x offset: subtle positional nudge for non-pair text blocks
-            justify_x_offset = 0.0
-            if not pair_mode:
-                if justify == "L":
-                    justify_x_offset = -render_w * 0.02
-                elif justify == "R":
-                    justify_x_offset = render_w * 0.02
-
             self._text_blocks = []
             gradient_specs: list[tuple[int, float, float]] = []
 
@@ -217,14 +209,23 @@ class TextRenderer:
                     background_color=None,
                 )
 
-                x = render_center_x + justify_x_offset
+                # #728: edge-based x positioning for L/R justify — text sits at the
+                # render-area edge (or pair-half edge) rather than near the center.
+                x = render_center_x
                 if pair_mode:
                     pair_offset = render_w // 4
-                    x = (
-                        render_center_x - pair_offset
-                        if index == 0
-                        else render_center_x + pair_offset
-                    )
+                    if index == 0:
+                        x -= pair_offset
+                    else:
+                        x += pair_offset
+
+                if justify in ("L", "R"):
+                    justify_offset = width // 2 - text_block.sprite.width // 2
+                    if justify == "L":
+                        x -= justify_offset
+                    else:
+                        x += justify_offset
+
                 y = render_center_y - (render_h // 2) + (text_block.sprite.height // 2) + y_margin
                 text_block.sprite.position(x, y, 0.1)
                 text_block.sprite.set_alpha(0.0)
