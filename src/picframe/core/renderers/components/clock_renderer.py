@@ -175,9 +175,7 @@ class ClockRenderer:
 
                 # #728: edge-based x positioning for L/R clock justify — the clock
                 # sits at the render-area edge rather than horizontally centered.
-                x = edge_justify_x(
-                    render_center_x, justify, width, self._clock_block.sprite.width
-                )
+                x = edge_justify_x(render_center_x, justify, width, self._clock_block.sprite.width)
 
                 if str(self._config.clock_top_bottom or "T").upper() == "B":
                     y = (
