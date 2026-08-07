@@ -226,6 +226,47 @@ def test_clock_renderer_center_justify_stays_centered(mock_display, mock_shader)
     assert called_x == 0.0
 
 
+def test_clock_renderer_left_justify_uses_min_width_when_render_area_is_narrow(
+    mock_display, mock_shader
+):
+    """#728: when render_w - 2*x_margin < font_size*4, width is clamped to font_size*4.
+
+    Sourcery feedback: validate the ``max(font_size * 4, ...)`` branch of the
+    width calculation so the justify offset is correct in both branches.
+    """
+    # Narrow display: render_w=400, x_margin = 400*0.05 = 20, so
+    # render_w - 2*x_margin = 360 < font_size*4 = 480 → width = 480
+    mock_display.width = 400
+    with patch(
+        "picframe.core.renderers.components.clock_renderer.pi3d.FixedString"
+    ) as mock_fixed_string:
+        sprite = MagicMock()
+        sprite.height = 60
+        sprite.width = 300
+        mock_fixed_string.return_value.sprite = sprite
+        renderer = ClockRenderer(mock_display, mock_shader, "font.ttf")
+        renderer.update_config(
+            OverlayConfig(
+                show_clock=True,
+                clock_format="%H:%M",
+                clock_justify="L",
+                clock_text_sz=120,
+                clock_wdt_offset_pct=5,
+            )
+        )
+        with patch("picframe.core.renderers.components.clock_renderer.datetime") as mock_datetime:
+            mock_datetime.now.return_value.strftime.return_value = "12:00"
+            renderer.draw()
+
+    kwargs = mock_fixed_string.call_args.kwargs
+    # font_size=120 → font_size*4=480 > 400-40=360 → width=480
+    assert kwargs["width"] == 480
+    # justify_offset = 480//2 - 300//2 = 240 - 150 = 90
+    # render_center_x = 0.0 (no render_rect), x = 0.0 - 90 = -90.0
+    called_x = sprite.position.call_args.args[0]
+    assert called_x == pytest.approx(-90.0, abs=0.01)
+
+
 def test_clock_renderer_rebuilds_when_style_changes_at_same_time(mock_display, mock_shader):
     with patch(
         "picframe.core.renderers.components.clock_renderer.pi3d.FixedString"

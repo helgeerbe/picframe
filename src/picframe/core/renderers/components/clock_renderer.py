@@ -12,6 +12,7 @@ from typing import Any
 import pi3d
 
 from picframe.core.events.dto import OverlayConfig
+from picframe.core.renderers.components.justify_utils import edge_justify_x
 
 CLOCK_EXTRA_TXT_PATH = "/dev/shm/clock.txt"
 
@@ -160,6 +161,7 @@ class ClockRenderer:
                 justify = "R"
 
             try:
+                width = max(font_size * 4, render_w - (x_margin * 2))
                 self._clock_block = pi3d.FixedString(
                     self._font_file,
                     display_text,
@@ -167,22 +169,15 @@ class ClockRenderer:
                     shadow_radius=3,
                     shader=self._shader,
                     justify=justify,
-                    width=max(font_size * 4, render_w - (x_margin * 2)),
+                    width=width,
                     color=(255, 255, 255, opacity),
                 )
 
                 # #728: edge-based x positioning for L/R clock justify — the clock
                 # sits at the render-area edge rather than horizontally centered.
-                x = render_center_x
-                if justify in ("L", "R"):
-                    x_offset = (
-                        max(font_size * 4, render_w - (x_margin * 2)) // 2
-                        - self._clock_block.sprite.width // 2
-                    )
-                    if justify == "L":
-                        x -= x_offset
-                    else:
-                        x += x_offset
+                x = edge_justify_x(
+                    render_center_x, justify, width, self._clock_block.sprite.width
+                )
 
                 if str(self._config.clock_top_bottom or "T").upper() == "B":
                     y = (

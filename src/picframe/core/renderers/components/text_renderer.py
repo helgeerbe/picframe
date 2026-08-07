@@ -11,6 +11,7 @@ import numpy as np
 import pi3d
 
 from picframe.core.events.dto import OverlayConfig
+from picframe.core.renderers.components.justify_utils import edge_justify_x
 
 
 class TextRenderer:
@@ -219,12 +220,7 @@ class TextRenderer:
                     else:
                         x += pair_offset
 
-                if justify in ("L", "R"):
-                    justify_offset = width // 2 - text_block.sprite.width // 2
-                    if justify == "L":
-                        x -= justify_offset
-                    else:
-                        x += justify_offset
+                x = edge_justify_x(x, justify, width, text_block.sprite.width)
 
                 y = render_center_y - (render_h // 2) + (text_block.sprite.height // 2) + y_margin
                 text_block.sprite.position(x, y, 0.1)
