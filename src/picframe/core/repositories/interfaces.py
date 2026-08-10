@@ -103,6 +103,19 @@ class IConfigRepository(Protocol):
         """
         ...
 
+    def purge_orphaned_directories(self, active_directory_ids: set[int]) -> int:
+        """
+        Remove directory rows that are no longer referenced by active media.
+
+        Args:
+            active_directory_ids: The set of directory IDs still in use by
+                non-deleted media rows in the media cache.
+
+        Returns:
+            The number of directory rows removed.
+        """
+        ...
+
 
 class IMediaRepository(Protocol):
     """
@@ -262,6 +275,15 @@ class IMediaRepository(Protocol):
 
         Returns:
             A list of dictionaries with `value` and `count` keys.
+        """
+        ...
+
+    def get_active_directory_ids(self) -> set[int]:
+        """
+        Return the set of directory IDs referenced by non-deleted media rows.
+
+        Returns:
+            A set of directory IDs still in active use.
         """
         ...
 

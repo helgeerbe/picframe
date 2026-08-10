@@ -924,6 +924,19 @@ class SQLiteMediaRepository(IMediaRepository):
                 return row["latitude"], row["longitude"], row["language"]
             return None
 
+    def get_active_directory_ids(self) -> set[int]:
+        """
+        Return the set of directory IDs referenced by non-deleted media rows.
+
+        Returns:
+            A set of directory IDs still in active use.
+        """
+        with self._lock:
+            cursor = self._conn.execute(
+                "SELECT DISTINCT directory_id FROM media WHERE is_deleted = 0"
+            )
+            return {int(row["directory_id"]) for row in cursor.fetchall()}
+
     def purge_missing_files(self) -> int:
         """
         Remove database entries for files that no longer exist on disk.

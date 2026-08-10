@@ -266,6 +266,37 @@ class SQLiteConfigRepository(IConfigRepository):
         with self._lock, self._conn:
             self._conn.execute("DELETE FROM directories WHERE id = ?", (directory_id,))
 
+    def purge_orphaned_directories(self, active_directory_ids: set[int]) -> int:
+        """
+        Remove directory rows that are no longer referenced by active media.
+
+        Args:
+            active_directory_ids: The set of directory IDs still in use by
+                non-deleted media rows in the media cache.
+
+        Returns:
+            The number of directory rows removed.
+        """
+        with self._lock:
+            cursor = self._conn.execute("SELECT id FROM directories")
+            all_ids = [int(row["id"]) for row in cursor.fetchall()]
+
+        orphan_ids = [dir_id for dir_id in all_ids if dir_id not in active_directory_ids]
+        if not orphan_ids:
+            return 0
+
+        batch_size = 999
+        purged_count = 0
+        with self._lock, self._conn:
+            for i in range(0, len(orphan_ids), batch_size):
+                batch = orphan_ids[i : i + batch_size]
+                placeholders = ",".join("?" * len(batch))
+                cursor = self._conn.execute(
+                    f"DELETE FROM directories WHERE id IN ({placeholders})", batch
+                )
+                purged_count += cursor.rowcount
+        return purged_count
+
     def close(self) -> None:
         """Close the database connection."""
         with self._lock:

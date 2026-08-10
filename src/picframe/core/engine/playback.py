@@ -1135,6 +1135,10 @@ class PlaybackEngine:
         purged_count = self._playlist_manager.purge_missing_files()
         self._logger.info(f"Purged {purged_count} missing files from database.")
 
+        orphan_count = self._playlist_manager.purge_orphaned_directories()
+        if orphan_count:
+            self._logger.info("Purged %d orphaned directory entries from config.", orphan_count)
+
         if self._renderer_started:
             # Rebuild playlist to ensure we don't try to play purged items.
             self._playlist_manager.build_playlist()

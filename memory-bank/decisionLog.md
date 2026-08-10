@@ -92,5 +92,11 @@ This is a compact index of durable project decisions. Detailed rationale lives i
     without review; other maintainers still require 1 approving review; CI
     status checks remain required for all actors.
 
+- Purge also cleans orphaned directory rows: `PURGE_FILES` now calls
+  `PlaylistManager.purge_orphaned_directories()`, which queries active
+  directory IDs from the media repository and removes directory rows in the
+  config repository that no longer have any non-deleted media referencing them
+  (#724).
+
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

@@ -725,3 +725,37 @@ def test_geocoding_queue_is_language_aware(media_repo: SQLiteMediaRepository) ->
     assert media_repo.dequeue_location_lookup() == (52.5, 13.4, "en")
     assert media_repo.dequeue_location_lookup() == (52.5, 13.4, "de")
     assert media_repo.dequeue_location_lookup() is None
+
+
+def test_get_active_directory_ids_returns_only_active(media_repo: SQLiteMediaRepository) -> None:
+    """Only directory IDs referenced by non-deleted media are returned."""
+    media_repo.add_media_item(
+        {
+            "filepath": "/pics/active.jpg",
+            "filename": "active.jpg",
+            "directory_id": 10,
+            "media_type": "image",
+            "file_size": 100,
+            "last_modified": 1.0,
+        }
+    )
+    media_repo.add_media_item(
+        {
+            "filepath": "/pics/deleted.jpg",
+            "filename": "deleted.jpg",
+            "directory_id": 20,
+            "media_type": "image",
+            "file_size": 100,
+            "last_modified": 1.0,
+        }
+    )
+    media_repo.delete_media_by_path("/pics/deleted.jpg")
+
+    active_ids = media_repo.get_active_directory_ids()
+
+    assert active_ids == {10}
+
+
+def test_get_active_directory_ids_empty(media_repo: SQLiteMediaRepository) -> None:
+    """An empty media cache returns an empty set."""
+    assert media_repo.get_active_directory_ids() == set()

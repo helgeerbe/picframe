@@ -254,6 +254,24 @@ class PlaylistManager:
         """
         return self._media_repo.purge_missing_files()
 
+    def purge_orphaned_directories(self) -> int:
+        """
+        Remove directory rows no longer referenced by active media.
+
+        Coordinates across the media cache (``media_cache.db3``) and the
+        persistent config (``config.db3``) without either repository opening
+        the other's database file. The media repository supplies the set of
+        directory IDs still in use; the config repository deletes the rest.
+
+        Returns:
+            The number of directory rows removed, or 0 when no config
+            repository is configured.
+        """
+        if self._config_repo is None:
+            return 0
+        active_ids = self._media_repo.get_active_directory_ids()
+        return self._config_repo.purge_orphaned_directories(active_ids)
+
     def get_previous(self) -> DisplayItem | None:
         """
         Get the previously played display item from history.

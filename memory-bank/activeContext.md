@@ -1,8 +1,11 @@
 # Active Context
 
 ## Current Focus
-The active branch is `v2-dev`. The latest ticketed change is #719, which fixes
-three bugs reported by Paddy (@paddywwoof) during alpha testing of #714/#715/#716
+The active branch is `feat/724-purge-orphaned-directories`. Ticket #724 extends
+the PURGE_FILES command so it also removes directory rows from `config.db3`
+that no longer have any active (non-deleted) media entries referencing them.
+This keeps the directory table clean when folders are deleted or emptied.
+The previous ticketed change was #719 (alpha-test bug fixes for #714/#715/#716).
 (Discussion #682): (1) the gradient sprite z-order/PIL/1px-width issues in
 `text_renderer.py`, (2) `/dev/shm/clock.txt` not showing because
 `clock_extra_source` was not propagated through `OverlayConfig` and the clock

@@ -530,12 +530,41 @@ def test_engine_purge_does_not_rebuild_playlist_while_renderer_blocked(
     )
     engine._state = State.ERROR
     mock_playlist_manager.purge_missing_files.return_value = 3
+    mock_playlist_manager.purge_orphaned_directories.return_value = 1
 
     engine._handle_purge_command()
 
     mock_playlist_manager.purge_missing_files.assert_called_once()
+    mock_playlist_manager.purge_orphaned_directories.assert_called_once()
     mock_playlist_manager.build_playlist.assert_not_called()
     assert engine._playlist_ready is False
+
+
+def test_engine_purge_invokes_orphan_directory_cleanup(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """PURGE_FILES also removes directory rows no longer referenced by media."""
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+    )
+    engine._renderer_started = True
+    mock_playlist_manager.purge_missing_files.return_value = 0
+    mock_playlist_manager.purge_orphaned_directories.return_value = 2
+
+    engine._handle_purge_command()
+
+    mock_playlist_manager.purge_missing_files.assert_called_once()
+    mock_playlist_manager.purge_orphaned_directories.assert_called_once()
+    mock_playlist_manager.build_playlist.assert_called_once()
+    assert engine._playlist_ready is True
 
 
 def test_engine_handle_command_next(
