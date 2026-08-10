@@ -167,3 +167,9 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `ruff check` and `mypy` passed clean on touched files; `git diff --check`
   passed. Remaining: docs z-order convention, frontend rebuild, commit, push,
   ticket close, and Discussion #682 comment.
+- Latest #724 verification: targeted
+  `.venv/bin/python -m pytest test/core/repositories/test_sqlite_config.py
+  test/core/repositories/test_sqlite_media.py test/core/engine/test_playback.py`
+  passed with 128 tests; `mypy` passed clean on 5 source files; `ruff check`
+  and `ruff format --check` passed on 8 files; `git diff --check` passed.
+  Remaining: commit, push, create PR, close ticket.

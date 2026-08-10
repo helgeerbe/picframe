@@ -316,3 +316,71 @@ def test_v2_migration_skips_when_key_absent(tmp_path: Path) -> None:
         assert repo.get_app_config("viewer.text_overlay_format", "fallback") == ("fallback")
     finally:
         repo.close()
+
+
+def test_purge_orphaned_directories_removes_unreferenced(
+    config_repo: SQLiteConfigRepository,
+) -> None:
+    """Orphaned directories not in the active set are removed."""
+    dir_a = config_repo.add_directory("/pics/a")
+    dir_b = config_repo.add_directory("/pics/b")
+    config_repo.add_directory("/pics/c")
+
+    purged = config_repo.purge_orphaned_directories({dir_a, dir_b})
+
+    assert purged == 1
+    remaining = {d["id"] for d in config_repo.get_all_directories()}
+    assert remaining == {dir_a, dir_b}
+
+
+def test_purge_orphaned_directories_handles_empty_active_set(
+    config_repo: SQLiteConfigRepository,
+) -> None:
+    """When no directories are active, all rows are purged."""
+    config_repo.add_directory("/pics/a")
+    config_repo.add_directory("/pics/b")
+
+    purged = config_repo.purge_orphaned_directories(set())
+
+    assert purged == 2
+    assert config_repo.get_all_directories() == []
+
+
+def test_purge_orphaned_directories_no_rows(
+    config_repo: SQLiteConfigRepository,
+) -> None:
+    """Purging when no directory rows exist returns zero."""
+    assert config_repo.purge_orphaned_directories({1, 2}) == 0
+
+
+def test_purge_orphaned_directories_all_active(
+    config_repo: SQLiteConfigRepository,
+) -> None:
+    """When all directory rows are active, none are purged."""
+    dir_a = config_repo.add_directory("/pics/a")
+    dir_b = config_repo.add_directory("/pics/b")
+
+    purged = config_repo.purge_orphaned_directories({dir_a, dir_b})
+
+    assert purged == 0
+    assert len(config_repo.get_all_directories()) == 2
+
+
+def test_purge_orphaned_directories_batches_past_999_limit(
+    config_repo: SQLiteConfigRepository,
+) -> None:
+    """Deletion is chunked in batches of 999 to avoid SQLite parameter limits."""
+    # Insert 1050 directories; mark only the first 50 as active.
+    total_dirs = 1050
+    active_count = 50
+    active_ids: set[int] = set()
+    for i in range(total_dirs):
+        dir_id = config_repo.add_directory(f"/pics/dir_{i}")
+        if i < active_count:
+            active_ids.add(dir_id)
+
+    purged = config_repo.purge_orphaned_directories(active_ids)
+
+    assert purged == total_dirs - active_count
+    remaining = {d["id"] for d in config_repo.get_all_directories()}
+    assert remaining == active_ids

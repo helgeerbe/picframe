@@ -655,3 +655,33 @@ def test_portrait_pair_with_missing_side_displays_remaining_image(
         1,
         location_language="en",
     )
+
+
+def test_purge_orphaned_directories_returns_zero_without_config_repo(
+    mock_media_repo: Mock,
+) -> None:
+    """When no config repository is configured, purge returns 0 and does not query media."""
+    manager = PlaylistManager(mock_media_repo, config_repository=None)
+    mock_media_repo.get_active_directory_ids.reset_mock()
+
+    result = manager.purge_orphaned_directories()
+
+    assert result == 0
+    mock_media_repo.get_active_directory_ids.assert_not_called()
+
+
+def test_purge_orphaned_directories_invokes_config_repo_with_active_ids(
+    mock_media_repo: Mock,
+) -> None:
+    """When both repos are present, active IDs are fetched and passed to config repo."""
+    config_repo = Mock()
+    active_ids = {1, 2, 3}
+    mock_media_repo.get_active_directory_ids.return_value = active_ids
+    config_repo.purge_orphaned_directories.return_value = 42
+
+    manager = PlaylistManager(mock_media_repo, config_repository=config_repo)
+    result = manager.purge_orphaned_directories()
+
+    mock_media_repo.get_active_directory_ids.assert_called_once_with()
+    config_repo.purge_orphaned_directories.assert_called_once_with(active_ids)
+    assert result == 42
