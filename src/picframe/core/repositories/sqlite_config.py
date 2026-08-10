@@ -277,17 +277,21 @@ class SQLiteConfigRepository(IConfigRepository):
         Returns:
             The number of directory rows removed.
         """
-        with self._lock:
-            cursor = self._conn.execute("SELECT id FROM directories")
-            all_ids = [int(row["id"]) for row in cursor.fetchall()]
-
-        orphan_ids = [dir_id for dir_id in all_ids if dir_id not in active_directory_ids]
-        if not orphan_ids:
-            return 0
-
-        batch_size = 999
-        purged_count = 0
         with self._lock, self._conn:
+            cursor = self._conn.execute("SELECT id FROM directories")
+            all_ids = {int(row["id"]) for row in cursor.fetchall()}
+
+            if not active_directory_ids:
+                # No directories are active — purge all rows in one statement.
+                cursor = self._conn.execute("DELETE FROM directories")
+                return cursor.rowcount
+
+            orphan_ids = list(all_ids - active_directory_ids)
+            if not orphan_ids:
+                return 0
+
+            batch_size = 999
+            purged_count = 0
             for i in range(0, len(orphan_ids), batch_size):
                 batch = orphan_ids[i : i + batch_size]
                 placeholders = ",".join("?" * len(batch))
@@ -295,7 +299,7 @@ class SQLiteConfigRepository(IConfigRepository):
                     f"DELETE FROM directories WHERE id IN ({placeholders})", batch
                 )
                 purged_count += cursor.rowcount
-        return purged_count
+            return purged_count
 
     def close(self) -> None:
         """Close the database connection."""

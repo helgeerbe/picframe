@@ -759,3 +759,50 @@ def test_get_active_directory_ids_returns_only_active(media_repo: SQLiteMediaRep
 def test_get_active_directory_ids_empty(media_repo: SQLiteMediaRepository) -> None:
     """An empty media cache returns an empty set."""
     assert media_repo.get_active_directory_ids() == set()
+
+
+def test_get_active_directory_ids_includes_dir_with_mixed_active_and_deleted(
+    media_repo: SQLiteMediaRepository,
+) -> None:
+    """A directory with at least one active media item is returned even if others are deleted."""
+    # Active item in directory 10
+    media_repo.add_media_item(
+        {
+            "filepath": "/pics/mixed_active.jpg",
+            "filename": "mixed_active.jpg",
+            "directory_id": 10,
+            "media_type": "image",
+            "file_size": 100,
+            "last_modified": 1.0,
+        }
+    )
+    # Soft-deleted item in the same directory 10
+    deleted_id = media_repo.add_media_item(
+        {
+            "filepath": "/pics/mixed_deleted.jpg",
+            "filename": "mixed_deleted.jpg",
+            "directory_id": 10,
+            "media_type": "image",
+            "file_size": 100,
+            "last_modified": 2.0,
+        }
+    )
+    media_repo.delete_media_item(deleted_id)
+
+    # Directory 20 is fully soft-deleted and should not be returned
+    fully_deleted_id = media_repo.add_media_item(
+        {
+            "filepath": "/pics/fully_deleted.jpg",
+            "filename": "fully_deleted.jpg",
+            "directory_id": 20,
+            "media_type": "image",
+            "file_size": 100,
+            "last_modified": 1.0,
+        }
+    )
+    media_repo.delete_media_item(fully_deleted_id)
+
+    active_ids = media_repo.get_active_directory_ids()
+
+    assert 10 in active_ids
+    assert 20 not in active_ids

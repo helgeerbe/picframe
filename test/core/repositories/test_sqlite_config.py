@@ -364,3 +364,23 @@ def test_purge_orphaned_directories_all_active(
 
     assert purged == 0
     assert len(config_repo.get_all_directories()) == 2
+
+
+def test_purge_orphaned_directories_batches_past_999_limit(
+    config_repo: SQLiteConfigRepository,
+) -> None:
+    """Deletion is chunked in batches of 999 to avoid SQLite parameter limits."""
+    # Insert 1050 directories; mark only the first 50 as active.
+    total_dirs = 1050
+    active_count = 50
+    active_ids: set[int] = set()
+    for i in range(total_dirs):
+        dir_id = config_repo.add_directory(f"/pics/dir_{i}")
+        if i < active_count:
+            active_ids.add(dir_id)
+
+    purged = config_repo.purge_orphaned_directories(active_ids)
+
+    assert purged == total_dirs - active_count
+    remaining = {d["id"] for d in config_repo.get_all_directories()}
+    assert remaining == active_ids
