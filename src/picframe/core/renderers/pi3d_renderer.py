@@ -311,9 +311,13 @@ class Pi3dRenderer(IRenderer):
                     new_text_string != self._overlay_config.text_string
                     or new_overlay_text_strings != self._overlay_config.text_strings
                 ):
+                    # Preserve the current show_text value so that video media
+                    # suppression (show_text=False from execute()) is not clobbered
+                    # by the default config value (show_text_enabled=True).
                     self._overlay_config = self._build_overlay_config(
                         text_string=new_text_string,
                         text_strings=new_overlay_text_strings,
+                        show_text=self._overlay_config.show_text,
                     )
                     if self._text_renderer:
                         self._text_renderer.update_config(self._overlay_config)
@@ -351,6 +355,7 @@ class Pi3dRenderer(IRenderer):
         *,
         text_string: str = "",
         text_strings: tuple[str, ...] = (),
+        show_text: bool | None = None,
     ) -> OverlayConfig:
         return OverlayConfig(
             show_clock=self._config.show_clock,
@@ -363,7 +368,7 @@ class Pi3dRenderer(IRenderer):
             clock_hgt_offset_pct=self._config.clock_hgt_offset_pct,
             clock_extra_source=self._config.clock_extra_source,
             clock_extra_text=self._config.clock_extra_text,
-            show_text=self._config.show_text_enabled,
+            show_text=self._config.show_text_enabled if show_text is None else show_text,
             text_string=text_string,
             text_strings=text_strings,
             text_justify=self._config.text_justify,
