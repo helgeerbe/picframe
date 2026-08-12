@@ -117,6 +117,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
 - #691 is merged into `v2-dev`, pushed to `origin/v2-dev`, and closed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
+- #710 GStreamer worker Wayland env fix is in progress on branch `fix/710-gst-worker-wayland-env`: worker env enforces `GDK_BACKEND=wayland`, worker logs display env vars before GTK4 init, crash detection hints at display init failure, and the worker dynamically detects a single `wayland-*` socket in `XDG_RUNTIME_DIR` when `WAYLAND_DISPLAY` is missing. Tests added. Pending: quality gates, commit, push, PR, and user testing.
 
 ## Next
 - Continue caps-driven hardware capability discovery in the GStreamer worker, with Pi V4L2 probing enabled before worker startup.
