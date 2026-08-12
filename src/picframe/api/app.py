@@ -176,6 +176,7 @@ PUBLIC_WORKFLOW_KEYS = {
         "show_clock",
         "show_text_enabled",
         "text_overlay_format",
+        "show_text_on_video",
     },
 }
 

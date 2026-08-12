@@ -3383,3 +3383,111 @@ def test_read_clock_extra_text_ui_source_without_repo_uses_config_dict(
 
     result = engine._read_clock_extra_text()
     assert result == "From config dict"
+
+
+def test_engine_video_suppresses_text_overlay_by_default(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """Issue #726: video media suppresses text overlay when show_text_on_video is False."""
+    video = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1.0,
+    )
+    video.duration = 10.0
+    mock_playlist_manager.get_next.return_value = video
+    config_repo = MagicMock()
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "viewer.show_clock": False,
+        "viewer.show_text_enabled": True,
+        "viewer.show_text_on_video": False,
+    }.get(key, default)
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.clock_format": "%H:%M",
+        "viewer.text_overlay_format": "name",
+        "viewer.show_text_fm": "%b %d, %Y",
+    }.get(key, default)
+
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+            return_value=(MagicMock(), MagicMock()),
+        ),
+    ):
+        engine._trigger_next_media()
+
+    render_cmd = mock_renderer.execute.call_args.args[0]
+    assert render_cmd.overlay.show_text is False
+    assert render_cmd.overlay.text_strings == ()
+
+
+def test_engine_video_keeps_text_overlay_when_enabled(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """Issue #726: video media shows text overlay when show_text_on_video is True."""
+    video = MediaItem(
+        id=1,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1.0,
+    )
+    video.duration = 10.0
+    mock_playlist_manager.get_next.return_value = video
+    config_repo = MagicMock()
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "viewer.show_clock": False,
+        "viewer.show_text_enabled": True,
+        "viewer.show_text_on_video": True,
+    }.get(key, default)
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "viewer.clock_format": "%H:%M",
+        "viewer.text_overlay_format": "name",
+        "viewer.show_text_fm": "%b %d, %Y",
+    }.get(key, default)
+
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=config_repo,
+    )
+
+    with (
+        patch("os.path.exists", return_value=True),
+        patch(
+            "picframe.core.utils.video_frame_extractor.VideoFrameExtractor.get_first_and_last_frames",
+            return_value=(MagicMock(), MagicMock()),
+        ),
+    ):
+        engine._trigger_next_media()
+
+    render_cmd = mock_renderer.execute.call_args.args[0]
+    assert render_cmd.overlay.show_text is True
+    assert render_cmd.overlay.text_string == "video.mp4"

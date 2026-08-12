@@ -190,3 +190,13 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   passed with 14 tests; `mypy` passed clean on 2 source files; `ruff check`
   and `ruff format --check` passed on 2 files. Remaining: commit, force-push
   to update PR #732, close ticket.
+- Ticket #726 adds `viewer.show_text_on_video` (default `False`) so users can
+  opt out of the metadata text overlay on video media. The playback engine
+  suppresses only the metadata text overlay for video handoffs via
+  `dataclasses.replace()` (clock and status overlays preserved), so GStreamer
+  starts without waiting for `show_text_tm` fade-out. The setting flows through
+  `RendererConfig`, `default_config.yaml`, API `ViewerConfig`, live-update keys
+  in `app.py`, MQTT Home Assistant switch discovery, `configSchema.json`, the
+  `TextOverlayControls` Vue component, and en/de i18n strings. Tests cover the
+  renderer config mapping, playback handoff overlay suppression, and pi3d
+  renderer behavior.

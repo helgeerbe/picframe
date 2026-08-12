@@ -18,6 +18,7 @@ const statusMessage = ref('')
 const statusTone = ref<'success' | 'danger'>('success')
 
 const showClock = ref(false)
+const showTextOnVideo = ref(false)
 const showTitle = ref(false)
 const showCaption = ref(false)
 const showName = ref(false)
@@ -28,6 +29,7 @@ const showLocation = ref(false)
 const syncControlsFromConfig = () => {
   const viewerConfig = configStore.config?.viewer || {}
   showClock.value = !!viewerConfig.show_clock
+  showTextOnVideo.value = !!viewerConfig.show_text_on_video
 
   const showTextStr = (viewerConfig.text_overlay_format || '').toLowerCase()
   showTitle.value = showTextStr.includes('title')
@@ -66,7 +68,8 @@ const overlayPayload = () => {
     viewer: {
       show_clock: showClock.value,
       show_text_enabled: showTextStr.length > 0,
-      text_overlay_format: showTextStr
+      text_overlay_format: showTextStr,
+      show_text_on_video: showTextOnVideo.value
     }
   }
 }
@@ -104,6 +107,7 @@ const updateControl = (control: { ref: Ref<boolean> }, value: boolean) => {
 
 const controls: Array<{ id: string, ref: Ref<boolean>, labelKey: string, helperKey: string }> = [
   { id: 'clock', ref: showClock, labelKey: 'remote.overlays.clock', helperKey: 'remote.overlays.clockHelper' },
+  { id: 'textOnVideo', ref: showTextOnVideo, labelKey: 'remote.overlays.textOnVideo', helperKey: 'remote.overlays.textOnVideoHelper' },
   { id: 'title', ref: showTitle, labelKey: 'remote.overlays.textTitle', helperKey: 'remote.overlays.textTitleHelper' },
   { id: 'caption', ref: showCaption, labelKey: 'remote.overlays.textCaption', helperKey: 'remote.overlays.textCaptionHelper' },
   { id: 'name', ref: showName, labelKey: 'remote.overlays.textName', helperKey: 'remote.overlays.textNameHelper' },
