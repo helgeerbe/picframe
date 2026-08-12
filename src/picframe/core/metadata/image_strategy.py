@@ -384,6 +384,36 @@ class ImageMetadataStrategy(IMetadataStrategy):
                             return val
         return None
 
+    @staticmethod
+    def _extract_xmp_subject_tags(val: Any) -> str | None:
+        """
+        Extract XMP subject tags from either Bag/li or Seq/li structures.
+
+        ACDSee Photo Studio on Mac writes keywords under Seq/li instead of the
+        more common Bag/li. Single keywords may be stored as a string rather
+        than a list (#725).
+
+        Args:
+            val: The value found under the XMP "subject" key.
+
+        Returns:
+            A comma-joined tag string, or None if no tags could be extracted.
+        """
+        if not (val and isinstance(val, dict)):
+            return None
+
+        # Try Bag/li first (common case), then fall back to Seq/li (ACDSee on Mac)
+        for container_key in ("Bag", "Seq"):
+            container = val.get(container_key)
+            if not (isinstance(container, dict) and "li" in container):
+                continue
+            li_val = container["li"]
+            if isinstance(li_val, list) and len(li_val) > 0:
+                return ", ".join(str(tag) for tag in li_val)
+            if isinstance(li_val, str) and len(li_val) > 0:
+                return li_val
+        return None
+
     def _get_xmp_data(self, filepath: str) -> dict[str, Any]:
         """
         Retrieve XMP tags using PIL.
@@ -418,12 +448,11 @@ class ImageMetadataStrategy(IMetadataStrategy):
                             if text_val and isinstance(text_val, str) and len(text_val) > 0:
                                 xmp_data["caption"] = text_val
 
-                        # tags
+                        # tags — try Bag/li first, fall back to Seq/li for ACDSee on Mac (#725)
                         val = self._find_xmp_key("subject", xmp)
-                        if val and isinstance(val, dict) and "Bag" in val and "li" in val["Bag"]:
-                            li_val = val["Bag"]["li"]
-                            if li_val and isinstance(li_val, list) and len(li_val) > 0:
-                                xmp_data["tags"] = ", ".join(str(tag) for tag in li_val)
+                        tags = self._extract_xmp_subject_tags(val)
+                        if tags:
+                            xmp_data["tags"] = tags
         except Exception as e:
             logger.debug(f"Error reading XMP data for {filepath}: {e}")
 

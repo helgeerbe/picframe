@@ -111,12 +111,24 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `dev (incl v2-dev)` and `main` rulesets so the owner can self-merge PRs
   without review, while other maintainers still require 1 approving review;
   CI status checks remain required for all actors.
+- Ticket #724 purge orphaned directory rows: `PURGE_FILES` now calls
+  `PlaylistManager.purge_orphaned_directories()`, which queries active
+  directory IDs from the media repository and removes directory rows in the
+  config repository that no longer have any non-deleted media referencing them.
+- Ticket #725 XMP subject Seq/li fallback: `ImageMetadataStrategy._get_xmp_data()`
+  now extracts XMP subject keywords from either Bag/li (common) or Seq/li
+  (ACDSee Photo Studio on Mac) via a new static `_extract_xmp_subject_tags()`
+  helper, and handles both list and single-string `li` values. Tests cover
+  Bag/li list, Seq/li list, Bag/li single string, Seq/li single string,
+  missing-both, and Bag-preferred-over-Seq cases. The fix preserves existing
+  Bag/li behavior as the first-choice path.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
 - #691 is merged into `v2-dev`, pushed to `origin/v2-dev`, and closed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
+- #725 XMP subject Seq/li fallback is in progress on branch `fix/xmp-subject-seq-li-725` (rebased from `origin/v2-dev`): helper and tests implemented. Pending: quality gates, commit, force-push to update PR #732, close ticket.
 
 ## Next
 - Continue caps-driven hardware capability discovery in the GStreamer worker, with Pi V4L2 probing enabled before worker startup.
@@ -173,3 +185,8 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   passed with 128 tests; `mypy` passed clean on 5 source files; `ruff check`
   and `ruff format --check` passed on 8 files; `git diff --check` passed.
   Remaining: commit, push, create PR, close ticket.
+- Latest #725 verification: targeted
+  `.venv/bin/python -m pytest test/core/metadata/test_image_strategy.py -v`
+  passed with 14 tests; `mypy` passed clean on 2 source files; `ruff check`
+  and `ruff format --check` passed on 2 files. Remaining: commit, force-push
+  to update PR #732, close ticket.
