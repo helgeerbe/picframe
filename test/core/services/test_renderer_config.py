@@ -110,3 +110,16 @@ def test_build_renderer_config_uses_matting_defaults() -> None:
     assert config.shader_path == "/tmp/picframe-test/data/shaders/blend_new"
     assert config.font_file == "/tmp/picframe-test/data/fonts/NotoSans-Regular.ttf"
     assert config.mat_resource_folder == "/tmp/picframe-test/data/mat"
+
+
+def test_build_renderer_config_includes_show_text_on_video() -> None:
+    """Issue #726: show_text_on_video is mapped from the config repository."""
+    repo = FakeConfigRepository({"viewer.show_text_on_video": True})
+    config = build_renderer_config(repo)
+    assert config.show_text_on_video is True
+
+
+def test_build_renderer_config_defaults_show_text_on_video_false() -> None:
+    """Issue #726: show_text_on_video defaults to False."""
+    config = build_renderer_config(FakeConfigRepository({}))
+    assert config.show_text_on_video is False

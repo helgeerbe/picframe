@@ -1,12 +1,16 @@
 # Active Context
 
 ## Current Focus
-The active branch is `fix/xmp-subject-seq-li-725`. Ticket #725 adds a
-`Seq/li` fallback to XMP subject parsing in
-`ImageMetadataStrategy._get_xmp_data()` so ACDSee Photo Studio on Mac (which
-writes keywords under `Seq/li` instead of the common `Bag/li`) no longer
-silently misses tags from HEIC files. The previous ticketed change was #724
-(purge orphaned directory rows on PURGE_FILES).
+The active branch is `feat/show-text-on-video-726`. Ticket #726 adds a
+`viewer.show_text_on_video` setting (default `False`) so users can opt out of
+the metadata text overlay on video media. When `False`, the playback engine
+suppresses only the metadata text overlay for video handoffs (clock and
+status overlays are preserved via `dataclasses.replace()`), so GStreamer
+starts immediately without waiting for the `show_text_tm` fade-out. The
+setting flows through `RendererConfig`, `default_config.yaml`, API models,
+MQTT Home Assistant discovery, `configSchema.json`, the `TextOverlayControls`
+Vue component, and i18n strings. The previous ticketed change was #725
+(XMP `Seq/li` subject parsing fallback).
 (Discussion #682): (1) the gradient sprite z-order/PIL/1px-width issues in
 `text_renderer.py`, (2) `/dev/shm/clock.txt` not showing because
 `clock_extra_source` was not propagated through `OverlayConfig` and the clock
@@ -16,7 +20,7 @@ to `last_modified` at indexing time. Issues #714/#715/#716 are now fully
 functional after the #719 fixes.
 
 ## Current Repo State
-- Branch: `fix/xmp-subject-seq-li-725` (rebased from `origin/v2-dev`); #724 is the latest merged context on `v2-dev`.
+- Branch: `feat/show-text-on-video-726` (rebased from `origin/v2-dev`); #725 is the latest merged context on `v2-dev`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
@@ -117,6 +121,15 @@ functional after the #719 fixes.
   `dev (incl v2-dev)` and `main` rulesets so the owner can self-merge PRs
   without review, while other maintainers still require 1 approving review;
   CI status checks remain required for all actors.
+- Ticket #726 adds `viewer.show_text_on_video` (default `False`): when disabled,
+  the playback engine suppresses only the metadata text overlay for video
+  media via `dataclasses.replace()` so clock and status overlays are preserved
+  and GStreamer starts without waiting for `show_text_tm` fade-out. The setting
+  flows through `RendererConfig`, `default_config.yaml`, API `ViewerConfig`,
+  live-update keys in `app.py`, MQTT Home Assistant switch discovery,
+  `configSchema.json`, the `TextOverlayControls` Vue component, and en/de i18n
+  strings. Tests cover the renderer config mapping, playback handoff overlay
+  suppression, and pi3d renderer behavior.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.

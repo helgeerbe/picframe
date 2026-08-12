@@ -64,6 +64,11 @@ class HomeAssistantMqttAdapter:
             "mdi:subtitles",
             ("viewer", "show_text_enabled"),
         ),
+        "text_on_video": (
+            "Text on video",
+            "mdi:movie-open-cog",
+            ("viewer", "show_text_on_video"),
+        ),
     }
     NUMBERS: dict[str, tuple[str, str, float, float, float, tuple[str, str] | None]] = {
         "brightness": ("Brightness", "mdi:brightness-6", 0.0, 1.0, 0.05, None),

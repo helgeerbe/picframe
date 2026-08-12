@@ -30,6 +30,7 @@ viewer:
   fit: false
   # true stretches video to the display; false preserves video aspect ratio.
   video_fit_display: false
+  show_text_on_video: false
   # Highest resolution allowed for software video decode fallback.
   max_software_decode_resolution: 1280x720
   kenburns: false
