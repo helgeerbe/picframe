@@ -657,6 +657,37 @@ def test_renderer_pause_resume_preserves_visible_text_timer(
     assert renderer._animation_controller._text_timer == 101.0
 
 
+def test_renderer_execute_respects_show_text_false_from_overlay(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    """Renderer must copy ``show_text`` from the incoming overlay (#726).
+
+    When the playback engine sends ``show_text=False`` for video media,
+    the renderer must update its overlay config so text is suppressed.
+    """
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._overlay_config = OverlayConfig(show_text=True, text_string="Photo")
+    renderer._animation_controller._show_text = True
+
+    mock_image_renderer.execute.return_value = (True, 0.0, 0.0)
+    renderer.execute(
+        RenderCommand(
+            image_path="/cache/video.1.frame",
+            overlay=OverlayConfig(show_text=False, text_string=""),
+            render_action=RENDER_VIDEO_FIRST_FRAME,
+            transition_token=1,
+        )
+    )
+
+    assert renderer._overlay_config.show_text is False
+    assert renderer._overlay_config.text_string == ""
+
+
 @patch("time.sleep")
 def test_renderer_video_first_frame_completion_publishes_transition_token(
     mock_sleep: MagicMock,

@@ -823,6 +823,7 @@ class Pi3dRenderer(IRenderer):
         if command.overlay:
             self._overlay_config = replace(
                 self._overlay_config,
+                show_text=command.overlay.show_text,
                 text_string=command.overlay.text_string,
                 text_strings=command.overlay.text_strings,
                 status_text=command.overlay.status_text,
