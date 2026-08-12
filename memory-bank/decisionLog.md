@@ -97,6 +97,10 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   directory IDs from the media repository and removes directory rows in the
   config repository that no longer have any non-deleted media referencing them
   (#724).
+- XMP subject parsing must accept both Bag/li and Seq/li containers, and
+  handle single-string `li` values as well as lists. ACDSee Photo Studio on
+  Mac writes keywords under Seq/li instead of the common Bag/li; Bag/li
+  remains the preferred path when both are present (#725).
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

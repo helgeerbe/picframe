@@ -5,12 +5,13 @@ This module verifies the extraction of metadata from image files, including
 dimensions, orientation, and EXIF data.
 """
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from picframe.core.metadata.image_strategy import ImageMetadataStrategy
-from picframe.core.models.media import MediaType
+from picframe.core.models.media import MediaItem, MediaType
 
 
 @pytest.fixture
@@ -155,7 +156,7 @@ def _extract_with_dimensions(
     strategy: ImageMetadataStrategy,
     dimensions: tuple[int, int],
     orientation: int,
-):
+) -> MediaItem | None:
     with (
         patch("os.path.isfile", return_value=True),
         patch("os.stat") as mock_stat,
@@ -214,3 +215,79 @@ def test_extract_exception_handling(
     assert result is not None
     assert result.file_size == 1024
     assert result.last_modified == 1678886400.0
+
+
+# ---------------------------------------------------------------------------
+# XMP subject parsing — Bag/li vs Seq/li fallback (#725)
+# ---------------------------------------------------------------------------
+
+
+def _make_xmp_with_subject(subject_val: Any) -> dict[str, Any]:
+    """Build a minimal XMP dict containing only the subject key."""
+    return {"xmp": {"subject": subject_val}}
+
+
+def test_get_xmp_data_subject_bag_li(strategy: ImageMetadataStrategy) -> None:
+    """Bag/li list is the common case and must keep working (regression)."""
+    xmp = _make_xmp_with_subject({"Bag": {"li": ["vacation", "sunset"]}})
+    with patch("PIL.Image.open") as mock_open:
+        mock_img = MagicMock()
+        mock_img.getxmp.return_value = xmp
+        mock_open.return_value.__enter__.return_value = mock_img
+        result = strategy._get_xmp_data("/fake/path.jpg")
+    assert result.get("tags") == "vacation, sunset"
+
+
+def test_get_xmp_data_subject_seq_li(strategy: ImageMetadataStrategy) -> None:
+    """Seq/li list is written by ACDSee Photo Studio on Mac and must be parsed (#725)."""
+    xmp = _make_xmp_with_subject({"Seq": {"li": ["mountains", "hiking"]}})
+    with patch("PIL.Image.open") as mock_open:
+        mock_img = MagicMock()
+        mock_img.getxmp.return_value = xmp
+        mock_open.return_value.__enter__.return_value = mock_img
+        result = strategy._get_xmp_data("/fake/path.jpg")
+    assert result.get("tags") == "mountains, hiking"
+
+
+def test_get_xmp_data_subject_bag_li_single_string(strategy: ImageMetadataStrategy) -> None:
+    """Bag/li with a single-string li value should return that string (#725)."""
+    xmp = _make_xmp_with_subject({"Bag": {"li": "solo-keyword"}})
+    with patch("PIL.Image.open") as mock_open:
+        mock_img = MagicMock()
+        mock_img.getxmp.return_value = xmp
+        mock_open.return_value.__enter__.return_value = mock_img
+        result = strategy._get_xmp_data("/fake/path.jpg")
+    assert result.get("tags") == "solo-keyword"
+
+
+def test_get_xmp_data_subject_seq_li_single_string(strategy: ImageMetadataStrategy) -> None:
+    """Seq/li with a single-string li value should return that string (ACDSee, #725)."""
+    xmp = _make_xmp_with_subject({"Seq": {"li": "acdsee-keyword"}})
+    with patch("PIL.Image.open") as mock_open:
+        mock_img = MagicMock()
+        mock_img.getxmp.return_value = xmp
+        mock_open.return_value.__enter__.return_value = mock_img
+        result = strategy._get_xmp_data("/fake/path.jpg")
+    assert result.get("tags") == "acdsee-keyword"
+
+
+def test_get_xmp_data_subject_missing(strategy: ImageMetadataStrategy) -> None:
+    """When neither Bag nor Seq is present, no tags key should be set."""
+    xmp = _make_xmp_with_subject({"Other": {"li": ["nope"]}})
+    with patch("PIL.Image.open") as mock_open:
+        mock_img = MagicMock()
+        mock_img.getxmp.return_value = xmp
+        mock_open.return_value.__enter__.return_value = mock_img
+        result = strategy._get_xmp_data("/fake/path.jpg")
+    assert "tags" not in result
+
+
+def test_get_xmp_data_subject_prefers_bag_over_seq(strategy: ImageMetadataStrategy) -> None:
+    """Bag/li is preferred when both Bag and Seq are present."""
+    xmp = _make_xmp_with_subject({"Bag": {"li": ["preferred"]}, "Seq": {"li": ["fallback"]}})
+    with patch("PIL.Image.open") as mock_open:
+        mock_img = MagicMock()
+        mock_img.getxmp.return_value = xmp
+        mock_open.return_value.__enter__.return_value = mock_img
+        result = strategy._get_xmp_data("/fake/path.jpg")
+    assert result.get("tags") == "preferred"

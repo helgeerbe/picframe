@@ -1,11 +1,12 @@
 # Active Context
 
 ## Current Focus
-The active branch is `feat/724-purge-orphaned-directories`. Ticket #724 extends
-the PURGE_FILES command so it also removes directory rows from `config.db3`
-that no longer have any active (non-deleted) media entries referencing them.
-This keeps the directory table clean when folders are deleted or emptied.
-The previous ticketed change was #719 (alpha-test bug fixes for #714/#715/#716).
+The active branch is `fix/xmp-subject-seq-li-725`. Ticket #725 adds a
+`Seq/li` fallback to XMP subject parsing in
+`ImageMetadataStrategy._get_xmp_data()` so ACDSee Photo Studio on Mac (which
+writes keywords under `Seq/li` instead of the common `Bag/li`) no longer
+silently misses tags from HEIC files. The previous ticketed change was #724
+(purge orphaned directory rows on PURGE_FILES).
 (Discussion #682): (1) the gradient sprite z-order/PIL/1px-width issues in
 `text_renderer.py`, (2) `/dev/shm/clock.txt` not showing because
 `clock_extra_source` was not propagated through `OverlayConfig` and the clock
@@ -15,7 +16,7 @@ to `last_modified` at indexing time. Issues #714/#715/#716 are now fully
 functional after the #719 fixes.
 
 ## Current Repo State
-- Branch: `v2-dev`; #719 is the latest local implementation context.
+- Branch: `fix/xmp-subject-seq-li-725` (rebased from `origin/v2-dev`); #724 is the latest merged context on `v2-dev`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
