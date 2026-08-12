@@ -1,7 +1,7 @@
 # Active Context
 
 ## Current Focus
-The active branch is `feat/show-text-on-video-726`. Ticket #726 adds a
+The active branch is `feature/726-show-text-on-video`. Ticket #726 adds a
 `viewer.show_text_on_video` setting (default `False`) so users can opt out of
 the metadata text overlay on video media. When `False`, the playback engine
 suppresses only the metadata text overlay for video handoffs (clock and
@@ -20,7 +20,7 @@ to `last_modified` at indexing time. Issues #714/#715/#716 are now fully
 functional after the #719 fixes.
 
 ## Current Repo State
-- Branch: `feat/show-text-on-video-726` (rebased from `origin/v2-dev`); #725 is the latest merged context on `v2-dev`.
+- Branch: `feature/726-show-text-on-video` (rebased from `origin/v2-dev`); #725 is the latest merged context on `v2-dev`.
 - `.Codexrules` is a local instruction file and is ignored by git.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
