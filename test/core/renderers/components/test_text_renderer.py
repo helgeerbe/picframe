@@ -244,6 +244,7 @@ def test_text_renderer_positions_text_inside_render_rect(mock_display, mock_shad
     with mock_pi3d_text_components() as mock_fixed_string:
         sprite = MagicMock()
         sprite.height = 50
+        sprite.width = 300
         mock_fixed_string.return_value.sprite = sprite
         renderer = TextRenderer(
             mock_display,
@@ -262,8 +263,9 @@ def test_text_renderer_positions_text_inside_render_rect(mock_display, mock_shad
     kwargs = mock_fixed_string.call_args.kwargs
     assert kwargs["width"] == 800
     # y_margin scales with font_size: 12 + 40//4 = 22
-    # justify_x_offset for L: -1000 * 0.02 = -20.0
-    sprite.position.assert_called_once_with(-480.0, -313.0, 0.1)
+    # #728: justify_offset for L = width//2 - sprite.width//2 = 400 - 150 = 250
+    # render_center_x = -460.0, x = -460.0 - 250 = -710.0
+    sprite.position.assert_called_once_with(-710.0, -313.0, 0.1)
 
 
 def test_text_renderer_rebuilds_when_style_changes_for_same_text(mock_display, mock_shader):
@@ -618,13 +620,14 @@ def test_text_renderer_gradient_sprite_uses_uv_flat_shader(mock_display, mock_sh
 
 
 def test_text_renderer_justify_offset_applies_to_non_pair_text(mock_display, mock_shader):
+    """#728: R-justified text sits at the right edge of the render area."""
     with mock_pi3d_text_components() as mock_fixed_string:
         sprite = MagicMock()
         sprite.height = 40
+        sprite.width = 400
         mock_fixed_string.return_value.sprite = sprite
         renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
 
-        # Right justify: x offset = +render_w * 0.02
         renderer.update_config(
             OverlayConfig(
                 show_text=True,
@@ -634,10 +637,36 @@ def test_text_renderer_justify_offset_applies_to_non_pair_text(mock_display, moc
             )
         )
 
-    # render_w = 1920, offset = 1920 * 0.02 = 38.4
-    # render_center_x = 0.0, x = 0.0 + 38.4 = 38.4
+    # margin = 100 (default), width = 1920 - 200 = 1720
+    # justify_offset = 1720//2 - 400//2 = 860 - 200 = 660
+    # x = 0.0 + 660 = 660.0
     called_x = sprite.position.call_args.args[0]
-    assert called_x == pytest.approx(38.4, abs=0.01)
+    assert called_x == pytest.approx(660.0, abs=0.01)
+
+
+def test_text_renderer_justify_offset_left_edge(mock_display, mock_shader):
+    """#728: L-justified text sits at the left edge of the render area."""
+    with mock_pi3d_text_components() as mock_fixed_string:
+        sprite = MagicMock()
+        sprite.height = 40
+        sprite.width = 400
+        mock_fixed_string.return_value.sprite = sprite
+        renderer = TextRenderer(mock_display, mock_shader, "font.ttf")
+
+        renderer.update_config(
+            OverlayConfig(
+                show_text=True,
+                text_string="Left Text",
+                text_justify="L",
+                text_bkg_hgt=0.0,
+            )
+        )
+
+    # margin = 100 (default), width = 1920 - 200 = 1720
+    # justify_offset = 1720//2 - 400//2 = 860 - 200 = 660
+    # x = 0.0 - 660 = -660.0
+    called_x = sprite.position.call_args.args[0]
+    assert called_x == pytest.approx(-660.0, abs=0.01)
 
 
 def test_text_renderer_justify_offset_not_applied_for_center(mock_display, mock_shader):
