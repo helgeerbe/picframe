@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -132,6 +133,159 @@ def test_worker_environment_does_not_force_v4l2_probe_off_pi(
 
     env = mock_popen.call_args.kwargs["env"]
     assert "GST_V4L2_ENABLE_PROBE" not in env
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_worker_environment_enforces_gdk_backend_wayland(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The worker environment must force GDK_BACKEND=wayland (#710)."""
+    mock_client.return_value = MagicMock()
+    monkeypatch.setenv("WAYLAND_DISPLAY", "wayland-0")
+    monkeypatch.delenv("GDK_BACKEND", raising=False)
+
+    GstVideoRenderer(mock_publisher)
+
+    env = mock_popen.call_args.kwargs["env"]
+    assert env["GDK_BACKEND"] == "wayland"
+
+
+@pytest.mark.parametrize("wayland_display_value", [None, ""])
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_worker_environment_warns_when_wayland_display_missing(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+    wayland_display_value: str | None,
+) -> None:
+    """A warning is logged when WAYLAND_DISPLAY is missing or empty (#710)."""
+    mock_client.return_value = MagicMock()
+    if wayland_display_value is None:
+        monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    else:
+        monkeypatch.setenv("WAYLAND_DISPLAY", wayland_display_value)
+    # Point XDG_RUNTIME_DIR at an empty dir so no wayland socket is detected
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+
+    with caplog.at_level("WARNING", logger="picframe.core.renderers.gst_video_renderer"):
+        GstVideoRenderer(mock_publisher)
+
+    env = mock_popen.call_args.kwargs["env"]
+    assert env["GDK_BACKEND"] == "wayland"
+    # WAYLAND_DISPLAY should be absent or empty — not a usable value
+    assert not env.get("WAYLAND_DISPLAY")
+    assert any("WAYLAND_DISPLAY" in record.message for record in caplog.records)
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_worker_environment_detects_wayland_socket(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When WAYLAND_DISPLAY is missing, a single wayland-* socket is auto-detected (#710)."""
+    import socket as socket_mod
+
+    mock_client.return_value = MagicMock()
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+
+    # Create a real Unix-domain socket to simulate the compositor's wayland-0
+    sock_path = tmp_path / "wayland-0"
+    sock = socket_mod.socket(socket_mod.AF_UNIX, socket_mod.SOCK_STREAM)
+    sock.bind(str(sock_path))
+    try:
+        with caplog.at_level("INFO", logger="picframe.core.renderers.gst_video_renderer"):
+            GstVideoRenderer(mock_publisher)
+    finally:
+        sock.close()
+        sock_path.unlink(missing_ok=True)
+
+    env = mock_popen.call_args.kwargs["env"]
+    assert env["GDK_BACKEND"] == "wayland"
+    assert env["WAYLAND_DISPLAY"] == "wayland-0"
+    assert any("detected Wayland socket" in r.message for r in caplog.records)
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=True)
+def test_worker_environment_warns_when_multiple_wayland_sockets(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Multiple wayland-* sockets: detection is ambiguous, warn (#710)."""
+    import socket as socket_mod
+
+    mock_client.return_value = MagicMock()
+    monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
+
+    sockets: list[socket_mod.socket] = []
+    for name in ("wayland-0", "wayland-1"):
+        s = socket_mod.socket(socket_mod.AF_UNIX, socket_mod.SOCK_STREAM)
+        s.bind(str(tmp_path / name))
+        sockets.append(s)
+    try:
+        with caplog.at_level("WARNING", logger="picframe.core.renderers.gst_video_renderer"):
+            GstVideoRenderer(mock_publisher)
+    finally:
+        for s in sockets:
+            s.close()
+        for name in ("wayland-0", "wayland-1"):
+            (tmp_path / name).unlink(missing_ok=True)
+
+    env = mock_popen.call_args.kwargs["env"]
+    assert env["GDK_BACKEND"] == "wayland"
+    assert "WAYLAND_DISPLAY" not in env
+    assert any("WAYLAND_DISPLAY" in record.message for record in caplog.records)
+
+
+@patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")
+@patch("picframe.core.renderers.gst_video_renderer.Client")
+@patch("picframe.core.renderers.gst_video_renderer.os.path.exists", return_value=False)
+def test_worker_crash_with_negative_exit_code_includes_display_hint(
+    mock_exists: MagicMock,
+    mock_client: MagicMock,
+    mock_popen: MagicMock,
+    mock_publisher: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A negative worker exit code mentions GTK4/Wayland display init failure (#710)."""
+    mock_process = MagicMock()
+    mock_process.poll.return_value = -11  # SIGSEGV
+    mock_process.stdout = MagicMock()
+    mock_popen.return_value = mock_process
+
+    with caplog.at_level("ERROR", logger="picframe.core.renderers.gst_video_renderer"):
+        GstVideoRenderer(mock_publisher)
+
+    error_messages = [r.message for r in caplog.records if r.levelname == "ERROR"]
+    assert any("exit code -11" in m for m in error_messages)
+    assert any("GTK4/Wayland display initialization failure" in m for m in error_messages)
 
 
 @patch("picframe.core.renderers.gst_video_renderer.subprocess.Popen")

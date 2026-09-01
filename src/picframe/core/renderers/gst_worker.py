@@ -99,6 +99,19 @@ except ImportError as exc:
     logger.error("GStreamer not available. Worker cannot start: %s", exc)
     GST_AVAILABLE = False
 
+# Log display-related environment variables early so that silent GTK4/Wayland
+# initialization crashes leave a diagnostic trail.  The worker may segfault
+# during ``Gtk.init_check()`` before any GStreamer code runs (see #710), so this
+# log line is often the only output visible when that happens.
+logger.info(
+    "GStreamer worker display environment: "
+    "WAYLAND_DISPLAY=%s DISPLAY=%s XDG_RUNTIME_DIR=%s GDK_BACKEND=%s",
+    os.environ.get("WAYLAND_DISPLAY", ""),
+    os.environ.get("DISPLAY", ""),
+    os.environ.get("XDG_RUNTIME_DIR", ""),
+    os.environ.get("GDK_BACKEND", ""),
+)
+
 from picframe.core.renderers.gst_utils import find_best_element  # noqa: E402
 
 

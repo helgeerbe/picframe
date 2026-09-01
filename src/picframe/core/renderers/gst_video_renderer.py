@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+import stat
 import subprocess
 import sys
 import threading
@@ -101,9 +102,16 @@ class GstVideoRenderer(IVideoPlayer):
             while time.monotonic() < deadline and not os.path.exists(self._socket_path):
                 return_code = self._worker_process.poll()
                 if return_code is not None:
+                    hint = ""
+                    if return_code < 0:
+                        hint = (
+                            " A negative exit code indicates the worker was killed "
+                            "by a signal (e.g. SIGSEGV), which often points to a "
+                            "GTK4/Wayland display initialization failure."
+                        )
                     raise RuntimeError(
                         f"GStreamer worker exited before creating IPC socket "
-                        f"(exit code {return_code}).{self._worker_log_summary()}"
+                        f"(exit code {return_code}).{hint}{self._worker_log_summary()}"
                     )
                 time.sleep(_WORKER_SOCKET_POLL_SECONDS)
 
@@ -151,11 +159,62 @@ class GstVideoRenderer(IVideoPlayer):
         return " Recent worker output: " + " | ".join(self._worker_log_tail)
 
     def _worker_environment(self) -> dict[str, str]:
-        """Return the environment used for the GStreamer worker process."""
+        """Return the environment used for the GStreamer worker process.
+
+        The worker spawns GTK4 for ``gtk4paintablesink`` video rendering.  GTK4
+        defaults to the X11/Xwayland backend when both ``WAYLAND_DISPLAY`` and
+        ``DISPLAY`` are present, which causes green-screen / segfault crashes on
+        Raspberry Pi 5 under labwc.  Enforce ``GDK_BACKEND=wayland`` so GTK4
+        always uses native Wayland (X11 is not a supported target — see
+        .clinerules).
+        """
         env = os.environ.copy()
         if "GST_V4L2_ENABLE_PROBE" not in env and self._is_raspberry_pi_hardware():
             env["GST_V4L2_ENABLE_PROBE"] = "1"
+        env["GDK_BACKEND"] = "wayland"
+        if not env.get("WAYLAND_DISPLAY"):
+            detected = self._detect_wayland_display(env.get("XDG_RUNTIME_DIR", ""))
+            if detected:
+                env["WAYLAND_DISPLAY"] = detected
+                logger.info(
+                    "WAYLAND_DISPLAY was not set; detected Wayland socket '%s' "
+                    "in XDG_RUNTIME_DIR for the GStreamer worker.",
+                    detected,
+                )
+            else:
+                logger.warning(
+                    "GDK_BACKEND=wayland is set for the GStreamer worker but "
+                    "WAYLAND_DISPLAY is missing or empty and no Wayland socket "
+                    "was found in XDG_RUNTIME_DIR — GTK4 may fail to "
+                    "initialize. Check that the Wayland compositor is running and "
+                    "WAYLAND_DISPLAY is exported in the picframe service environment."
+                )
         return env
+
+    @staticmethod
+    def _detect_wayland_display(xdg_runtime_dir: str) -> str | None:
+        """Detect a Wayland socket in *xdg_runtime_dir*.
+
+        Scans the directory for entries named ``wayland-*`` that are actual
+        Unix-domain sockets.  Returns the socket name (e.g. ``wayland-0``) when
+        exactly one candidate is found, or ``None`` when the directory is
+        inaccessible, empty, or contains multiple candidates (ambiguous — leave
+        it to the environment).
+        """
+        if not xdg_runtime_dir:
+            return None
+        runtime_dir = Path(xdg_runtime_dir)
+        try:
+            candidates = [
+                p.name
+                for p in runtime_dir.iterdir()
+                if p.name.startswith("wayland-") and stat.S_ISSOCK(p.lstat().st_mode)
+            ]
+        except OSError:
+            return None
+        if len(candidates) == 1:
+            return candidates[0]
+        return None
 
     @staticmethod
     def _is_raspberry_pi_hardware() -> bool:
