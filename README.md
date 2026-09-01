@@ -43,7 +43,7 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
   - optional Home Assistant MQTT discovery and control
   - turn on/off display
   - next/prev/pause image
-  - shuffle play
+  - shuffle play (random, fewer repeats, age weighted)
   - toggle metadata overlays
   - toggle clock visibility
   - retrieve image meta info (exif, IPTC)
