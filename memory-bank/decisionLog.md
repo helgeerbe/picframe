@@ -105,5 +105,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   Mac writes keywords under Seq/li instead of the common Bag/li; Bag/li
   remains the preferred path when both are present (#725).
 
+- Use the GitHub MCP agent for all GitHub operations (issues, PRs, branches, commits, releases, comments, reviews, searches) on `helgeerbe/picframe`; prefer it over shell `gh` or manual web edits. Verified read-only live on 2026-09-01.
+
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

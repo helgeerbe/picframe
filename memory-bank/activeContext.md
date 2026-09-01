@@ -178,6 +178,9 @@ functional after the #719 fixes.
 - Continue using GitHub Issues/project board as the authoritative task state.
 - Keep code-change workflow ticketed: create/use a GitHub issue before code changes, include the issue number in every commit message, and reference the implementing commit hash when closing the issue.
 
+## Tooling Note
+- The GitHub MCP agent is now configured and verified for `helgeerbe/picframe` (read-only ops confirmed 2026-09-01: get_me, list_issues, list_branches, list_pull_requests). It is the preferred path for GitHub-side workflow steps; see `techContext.md` for supported operations and `systemPatterns.md` for the ticketed-workflow tooling note. Mutating operations are available but not yet exercised against a real change.
+
 ## Active Risks / Watch Items
 - Test reliability is environment-sensitive because display/media dependencies and Python version may differ from the target.
 - The local Python 3.14 stack exposed Starlette/AnyIO threadpool deadlocks; tests currently work around this without changing production paths.
