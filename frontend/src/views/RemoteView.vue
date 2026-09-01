@@ -1233,7 +1233,7 @@ const metadataFields = computed(() => {
                 </div>
                 <div
                   v-if="isShuffleModeMenuOpen"
-                  class="absolute right-0 top-14 z-30 w-44 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800"
+                  class="absolute bottom-full right-0 mb-2 z-30 w-44 overflow-hidden rounded-lg border border-gray-200 bg-white py-1 shadow-xl dark:border-gray-700 dark:bg-gray-800"
                   role="menu"
                   :aria-label="t('remote.controls.shuffleMode')"
                 >
