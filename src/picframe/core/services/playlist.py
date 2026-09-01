@@ -431,7 +431,12 @@ class PlaylistManager:
             weight = 0.5 ** (age_days / half_life)
             # u in (0, 1]; log(u) is always finite and negative.
             u = 1.0 - random.random()
-            key = math.log(u) / weight if weight > 0 else float("inf")
+            # As weight -> 0+ (very old media or tiny half_life), log(u)/weight
+            # tends to -inf, so the underflowed row sorts LAST (descending),
+            # preserving the recency bias. NB: not +inf, which would sort first
+            # and invert the intent; and not the log-space form log(u)-log(weight),
+            # which is a different function with the opposite ordering.
+            key = math.log(u) / weight if weight > 0 else float("-inf")
             keyed.append((key, row))
 
         # Descending: largest key (newest, highest weight) first.

@@ -813,6 +813,29 @@ def test_age_weighted_smaller_half_life_is_stronger_bias(
     assert strong_first_new > weak_first_new
 
 
+def test_age_weighted_weight_underflow_sorts_old_last(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When 0.5**(age/half_life) underflows to 0.0, the old row sorts LAST.
+
+    Regression test: the weight underflows to zero for very old media or a very
+    small half-life. The fallback key must be -inf (sorts last in descending
+    order), preserving the recency bias. The earlier +inf fallback sorted the
+    underflowed oldest row FIRST, inverting the intent.
+    """
+    now = 1_700_000_000.0
+    monkeypatch.setattr("picframe.core.services.playlist.time.time", lambda: now)
+    rows = [
+        {"id": "new", "last_modified": now - (1 * _DAY_SECONDS)},
+        {"id": "very-old", "last_modified": now - (3 * 365 * _DAY_SECONDS)},
+    ]
+
+    # 1-day half-life: 0.5 ** 1095 underflows to 0.0 for the 3-year-old row.
+    shuffled = PlaylistManager._shuffle_age_weighted(rows, recency_half_life_days=1.0)
+    assert shuffled[0]["id"] == "new"
+    assert shuffled[-1]["id"] == "very-old"
+
+
 def test_age_weighted_runs_before_portrait_pair_joining(
     mock_media_repo: Mock,
     monkeypatch: pytest.MonkeyPatch,
