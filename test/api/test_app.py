@@ -866,7 +866,7 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     mock_repo = MagicMock()
     mock_repo.get_all_app_config.return_value = {
         "model.shuffle": True,
-        "model.shuffle_mode": "standard",
+        "model.shuffle_mode": "random",
         "model.subdirectory": "holiday",
         "model.date_from": "",
         "model.date_to": "",

@@ -106,7 +106,7 @@ class HomeAssistantMqttAdapter:
         "shuffle_mode": (
             "Shuffle mode",
             "mdi:shuffle",
-            ("standard", "fewer_repeats"),
+            ("random", "fewer_repeats", "age_weighted"),
             ("model", "shuffle_mode"),
         ),
     }
@@ -222,7 +222,7 @@ class HomeAssistantMqttAdapter:
             section, key = config_key
             self._publish_entity_state(
                 entity_id,
-                self._config_value(f"{section}.{key}", "standard"),
+                self._config_value(f"{section}.{key}", "random"),
             )
 
     def _load_settings(self) -> MqttSettings:

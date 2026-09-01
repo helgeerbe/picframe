@@ -94,10 +94,10 @@ watch(mapCenter, invalidateMapSize)
     <div class="flex-grow w-full relative z-0">
       <l-map ref="map" v-model:zoom="zoom" :center="mapCenter" :use-global-leaflet="false" class="z-0">
         <l-tile-layer
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           layer-type="base"
-          name="CartoDB Voyager"
-          attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors &copy; <a href='https://carto.com/attributions'>CARTO</a>"
+          name="OpenStreetMap"
+          attribution="&copy; <a href='https://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
         ></l-tile-layer>
         <l-marker :lat-lng="mapCenter"></l-marker>
       </l-map>

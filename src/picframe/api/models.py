@@ -260,7 +260,10 @@ class ModelConfig(BaseModel):
     fade_time: float = 10.0
     update_interval: float = 2.0
     shuffle: bool = True
-    shuffle_mode: str = "standard"
+    shuffle_mode: str = "random"
+    # Age-weighted shuffle tuning (only used when shuffle_mode == "age_weighted").
+    recency_half_life_days: float = 365.0
+    sample_limit: int | None = None
     sort_cols: str = "fname ASC"
     image_attr: list[Any] = Field(
         default_factory=lambda: [

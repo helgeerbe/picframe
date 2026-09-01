@@ -933,6 +933,20 @@ function setBackgroundColor(event: Event) {
               <FieldRow :label="formatLabel('reshuffle_num')" :help="sectionHelp('model', 'reshuffle_num')">
                 <NumberField v-model="localConfig.model.reshuffle_num" :min="1" :step="1" />
               </FieldRow>
+              <FieldRow
+                v-if="localConfig.model.shuffle_mode === 'age_weighted'"
+                :label="formatLabel('recency_half_life_days')"
+                :help="sectionHelp('model', 'recency_half_life_days')"
+              >
+                <NumberField v-model="localConfig.model.recency_half_life_days" :min="0" :step="1" />
+              </FieldRow>
+              <FieldRow
+                v-if="localConfig.model.shuffle_mode === 'age_weighted'"
+                :label="formatLabel('sample_limit')"
+                :help="sectionHelp('model', 'sample_limit')"
+              >
+                <NumberField v-model="localConfig.model.sample_limit" :min="0" :step="1" />
+              </FieldRow>
               <FieldRow :label="formatLabel('sort_cols')" :help="sectionHelp('model', 'sort_cols')">
                 <SortRulesEditor v-model="localConfig.model.sort_cols" :columns="sortColumns" />
               </FieldRow>
