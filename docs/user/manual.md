@@ -664,7 +664,19 @@ enabled and produces text for the video, Picframe keeps that text visible for
 `viewer.show_text_tm`, fades it out, redraws clean image frames, and then starts
 the video. Manual next/previous navigation uses the same first-frame handoff as
 timed playback. If no overlay text is shown, video start remains immediate
-after the first-frame transition. The final transition frame is taken by
+after the first-frame transition.
+
+The `viewer.show_text_on_video` setting (default `False`) controls whether the
+metadata text overlay is shown for video media. When `False`, the playback
+engine suppresses only the metadata text overlay for video handoffs so
+GStreamer starts immediately without waiting for the `show_text_tm` fade-out;
+the clock overlay and status overlays are preserved. When `True`, video
+title-card text behaves like still-image text: the text fades in, remains
+visible for `viewer.show_text_tm`, fades out, and clean redraw frames drain
+before GStreamer starts. This setting is available in the Appearance tab under
+text overlay controls.
+
+The final transition frame is taken by
 seeking near the end of the video and decoding a short tail window through EOS,
 which makes the cached last frame match the actual video handoff more closely
 than sampling a fixed duration offset.

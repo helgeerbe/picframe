@@ -1,13 +1,20 @@
 # Active Context
 
 ## Current Focus
-The active branch is `fix/710-gst-worker-wayland-env`. Ticket #710 evolved from
-a thumbnail extraction fix into a GStreamer worker crash fix: the worker
-subprocess must enforce `GDK_BACKEND=wayland` so GTK4 never falls back to
-X11/Xwayland (which causes green-screen / segfault crashes on Raspberry Pi 5
-under labwc). The fix also adds display-env diagnostics logging in the worker
-and dynamic Wayland socket detection in the worker environment when `WAYLAND_DISPLAY` is missing.
-The previous ticketed change was #724 (PURGE_FILES directory cleanup).
+Ticket #726 is **closed** — merged via PR #733 (squash-merged into `v2-dev`,
+feature branch deleted). The `viewer.show_text_on_video` setting (default
+`False`) lets users opt out of the metadata text overlay on video media. When
+`False`, the playback engine suppresses only the metadata text overlay for
+video handoffs (clock and status overlays are preserved via
+`dataclasses.replace()`), so GStreamer starts immediately without waiting for
+the `show_text_tm` fade-out. The setting flows through `RendererConfig`,
+`default_config.yaml`, API models, MQTT Home Assistant discovery,
+`configSchema.json`, the `TextOverlayControls` Vue component, and i18n
+strings. Two follow-up bugfixes were included in the PR: (1) `execute()`
+ignored `show_text` from the incoming overlay, and (2)
+`CurrentMediaChangedEvent` clobbered `show_text=False` by rebuilding the
+overlay config with `show_text_enabled=True` from the renderer config. The
+previous ticketed change was #725 (XMP `Seq/li` subject parsing fallback).
 (Discussion #682): (1) the gradient sprite z-order/PIL/1px-width issues in
 `text_renderer.py`, (2) `/dev/shm/clock.txt` not showing because
 `clock_extra_source` was not propagated through `OverlayConfig` and the clock
@@ -17,8 +24,7 @@ to `last_modified` at indexing time. Issues #714/#715/#716 are now fully
 functional after the #719 fixes.
 
 ## Current Repo State
-- Branch: `v2-dev`; #719 is the latest local implementation context.
-- `.Codexrules` is a local instruction file and is ignored by git.
+- Branch: `main` (feature/726-show-text-on-video deleted after squash-merge to `v2-dev` via PR #733).
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and `infrastructure` architecture; broad legacy runtime modules were removed during #678 while reusable helpers such as matting/geocoding remain where still imported.
 
 ## Recently Established Context
@@ -118,6 +124,15 @@ functional after the #719 fixes.
   `dev (incl v2-dev)` and `main` rulesets so the owner can self-merge PRs
   without review, while other maintainers still require 1 approving review;
   CI status checks remain required for all actors.
+- Ticket #726 adds `viewer.show_text_on_video` (default `False`): when disabled,
+  the playback engine suppresses only the metadata text overlay for video
+  media via `dataclasses.replace()` so clock and status overlays are preserved
+  and GStreamer starts without waiting for `show_text_tm` fade-out. The setting
+  flows through `RendererConfig`, `default_config.yaml`, API `ViewerConfig`,
+  live-update keys in `app.py`, MQTT Home Assistant switch discovery,
+  `configSchema.json`, the `TextOverlayControls` Vue component, and en/de i18n
+  strings. Tests cover the renderer config mapping, playback handoff overlay
+  suppression, and pi3d renderer behavior.
 
 ## Immediate Next Steps
 - Preserve the #618 portrait-pair decisions: videos remain single-item fullscreen and pairs apply only to images.
@@ -162,6 +177,9 @@ functional after the #719 fixes.
 - Keep backend pytest green while Python 3.14 compatibility shims remain test-only.
 - Continue using GitHub Issues/project board as the authoritative task state.
 - Keep code-change workflow ticketed: create/use a GitHub issue before code changes, include the issue number in every commit message, and reference the implementing commit hash when closing the issue.
+
+## Tooling Note
+- The GitHub MCP agent is now configured and verified for `helgeerbe/picframe` (read-only ops confirmed 2026-09-01: get_me, list_issues, list_branches, list_pull_requests). It is the preferred path for GitHub-side workflow steps; see `techContext.md` for supported operations and `systemPatterns.md` for the ticketed-workflow tooling note. Mutating operations are available but not yet exercised against a real change.
 
 ## Active Risks / Watch Items
 - Test reliability is environment-sensitive because display/media dependencies and Python version may differ from the target.

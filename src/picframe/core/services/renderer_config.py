@@ -99,6 +99,9 @@ def build_renderer_config(
         edge_alpha=float(config_repository.get_app_config("viewer.edge_alpha", 0.5)),
         fit=config_repository.get_app_config_bool("viewer.fit", False),
         video_fit_display=config_repository.get_app_config_bool("viewer.video_fit_display", False),
+        show_text_on_video=config_repository.get_app_config_bool(
+            "viewer.show_text_on_video", False
+        ),
         video_extensions=config_repository.get_app_config(
             "model.video_extensions", [".mp4", ".mov", ".avi", ".mkv"]
         ),

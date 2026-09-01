@@ -111,14 +111,36 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `dev (incl v2-dev)` and `main` rulesets so the owner can self-merge PRs
   without review, while other maintainers still require 1 approving review;
   CI status checks remain required for all actors.
+- Ticket #724 purge orphaned directory rows: `PURGE_FILES` now calls
+  `PlaylistManager.purge_orphaned_directories()`, which queries active
+  directory IDs from the media repository and removes directory rows in the
+  config repository that no longer have any non-deleted media referencing them.
+  - Ticket #725 XMP subject Seq/li fallback: `ImageMetadataStrategy._get_xmp_data()`
+  now extracts XMP subject keywords from either Bag/li (common) or Seq/li
+  (ACDSee Photo Studio on Mac) via a new static `_extract_xmp_subject_tags()`
+  helper, and handles both list and single-string `li` values. Tests cover
+  Bag/li list, Seq/li list, Bag/li single string, Seq/li single string,
+  missing-both, and Bag-preferred-over-Seq cases. The fix preserves existing
+  Bag/li behavior as the first-choice path.
+- Ticket #726 `viewer.show_text_on_video` (default `False`): when disabled,
+  the playback engine suppresses only the metadata text overlay for video
+  media via `dataclasses.replace()` so clock and status overlays are preserved
+  and GStreamer starts without waiting for `show_text_tm` fade-out. The setting
+  flows through `RendererConfig`, `default_config.yaml`, API `ViewerConfig`,
+  live-update keys in `app.py`, MQTT Home Assistant switch discovery,
+  `configSchema.json`, the `TextOverlayControls` Vue component, and en/de i18n
+  strings. Tests cover the renderer config mapping, playback handoff overlay
+  suppression, and pi3d renderer behavior. Two bugfixes were included: (1)
+  `Pi3dRenderer.execute()` now copies `show_text` from the incoming overlay, and
+  (2) `_handle_state_event` preserves `show_text=False` through
+  `CurrentMediaChangedEvent` instead of resetting it from config. Merged via
+  PR #733 (squash-merged into `v2-dev`, feature branch deleted).
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
 - Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
 - #691 is merged into `v2-dev`, pushed to `origin/v2-dev`, and closed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
 - #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
-- #710 GStreamer worker Wayland env fix is in progress on branch `fix/710-gst-worker-wayland-env`: worker env enforces `GDK_BACKEND=wayland`, worker logs display env vars before GTK4 init, crash detection hints at display init failure, and the worker dynamically detects a single `wayland-*` socket in `XDG_RUNTIME_DIR` when `WAYLAND_DISPLAY` is missing. Tests added. Pending: quality gates, commit, push, PR, and user testing.
-
 ## Next
 - Continue caps-driven hardware capability discovery in the GStreamer worker, with Pi V4L2 probing enabled before worker startup.
 - Validate more H.264 1080p60 and HEVC container variants before relaxing additional guards.
@@ -174,3 +196,9 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   passed with 128 tests; `mypy` passed clean on 5 source files; `ruff check`
   and `ruff format --check` passed on 8 files; `git diff --check` passed.
   Remaining: commit, push, create PR, close ticket.
+- Latest #725 verification: targeted
+  `.venv/bin/python -m pytest test/core/metadata/test_image_strategy.py -v`
+  passed with 14 tests; `mypy` passed clean on 2 source files; `ruff check`
+  and `ruff format --check` passed on 2 files. Remaining: commit, force-push
+  to update PR #732, close ticket.
+- Latest #726 verification: `.venv/bin/python -m pytest test/core/renderers/test_pi3d_renderer.py` passed with 56 tests; `ruff check` and `ruff format --check` passed on 2 files; `mypy` passed clean. PR #733 squash-merged into `v2-dev`, issue #726 closed, feature branch deleted.

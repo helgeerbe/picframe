@@ -27,6 +27,10 @@
 - Hardware decoding decisions should be based on GStreamer registry/caps negotiation, not board-name hardcoding.
 - Software decode fallback is capped by `viewer.max_software_decode_resolution`.
 
+## Tooling / GitHub Access
+- The GitHub MCP agent is configured and verified for `helgeerbe/picframe`. Use it for all GitHub operations: issues (create/update/read/close, sub-issues, labels, fields), pull requests (create/read/update/merge, review comments, reviews, check runs, branch update), branches (create/list), commits (list/get), tags/releases, file CRUD, code/commit/issue/PR/repo/user searches, and Copilot review requests.
+- Prefer the GitHub MCP agent over shell `gh` or manual web edits for GitHub-side workflow steps. Read-only operations (get_me, list_issues, list_branches, list_pull_requests) were verified live on 2026-09-01; mutating operations are available per the tool schema but should be confirmed against a real change before relying on them for a release.
+
 ## Verification Notes
 - Frontend build passes with `npm run build`; the 2026-06-19 #695 check emitted sandbox stream-fd warnings before Vite completed successfully.
 - Backend pytest passes in the local Python 3.14.4 `.venv`: `.venv/bin/python -m pytest` reported 640 passed, 1 GI deprecation warning on 2026-06-19.

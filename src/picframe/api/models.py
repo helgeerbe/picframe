@@ -205,6 +205,7 @@ class ViewerConfig(BaseModel):
     text_y_margin: int = 0
     fit: bool = False
     video_fit_display: bool = False
+    show_text_on_video: bool = False
     max_software_decode_resolution: str = "1280x720"
     kenburns: bool = False
     display_x: int = 0

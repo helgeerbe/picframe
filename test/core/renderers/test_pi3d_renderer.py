@@ -657,6 +657,37 @@ def test_renderer_pause_resume_preserves_visible_text_timer(
     assert renderer._animation_controller._text_timer == 101.0
 
 
+def test_renderer_execute_respects_show_text_false_from_overlay(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    """Renderer must copy ``show_text`` from the incoming overlay (#726).
+
+    When the playback engine sends ``show_text=False`` for video media,
+    the renderer must update its overlay config so text is suppressed.
+    """
+    renderer = Pi3dRenderer(config)
+    renderer.start()
+    renderer._overlay_config = OverlayConfig(show_text=True, text_string="Photo")
+    renderer._animation_controller._show_text = True
+
+    mock_image_renderer.execute.return_value = (True, 0.0, 0.0)
+    renderer.execute(
+        RenderCommand(
+            image_path="/cache/video.1.frame",
+            overlay=OverlayConfig(show_text=False, text_string=""),
+            render_action=RENDER_VIDEO_FIRST_FRAME,
+            transition_token=1,
+        )
+    )
+
+    assert renderer._overlay_config.show_text is False
+    assert renderer._overlay_config.text_string == ""
+
+
 @patch("time.sleep")
 def test_renderer_video_first_frame_completion_publishes_transition_token(
     mock_sleep: MagicMock,
@@ -737,6 +768,53 @@ def test_renderer_current_media_event_does_not_restart_same_single_overlay_text(
     assert renderer._animation_controller._show_text is False
     assert renderer._animation_controller._frames_to_render == 0
     mock_text_renderer.update_config.assert_not_called()
+
+
+def test_renderer_current_media_event_preserves_show_text_false_for_video(
+    config: RendererConfig,
+    mock_pi3d: MagicMock,
+    mock_image_renderer: MagicMock,
+    mock_text_renderer: MagicMock,
+    mock_clock_renderer: MagicMock,
+) -> None:
+    """CurrentMediaChangedEvent must not clobber show_text=False (#726).
+
+    When ``execute()`` sets ``show_text=False`` for video media, a subsequent
+    ``CurrentMediaChangedEvent`` must preserve that value instead of
+    resetting it to ``show_text_enabled=True`` from the config.
+    """
+    text_config = replace(
+        config,
+        show_text_enabled=True,
+        text_overlay_format="name",
+    )
+    renderer = Pi3dRenderer(text_config)
+    renderer.start()
+    # Simulate a video command that suppresses text overlay.
+    renderer._overlay_config = OverlayConfig(
+        show_clock=renderer._config.show_clock,
+        show_text=False,
+        text_string="",
+    )
+    renderer._animation_controller._show_text = False
+
+    media_item = MediaItem(
+        id=2,
+        filepath="/path/to/clip.mp4",
+        media_type=MediaType.VIDEO,
+        filename="clip.mp4",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+
+    renderer._handle_state_event(
+        CurrentMediaChangedEvent(media_item=DisplayItem.single(media_item))
+    )
+
+    assert renderer._overlay_config.show_text is False
+    assert renderer._overlay_config.text_string == "clip.mp4"
+    mock_text_renderer.update_config.assert_called_once_with(renderer._overlay_config)
 
 
 def test_renderer_resume_forces_redraw_frames(

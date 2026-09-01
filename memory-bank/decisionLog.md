@@ -38,6 +38,9 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Keep black-gap cleanup video-only: generated matted video transition frames may replace source-influenced pixels outside `content_rect` with a black-source render, but normal still-image matting remains unchanged.
 - Enable `GST_V4L2_ENABLE_PROBE=1` for the GStreamer worker on Raspberry Pi/Compute Module hardware so V4L2 hardware decoder elements are discoverable before Gst initializes.
 - Treat VLC as a diagnostic reference only: VLC's FFmpeg DRM/V4L2-request plus `wl_dmabuf` success does not relax Picframe's GStreamer guards until an equivalent GStreamer path is validated. HEVC Main 8-bit 60 fps support is path-specific: validated MKV may use hardware playbin, while MOV/QuickTime 60 fps remains guarded.
+- `viewer.show_text_on_video` (default `False`) gates the metadata text overlay on video media. When `False`, the playback engine suppresses only the text overlay for video handoffs via `dataclasses.replace()` so clock and status overlays are preserved and GStreamer starts without waiting for `show_text_tm` fade-out. When `True`, video title-card text behaves like still-image text (fade-in, `show_text_tm`, fade-out, clean redraw, then GStreamer starts).
+- `Pi3dRenderer.execute()` must copy `show_text` from the incoming `OverlayConfig` so video media suppression reaches the renderer's overlay state (#726 bugfix).
+- `Pi3dRenderer._handle_state_event` must preserve the current `show_text` value through `CurrentMediaChangedEvent` by passing it to `_build_overlay_config()` instead of resetting it from `self._config.show_text_enabled` (#726 bugfix).
 - Treat failed `ffprobe`, invalid video probe JSON, or absence of a video stream as unplayable at indexing time. Such videos are excluded from active playlists and stale cache rows are marked inactive; transition-frame cache failure is best-effort only and does not exclude an otherwise playable video.
 - The GStreamer worker must preflight URI discoverability before creating a playback sink, and an explicit render rectangle takes precedence over sink fullscreen requests.
 - Use Vue 3, Pinia, Vue Router, Tailwind CSS, vue-i18n, and Leaflet for the SPA.
@@ -97,6 +100,12 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   directory IDs from the media repository and removes directory rows in the
   config repository that no longer have any non-deleted media referencing them
   (#724).
+- XMP subject parsing must accept both Bag/li and Seq/li containers, and
+  handle single-string `li` values as well as lists. ACDSee Photo Studio on
+  Mac writes keywords under Seq/li instead of the common Bag/li; Bag/li
+  remains the preferred path when both are present (#725).
+
+- Use the GitHub MCP agent for all GitHub operations (issues, PRs, branches, commits, releases, comments, reviews, searches) on `helgeerbe/picframe`; prefer it over shell `gh` or manual web edits. Verified read-only live on 2026-09-01.
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

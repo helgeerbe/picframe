@@ -207,6 +207,7 @@ class RendererConfig:
     edge_alpha: float = 0.5
     fit: bool = False
     video_fit_display: bool = False
+    show_text_on_video: bool = False
     video_extensions: list[str] = field(default_factory=lambda: [".mp4", ".mov", ".avi", ".mkv"])
     mat_images: float | bool | str = 0.01
     mat_type: str | None = None

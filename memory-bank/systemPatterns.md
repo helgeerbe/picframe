@@ -95,6 +95,10 @@
 - Hardware input mappings use BCM pin numbers and reject duplicate pins, unsupported actions, commands that require payloads, and unsupported legacy-style `WAKE`/`SLEEP` selections. PIR screen power uses `DISPLAY_ON`/`DISPLAY_OFF`.
 - PIR no-motion grace periods are core service timers (`no_motion_delay_seconds`), not GPIO adapter behavior. Renewed `motion_detected` cancels a pending delayed `no_motion` command.
 
+## Ticketed Workflow Tooling
+- GitHub-side workflow steps are performed through the GitHub MCP agent against `helgeerbe/picframe`, not shell `gh` or manual web edits: issue create/update/close, PR create/merge, branch create, review comments, commit listing, and releases.
+- See `memory-bank/techContext.md` for the full set of supported operations and the verification state.
+
 ## Testing And Quality
 - TDD is expected for new work: adapt or add tests with the implementation.
 - Quality gates are pytest, mypy strict mode, ruff, frontend type checks, and relevant integration/manual checks.

@@ -571,6 +571,7 @@ class PlaybackEngine:
             config.edge_alpha,
             config.fit,
             config.video_fit_display,
+            config.show_text_on_video,
             tuple(config.video_extensions),
             config.mat_images,
             config.mat_type,
@@ -675,6 +676,22 @@ class PlaybackEngine:
                 )
             )
         return bool(self._config.get("video_fit_display", False))
+
+    def _show_text_on_video(self) -> bool:
+        """Return whether metadata text overlays should be shown on video media.
+
+        When False (default), video handoff skips the metadata text overlay so
+        GStreamer starts immediately without waiting for the ``show_text_tm``
+        text fade-out period (issue #726).
+        """
+        if self._config_repository:
+            return bool(
+                self._config_repository.get_app_config_bool(
+                    "viewer.show_text_on_video",
+                    bool(self._config.get("show_text_on_video", False)),
+                )
+            )
+        return bool(self._config.get("show_text_on_video", False))
 
     def _video_host_background(self) -> tuple[float, ...] | None:
         if self._renderer_config is None:
@@ -872,6 +889,18 @@ class PlaybackEngine:
         )
 
         text_strings = tuple(self._generate_text_string(item) for item in display_item.items)
+
+        # Issue #726: suppress metadata text overlay for video media when
+        # viewer.show_text_on_video is False (default). This lets GStreamer
+        # start immediately without waiting for the show_text_tm fade-out.
+        # Clock overlay is preserved; status_text is preserved by
+        # _overlay_config_for_current_status() via dataclasses.replace().
+        is_video = self._is_video_media(display_item.primary, self._video_extensions())
+        suppress_text_on_video = is_video and not self._show_text_on_video()
+        if suppress_text_on_video:
+            show_text = False
+            text_strings = ()
+
         return OverlayConfig(
             show_clock=show_clock,
             clock_format=clock_format,
