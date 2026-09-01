@@ -120,7 +120,8 @@
       "shuffleOff": "Shuffle off",
       "shuffleMode": "Shuffle mode",
       "shuffleModeStandard": "Standard",
-      "shuffleModeFewerRepeats": "Fewer repeats"
+      "shuffleModeFewerRepeats": "Fewer repeats",
+      "shuffleModeAgeWeighted": "Age weighted"
     },
     "overlays": {
       "title": "Text Overlays",
@@ -435,7 +436,9 @@
       "fade_time": "default=10.0, change time during which slides overlap - can be changed by Appearance or MQTT/Home Assistant",
       "update_interval": "default=2.0, time in seconds to wait between two consecutive scans for new files",
       "shuffle": "default=True, shuffle on reloading image files - can be changed by Remote or MQTT/Home Assistant",
-      "shuffle_mode": "default=standard, shuffle mode used when shuffle is enabled. Choices: standard, fewer_repeats.",
+      "shuffle_mode": "default=standard, shuffle mode used when shuffle is enabled. Choices: standard, fewer_repeats, age_weighted.",
+      "recency_half_life_days": "default=365, only used by age_weighted shuffle. Controls how fast the recency bias decays; smaller values bias more strongly toward newer media (days).",
+      "sample_limit": "default=empty, only used by age_weighted shuffle. Keeps only the first N photos after the weighted sort, forcing more frequent reshuffles on large libraries; empty or 0 means unlimited.",
       "sort_cols": "default='fname ASC' can be any columns in the table with optional ASC or DESC separated by commas fname, last_modified, file_id, orientation, exif_datetime, f_number, exposure_time, iso, focal_length, make, model, lens, rating, latitude, longitude, width, height, title, caption, tags, is_portrait, location",
       "image_attr": "metadata attributes exposed to UI/MQTT payloads. \"PICFRAME GPS\" retrieves GPS lon/lat, \"PICFRAME LOCATION\" retrieves reverse geocoding (load_geoloc must be True)",
       "load_geoloc": "get location information from open street map NB if you switch this on (recommended)",

@@ -163,6 +163,8 @@ PUBLIC_WORKFLOW_KEYS = {
     "model": {
         "shuffle",
         "shuffle_mode",
+        "recency_half_life_days",
+        "sample_limit",
         "subdirectory",
         "date_from",
         "date_to",

@@ -228,8 +228,16 @@
       "type": "select",
       "options": [
         "standard",
-        "fewer_repeats"
+        "fewer_repeats",
+        "age_weighted"
       ]
+    },
+    "recency_half_life_days": {
+      "type": "float"
+    },
+    "sample_limit": {
+      "type": "integer",
+      "nullable": true
     },
     "sort_cols": {
       "type": "string"

@@ -6,6 +6,7 @@ import pytest
 
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaType
 from picframe.core.models.playlist import (
+    SHUFFLE_MODE_AGE_WEIGHTED,
     SHUFFLE_MODE_FEWER_REPEATS,
     SHUFFLE_MODE_STANDARD,
     PlaylistCriteria,
@@ -685,3 +686,234 @@ def test_purge_orphaned_directories_invokes_config_repo_with_active_ids(
     mock_media_repo.get_active_directory_ids.assert_called_once_with()
     config_repo.purge_orphaned_directories.assert_called_once_with(active_ids)
     assert result == 42
+
+
+# ---------------------------------------------------------------------------
+# Age-weighted shuffle mode (ticket #723)
+# ---------------------------------------------------------------------------
+
+_DAY_SECONDS = 24 * 60 * 60
+
+
+def test_age_weighted_places_newer_media_before_older_media(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Newer files should appear earlier on average than older files."""
+    now = 1_700_000_000.0
+    monkeypatch.setattr("picframe.core.services.playlist.time.time", lambda: now)
+    rows = [
+        {"id": "old", "last_modified": now - (10 * 365 * _DAY_SECONDS)},
+        {"id": "new", "last_modified": now - (1 * _DAY_SECONDS)},
+    ]
+
+    first_is_new = 0
+    trials = 200
+    for _ in range(trials):
+        shuffled = PlaylistManager._shuffle_age_weighted(rows, recency_half_life_days=365.0)
+        if shuffled[0]["id"] == "new":
+            first_is_new += 1
+
+    # With a 10-year age gap and a 1-year half-life the bias is very strong.
+    assert first_is_new > int(trials * 0.9)
+
+
+def test_age_weighted_preserves_all_rows_without_sample_limit() -> None:
+    rows = [{"id": i, "last_modified": float(i)} for i in range(5)]
+    shuffled = PlaylistManager._shuffle_age_weighted(rows, recency_half_life_days=365.0)
+    assert {row["id"] for row in shuffled} == {0, 1, 2, 3, 4}
+    assert len(shuffled) == 5
+
+
+def test_age_weighted_sample_limit_truncates_to_subset() -> None:
+    rows = [{"id": i, "last_modified": float(i)} for i in range(10)]
+    shuffled = PlaylistManager._shuffle_age_weighted(
+        rows, recency_half_life_days=365.0, sample_limit=3
+    )
+    assert len(shuffled) == 3
+    assert {row["id"] for row in shuffled}.issubset(set(range(10)))
+
+
+def test_age_weighted_sample_limit_zero_or_negative_means_unlimited() -> None:
+    rows = [{"id": i, "last_modified": float(i)} for i in range(4)]
+    assert len(PlaylistManager._shuffle_age_weighted(rows, 365.0, sample_limit=0)) == 4
+    assert len(PlaylistManager._shuffle_age_weighted(rows, 365.0, sample_limit=-5)) == 4
+
+
+def test_age_weighted_handles_empty_and_single_rows() -> None:
+    assert PlaylistManager._shuffle_age_weighted([], 365.0) == []
+    single = [{"id": 1, "last_modified": 1.0}]
+    assert PlaylistManager._shuffle_age_weighted(single, 365.0) == single
+
+
+def test_age_weighted_prefers_exif_datetime_over_last_modified(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """exif_datetime (capture time) should drive age, not last_modified."""
+    now = 1_700_000_000.0
+    monkeypatch.setattr("picframe.core.services.playlist.time.time", lambda: now)
+    rows = [
+        # Old capture time, recent mtime -> should be treated as OLD.
+        {"id": "old-capture", "exif_datetime": now - (2000 * _DAY_SECONDS), "last_modified": now},
+        # Recent capture time, old mtime -> should be treated as NEW.
+        {"id": "new-capture", "exif_datetime": now - (1 * _DAY_SECONDS), "last_modified": 1.0},
+    ]
+
+    first_new = 0
+    trials = 100
+    for _ in range(trials):
+        shuffled = PlaylistManager._shuffle_age_weighted(rows, 365.0)
+        if shuffled[0]["id"] == "new-capture":
+            first_new += 1
+    assert first_new > int(trials * 0.9)
+
+
+def test_age_weighted_missing_timestamps_treated_as_newest(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Rows with no timestamp at all are age 0 (newest), so appear early."""
+    now = 1_700_000_000.0
+    monkeypatch.setattr("picframe.core.services.playlist.time.time", lambda: now)
+    rows = [
+        {"id": "no-ts"},
+        {"id": "old", "last_modified": now - (2000 * _DAY_SECONDS)},
+    ]
+    first_no_ts = 0
+    trials = 100
+    for _ in range(trials):
+        shuffled = PlaylistManager._shuffle_age_weighted(rows, 365.0)
+        if shuffled[0]["id"] == "no-ts":
+            first_no_ts += 1
+    assert first_no_ts > int(trials * 0.9)
+
+
+def test_age_weighted_smaller_half_life_is_stronger_bias(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A smaller half-life should bias more aggressively toward newer media."""
+    now = 1_700_000_000.0
+    monkeypatch.setattr("picframe.core.services.playlist.time.time", lambda: now)
+    rows = [
+        {"id": "old", "last_modified": now - (60 * _DAY_SECONDS)},
+        {"id": "new", "last_modified": now - (1 * _DAY_SECONDS)},
+    ]
+    trials = 200
+
+    strong_first_new = sum(
+        1
+        for _ in range(trials)
+        if PlaylistManager._shuffle_age_weighted(rows, recency_half_life_days=7.0)[0]["id"] == "new"
+    )
+    weak_first_new = sum(
+        1
+        for _ in range(trials)
+        if PlaylistManager._shuffle_age_weighted(rows, recency_half_life_days=3650.0)[0]["id"]
+        == "new"
+    )
+    # A 7-day half-life biases far more strongly than a 10-year half-life.
+    assert strong_first_new > weak_first_new
+
+
+def test_age_weighted_runs_before_portrait_pair_joining(
+    mock_media_repo: Mock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Age-weighted shuffle operates on raw rows, before portrait-pair joining."""
+    now = 1_700_000_000.0
+    monkeypatch.setattr("picframe.core.services.playlist.time.time", lambda: now)
+    rows = [
+        {
+            "id": 1,
+            "filepath": "/path/to/portrait_new.jpg",
+            "filename": "portrait_new.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": now - (1 * _DAY_SECONDS),
+            "is_portrait": 1,
+        },
+        {
+            "id": 2,
+            "filepath": "/path/to/portrait_old.jpg",
+            "filename": "portrait_old.jpg",
+            "directory_id": 1,
+            "media_type": "image",
+            "file_size": 1024,
+            "last_modified": now - (365 * _DAY_SECONDS),
+            "is_portrait": 1,
+        },
+    ]
+    mock_media_repo.query_media.return_value = rows
+    config_repo = Mock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.shuffle_mode": SHUFFLE_MODE_AGE_WEIGHTED,
+        "model.recency_half_life_days": 30.0,
+        "model.sample_limit": None,
+        "model.pic_dir": "/pictures",
+    }.get(key, default)
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "model.shuffle": True,
+        "model.portrait_pairs": True,
+    }.get(key, default)
+
+    manager = PlaylistManager(mock_media_repo, config_repo)
+    manager.build_playlist()
+
+    criteria = mock_media_repo.query_media.call_args[0][0]
+    assert criteria.shuffle_mode == SHUFFLE_MODE_AGE_WEIGHTED
+    assert criteria.recency_half_life_days == 30.0
+    assert criteria.sample_limit is None
+    # The newer portrait should be in the first display slot.
+    assert manager._display_playlist[0][0]["id"] == 1
+
+
+def test_age_weighted_criteria_reads_config_keys(mock_media_repo: Mock) -> None:
+    rows = [{"id": 1, "filepath": "/p/a.jpg", "last_modified": 1.0}]
+    mock_media_repo.query_media.return_value = rows
+    config_repo = Mock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.shuffle_mode": SHUFFLE_MODE_AGE_WEIGHTED,
+        "model.recency_half_life_days": 90.0,
+        "model.sample_limit": 50,
+        "model.pic_dir": "/pictures",
+    }.get(key, default)
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "model.shuffle": True,
+        "model.portrait_pairs": False,
+    }.get(key, default)
+
+    manager = PlaylistManager(mock_media_repo, config_repo)
+    manager.build_playlist()
+
+    criteria = mock_media_repo.query_media.call_args[0][0]
+    assert criteria.shuffle_mode == SHUFFLE_MODE_AGE_WEIGHTED
+    assert criteria.recency_half_life_days == 90.0
+    assert criteria.sample_limit == 50
+    assert manager._shuffle_mode == SHUFFLE_MODE_AGE_WEIGHTED
+
+
+def test_age_weighted_does_not_use_sql_random_order_clause() -> None:
+    """age_weighted shuffles in Python, so the SQL order clause must avoid RANDOM()."""
+    from picframe.core.repositories.sqlite_media import SQLiteMediaRepository
+
+    clause = SQLiteMediaRepository._build_order_clause(
+        PlaylistCriteria(shuffle=True, shuffle_mode=SHUFFLE_MODE_AGE_WEIGHTED)
+    )
+    assert "RANDOM()" not in clause
+    assert "m.filepath ASC" in clause
+
+
+def test_age_weighted_default_criteria_values() -> None:
+    criteria = PlaylistCriteria(shuffle_mode=SHUFFLE_MODE_AGE_WEIGHTED)
+    assert criteria.recency_half_life_days == 365.0
+    assert criteria.sample_limit is None
+
+
+def test_normalize_shuffle_mode_accepts_age_weighted() -> None:
+    from picframe.core.models.playlist import normalize_shuffle_mode
+
+    assert normalize_shuffle_mode("age_weighted") == SHUFFLE_MODE_AGE_WEIGHTED
+    assert SHUFFLE_MODE_AGE_WEIGHTED in {
+        SHUFFLE_MODE_STANDARD,
+        SHUFFLE_MODE_FEWER_REPEATS,
+        SHUFFLE_MODE_AGE_WEIGHTED,
+    }

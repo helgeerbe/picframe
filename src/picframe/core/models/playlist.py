@@ -4,9 +4,11 @@ from dataclasses import dataclass
 
 SHUFFLE_MODE_STANDARD = "standard"
 SHUFFLE_MODE_FEWER_REPEATS = "fewer_repeats"
+SHUFFLE_MODE_AGE_WEIGHTED = "age_weighted"
 SUPPORTED_SHUFFLE_MODES = {
     SHUFFLE_MODE_STANDARD,
     SHUFFLE_MODE_FEWER_REPEATS,
+    SHUFFLE_MODE_AGE_WEIGHTED,
 }
 
 
@@ -33,3 +35,10 @@ class PlaylistCriteria:
     shuffle_mode: str = SHUFFLE_MODE_STANDARD
     sort_cols: str = "fname ASC"
     recent_n: int = 0
+    # Age-weighted shuffle tuning. ``recency_half_life_days`` controls how fast
+    # the recency bias decays (smaller = stronger bias toward newer media); only
+    # used when ``shuffle_mode == "age_weighted"``. ``sample_limit`` optionally
+    # truncates the weighted permutation to the most-recency-biased subset, which
+    # forces more frequent reshuffles on large libraries.
+    recency_half_life_days: float = 365.0
+    sample_limit: int | None = None

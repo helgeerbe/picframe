@@ -328,6 +328,9 @@ def test_order_clause_avoids_sql_random_for_standard_shuffle() -> None:
     fewer_repeats_clause = SQLiteMediaRepository._build_order_clause(
         PlaylistCriteria(shuffle=True, shuffle_mode="fewer_repeats")
     )
+    age_weighted_clause = SQLiteMediaRepository._build_order_clause(
+        PlaylistCriteria(shuffle=True, shuffle_mode="age_weighted")
+    )
     invalid_clause = SQLiteMediaRepository._build_order_clause(
         PlaylistCriteria(shuffle=True, shuffle_mode="unknown")
     )
@@ -343,6 +346,8 @@ def test_order_clause_avoids_sql_random_for_standard_shuffle() -> None:
     assert "m.filepath ASC" in standard_clause
     assert "RANDOM()" not in fewer_repeats_clause
     assert "m.filepath ASC" in fewer_repeats_clause
+    assert "RANDOM()" not in age_weighted_clause
+    assert "m.filepath ASC" in age_weighted_clause
     assert "RANDOM()" not in invalid_clause
     assert "m.filepath ASC" in invalid_clause
     assert "RANDOM()" not in sorted_clause

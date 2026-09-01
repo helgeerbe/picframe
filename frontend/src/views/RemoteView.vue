@@ -97,12 +97,14 @@ const MAX_IMAGE_AUTO_RETRIES = 2
 
 const shuffleModes = [
   { value: 'standard', labelKey: 'remote.controls.shuffleModeStandard' },
-  { value: 'fewer_repeats', labelKey: 'remote.controls.shuffleModeFewerRepeats' }
+  { value: 'fewer_repeats', labelKey: 'remote.controls.shuffleModeFewerRepeats' },
+  { value: 'age_weighted', labelKey: 'remote.controls.shuffleModeAgeWeighted' }
 ] as const
 type ShuffleMode = typeof shuffleModes[number]['value']
 
 const normalizeShuffleMode = (value: unknown): ShuffleMode => {
-  return value === 'fewer_repeats' ? 'fewer_repeats' : 'standard'
+  if (value === 'fewer_repeats' || value === 'age_weighted') return value
+  return 'standard'
 }
 
 const closeShuffleModeMenu = () => {

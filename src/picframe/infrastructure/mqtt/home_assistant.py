@@ -106,7 +106,7 @@ class HomeAssistantMqttAdapter:
         "shuffle_mode": (
             "Shuffle mode",
             "mdi:shuffle",
-            ("standard", "fewer_repeats"),
+            ("standard", "fewer_repeats", "age_weighted"),
             ("model", "shuffle_mode"),
         ),
     }

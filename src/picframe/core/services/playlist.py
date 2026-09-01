@@ -7,6 +7,7 @@ handles shuffling logic, and maintains playback history.
 """
 
 import logging
+import math
 import os
 import random
 import time
@@ -16,6 +17,7 @@ from picframe.core.events.dto import FileChangeEvent
 from picframe.core.events.interfaces import IEventPublisher
 from picframe.core.models.media import DisplayItem, DisplayLayout, MediaItem, MediaType
 from picframe.core.models.playlist import (
+    SHUFFLE_MODE_AGE_WEIGHTED,
     SHUFFLE_MODE_FEWER_REPEATS,
     SHUFFLE_MODE_STANDARD,
     PlaylistCriteria,
@@ -29,6 +31,17 @@ logger = logging.getLogger(__name__)
 
 _FILE_MTIME_TOLERANCE = 1e-6
 _FEWER_REPEATS_CANDIDATES = 12
+
+
+def _config_optional_int(value: Any) -> int | None:
+    """Coerce a config value to an optional positive int (None/<=0 means unset)."""
+    if value is None or value == "":
+        return None
+    try:
+        parsed = int(float(value))
+    except (TypeError, ValueError):
+        return None
+    return parsed if parsed > 0 else None
 
 
 class PlaylistManager:
@@ -88,6 +101,12 @@ class PlaylistManager:
                 self._playlist = self._shuffle_standard_rows(
                     self._playlist,
                     criteria.recent_n,
+                )
+            elif self._shuffle and self._shuffle_mode == SHUFFLE_MODE_AGE_WEIGHTED:
+                self._playlist = self._shuffle_age_weighted(
+                    self._playlist,
+                    criteria.recency_half_life_days,
+                    criteria.sample_limit,
                 )
         else:
             self._playlist = self._media_repo.get_all_media()
@@ -372,6 +391,74 @@ class PlaylistManager:
         random.shuffle(older_rows)
         return recent_rows + older_rows
 
+    @staticmethod
+    def _shuffle_age_weighted(
+        playlist: list[dict[str, Any]],
+        recency_half_life_days: float,
+        sample_limit: int | None = None,
+    ) -> list[dict[str, Any]]:
+        """Order rows by recency-biased weighted sampling (Efraimidis-Spirakis).
+
+        Newer media (smaller age) get larger weights and therefore appear
+        earlier on average, while older media still appears, just less
+        frequently. ``sample_limit`` truncates the result to the most-recency-
+        biased subset before portrait-pair joining, which forces more frequent
+        reshuffles on large libraries.
+
+        The weight decays as ``0.5 ** (age_days / recency_half_life_days)`` so a
+        file exactly one half-life old is half as likely to surface early as a
+        brand-new file. Age is derived from ``exif_datetime`` when available,
+        falling back to ``last_modified``; rows missing both are treated as
+        age 0 (newest).
+
+        Note: the Efraimidis-Spirakis key ``log(u) / weight`` selects the largest
+        keys for weighted sampling without replacement, so we sort descending
+        (newer first). This matches the ticket's stated intent; the ticket text
+        described the sort as "ascending" but that ordering would place newer
+        media last, which contradicts the documented goal.
+        """
+        if len(playlist) <= 1:
+            return list(playlist)
+
+        now = time.time()
+        seconds_per_day = 24 * 60 * 60
+        half_life = recency_half_life_days if recency_half_life_days > 0 else 365.0
+
+        keyed: list[tuple[float, dict[str, Any]]] = []
+        for row in playlist:
+            timestamp = PlaylistManager._row_age_timestamp(row)
+            age_days = max(0.0, (now - timestamp) / seconds_per_day) if timestamp > 0 else 0.0
+            weight = 0.5 ** (age_days / half_life)
+            # u in (0, 1]; log(u) is always finite and negative.
+            u = 1.0 - random.random()
+            key = math.log(u) / weight if weight > 0 else float("inf")
+            keyed.append((key, row))
+
+        # Descending: largest key (newest, highest weight) first.
+        keyed.sort(key=lambda pair: pair[0], reverse=True)
+        ordered = [row for _, row in keyed]
+
+        if sample_limit is not None and sample_limit > 0:
+            ordered = ordered[:sample_limit]
+        return ordered
+
+    @staticmethod
+    def _row_age_timestamp(row: dict[str, Any]) -> float:
+        """Return the best available epoch timestamp for age computation.
+
+        Prefers ``exif_datetime`` (capture time) and falls back to
+        ``last_modified`` (filesystem mtime). Returns 0.0 when neither is
+        available, which the caller treats as age 0 (newest).
+        """
+        for key in ("exif_datetime", "last_modified"):
+            try:
+                value = float(row.get(key) or 0.0)
+            except (TypeError, ValueError):
+                value = 0.0
+            if value > 0:
+                return value
+        return 0.0
+
     def _get_playlist_criteria(self, shuffle_override: bool | None = None) -> PlaylistCriteria:
         """Build playlist criteria from the live configuration repository."""
         assert self._config_repo is not None
@@ -409,6 +496,10 @@ class PlaylistManager:
             shuffle_mode=shuffle_mode,
             sort_cols=str(config_value("model.sort_cols", "fname ASC")),
             recent_n=int(config_value("model.recent_n", 0) or 0),
+            recency_half_life_days=float(
+                config_value("model.recency_half_life_days", 365.0) or 365.0
+            ),
+            sample_limit=_config_optional_int(config_value("model.sample_limit", None)),
         )
 
     def _location_language(self) -> str:
