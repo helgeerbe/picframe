@@ -119,7 +119,7 @@
       "shuffleOn": "Zufall an",
       "shuffleOff": "Zufall aus",
       "shuffleMode": "Zufallsmodus",
-      "shuffleModeStandard": "Standard",
+      "shuffleModeStandard": "Zufall",
       "shuffleModeFewerRepeats": "Weniger Wiederholungen",
       "shuffleModeAgeWeighted": "Altersgewichtet"
     },
@@ -436,7 +436,7 @@
       "fade_time": "default=10.0, Überblendzeit - kann per Darstellung oder MQTT/Home Assistant geändert werden",
       "update_interval": "default=2.0, time in seconds to wait between two consecutive scans for new files",
       "shuffle": "default=True, Zufallswiedergabe - kann per Remote oder MQTT/Home Assistant geändert werden",
-      "shuffle_mode": "default=standard, shuffle mode used when shuffle is enabled. Choices: standard, fewer_repeats, age_weighted.",
+      "shuffle_mode": "default=random, shuffle mode used when shuffle is enabled. Choices: random, fewer_repeats, age_weighted.",
       "recency_half_life_days": "default=365, nur für age_weighted verwendet. Steuert, wie schnell die Aktualitäts-Gewichtung abfällt; kleinere Werte bevorzugen neuere Medien stärker (Tage).",
       "sample_limit": "default=leer, nur für age_weighted verwendet. Behält nur die ersten N Fotos nach der gewichteten Sortierung, was häufigeres Neu mischen großer Bibliotheken erzwingt; leer oder 0 bedeutet unbegrenzt.",
       "sort_cols": "default='fname ASC' can be any columns in the table with optional ASC or DESC separated by commas fname, last_modified, file_id, orientation, exif_datetime, f_number, exposure_time, iso, focal_length, make, model, lens, rating, latitude, longitude, width, height, title, caption, tags, is_portrait, location",

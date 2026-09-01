@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 
-SHUFFLE_MODE_STANDARD = "standard"
+SHUFFLE_MODE_STANDARD = "random"
 SHUFFLE_MODE_FEWER_REPEATS = "fewer_repeats"
 SHUFFLE_MODE_AGE_WEIGHTED = "age_weighted"
 SUPPORTED_SHUFFLE_MODES = {

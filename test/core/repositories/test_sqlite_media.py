@@ -323,7 +323,7 @@ def test_query_media_path_range_filter_matches_prefix_scope(
 
 def test_order_clause_avoids_sql_random_for_standard_shuffle() -> None:
     standard_clause = SQLiteMediaRepository._build_order_clause(
-        PlaylistCriteria(shuffle=True, shuffle_mode="standard")
+        PlaylistCriteria(shuffle=True, shuffle_mode="random")
     )
     fewer_repeats_clause = SQLiteMediaRepository._build_order_clause(
         PlaylistCriteria(shuffle=True, shuffle_mode="fewer_repeats")

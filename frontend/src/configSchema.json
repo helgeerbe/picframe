@@ -227,7 +227,7 @@
     "shuffle_mode": {
       "type": "select",
       "options": [
-        "standard",
+        "random",
         "fewer_repeats",
         "age_weighted"
       ]

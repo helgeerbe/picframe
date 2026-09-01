@@ -28,7 +28,7 @@ class FakeConfigRepository:
             "mqtt.device_id": "picframe_test",
             "mqtt.device_url": "http://picframe.local",
             "model.shuffle": True,
-            "model.shuffle_mode": "standard",
+            "model.shuffle_mode": "random",
             "model.time_delay": 200.0,
             "model.fade_time": 10.0,
             "model.subdirectory": "",

@@ -94,9 +94,9 @@ model:
   fade_time: 10.0
   # Media monitor scan interval, in seconds.
   update_interval: 2.0
-  # Remote shuffle toggle and mode. Modes: standard, fewer_repeats, age_weighted.
+  # Remote shuffle toggle and mode. Modes: random, fewer_repeats, age_weighted.
   shuffle: true
-  shuffle_mode: standard
+  shuffle_mode: random
   # age_weighted tuning (only used when shuffle_mode is age_weighted).
   # recency_half_life_days controls how fast the recency bias decays; smaller
   # values bias more strongly toward newer media. sample_limit optionally keeps
