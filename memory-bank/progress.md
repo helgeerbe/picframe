@@ -135,6 +135,17 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   (2) `_handle_state_event` preserves `show_text=False` through
   `CurrentMediaChangedEvent` instead of resetting it from config. Merged via
   PR #733 (squash-merged into `v2-dev`, feature branch deleted).
+- Ticket #710 GStreamer worker Wayland enforcement (two stages): (1)
+  limited-range YUV thumbnail extraction fixed on `v2-dev` in commit b66a9134
+  via the `-strict unofficial` ffmpeg flag in `VideoFrameExtractor`; (2) the
+  green-screen / segfault from the GStreamer worker falling back to Xwayland
+  fixed by `GstVideoRenderer._worker_environment()` enforcing
+  `GDK_BACKEND=wayland`, dynamically detecting a single `wayland-*` socket in
+  `XDG_RUNTIME_DIR` when `WAYLAND_DISPLAY` is missing (warns on zero/multiple),
+  logging display env vars before GTK4 init, and hinting at a GTK4/Wayland
+  display-init failure for signal-killed workers. Merged via PR #731
+  (squash-merged into `v2-dev`, commit 69b2445, feature branch deleted). The
+  reporter's on-device crash was not re-confirmed; merged on owner judgment.
 
 ## Current / In Progress
 - Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.

@@ -1,20 +1,19 @@
 # Active Context
 
 ## Current Focus
-Ticket #726 is **closed** — merged via PR #733 (squash-merged into `v2-dev`,
-feature branch deleted). The `viewer.show_text_on_video` setting (default
-`False`) lets users opt out of the metadata text overlay on video media. When
-`False`, the playback engine suppresses only the metadata text overlay for
-video handoffs (clock and status overlays are preserved via
-`dataclasses.replace()`), so GStreamer starts immediately without waiting for
-the `show_text_tm` fade-out. The setting flows through `RendererConfig`,
-`default_config.yaml`, API models, MQTT Home Assistant discovery,
-`configSchema.json`, the `TextOverlayControls` Vue component, and i18n
-strings. Two follow-up bugfixes were included in the PR: (1) `execute()`
-ignored `show_text` from the incoming overlay, and (2)
-`CurrentMediaChangedEvent` clobbered `show_text=False` by rebuilding the
-overlay config with `show_text_enabled=True` from the renderer config. The
-previous ticketed change was #725 (XMP `Seq/li` subject parsing fallback).
+Ticket #710 is **closed** — merged via PR #731 (squash-merged into `v2-dev`,
+commit 69b2445; feature branch `fix/710-gst-worker-wayland-env` deleted). The
+issue had two stages, both now on `v2-dev`: (1) limited-range YUV thumbnail
+extraction was fixed directly on `v2-dev` in commit b66a9134 via the
+`-strict unofficial` ffmpeg flag in `VideoFrameExtractor`; (2) the GStreamer
+worker green-screen / segfault from falling back to Xwayland was fixed by
+enforcing `GDK_BACKEND=wayland` in `GstVideoRenderer._worker_environment()`.
+When `WAYLAND_DISPLAY` is missing, the renderer dynamically detects a single
+`wayland-*` socket in `XDG_RUNTIME_DIR` (warns on zero/multiple); the worker
+logs display env vars before GTK4 init, and signal-killed workers hint at a
+GTK4/Wayland display-init failure. The reporter's on-device crash was not
+re-confirmed (issue went stale), so this merged on owner judgment + green CI.
+The previous ticketed change was #726 (`viewer.show_text_on_video`).
 (Discussion #682): (1) the gradient sprite z-order/PIL/1px-width issues in
 `text_renderer.py`, (2) `/dev/shm/clock.txt` not showing because
 `clock_extra_source` was not propagated through `OverlayConfig` and the clock
