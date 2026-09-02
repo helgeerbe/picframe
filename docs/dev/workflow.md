@@ -96,7 +96,7 @@ pytest test/
 ### 3. `frontend-drift` — Frontend Bundle Consistency
 
 ```bash
-cd frontend && npm ci && npm run build
+cd frontend && yarn install --frozen-lockfile && yarn build
 git diff --exit-code src/picframe/html
 ```
 
@@ -164,8 +164,8 @@ pytest test/
 
 # Frontend build
 cd frontend
-npm ci
-npm run build
+yarn install --frozen-lockfile
+yarn build
 cd ..
 
 # Package build dry-run

@@ -7,23 +7,6 @@ import { useConfigStore } from '../stores/config'
 import type { LocationOption } from '../stores/config'
 import { useI18n } from 'vue-i18n'
 import {
-  mdiCalendarClock,
-  mdiCameraTimer,
-  mdiCameraIris,
-  mdiFilm,
-  mdiSignalDistanceVariant,
-  mdiCamera,
-  mdiImageSizeSelectActual,
-  mdiScreenRotation,
-  mdiFileImage,
-  mdiClockOutline,
-  mdiVideo,
-  mdiPalette,
-  mdiAnimationPlay,
-  mdiSpeedometer,
-  mdiShuffleVariant
-} from '@mdi/js'
-import {
   ForwardIcon,
   BackwardIcon,
   SunIcon,
@@ -36,7 +19,9 @@ import {
   XMarkIcon,
   ChevronDownIcon,
   ArrowsPointingOutIcon,
-  MagnifyingGlassIcon
+  MagnifyingGlassIcon,
+  ArrowPathIcon,
+  VideoCameraIcon
 } from '@heroicons/vue/24/outline'
 import {
   PlayIcon as PlayIconSolid,
@@ -745,7 +730,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'title',
       label: t('remote.metadata.title'),
-      icon: mdiFileImage, // Or another appropriate icon
+      icon: 'photo', // Or another appropriate icon
       value: data.title
     })
   }
@@ -754,7 +739,7 @@ const metadataFields = computed(() => {
   fields.push({
     key: 'fileName',
     label: t('remote.metadata.fileName'),
-    icon: mdiFileImage,
+    icon: 'photo',
     value: displayFileName.value
   })
 
@@ -763,7 +748,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'date',
       label: t('remote.metadata.date'),
-      icon: mdiCalendarClock,
+      icon: 'calendar',
       value: new Date(data.exif_datetime * 1000).toLocaleString()
     })
   }
@@ -772,7 +757,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'displayedCount',
       label: t('remote.metadata.displayedCount'),
-      icon: mdiSpeedometer,
+      icon: 'bolt',
       value: Number(data.displayed_count).toLocaleString()
     })
   }
@@ -781,7 +766,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'lastDisplayed',
       label: t('remote.metadata.lastDisplayed'),
-      icon: mdiClockOutline,
+      icon: 'clock',
       value: new Date(Number(data.last_displayed) * 1000).toLocaleString()
     })
   }
@@ -791,7 +776,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'exposureTime',
       label: t('remote.metadata.exposureTime'),
-      icon: mdiCameraTimer,
+      icon: 'clock',
       value: `${data.exposure_time} sec`
     })
   }
@@ -801,7 +786,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'aperture',
       label: t('remote.metadata.aperture'),
-      icon: mdiCameraIris,
+      icon: 'camera',
       value: `f/${data.f_number}`
     })
   }
@@ -811,7 +796,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'iso',
       label: t('remote.metadata.iso'),
-      icon: mdiFilm,
+      icon: 'film',
       value: data.iso
     })
   }
@@ -821,7 +806,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'focalLength',
       label: t('remote.metadata.focalLength'),
-      icon: mdiSignalDistanceVariant,
+      icon: 'arrowsUpDown',
       value: `${data.focal_length} mm`
     })
   }
@@ -832,7 +817,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'camera',
       label: t('remote.metadata.camera'),
-      icon: mdiCamera,
+      icon: 'camera',
       value: camera
     })
   }
@@ -842,7 +827,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'resolution',
       label: t('remote.metadata.resolution'),
-      icon: mdiImageSizeSelectActual,
+      icon: 'squares',
       value: `${data.width} × ${data.height}`
     })
   }
@@ -852,7 +837,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'orientation',
       label: t('remote.metadata.orientation'),
-      icon: mdiScreenRotation,
+      icon: 'arrowPath',
       value: data.orientation
     })
   }
@@ -862,7 +847,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'duration',
       label: t('remote.metadata.duration') || 'Duration',
-      icon: mdiClockOutline,
+      icon: 'clock',
       value: `${Number(data.duration).toFixed(2)} sec`
     })
   }
@@ -872,7 +857,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'codec',
       label: t('remote.metadata.codec') || 'Codec',
-      icon: mdiVideo,
+      icon: 'video',
       value: data.codec
     })
   }
@@ -882,7 +867,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'pixelFormat',
       label: t('remote.metadata.pixelFormat') || 'Pixel Format',
-      icon: mdiPalette,
+      icon: 'swatch',
       value: data.pixel_format
     })
   }
@@ -892,7 +877,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'framerate',
       label: t('remote.metadata.framerate') || 'Framerate',
-      icon: mdiAnimationPlay,
+      icon: 'playCircle',
       value: `${data.framerate} fps`
     })
   }
@@ -902,7 +887,7 @@ const metadataFields = computed(() => {
     fields.push({
       key: 'bitrate',
       label: t('remote.metadata.bitrate') || 'Bitrate',
-      icon: mdiSpeedometer,
+      icon: 'bolt',
       value: `${(Number(data.bitrate) / 1000).toFixed(0)} kbps`
     })
   }
@@ -949,9 +934,7 @@ const metadataFields = computed(() => {
                     v-else
                     class="flex h-full w-full flex-col items-center justify-center px-4 text-center text-gray-200"
                   >
-                    <svg class="mb-2 h-8 w-8 opacity-70" viewBox="0 0 24 24" aria-hidden="true">
-                      <path :d="mdiVideo" fill="currentColor" />
-                    </svg>
+                    <VideoCameraIcon class="mb-2 h-8 w-8 opacity-70" />
                     <span class="text-xs font-semibold">{{ t('remote.videoPreviewUnavailable') }}</span>
                   </div>
                 </template>
@@ -989,9 +972,7 @@ const metadataFields = computed(() => {
                 v-if="!mediaPosterSrc(selectedMediaItem) || hasVideoPosterFailed(selectedMediaItem)"
                 class="flex flex-col items-center justify-center px-6 text-center text-gray-200"
               >
-                <svg class="mb-3 h-16 w-16 opacity-70" viewBox="0 0 24 24" aria-hidden="true">
-                  <path :d="mdiVideo" fill="currentColor" />
-                </svg>
+                <VideoCameraIcon class="mb-3 h-16 w-16 opacity-70" />
                 <p class="text-sm font-semibold">{{ t('remote.videoPreviewUnavailable') }}</p>
               </div>
               <div class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
@@ -1207,9 +1188,7 @@ const metadataFields = computed(() => {
                         : 'hover:bg-gray-100 hover:text-indigo-600 dark:hover:bg-gray-700/50 dark:hover:text-indigo-400'
                     ]"
                   >
-                    <svg class="w-6 h-6" viewBox="0 0 24 24" aria-hidden="true">
-                      <path :d="mdiShuffleVariant" fill="currentColor" />
-                    </svg>
+                    <ArrowPathIcon class="w-6 h-6" />
                     <span class="sr-only">{{ shuffleTitle }}</span>
                   </button>
                   <button
@@ -1558,9 +1537,7 @@ const metadataFields = computed(() => {
                 v-else
                 class="flex h-full w-full flex-col items-center justify-center px-4 text-center text-gray-200"
               >
-                <svg class="mb-2 h-10 w-10 opacity-70" viewBox="0 0 24 24" aria-hidden="true">
-                  <path :d="mdiVideo" fill="currentColor" />
-                </svg>
+                <VideoCameraIcon class="mb-2 h-10 w-10 opacity-70" />
                 <span class="text-xs font-semibold">{{ t('remote.videoPreviewUnavailable') }}</span>
               </div>
             </template>
@@ -1662,9 +1639,7 @@ const metadataFields = computed(() => {
                   v-else
                   class="flex h-full w-full flex-col items-center justify-center px-3 text-center text-gray-200"
                 >
-                  <svg class="mb-2 h-8 w-8 opacity-70" viewBox="0 0 24 24" aria-hidden="true">
-                    <path :d="mdiVideo" fill="currentColor" />
-                  </svg>
+                  <VideoCameraIcon class="mb-2 h-8 w-8 opacity-70" />
                   <span class="text-xs font-semibold">{{ t('remote.videoPreviewUnavailable') }}</span>
                 </div>
               </template>

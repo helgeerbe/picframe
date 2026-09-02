@@ -1,6 +1,22 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { DocumentTextIcon, MapPinIcon, TagIcon } from '@heroicons/vue/24/outline'
+import {
+  DocumentTextIcon,
+  MapPinIcon,
+  TagIcon,
+  PhotoIcon,
+  CalendarDaysIcon,
+  ClockIcon,
+  CameraIcon,
+  FilmIcon,
+  ArrowsUpDownIcon,
+  Squares2X2Icon,
+  ArrowPathIcon,
+  VideoCameraIcon,
+  SwatchIcon,
+  PlayCircleIcon,
+  BoltIcon
+} from '@heroicons/vue/24/outline'
 import { useI18n } from 'vue-i18n'
 import AppSheet from '../ui/AppSheet.vue'
 import EmptyState from '../ui/EmptyState.vue'
@@ -10,6 +26,21 @@ type MetadataField = {
   label: string
   icon: string
   value: unknown
+}
+
+const iconComponents: Record<string, typeof PhotoIcon> = {
+  photo: PhotoIcon,
+  calendar: CalendarDaysIcon,
+  clock: ClockIcon,
+  camera: CameraIcon,
+  film: FilmIcon,
+  arrowsUpDown: ArrowsUpDownIcon,
+  squares: Squares2X2Icon,
+  arrowPath: ArrowPathIcon,
+  video: VideoCameraIcon,
+  swatch: SwatchIcon,
+  playCircle: PlayCircleIcon,
+  bolt: BoltIcon
 }
 
 const props = defineProps<{
@@ -79,9 +110,7 @@ const visibleFields = computed(() => {
             class="grid grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)] gap-3 px-3 py-3 text-sm"
           >
             <dt class="flex min-w-0 items-center gap-2 text-gray-500 dark:text-gray-400">
-              <svg class="h-4 w-4 flex-shrink-0" viewBox="0 0 24 24" aria-hidden="true">
-                <path :d="field.icon" fill="currentColor" />
-              </svg>
+              <component :is="iconComponents[field.icon]" class="h-4 w-4 flex-shrink-0" />
               <span class="truncate">{{ field.label }}</span>
             </dt>
             <dd class="truncate text-right font-medium text-gray-950 dark:text-gray-100" :title="String(field.value)">

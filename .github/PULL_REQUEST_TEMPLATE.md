@@ -35,7 +35,7 @@ All items must be checked before this PR can be merged.
 - [ ] Tests are written/updated and passing (`pytest`).
 - [ ] Code is fully type-annotated and passes `mypy`.
 - [ ] Linting and formatting (`ruff`) pass.
-- [ ] Frontend changes (if any) are rebuilt: `npm run build` committed in
+- [ ] Frontend changes (if any) are rebuilt: `yarn build` committed in
       `src/picframe/html`.
 - [ ] Inline documentation and module descriptions are updated.
 - [ ] No performance or security regressions introduced.

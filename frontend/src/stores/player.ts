@@ -66,7 +66,7 @@ export const usePlayerStore = defineStore('player', () => {
       connectionStatus.value = 'connected'
       lastMessageAt = Date.now()
       startHeartbeat()
-      console.log('WebSocket connected')
+
       // Request initial state upon connection
       sendCommand('REQUEST_STATE')
     }
@@ -119,7 +119,7 @@ export const usePlayerStore = defineStore('player', () => {
       if (ws !== socket) return
       ws = null
       stopHeartbeat()
-      console.log('WebSocket disconnected, retrying in 5s...')
+
       scheduleReconnect()
     }
 
