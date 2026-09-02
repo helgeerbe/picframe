@@ -1,0 +1,146 @@
+name: CI
+
+on:
+  pull_request:
+    branches:
+      - dev
+      - v2-dev
+
+permissions:
+  contents: read
+
+jobs:
+  pr-title:
+    name: PR Title (Conventional Commit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: amannn/action-semantic-pull-request@v5
+        with:
+          # https://www.conventionalcommits.org/en/v1.0.0/
+          types: |
+            feat
+            fix
+            docs
+            refactor
+            perf
+            test
+            build
+            ci
+            chore
+            revert
+          requireScope: false
+          subjectPattern: '^[A-Z].+|^[a-z].+'  # allow any subject; this is a no-op guard
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  lint-type-test:
+    name: Ruff · Mypy · Pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Ruff lint
+        run: ruff check .
+
+      - name: Ruff format check
+        run: ruff format --check .
+
+      - name: Mypy
+        run: mypy src/picframe
+
+      - name: Pytest
+        run: pytest test/
+
+  frontend-drift:
+    name: Frontend bundle drift
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install
+        working-directory: frontend
+
+      - name: Build frontend
+        run: yarn build
+        working-directory: frontend
+
+      - name: Check for drift
+        run: |
+          if [ -n "$(git status --porcelain src/picframe/html)" ]; then
+            echo "::error::Frontend bundle drift detected. Rebuild the frontend and commit the updated src/picframe/html directory."
+            git status --porcelain src/picframe/html
+            exit 1
+          fi
+
+  frontend-lint:
+    name: ESLint · Prettier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: frontend
+
+      - name: ESLint
+        run: yarn lint
+        working-directory: frontend
+
+      - name: Prettier check
+        run: yarn format:check
+        working-directory: frontend
+
+  package-build:
+    name: Python package build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # setuptools_scm needs full history
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip build twine
+
+      - name: Build package
+        run: python -m build
+
+      - name: Check package metadata
+        run: twine check --strict dist/*
+
+      - name: Verify console script
+        run: |
+          python -m pip install dist/picframe-*.whl
+          picframe --help || picframe --version || true

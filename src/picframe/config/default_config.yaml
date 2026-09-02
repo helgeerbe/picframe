@@ -1,0 +1,202 @@
+# Next-gen seed config. Runtime settings are persisted in config.db3; these
+# comments are for users and maintainers reading the seed file.
+# UI labels and help text live in the frontend locale files.
+viewer:
+  # Edge-fill rendering for photos that do not match the display aspect ratio.
+  blur_amount: 12
+  blur_zoom: 1.0
+  blur_edges: false
+  edge_alpha: 0.5
+  fps: 20.0
+  background:
+  - 0.2
+  - 0.2
+  - 0.3
+  - 1.0
+  blend_type: blend
+  font_file: ${PICFRAME_DATA}/fonts/NotoSans-Regular.ttf
+  shader: ${PICFRAME_DATA}/shaders/blend_new
+  show_text_fm: '%b %d, %Y'
+  show_text_tm: 20.0
+  show_text_sz: 40
+  show_text_enabled: true
+  text_overlay_format: title caption name date folder location
+  text_justify: L
+  text_bkg_hgt: 0.25
+  text_opacity: 1.0
+  text_x_margin: 100
+  text_y_margin: 0
+  # false crops media to fill the display; true keeps the full image visible.
+  fit: false
+  # true stretches video to the display; false preserves video aspect ratio.
+  video_fit_display: false
+  show_text_on_video: false
+  # Highest resolution allowed for software video decode fallback.
+  max_software_decode_resolution: 1280x720
+  kenburns: false
+  # Optional display surface override. null means use the detected display size.
+  display_x: 0
+  display_y: 0
+  display_w: null
+  display_h: null
+  # Display power backend selector. 0 is the default next-gen backend.
+  display_power: '0'
+  # Wayland output name, for example HDMI-A-1 or HDMI-A-2.
+  display_hdmi: HDMI-A-1
+  # Wayland is the supported target; SDL2 is the normal pi3d path.
+  use_glx: false
+  use_sdl2: true
+  # Settings-only. false disables, true mats all images, a number mats images
+  # whose aspect ratio differs from the display by more than this threshold.
+  mat_images: 0.01
+  mat_type: null
+  outer_mat_color: null
+  inner_mat_color: null
+  outer_mat_border: 75
+  inner_mat_border: 40
+  outer_mat_use_texture: true
+  inner_mat_use_texture: false
+  mat_resource_folder: ${PICFRAME_DATA}/mat
+  show_clock: false
+  clock_justify: R
+  clock_text_sz: 120
+  clock_format: '%-I:%M'
+  clock_opacity: 1.0
+  clock_top_bottom: T
+  clock_wdt_offset_pct: 3.0
+  clock_hgt_offset_pct: 3.0
+  # Extra text source shown below the clock. off disables it, clock_txt reads
+  # /dev/shm/clock.txt, ui_text uses clock_extra_text from the settings UI.
+  clock_extra_source: off
+  clock_extra_text: ''
+  menu_text_sz: 40
+  menu_autohide_tm: 10.0
+  geo_suppress_list: []
+model:
+  # Library root indexed by the media monitor. Configure in Settings.
+  pic_dir: ~/Pictures
+  # Destination used by delete/move actions.
+  deleted_pictures: ~/DeletedPictures
+  # Follow directory symlinks while indexing.
+  follow_links: false
+  no_files_img: ${PICFRAME_DATA}/no_pictures.jpg
+  # Remote media-selection filters. subdirectory is relative to pic_dir.
+  subdirectory: ''
+  # YYYY-MM-DD date range; empty values disable each bound.
+  date_from: ''
+  date_to: ''
+  # Advanced playlist controls. recent_n prioritizes recently modified media;
+  # reshuffle_num controls how many passes happen before reshuffling.
+  recent_n: 7
+  reshuffle_num: 1
+  # Appearance timing controls, in seconds.
+  time_delay: 200.0
+  fade_time: 10.0
+  # Media monitor scan interval, in seconds.
+  update_interval: 2.0
+  # Remote shuffle toggle and mode. Modes: random, fewer_repeats, age_weighted.
+  shuffle: true
+  shuffle_mode: random
+  # age_weighted tuning (only used when shuffle_mode is age_weighted).
+  # recency_half_life_days controls how fast the recency bias decays; smaller
+  # values bias more strongly toward newer media. sample_limit optionally keeps
+  # only the first N rows after the weighted sort, forcing more frequent
+  # reshuffles on large libraries; empty/0 means unlimited.
+  recency_half_life_days: 365
+  sample_limit: null
+  # Advanced setting. Comma-separated whitelisted media columns with optional
+  # ASC/DESC, for example "fname ASC" or "exif_datetime DESC, fname ASC".
+  sort_cols: fname ASC
+  # Metadata keys extracted from images and sent through media state payloads.
+  image_attr:
+  - PICFRAME GPS
+  - PICFRAME LOCATION
+  - EXIF FNumber
+  - EXIF ExposureTime
+  - EXIF ISOSpeedRatings
+  - EXIF FocalLength
+  - EXIF DateTimeOriginal
+  - Image Model
+  - Image Make
+  - IPTC Caption/Abstract
+  - IPTC Object Name
+  - IPTC Keywords
+  load_geoloc: false
+  geo_key: this_needs_to@be_changed
+  locale: en_US.utf8
+  key_list:
+  - - tourism
+    - amenity
+    - isolated_dwelling
+  - - suburb
+    - village
+  - - city
+    - county
+  - - region
+    - state
+    - province
+  - - country
+  # Deferred renderer parity feature; tracked separately from Remote filters.
+  portrait_pairs: false
+  # Remote filter expressions. Use AND/OR/NOT and parentheses explicitly.
+  # Adjacent words are treated as one phrase, e.g. New York matches "New York".
+  # Empty values disable each filter.
+  location_filter: ''
+  tags_filter: ''
+  log_level: WARNING
+  log_file: ''
+  # Indexed media extensions. Keep lowercase with leading dots.
+  image_extensions:
+  - .jpg
+  - .jpeg
+  - .png
+  - .heic
+  - .heif
+  video_extensions:
+  - .mp4
+  - .mkv
+  - .flv
+  - .mov
+  - .avi
+  - .webm
+  - .hevc
+mqtt:
+  # Optional Home Assistant MQTT discovery/control integration.
+  use_mqtt: false
+  server: your_mqtt_broker
+  port: 1883
+  login: name
+  password: your_password
+  tls: ''
+  device_id: picframe
+  device_url: ''
+http:
+  # Local control-plane settings. Do not expose the server directly to the
+  # public internet.
+  auth: false
+  username: admin
+  password: ''
+  use_ssl: false
+  keyfile: path/to/key.pem
+  certfile: path/to/cert.pem
+  websocket_broadcast_rate_limit: 10.0
+  websocket_broadcast_capacity: 20
+  command_debounce_ms: 200
+  cors_allowed_origins:
+    - "*"
+peripherals:
+  # Optional local input shortcuts.
+  input_type: null
+  buttons:
+    pause: ' '
+    display_off: o
+    location: l
+    exit: e
+    power_down: p
+  enable: true
+  label: ''
+  shortcut: ''
+hardware_inputs:
+  # Optional Raspberry Pi GPIO inputs. Pins use BCM numbering.
+  enabled: false
+  inputs: {}
