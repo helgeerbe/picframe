@@ -1,12 +1,16 @@
 ## PictureFrame powered by pi3d
 
-![picframe logo](https://github.com/helgeerbe/picframe/wiki/images/Picframe_Logo.png)
+![picframe logo](docs/images/Picframe_Logo.jpg)
 
 - [PictureFrame powered by pi3d](#pictureframe-powered-by-pi3d)
 - [What Is PictureFrame?](#what-is-pictureframe)
 - [History of PictureFrame](#history-of-pictureframe)
 - [Highlights of PictureFrame](#highlights-of-pictureframe)
 - [Quick Install](#quick-install)
+- [Next-Gen CLI](#next-gen-cli)
+- [Web Control Plane](#web-control-plane)
+- [Runtime Files](#runtime-files)
+- [Home Assistant / MQTT](#home-assistant--mqtt)
 - [Documentation](#documentation)
 - [Acknowledgement](#acknowledgement)
 
