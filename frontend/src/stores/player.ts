@@ -7,6 +7,9 @@ export interface MediaItem {
   id?: number | null
   file_path: string
   media_type?: 'image' | 'video' | string
+  // EXIF is an open-ended metadata blob accessed at arbitrary keys by RemoteView;
+  // keep dynamic `any` rather than cascading `unknown` casts through the template.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   exif?: Record<string, any>
   location?: {
     lat: number
@@ -167,7 +170,7 @@ export const usePlayerStore = defineStore('player', () => {
     }, reconnectDelayMs)
   }
 
-  function sendCommand(command: string, payload?: any): boolean {
+  function sendCommand(command: string, payload?: Record<string, unknown>): boolean {
     if (ws && isConnected.value && ws.readyState === WebSocket.OPEN) {
       try {
         ws.send(JSON.stringify({ command, ...payload }))

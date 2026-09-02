@@ -3,6 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { DocumentIcon, FolderIcon } from '@heroicons/vue/24/outline'
 import { useI18n } from 'vue-i18n'
 import { useConfigStore, type FilesystemBrowseResponse } from '../../stores/config'
+import { getApiErrorMessage } from '../../utils/errors'
 
 const props = defineProps<{
   modelValue: string
@@ -69,9 +70,8 @@ async function validateShader() {
         validationError.value = `${check.path}: ${result.error}`
         return
       }
-    } catch (error: any) {
-      validationError.value =
-        error?.response?.data?.detail || error?.message || t('settings.shaderPicker.validateFailed')
+    } catch (error: unknown) {
+      validationError.value = getApiErrorMessage(error, t('settings.shaderPicker.validateFailed'))
       return
     }
   }
@@ -85,9 +85,8 @@ async function browse(path = dirname(normalizedValue.value || '${PICFRAME_DATA}/
       kind: 'file',
       extensions: ['.fs', '.vs']
     })
-  } catch (error: any) {
-    browseError.value =
-      error?.response?.data?.detail || error?.message || t('settings.shaderPicker.browseFailed')
+  } catch (error: unknown) {
+    browseError.value = getApiErrorMessage(error, t('settings.shaderPicker.browseFailed'))
     browseState.value = await configStore.browseFilesystem({
       path: '~',
       kind: 'file',

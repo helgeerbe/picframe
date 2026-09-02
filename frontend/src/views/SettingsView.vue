@@ -52,6 +52,10 @@ const {
 } = storeToRefs(configStore)
 const { error: systemError } = storeToRefs(systemStore)
 
+// localConfig is the editable copy of the data-driven config blob, bound to ~80
+// v-model / deep accesses in the template; `unknown` would break those, so `any`
+// is kept here intentionally.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const localConfig = ref<Record<string, any>>({})
 const localAuthConfig = ref({
   enabled: false,
@@ -69,10 +73,11 @@ const confirmAction = ref<(() => Promise<void>) | null>(null)
 const confirmActionHandlesSuccess = ref(false)
 const confirmMessage = ref('')
 const successMessage = ref('')
-const renderError = ref<any>(null)
+const renderError = ref<{ message: string; info: string } | null>(null)
 const CLOCK_FORMAT_24 = '%H:%M'
 const CLOCK_FORMAT_12 = '%-I:%M %p'
 type ClockFormatMode = '24' | '12' | 'custom'
+type SchemaPropDef = { type?: string; properties?: Record<string, unknown> }
 const clockFormatModeOverride = ref<ClockFormatMode | null>(null)
 
 const tabs = [
@@ -242,6 +247,7 @@ const displayMode = computed({
   }
 })
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- dynamic config blob, deep-indexed below
 function initializeConfig(newConfig: Record<string, any>) {
   const getFallbackValue = (type: string) => {
     switch (type) {
@@ -260,24 +266,26 @@ function initializeConfig(newConfig: Record<string, any>) {
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- mixed-depth writes require any
   const initialized: Record<string, any> = {}
   for (const [section, props] of Object.entries(configSchema)) {
     initialized[section] = {}
-    for (const [key, propDef] of Object.entries(props as Record<string, any>)) {
+    for (const [key, propDef] of Object.entries(props as Record<string, unknown>)) {
       if (key === '_title') continue
-      if (propDef.type === 'object' && propDef.properties) {
+      const def = propDef as SchemaPropDef
+      if (def.type === 'object' && def.properties) {
         initialized[section][key] = {}
         for (const [subKey, subPropDef] of Object.entries(
-          propDef.properties as Record<string, any>
+          def.properties as Record<string, unknown>
         )) {
           if (subKey === '_title') continue
+          const subDef = subPropDef as SchemaPropDef
           initialized[section][key][subKey] =
-            newConfig?.[section]?.[key]?.[subKey] ??
-            getFallbackValue((subPropDef as any).type || 'string')
+            newConfig?.[section]?.[key]?.[subKey] ?? getFallbackValue(subDef.type || 'string')
         }
       } else {
         initialized[section][key] =
-          newConfig?.[section]?.[key] ?? getFallbackValue((propDef as any).type)
+          newConfig?.[section]?.[key] ?? getFallbackValue(def.type || 'string')
       }
     }
   }
