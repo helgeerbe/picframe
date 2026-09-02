@@ -13,7 +13,7 @@ from typing import Any
 
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 from picframe.core.services.locale_utils import language_from_locale
-from picframe.geo_reverse import GeoReverse
+from picframe.infrastructure.geo_reverse import GeoReverse
 
 logger = logging.getLogger(__name__)
 
