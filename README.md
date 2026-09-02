@@ -66,15 +66,15 @@ chmod +x install_picframe.sh
 sudo ./install_picframe.sh
 ```
 
-To install from the next-generation development branch, change `main` to
-`v2-dev` in the installer options:
+To install from the development branch, change `main` to `dev` in the
+installer options:
 
 ```bash
 curl -fsSL \
-  https://raw.githubusercontent.com/helgeerbe/picframe/v2-dev/docs/user/install_picframe.sh \
+  https://raw.githubusercontent.com/helgeerbe/picframe/dev/docs/user/install_picframe.sh \
   -o install_picframe.sh
 chmod +x install_picframe.sh
-sudo ./install_picframe.sh --branch v2-dev
+sudo ./install_picframe.sh --branch dev
 ```
 
 The current helper script installs system packages, creates a Python virtual

@@ -1,8 +1,8 @@
 # Active Context
 
 ## Current Focus
-Post-merge cleanup for the `v2-dev → dev` transition is **complete**. PR #737
-merged the full Picframe 2.0 modernization into `dev`. Pre-merge cleanup
+Post-merge cleanup for the Picframe 2.0 modernization is **complete**. PR #737
+merged the full modernization into `dev`. Pre-merge cleanup
 issues #736 (frontend lint/format) and #738 (ESLint + Prettier + CI gate
 baseline) are closed. Three deferred follow-up tracking issues were created
 and fully implemented on `dev`:
@@ -27,7 +27,7 @@ clean working tree. All merged feature branches deleted (local + remote).
   `core/utils/mat_image.py` (#742). Broad legacy runtime modules were removed
   during #678.
 
-## Established Context (post-`v2-dev → dev` merge)
+## Established Context (post-modernization merge)
 All Picframe 2.0 modernization work has merged into `dev` via PR #737. The
 codebase now reflects the full target architecture; GitHub Issues and the
 Project board remain the authoritative progress source. Key established facts:

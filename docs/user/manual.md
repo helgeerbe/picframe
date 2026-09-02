@@ -25,15 +25,14 @@ chmod +x install_picframe.sh
 sudo ./install_picframe.sh
 ```
 
-For next-generation testing from the development branch, use `v2-dev` instead
-of `main`:
+For testing from the development branch, use `dev` instead of `main`:
 
 ```bash
 curl -fsSL \
-  https://raw.githubusercontent.com/helgeerbe/picframe/v2-dev/docs/user/install_picframe.sh \
+  https://raw.githubusercontent.com/helgeerbe/picframe/dev/docs/user/install_picframe.sh \
   -o install_picframe.sh
 chmod +x install_picframe.sh
-sudo ./install_picframe.sh --branch v2-dev
+sudo ./install_picframe.sh --branch dev
 ```
 
 The current helper script installs the required APT packages, configures basic
@@ -71,11 +70,11 @@ Installer options:
 # Use defaults without prompts
 sudo ./install_picframe.sh --yes
 
-# Install Picframe from GitHub v2-dev
-sudo ./install_picframe.sh --branch v2-dev
+# Install Picframe from GitHub dev
+sudo ./install_picframe.sh --branch dev
 
-# Install Picframe from GitHub v2-dev and enable boot startup
-sudo ./install_picframe.sh --branch v2-dev --enable-service
+# Install Picframe from GitHub dev and enable boot startup
+sudo ./install_picframe.sh --branch dev --enable-service
 
 # Select a locale and generate it if it is missing
 sudo ./install_picframe.sh --locale de_DE.UTF-8
@@ -129,13 +128,13 @@ upgrade the package, then start the service again:
 ```bash
 sudo systemctl stop picframe.service
 source ~/picframe_env/bin/activate
-python -m pip install --upgrade "git+https://github.com/helgeerbe/picframe.git@v2-dev"
+python -m pip install --upgrade "git+https://github.com/helgeerbe/picframe.git@dev"
 deactivate
 sudo systemctl start picframe.service
 sudo systemctl status picframe.service
 ```
 
-Use `@main` instead of `@v2-dev` for the stable branch, or use
+Use `@main` instead of `@dev` for the stable branch, or use
 `python -m pip install --upgrade picframe` for a PyPI install. Do not use
 `picframe init --force` for a routine update because it recreates runtime
 databases.

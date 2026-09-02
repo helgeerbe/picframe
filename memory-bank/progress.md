@@ -100,7 +100,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `test.yml` (flake8 push), `python-publish.yml` (tag-triggered), and the
   placeholder `pr-checks.yml` are replaced by `ci.yml` (ruff, mypy, pytest,
   frontend bundle drift, package build, Conventional Commit PR title
-  validation on PRs to `dev`/`v2-dev`) and `release.yml` (calendar-version
+  validation on PRs to `dev`) and `release.yml` (calendar-version
   `YYYY.MM.DD[.postN]` tag, PyPI trusted publishing, GitHub Release with
   PR-title changelog from `dev → main` merges). The changelog builder config
   uses Conventional Commit type categories and PR links.
@@ -108,7 +108,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   linking. `docs/dev/workflow.md` is the developer workflow reference and is
   linked from `docs/README.md`. Branch protection rules are configured on
   GitHub: `helgeerbe` is a bypass actor (always) on both the
-  `dev (incl v2-dev)` and `main` rulesets so the owner can self-merge PRs
+  `dev` and `main` rulesets so the owner can self-merge PRs
   without review, while other maintainers still require 1 approving review;
   CI status checks remain required for all actors.
 - Ticket #724 purge orphaned directory rows: `PURGE_FILES` now calls

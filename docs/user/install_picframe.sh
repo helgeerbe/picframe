@@ -33,8 +33,8 @@ Options:
 
 Examples:
   sudo ./install_picframe.sh
-  sudo ./install_picframe.sh --branch v2-dev
-  sudo ./install_picframe.sh --branch v2-dev --enable-service
+  sudo ./install_picframe.sh --branch dev
+  sudo ./install_picframe.sh --branch dev --enable-service
   sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
   sudo ./install_picframe.sh --source local --local-path /home/pi/Development/picframe
   sudo ./install_picframe.sh --source pypi

@@ -9,14 +9,14 @@ pull requests, CI gates, releases, and changelog automation.
 |--------|---------|-----------|
 | `dev`  | Staging / integration. All feature and fix PRs target this branch. | PR + CI required |
 | `main` | Release-only. Updated only by merging `dev → main`. | PR + CI required, no direct push |
-| `v2-dev` | Transition branch during Picframe 2.0 modernization. PRs may target this branch until `dev` is fully active. | PR + CI required |
-| Feature/fix branches | Short-lived, named `feat/<ticket>-<slug>`, `fix/<ticket>-<slug>`, etc. | Merged to `dev` or `v2-dev` via PR |
+| Feature/fix branches | Short-lived, named `feat/<ticket>-<slug>`, `fix/<ticket>-<slug>`, etc. | Merged to `dev` via PR |
 
-### Transition
+### Branch History
 
-During the next-gen transition, `v2-dev` is the active development branch.
-PRs may target either `dev` or `v2-dev`. Once the transition is complete,
-`v2-dev` merges to `dev` via PR and `dev` becomes the sole staging branch.
+The Picframe 2.0 modernization was developed on a long-lived `v2-dev` branch
+and merged into `dev` via PR #737. That transition is complete; `dev` is now
+the sole staging branch and `v2-dev` has been deleted (commits preserved on
+`dev`).
 
 ## Pull Requests
 
@@ -77,8 +77,8 @@ Every PR must satisfy the Definition of Done checklist in the PR template:
 
 ## CI Pipeline
 
-The CI workflow (`.github/workflows/ci.yml`) runs on every PR targeting `dev`
-or `v2-dev`. It consists of five jobs:
+The CI workflow (`.github/workflows/ci.yml`) runs on every PR targeting `dev`.
+It consists of five jobs:
 
 ### 1. `pr-title` — Conventional Commit Validation
 
@@ -189,7 +189,7 @@ twine check --strict dist/*
 ## Branch Protection Rules
 
 The following GitHub branch protection rules are configured for `dev`
-(including `v2-dev`) and `main`:
+and `main`:
 
 - **Require a pull request before merging**
 - **Require status checks to pass:**
@@ -203,7 +203,7 @@ The following GitHub branch protection rules are configured for `dev`
 ### Bypass Actor
 
 `helgeerbe` (repo owner, user ID 59169507) is configured as a **bypass actor**
-(`bypass_mode: always`) on both the `dev (incl v2-dev)` and `main` rulesets.
+(`bypass_mode: always`) on both the `dev` and `main` rulesets.
 This allows the owner to self-merge PRs without an approving review while CI
 status checks remain required. Other maintainers still need at least 1
 approving review.

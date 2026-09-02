@@ -3,7 +3,7 @@
 This is a compact index of durable project decisions. Detailed rationale lives in `docs/dev/architecture/`, `docs/user/manual.md`, and GitHub Issues.
 
 ## Durable Decisions
-- Use the existing repository with long-lived modernization branch `v2-dev`.
+- Use the existing repository for the Picframe 2.0 modernization (originally on a long-lived modernization branch, since merged to `dev` via PR #737 and deleted).
 - Use GitHub Issues and the GitHub Project board as the authoritative task and progress source.
 - Every code change must have a GitHub ticket; every commit message for code changes must include the ticket number; closing a code-change ticket must reference the implementing commit hash.
 - Build Picframe 2.0 around Clean Architecture / Hexagonal boundaries.
@@ -84,7 +84,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - CI/CD and developer workflow decisions (#706):
   - CI pipeline (`ci.yml`) runs ruff, mypy, pytest, frontend bundle drift,
     package build, and Conventional Commit PR-title validation on PRs to
-    `dev`/`v2-dev`; it replaces legacy `test.yml`/`python-publish.yml`.
+    `dev`; it replaces legacy `test.yml`/`python-publish.yml`.
   - Releases (`release.yml`) use calendar-version tags `YYYY.MM.DD[.postN]`,
     PyPI trusted publishing, and GitHub Releases with PR-title changelog
     categories from `dev → main` merges.
@@ -92,7 +92,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
     tracking ticket via `Closes`/`Fixes`/`Refs`.
   - `docs/dev/workflow.md` is the developer workflow reference.
   - Branch protection: `helgeerbe` is a bypass actor (always) on both the
-    `dev (incl v2-dev)` and `main` rulesets so the owner can self-merge PRs
+    `dev` and `main` rulesets so the owner can self-merge PRs
     without review; other maintainers still require 1 approving review; CI
     status checks remain required for all actors.
 

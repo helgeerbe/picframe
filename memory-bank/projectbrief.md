@@ -18,9 +18,9 @@ Picframe 2.0 modernizes the Raspberry Pi digital picture frame into a modular, e
 - GitHub Issues and the GitHub Project board are the authoritative task tracker. Memory Bank files are a concise local context cache.
 
 ## Current Modernization Shape
-- Branch: `dev` (integration branch, post-`v2-dev → dev` merge via PR #737).
-  The long-lived `v2-dev` branch is superseded and deleted (commits preserved
-  on `dev`); `main` remains the release branch.
+- Branch: `dev` (integration branch; the Picframe 2.0 modernization merged
+  via PR #737). The long-lived modernization branch was superseded and
+  deleted (commits preserved on `dev`); `main` remains the release branch.
 - Phases 0–2 are complete and merged into `dev`. The full target architecture
   (Clean Architecture, strict EDA, dual SQLite, FastAPI + Vue 3 control plane,
   Wayland-only pi3d rendering, GStreamer subprocess video) is in place.
