@@ -7,6 +7,7 @@ import {
   type FilesystemBrowseResponse,
   type FilesystemValidateResponse
 } from '../../stores/config'
+import { getApiErrorMessage } from '../../utils/errors'
 
 const props = withDefaults(
   defineProps<{
@@ -45,7 +46,7 @@ async function validatePath() {
       allow_missing: props.allowMissing,
       extensions: props.extensions
     })
-  } catch (error: any) {
+  } catch (error: unknown) {
     validation.value = {
       valid: false,
       path: props.modelValue,
@@ -53,7 +54,7 @@ async function validatePath() {
       is_dir: false,
       is_file: false,
       warnings: [],
-      error: error?.response?.data?.detail || error?.message || t('settings.pathPicker.notAllowed')
+      error: getApiErrorMessage(error, t('settings.pathPicker.notAllowed'))
     }
   }
 }
@@ -67,9 +68,8 @@ async function browse(path = props.modelValue || '~') {
       extensions: props.extensions
     })
     browseOpen.value = true
-  } catch (error: any) {
-    browseError.value =
-      error?.response?.data?.detail || error?.message || t('settings.pathPicker.browseFailed')
+  } catch (error: unknown) {
+    browseError.value = getApiErrorMessage(error, t('settings.pathPicker.browseFailed'))
     browseState.value = await configStore.browseFilesystem({
       path: '~',
       kind: props.kind,

@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import axios from 'axios'
+import { getApiErrorMessage, getErrorMessage } from '../utils/errors'
 
 const api = axios.create({
   baseURL: import.meta.env.DEV ? `http://${window.location.hostname}:9000/api` : '/api'
@@ -68,15 +69,20 @@ export interface FilesystemValidateResponse {
   error: string
 }
 
-function isPlainObject(value: unknown): value is Record<string, any> {
+function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function mergeConfig(base: Record<string, any>, patch: Record<string, any>): Record<string, any> {
+function mergeConfig(
+  base: Record<string, unknown>,
+  patch: Record<string, unknown>
+): Record<string, unknown> {
   const merged = { ...base }
   for (const [key, value] of Object.entries(patch)) {
     merged[key] =
-      isPlainObject(value) && isPlainObject(merged[key]) ? mergeConfig(merged[key], value) : value
+      isPlainObject(value) && isPlainObject(merged[key])
+        ? mergeConfig(merged[key] as Record<string, unknown>, value)
+        : value
   }
   return merged
 }
@@ -88,11 +94,11 @@ function normalizeAuthScope(value: unknown, enabled?: boolean): AuthScope {
   return enabled ? 'settings' : 'none'
 }
 
-function normalizeAuthConfig(payload: any): BasicAuthConfig {
+function normalizeAuthConfig(payload: Record<string, unknown>): BasicAuthConfig {
   const scope = normalizeAuthScope(payload?.scope, Boolean(payload?.enabled))
   return {
     enabled: scope !== 'none',
-    username: payload?.username || 'admin',
+    username: (payload?.username as string | undefined) || 'admin',
     scope,
     password_set: Boolean(payload?.password_set),
     password: typeof payload?.password === 'string' ? payload.password : ''
@@ -100,6 +106,10 @@ function normalizeAuthConfig(payload: any): BasicAuthConfig {
 }
 
 export const useConfigStore = defineStore('config', () => {
+  // The config blob is a data-driven dynamic object accessed at arbitrary depth
+  // by consumers (TextOverlayControls, AppearanceView); `unknown` would break
+  // those index accesses, so `any` is kept here intentionally.
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const config = ref<Record<string, any>>({})
   const filterOptions = ref<FilterOptions>({
     subdirectories: [],
@@ -132,22 +142,22 @@ export const useConfigStore = defineStore('config', () => {
     try {
       const response = await api.get('/config')
       config.value = response.data
-    } catch (e: any) {
-      error.value = e.message || 'Failed to fetch configuration'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to fetch configuration')
       console.error(e)
     } finally {
       isLoading.value = false
     }
   }
 
-  async function saveConfig(newConfig: Record<string, any>) {
+  async function saveConfig(newConfig: Record<string, unknown>) {
     isLoading.value = true
     error.value = null
     try {
       await api.put('/config', newConfig)
       config.value = newConfig
-    } catch (e: any) {
-      error.value = e.message || 'Failed to save configuration'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to save configuration')
       console.error(e)
       throw e
     } finally {
@@ -155,14 +165,14 @@ export const useConfigStore = defineStore('config', () => {
     }
   }
 
-  async function savePartialConfig(partialConfig: Record<string, any>) {
+  async function savePartialConfig(partialConfig: Record<string, unknown>) {
     isLoading.value = true
     error.value = null
     try {
       await api.put('/config', partialConfig)
       config.value = mergeConfig(config.value, partialConfig)
-    } catch (e: any) {
-      error.value = e.message || 'Failed to save configuration'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to save configuration')
       console.error(e)
       throw e
     } finally {
@@ -176,22 +186,22 @@ export const useConfigStore = defineStore('config', () => {
     try {
       const response = await api.get('/workflow-config')
       config.value = mergeConfig(config.value, response.data)
-    } catch (e: any) {
-      error.value = e.message || 'Failed to fetch workflow configuration'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to fetch workflow configuration')
       console.error(e)
     } finally {
       isLoading.value = false
     }
   }
 
-  async function saveWorkflowConfig(partialConfig: Record<string, any>) {
+  async function saveWorkflowConfig(partialConfig: Record<string, unknown>) {
     isLoading.value = true
     error.value = null
     try {
       await api.put('/workflow-config', partialConfig)
       config.value = mergeConfig(config.value, partialConfig)
-    } catch (e: any) {
-      error.value = e.message || 'Failed to save workflow configuration'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to save workflow configuration')
       console.error(e)
       throw e
     } finally {
@@ -203,8 +213,8 @@ export const useConfigStore = defineStore('config', () => {
     try {
       const response = await api.get('/auth/config')
       authConfig.value = normalizeAuthConfig(response.data)
-    } catch (e: any) {
-      error.value = e.message || 'Failed to fetch authentication settings'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to fetch authentication settings')
       console.error(e)
     }
   }
@@ -217,9 +227,8 @@ export const useConfigStore = defineStore('config', () => {
         password: nextAuthConfig.password || ''
       })
       authConfig.value = normalizeAuthConfig(response.data)
-    } catch (e: any) {
-      error.value =
-        e?.response?.data?.detail || e.message || 'Failed to save authentication settings'
+    } catch (e: unknown) {
+      error.value = getApiErrorMessage(e, 'Failed to save authentication settings')
       console.error(e)
       throw e
     }
@@ -229,20 +238,20 @@ export const useConfigStore = defineStore('config', () => {
     try {
       const response = await api.get('/media/filter-options')
       filterOptions.value = response.data
-    } catch (e: any) {
-      error.value = e.message || 'Failed to fetch media filter options'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to fetch media filter options')
       console.error(e)
     }
   }
 
-  async function fetchSelectionCount(payload: Record<string, any>) {
+  async function fetchSelectionCount(payload: Record<string, unknown>) {
     isSelectionCountLoading.value = true
     selectionCountError.value = null
     try {
       const response = await api.post('/media/selection-count', payload)
       selectionCount.value = response.data
-    } catch (e: any) {
-      selectionCountError.value = e.message || 'Failed to fetch media selection count'
+    } catch (e: unknown) {
+      selectionCountError.value = getErrorMessage(e, 'Failed to fetch media selection count')
       console.error(e)
     } finally {
       isSelectionCountLoading.value = false
@@ -253,8 +262,8 @@ export const useConfigStore = defineStore('config', () => {
     try {
       const response = await api.get('/system/locales')
       locales.value = response.data.locales || []
-    } catch (e: any) {
-      error.value = e.message || 'Failed to fetch installed locales'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to fetch installed locales')
       console.error(e)
     }
   }
@@ -327,8 +336,8 @@ export const useSystemStore = defineStore('system', () => {
     error.value = null
     try {
       await api.post('/maintenance/purge-db')
-    } catch (e: any) {
-      error.value = e.message || 'Failed to purge database'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to purge database')
       throw e
     } finally {
       isLoading.value = false
@@ -340,8 +349,8 @@ export const useSystemStore = defineStore('system', () => {
     error.value = null
     try {
       await api.post('/maintenance/clear-cache')
-    } catch (e: any) {
-      error.value = e.message || 'Failed to clear cache'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to clear cache')
       throw e
     } finally {
       isLoading.value = false
@@ -353,8 +362,8 @@ export const useSystemStore = defineStore('system', () => {
     error.value = null
     try {
       await api.post('/system/reboot')
-    } catch (e: any) {
-      error.value = e.message || 'Failed to reboot system'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to reboot system')
       throw e
     } finally {
       isLoading.value = false
@@ -366,8 +375,8 @@ export const useSystemStore = defineStore('system', () => {
     error.value = null
     try {
       await api.post('/system/shutdown')
-    } catch (e: any) {
-      error.value = e.message || 'Failed to shutdown system'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to shutdown system')
       throw e
     } finally {
       isLoading.value = false
@@ -380,8 +389,8 @@ export const useSystemStore = defineStore('system', () => {
     try {
       const response = await api.get('/system/service-status')
       return response.data
-    } catch (e: any) {
-      error.value = e.message || 'Failed to inspect Picframe service'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to inspect Picframe service')
       throw e
     } finally {
       isLoading.value = false
@@ -394,8 +403,8 @@ export const useSystemStore = defineStore('system', () => {
     try {
       const response = await api.post('/system/restart-service')
       return response.data
-    } catch (e: any) {
-      error.value = e.message || 'Failed to restart Picframe service'
+    } catch (e: unknown) {
+      error.value = getErrorMessage(e, 'Failed to restart Picframe service')
       throw e
     } finally {
       isLoading.value = false

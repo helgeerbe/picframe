@@ -48,7 +48,7 @@ const mapCenter = computed(() => {
 })
 
 const zoom = ref(13)
-const map = ref<any | null>(null)
+const map = ref<InstanceType<typeof LMap> | null>(null)
 
 const containerClass = computed(() => {
   return props.expanded

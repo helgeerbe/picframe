@@ -60,9 +60,11 @@ export default [
       'vue/multi-word-component-names': 'off',
       // Allow v-html in controlled contexts (i18n / trusted content)
       'vue/no-v-html': 'off',
-      // Establish a baseline without a large `any`-type refactor; surface
-      // them as warnings for future cleanup rather than blocking CI.
-      '@typescript-eslint/no-explicit-any': 'warn',
+      // `any` is now a hard error. The few remaining dynamic config/metadata
+      // blobs that legitimately need `any` carry a scoped
+      // `eslint-disable-next-line @typescript-eslint/no-explicit-any` with a
+      // rationale comment (see #743).
+      '@typescript-eslint/no-explicit-any': 'error',
     },
   },
 

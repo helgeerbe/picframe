@@ -144,7 +144,7 @@ function connect() {
   }
 }
 
-function normalizeLine(payload: Record<string, any>): LogLine {
+function normalizeLine(payload: Record<string, unknown>): LogLine {
   return {
     timestamp: Number(payload.timestamp || Date.now() / 1000),
     level: String(payload.level || 'INFO').toUpperCase(),
