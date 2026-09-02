@@ -13,7 +13,7 @@ from typing import Any
 from PIL import Image, ImageFilter, ImageOps
 
 from picframe.core.events.dto import RenderCommand
-from picframe.mat_image import MatImage
+from picframe.core.utils.mat_image import MatImage
 
 
 @dataclass(frozen=True)

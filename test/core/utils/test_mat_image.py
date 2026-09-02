@@ -3,7 +3,7 @@ from pathlib import Path
 from PIL import Image, ImageChops, ImageDraw
 
 from picframe.core.services.resource_paths import ResourcePaths
-from picframe.mat_image import MatImage
+from picframe.core.utils.mat_image import MatImage
 
 
 def _without_content(image: Image.Image, rect: tuple[int, int, int, int]) -> Image.Image:
