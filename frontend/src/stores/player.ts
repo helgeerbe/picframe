@@ -53,11 +53,12 @@ export const usePlayerStore = defineStore('player', () => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
     const host = window.location.host
     // In development, connect to the FastAPI backend port (e.g., 9000)
-    const wsUrl = import.meta.env.DEV 
+    const wsUrl = import.meta.env.DEV
       ? `ws://${window.location.hostname}:9000/ws/state`
       : `${protocol}//${host}/ws/state`
 
-    connectionStatus.value = connectionStatus.value === 'reconnecting' ? 'reconnecting' : 'connecting'
+    connectionStatus.value =
+      connectionStatus.value === 'reconnecting' ? 'reconnecting' : 'connecting'
     const socket = new WebSocket(wsUrl)
     ws = socket
 
@@ -71,7 +72,7 @@ export const usePlayerStore = defineStore('player', () => {
       sendCommand('REQUEST_STATE')
     }
 
-    socket.onmessage = (event) => {
+    socket.onmessage = event => {
       if (ws !== socket) return
       lastMessageAt = Date.now()
       try {
@@ -123,7 +124,7 @@ export const usePlayerStore = defineStore('player', () => {
       scheduleReconnect()
     }
 
-    socket.onerror = (error) => {
+    socket.onerror = error => {
       if (ws !== socket) return
       connectionStatus.value = 'offline'
       console.error('WebSocket error:', error)
@@ -187,7 +188,7 @@ export const usePlayerStore = defineStore('player', () => {
     const normalized = { ...media }
     normalized.file_path = normalizeMediaUrl(normalized.file_path)
     if (Array.isArray(normalized.items)) {
-      normalized.items = normalized.items.map((item) => normalizeMediaUrls(item))
+      normalized.items = normalized.items.map(item => normalizeMediaUrls(item))
     }
     return normalized
   }
@@ -197,7 +198,9 @@ export const usePlayerStore = defineStore('player', () => {
       return path
     }
 
-    const port = import.meta.env.DEV ? '9000' : window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
+    const port = import.meta.env.DEV
+      ? '9000'
+      : window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
     const host = window.location.hostname
     const protocol = window.location.protocol
     const mediaUrl = `/media?path=${encodeURIComponent(path)}`

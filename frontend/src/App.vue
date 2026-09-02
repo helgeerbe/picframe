@@ -30,7 +30,8 @@ const connectionIndicator = computed(() => {
       return {
         label: t('connection.live'),
         title: t('connection.liveTitle'),
-        containerClass: 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300',
+        containerClass:
+          'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300',
         dotClass: 'bg-emerald-500',
         pulse: false
       }
@@ -38,7 +39,8 @@ const connectionIndicator = computed(() => {
       return {
         label: t('connection.connecting'),
         title: t('connection.connectingTitle'),
-        containerClass: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
+        containerClass:
+          'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
         dotClass: 'bg-amber-500',
         pulse: true
       }
@@ -46,7 +48,8 @@ const connectionIndicator = computed(() => {
       return {
         label: t('connection.reconnecting'),
         title: t('connection.reconnectingTitle'),
-        containerClass: 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
+        containerClass:
+          'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-500/30 dark:bg-amber-500/10 dark:text-amber-300',
         dotClass: 'bg-amber-500',
         pulse: true
       }
@@ -54,7 +57,8 @@ const connectionIndicator = computed(() => {
       return {
         label: t('connection.offline'),
         title: t('connection.offlineTitle'),
-        containerClass: 'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300',
+        containerClass:
+          'border-red-200 bg-red-50 text-red-700 dark:border-red-500/30 dark:bg-red-500/10 dark:text-red-300',
         dotClass: 'bg-red-500',
         pulse: false
       }
@@ -64,9 +68,14 @@ const connectionIndicator = computed(() => {
 
 <template>
   <div class="min-h-screen bg-gray-100 text-gray-950 dark:bg-gray-900 dark:text-gray-100">
-    <header class="sticky top-0 z-40 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur dark:border-gray-800 dark:bg-gray-900/95">
+    <header
+      class="sticky top-0 z-40 border-b border-gray-200 bg-white/95 shadow-sm backdrop-blur dark:border-gray-800 dark:bg-gray-900/95"
+    >
       <nav class="mx-auto flex max-w-7xl items-center gap-1.5 px-2 py-2 sm:gap-2 sm:px-6 lg:px-8">
-        <div class="hide-scrollbar flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto sm:gap-1" :aria-label="t('nav.primary')">
+        <div
+          class="hide-scrollbar flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto sm:gap-1"
+          :aria-label="t('nav.primary')"
+        >
           <RouterLink
             v-for="item in navItems"
             :key="item.to"
@@ -88,15 +97,18 @@ const connectionIndicator = computed(() => {
           >
             <span
               class="h-2.5 w-2.5 rounded-full"
-              :class="[connectionIndicator.dotClass, connectionIndicator.pulse ? 'animate-pulse' : '']"
+              :class="[
+                connectionIndicator.dotClass,
+                connectionIndicator.pulse ? 'animate-pulse' : ''
+              ]"
             ></span>
             <span class="hidden sm:inline">{{ connectionIndicator.label }}</span>
           </div>
           <button
             type="button"
             :aria-label="t('nav.toggleLanguage')"
-            @click="toggleLocale"
             class="inline-flex h-9 items-center rounded-lg px-1 text-xs font-medium uppercase text-gray-700 hover:bg-gray-100 hover:text-gray-950 focus:outline-none focus:ring-2 focus:ring-sky-500/60 dark:text-gray-200 dark:hover:bg-gray-800 dark:hover:text-white sm:h-10 sm:px-3 sm:text-sm"
+            @click="toggleLocale"
           >
             {{ locale }}
           </button>

@@ -20,11 +20,7 @@
     },
     "blend_type": {
       "type": "select",
-      "options": [
-        "blend",
-        "burn",
-        "bump"
-      ]
+      "options": ["blend", "burn", "bump"]
     },
     "font_file": {
       "type": "string"
@@ -91,12 +87,7 @@
     },
     "display_power": {
       "type": "select",
-      "options": [
-        "0",
-        "1",
-        "2",
-        "3"
-      ]
+      "options": ["0", "1", "2", "3"]
     },
     "display_hdmi": {
       "type": "string"
@@ -109,11 +100,7 @@
     },
     "mat_images": {
       "type": "float",
-      "acceptedTypes": [
-        "boolean",
-        "float",
-        "string"
-      ]
+      "acceptedTypes": ["boolean", "float", "string"]
     },
     "mat_type": {
       "type": "string"
@@ -153,11 +140,7 @@
     },
     "clock_extra_source": {
       "type": "select",
-      "options": [
-        "off",
-        "clock_txt",
-        "ui_text"
-      ]
+      "options": ["off", "clock_txt", "ui_text"]
     },
     "clock_extra_text": {
       "type": "string"
@@ -226,11 +209,7 @@
     },
     "shuffle_mode": {
       "type": "select",
-      "options": [
-        "random",
-        "fewer_repeats",
-        "age_weighted"
-      ]
+      "options": ["random", "fewer_repeats", "age_weighted"]
     },
     "recency_half_life_days": {
       "type": "float"
@@ -320,12 +299,7 @@
   "peripherals": {
     "input_type": {
       "type": "select",
-      "options": [
-        "null",
-        "keyboard",
-        "touch",
-        "mouse"
-      ]
+      "options": ["null", "keyboard", "touch", "mouse"]
     },
     "buttons": {
       "type": "object",

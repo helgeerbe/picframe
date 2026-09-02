@@ -2,14 +2,17 @@
 import { ref } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 
-const props = withDefaults(defineProps<{
-  modelValue: string[]
-  placeholder?: string
-  extensionMode?: boolean
-}>(), {
-  placeholder: '',
-  extensionMode: false
-})
+const props = withDefaults(
+  defineProps<{
+    modelValue: string[]
+    placeholder?: string
+    extensionMode?: boolean
+  }>(),
+  {
+    placeholder: '',
+    extensionMode: false
+  }
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: string[]]
@@ -35,7 +38,10 @@ function addToken(rawValue = draft.value) {
 }
 
 function removeToken(token: string) {
-  emit('update:modelValue', props.modelValue.filter(item => item !== token))
+  emit(
+    'update:modelValue',
+    props.modelValue.filter(item => item !== token)
+  )
 }
 
 function handleKeydown(event: KeyboardEvent) {
@@ -55,7 +61,11 @@ function handleKeydown(event: KeyboardEvent) {
         class="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-sm font-medium text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300"
       >
         {{ token }}
-        <button type="button" class="rounded p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20" @click="removeToken(token)">
+        <button
+          type="button"
+          class="rounded p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20"
+          @click="removeToken(token)"
+        >
           <XMarkIcon class="h-3.5 w-3.5" />
         </button>
       </span>
@@ -66,7 +76,7 @@ function handleKeydown(event: KeyboardEvent) {
         class="min-w-[10rem] flex-1 border-0 bg-transparent px-1 py-1 text-sm text-gray-900 shadow-none outline-none focus:ring-0 dark:text-white"
         @keydown="handleKeydown"
         @blur="addToken()"
-      >
+      />
     </div>
   </div>
 </template>

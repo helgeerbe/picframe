@@ -31,6 +31,11 @@ const fieldHelpId = inject<ComputedRef<string | undefined> | undefined>('fieldHe
     ]"
     @click="emit('update:modelValue', !props.modelValue)"
   >
-    <span :class="[props.modelValue ? 'translate-x-5' : 'translate-x-0', 'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition']"></span>
+    <span
+      :class="[
+        props.modelValue ? 'translate-x-5' : 'translate-x-0',
+        'pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow transition'
+      ]"
+    ></span>
   </button>
 </template>

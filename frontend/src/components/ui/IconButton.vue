@@ -1,18 +1,21 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
-  label: string
-  title?: string
-  pressed?: boolean
-  variant?: 'ghost' | 'soft' | 'primary' | 'danger'
-  size?: 'sm' | 'md' | 'lg'
-  type?: 'button' | 'submit' | 'reset'
-  disabled?: boolean
-}>(), {
-  variant: 'ghost',
-  size: 'md',
-  type: 'button',
-  disabled: false
-})
+withDefaults(
+  defineProps<{
+    label: string
+    title?: string
+    pressed?: boolean
+    variant?: 'ghost' | 'soft' | 'primary' | 'danger'
+    size?: 'sm' | 'md' | 'lg'
+    type?: 'button' | 'submit' | 'reset'
+    disabled?: boolean
+  }>(),
+  {
+    variant: 'ghost',
+    size: 'md',
+    type: 'button',
+    disabled: false
+  }
+)
 
 const emit = defineEmits<{
   click: [event: MouseEvent]

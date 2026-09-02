@@ -14,7 +14,7 @@ import shadowUrl from 'leaflet/dist/images/marker-shadow.png'
 L.Icon.Default.mergeOptions({
   iconRetinaUrl,
   iconUrl,
-  shadowUrl,
+  shadowUrl
 })
 
 const props = defineProps<{
@@ -69,14 +69,23 @@ watch(mapCenter, invalidateMapSize)
 </script>
 
 <template>
-  <div v-if="hasLocation" :class="['flex flex-col overflow-hidden bg-white dark:bg-gray-800', containerClass]">
-    <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between z-10 bg-white dark:bg-gray-800/90">
+  <div
+    v-if="hasLocation"
+    :class="['flex flex-col overflow-hidden bg-white dark:bg-gray-800', containerClass]"
+  >
+    <div
+      class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between z-10 bg-white dark:bg-gray-800/90"
+    >
       <div class="flex items-center space-x-3 overflow-hidden">
         <div class="p-2 bg-emerald-50 dark:bg-emerald-500/10 rounded-lg flex-shrink-0">
           <MapPinIcon class="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
         </div>
         <h3 class="truncate text-lg font-bold tracking-normal text-gray-900 dark:text-white">
-          {{ locationName || formatCoordinates(props.latitude, props.longitude) || t('remote.location') }}
+          {{
+            locationName ||
+            formatCoordinates(props.latitude, props.longitude) ||
+            t('remote.location')
+          }}
         </h3>
       </div>
       <button
@@ -90,9 +99,15 @@ watch(mapCenter, invalidateMapSize)
         <ArrowsPointingOutIcon class="h-5 w-5" />
       </button>
     </div>
-    
+
     <div class="flex-grow w-full relative z-0">
-      <l-map ref="map" v-model:zoom="zoom" :center="mapCenter" :use-global-leaflet="false" class="z-0">
+      <l-map
+        ref="map"
+        v-model:zoom="zoom"
+        :center="mapCenter"
+        :use-global-leaflet="false"
+        class="z-0"
+      >
         <l-tile-layer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           layer-type="base"

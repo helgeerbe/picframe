@@ -59,7 +59,8 @@ const updateTooltipPosition = async () => {
   const maxLeft = Math.max(VIEWPORT_MARGIN, window.innerWidth - tooltipRect.width - VIEWPORT_MARGIN)
   const desiredLeft = buttonRect.left + buttonRect.width / 2 - tooltipRect.width / 2
   const left = clamp(desiredLeft, VIEWPORT_MARGIN, maxLeft)
-  const hasRoomBelow = buttonRect.bottom + TOOLTIP_OFFSET + tooltipRect.height + VIEWPORT_MARGIN <= window.innerHeight
+  const hasRoomBelow =
+    buttonRect.bottom + TOOLTIP_OFFSET + tooltipRect.height + VIEWPORT_MARGIN <= window.innerHeight
   const hasRoomAbove = buttonRect.top - TOOLTIP_OFFSET - tooltipRect.height - VIEWPORT_MARGIN >= 0
   const placeAbove = !hasRoomBelow && hasRoomAbove
   const top = placeAbove
@@ -100,7 +101,7 @@ const handleKeydown = (event: KeyboardEvent) => {
   }
 }
 
-watch(isOpen, (open) => {
+watch(isOpen, open => {
   if (open) {
     document.addEventListener('keydown', handleKeydown)
   } else {
@@ -108,7 +109,7 @@ watch(isOpen, (open) => {
   }
 })
 
-watch(isTooltipOpen, (open) => {
+watch(isTooltipOpen, open => {
   if (open) {
     window.addEventListener('resize', scheduleTooltipPositionUpdate)
     window.addEventListener('scroll', scheduleTooltipPositionUpdate, true)
@@ -160,7 +161,9 @@ onBeforeUnmount(() => {
         <div
           :style="arrowStyle"
           :class="[
-            tooltipPlacement === 'bottom' ? 'bottom-full border-b-gray-900' : 'top-full border-t-gray-900',
+            tooltipPlacement === 'bottom'
+              ? 'bottom-full border-b-gray-900'
+              : 'top-full border-t-gray-900',
             'absolute -translate-x-1/2 border-4 border-transparent'
           ]"
         ></div>
@@ -176,19 +179,24 @@ onBeforeUnmount(() => {
         :aria-label="t('common.help')"
         @click="closeDialog"
       >
-        <div class="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl transition-all dark:bg-gray-800" @click.stop>
+        <div
+          class="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl transition-all dark:bg-gray-800"
+          @click.stop
+        >
           <button
             type="button"
-            @click.stop="closeDialog"
             :aria-label="t('common.close')"
             class="absolute right-4 top-4 inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 dark:hover:bg-gray-700 dark:hover:text-gray-300"
+            @click.stop="closeDialog"
           >
             <XMarkIcon class="w-5 h-5" />
           </button>
           <div class="flex items-start space-x-3 pr-8">
             <InformationCircleIcon class="mt-0.5 h-6 w-6 flex-shrink-0 text-indigo-500" />
             <div>
-              <h4 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">{{ t('common.help') }}</h4>
+              <h4 class="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
+                {{ t('common.help') }}
+              </h4>
               <p class="text-sm leading-relaxed text-gray-600 dark:text-gray-300">
                 {{ text }}
               </p>

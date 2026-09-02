@@ -10,7 +10,7 @@ export interface FilterOptions {
   subdirectories: string[]
   locations: string[]
   tags: string[]
-  sort_columns: Array<{ key: string, label: string }>
+  sort_columns: Array<{ key: string; label: string }>
 }
 
 export interface LocationOption {
@@ -75,9 +75,8 @@ function isPlainObject(value: unknown): value is Record<string, any> {
 function mergeConfig(base: Record<string, any>, patch: Record<string, any>): Record<string, any> {
   const merged = { ...base }
   for (const [key, value] of Object.entries(patch)) {
-    merged[key] = isPlainObject(value) && isPlainObject(merged[key])
-      ? mergeConfig(merged[key], value)
-      : value
+    merged[key] =
+      isPlainObject(value) && isPlainObject(merged[key]) ? mergeConfig(merged[key], value) : value
   }
   return merged
 }
@@ -219,7 +218,8 @@ export const useConfigStore = defineStore('config', () => {
       })
       authConfig.value = normalizeAuthConfig(response.data)
     } catch (e: any) {
-      error.value = e?.response?.data?.detail || e.message || 'Failed to save authentication settings'
+      error.value =
+        e?.response?.data?.detail || e.message || 'Failed to save authentication settings'
       console.error(e)
       throw e
     }

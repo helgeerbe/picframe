@@ -2,18 +2,25 @@
 import { onMounted, ref, watch } from 'vue'
 import { FolderIcon, DocumentIcon } from '@heroicons/vue/24/outline'
 import { useI18n } from 'vue-i18n'
-import { useConfigStore, type FilesystemBrowseResponse, type FilesystemValidateResponse } from '../../stores/config'
+import {
+  useConfigStore,
+  type FilesystemBrowseResponse,
+  type FilesystemValidateResponse
+} from '../../stores/config'
 
-const props = withDefaults(defineProps<{
-  modelValue: string
-  kind?: 'any' | 'file' | 'directory'
-  allowMissing?: boolean
-  extensions?: string[]
-}>(), {
-  kind: 'any',
-  allowMissing: false,
-  extensions: () => []
-})
+const props = withDefaults(
+  defineProps<{
+    modelValue: string
+    kind?: 'any' | 'file' | 'directory'
+    allowMissing?: boolean
+    extensions?: string[]
+  }>(),
+  {
+    kind: 'any',
+    allowMissing: false,
+    extensions: () => []
+  }
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: string]
@@ -61,7 +68,8 @@ async function browse(path = props.modelValue || '~') {
     })
     browseOpen.value = true
   } catch (error: any) {
-    browseError.value = error?.response?.data?.detail || error?.message || t('settings.pathPicker.browseFailed')
+    browseError.value =
+      error?.response?.data?.detail || error?.message || t('settings.pathPicker.browseFailed')
     browseState.value = await configStore.browseFilesystem({
       path: '~',
       kind: props.kind,
@@ -76,9 +84,12 @@ function selectPath(path: string) {
   browseOpen.value = false
 }
 
-watch(() => props.modelValue, () => {
-  validatePath()
-})
+watch(
+  () => props.modelValue,
+  () => {
+    validatePath()
+  }
+)
 
 onMounted(validatePath)
 </script>
@@ -92,7 +103,7 @@ onMounted(validatePath)
         class="block min-w-0 flex-1 rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
         @input="emit('update:modelValue', ($event.target as HTMLInputElement).value)"
         @blur="validatePath"
-      >
+      />
       <button
         type="button"
         class="inline-flex items-center justify-center rounded-lg border border-gray-300 px-3 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
@@ -102,22 +113,55 @@ onMounted(validatePath)
         {{ t('settings.pathPicker.browse') }}
       </button>
     </div>
-    <p v-if="validation && !validation.valid" class="text-xs font-medium text-red-600 dark:text-red-400">{{ validation.error }}</p>
-    <p v-else-if="validation?.warnings.length" class="text-xs font-medium text-amber-600 dark:text-amber-400">{{ validation.warnings.join(', ') }}</p>
-    <p v-else-if="validation?.valid" class="text-xs text-gray-500 dark:text-gray-400">{{ validation.exists ? t('settings.pathPicker.exists') : t('settings.pathPicker.later') }}</p>
+    <p
+      v-if="validation && !validation.valid"
+      class="text-xs font-medium text-red-600 dark:text-red-400"
+    >
+      {{ validation.error }}
+    </p>
+    <p
+      v-else-if="validation?.warnings.length"
+      class="text-xs font-medium text-amber-600 dark:text-amber-400"
+    >
+      {{ validation.warnings.join(', ') }}
+    </p>
+    <p v-else-if="validation?.valid" class="text-xs text-gray-500 dark:text-gray-400">
+      {{ validation.exists ? t('settings.pathPicker.exists') : t('settings.pathPicker.later') }}
+    </p>
 
-    <div v-if="browseOpen" class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/60 p-4">
-      <div class="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl dark:bg-gray-800">
-        <div class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700">
+    <div
+      v-if="browseOpen"
+      class="fixed inset-0 z-40 flex items-center justify-center bg-gray-900/60 p-4"
+    >
+      <div
+        class="max-h-[85vh] w-full max-w-3xl overflow-hidden rounded-lg bg-white shadow-xl dark:bg-gray-800"
+      >
+        <div
+          class="flex items-center justify-between border-b border-gray-200 px-4 py-3 dark:border-gray-700"
+        >
           <div>
-            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">{{ t('settings.pathPicker.selectPath') }}</h3>
+            <h3 class="text-sm font-semibold text-gray-900 dark:text-white">
+              {{ t('settings.pathPicker.selectPath') }}
+            </h3>
             <p class="text-xs text-gray-500 dark:text-gray-400">{{ browseState?.path }}</p>
           </div>
-          <button type="button" class="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700" @click="browseOpen = false">{{ t('common.close') }}</button>
+          <button
+            type="button"
+            class="rounded-md px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700"
+            @click="browseOpen = false"
+          >
+            {{ t('common.close') }}
+          </button>
         </div>
-        <div class="grid max-h-[70vh] grid-cols-1 overflow-y-auto md:grid-cols-[12rem_minmax(0,1fr)]">
-          <aside class="border-b border-gray-200 p-3 dark:border-gray-700 md:border-b-0 md:border-r">
-            <p class="mb-2 text-xs font-semibold uppercase text-gray-500">{{ t('settings.pathPicker.shortcuts') }}</p>
+        <div
+          class="grid max-h-[70vh] grid-cols-1 overflow-y-auto md:grid-cols-[12rem_minmax(0,1fr)]"
+        >
+          <aside
+            class="border-b border-gray-200 p-3 dark:border-gray-700 md:border-b-0 md:border-r"
+          >
+            <p class="mb-2 text-xs font-semibold uppercase text-gray-500">
+              {{ t('settings.pathPicker.shortcuts') }}
+            </p>
             <button
               v-for="shortcut in browseState?.shortcuts || []"
               :key="shortcut.path"
@@ -129,7 +173,9 @@ onMounted(validatePath)
             </button>
           </aside>
           <main class="p-3">
-            <p v-if="browseError" class="mb-2 text-xs font-medium text-amber-600">{{ browseError }}</p>
+            <p v-if="browseError" class="mb-2 text-xs font-medium text-amber-600">
+              {{ browseError }}
+            </p>
             <div class="mb-3 flex gap-2">
               <button
                 v-if="browseState?.parent"
@@ -148,7 +194,9 @@ onMounted(validatePath)
                 {{ t('settings.pathPicker.useFolder') }}
               </button>
             </div>
-            <div class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
+            <div
+              class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700"
+            >
               <div
                 v-for="entry in browseState?.entries || []"
                 :key="entry.path"

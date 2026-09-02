@@ -54,20 +54,34 @@ function move(value: string, direction: -1 | 1) {
 
 <template>
   <div class="space-y-3">
-    <div class="flex min-h-11 flex-wrap gap-2 rounded-lg border border-gray-300 bg-white p-2 dark:border-gray-600 dark:bg-gray-700">
+    <div
+      class="flex min-h-11 flex-wrap gap-2 rounded-lg border border-gray-300 bg-white p-2 dark:border-gray-600 dark:bg-gray-700"
+    >
       <span
         v-for="value in values()"
         :key="value"
         class="inline-flex items-center gap-1 rounded-md bg-indigo-50 px-2 py-1 text-sm font-medium text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300"
       >
         {{ labelFor(value) }}
-        <button type="button" class="rounded p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20" @click="move(value, -1)">
+        <button
+          type="button"
+          class="rounded p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20"
+          @click="move(value, -1)"
+        >
           <ArrowUpIcon class="h-3.5 w-3.5" />
         </button>
-        <button type="button" class="rounded p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20" @click="move(value, 1)">
+        <button
+          type="button"
+          class="rounded p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20"
+          @click="move(value, 1)"
+        >
           <ArrowDownIcon class="h-3.5 w-3.5" />
         </button>
-        <button type="button" class="rounded p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20" @click="remove(value)">
+        <button
+          type="button"
+          class="rounded p-0.5 hover:bg-indigo-100 dark:hover:bg-indigo-500/20"
+          @click="remove(value)"
+        >
           <XMarkIcon class="h-3.5 w-3.5" />
         </button>
       </span>

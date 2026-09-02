@@ -47,13 +47,21 @@ function toggleTerm(term: string, joiner: 'OR' | 'AND') {
       class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
       @input="emit('update:modelValue', ($event.target as HTMLTextAreaElement).value)"
     ></textarea>
-    <div v-if="options.length" class="max-h-28 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-gray-700">
+    <div
+      v-if="options.length"
+      class="max-h-28 overflow-y-auto rounded-lg border border-gray-200 p-2 dark:border-gray-700"
+    >
       <div class="flex flex-wrap gap-2">
         <button
           v-for="option in options"
           :key="option"
           type="button"
-          :class="[containsTerm(modelValue, quoteTerm(option)) ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600', 'rounded-md px-2 py-1 text-xs font-medium transition-colors']"
+          :class="[
+            containsTerm(modelValue, quoteTerm(option))
+              ? 'bg-indigo-600 text-white'
+              : 'bg-gray-100 text-gray-700 hover:bg-gray-200 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600',
+            'rounded-md px-2 py-1 text-xs font-medium transition-colors'
+          ]"
           @click="toggleTerm(option, ($event as MouseEvent).shiftKey ? 'AND' : 'OR')"
         >
           {{ option }}

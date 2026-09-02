@@ -60,7 +60,9 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const visibleFields = computed(() => {
-  return props.fields.filter((field) => field.value !== undefined && field.value !== null && String(field.value) !== '')
+  return props.fields.filter(
+    field => field.value !== undefined && field.value !== null && String(field.value) !== ''
+  )
 })
 </script>
 
@@ -74,19 +76,28 @@ const visibleFields = computed(() => {
     <div v-if="visibleFields.length || caption || tags.length || locationName" class="space-y-6">
       <section>
         <h3 class="text-lg font-semibold text-gray-950 dark:text-white">{{ title || fileName }}</h3>
-        <p v-if="caption" class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ caption }}</p>
+        <p v-if="caption" class="mt-2 text-sm leading-6 text-gray-600 dark:text-gray-300">
+          {{ caption }}
+        </p>
       </section>
 
-      <section v-if="locationName" class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40">
+      <section
+        v-if="locationName"
+        class="flex items-start gap-3 rounded-lg border border-gray-200 bg-gray-50 p-3 dark:border-gray-700 dark:bg-gray-900/40"
+      >
         <MapPinIcon class="mt-0.5 h-5 w-5 flex-shrink-0 text-gray-400" />
         <div>
-          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('remote.location') }}</p>
+          <p class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+            {{ t('remote.location') }}
+          </p>
           <p class="mt-1 text-sm font-medium text-gray-950 dark:text-white">{{ locationName }}</p>
         </div>
       </section>
 
       <section v-if="tags.length">
-        <div class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white">
+        <div
+          class="mb-2 flex items-center gap-2 text-sm font-semibold text-gray-950 dark:text-white"
+        >
           <TagIcon class="h-4 w-4 text-gray-400" />
           {{ t('remote.metadata.tags') }}
         </div>
@@ -102,8 +113,12 @@ const visibleFields = computed(() => {
       </section>
 
       <section>
-        <h3 class="mb-3 text-sm font-semibold text-gray-950 dark:text-white">{{ t('remote.mediaInfo.technical') }}</h3>
-        <dl class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700">
+        <h3 class="mb-3 text-sm font-semibold text-gray-950 dark:text-white">
+          {{ t('remote.mediaInfo.technical') }}
+        </h3>
+        <dl
+          class="divide-y divide-gray-100 rounded-lg border border-gray-200 dark:divide-gray-700 dark:border-gray-700"
+        >
           <div
             v-for="field in visibleFields"
             :key="field.key"
@@ -113,7 +128,10 @@ const visibleFields = computed(() => {
               <component :is="iconComponents[field.icon]" class="h-4 w-4 flex-shrink-0" />
               <span class="truncate">{{ field.label }}</span>
             </dt>
-            <dd class="truncate text-right font-medium text-gray-950 dark:text-gray-100" :title="String(field.value)">
+            <dd
+              class="truncate text-right font-medium text-gray-950 dark:text-gray-100"
+              :title="String(field.value)"
+            >
               {{ field.value }}
             </dd>
           </div>

@@ -3,14 +3,17 @@ import { computed, ref, toRef } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { useFocusTrap } from './useFocusTrap'
 
-const props = withDefaults(defineProps<{
-  open: boolean
-  title: string
-  description?: string
-  maxWidth?: 'sm' | 'md' | 'lg' | 'xl'
-}>(), {
-  maxWidth: 'md'
-})
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    description?: string
+    maxWidth?: 'sm' | 'md' | 'lg' | 'xl'
+  }>(),
+  {
+    maxWidth: 'md'
+  }
+)
 
 const emit = defineEmits<{
   close: []
@@ -21,10 +24,14 @@ useFocusTrap(toRef(props, 'open'), panelRef, () => emit('close'))
 
 const widthClass = computed(() => {
   switch (props.maxWidth) {
-    case 'sm': return 'max-w-sm'
-    case 'lg': return 'max-w-2xl'
-    case 'xl': return 'max-w-4xl'
-    default: return 'max-w-lg'
+    case 'sm':
+      return 'max-w-sm'
+    case 'lg':
+      return 'max-w-2xl'
+    case 'xl':
+      return 'max-w-4xl'
+    default:
+      return 'max-w-lg'
   }
 })
 </script>
@@ -40,17 +47,27 @@ const widthClass = computed(() => {
       <section
         ref="panelRef"
         tabindex="-1"
-        :class="['w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl outline-none dark:border-gray-700 dark:bg-gray-800', widthClass]"
+        :class="[
+          'w-full overflow-hidden rounded-lg border border-gray-200 bg-white shadow-xl outline-none dark:border-gray-700 dark:bg-gray-800',
+          widthClass
+        ]"
         role="dialog"
         aria-modal="true"
         :aria-labelledby="`${title.replace(/\s+/g, '-').toLowerCase()}-dialog-title`"
       >
-        <header class="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-gray-700">
+        <header
+          class="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-gray-700"
+        >
           <div>
-            <h2 :id="`${title.replace(/\s+/g, '-').toLowerCase()}-dialog-title`" class="text-lg font-semibold text-gray-950 dark:text-white">
+            <h2
+              :id="`${title.replace(/\s+/g, '-').toLowerCase()}-dialog-title`"
+              class="text-lg font-semibold text-gray-950 dark:text-white"
+            >
               {{ title }}
             </h2>
-            <p v-if="description" class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ description }}</p>
+            <p v-if="description" class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">
+              {{ description }}
+            </p>
           </div>
           <button
             type="button"
@@ -64,7 +81,10 @@ const widthClass = computed(() => {
         <div class="p-5">
           <slot />
         </div>
-        <footer v-if="$slots.footer" class="border-t border-gray-100 bg-gray-50 px-5 py-4 dark:border-gray-700 dark:bg-gray-900/40">
+        <footer
+          v-if="$slots.footer"
+          class="border-t border-gray-100 bg-gray-50 px-5 py-4 dark:border-gray-700 dark:bg-gray-900/40"
+        >
           <slot name="footer" />
         </footer>
       </section>

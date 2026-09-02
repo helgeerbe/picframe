@@ -3,14 +3,17 @@ import { computed, ref, toRef } from 'vue'
 import { XMarkIcon } from '@heroicons/vue/24/outline'
 import { useFocusTrap } from './useFocusTrap'
 
-const props = withDefaults(defineProps<{
-  open: boolean
-  title: string
-  description?: string
-  side?: 'right' | 'left'
-}>(), {
-  side: 'right'
-})
+const props = withDefaults(
+  defineProps<{
+    open: boolean
+    title: string
+    description?: string
+    side?: 'right' | 'left'
+  }>(),
+  {
+    side: 'right'
+  }
+)
 
 const emit = defineEmits<{
   close: []
@@ -20,9 +23,7 @@ const panelRef = ref<HTMLElement | null>(null)
 useFocusTrap(toRef(props, 'open'), panelRef, () => emit('close'))
 
 const placementClass = computed(() => {
-  return props.side === 'left'
-    ? 'sm:left-0 sm:right-auto'
-    : 'sm:right-0 sm:left-auto'
+  return props.side === 'left' ? 'sm:left-0 sm:right-auto' : 'sm:right-0 sm:left-auto'
 })
 </script>
 
@@ -46,12 +47,19 @@ const placementClass = computed(() => {
         aria-modal="true"
         :aria-labelledby="`${title.replace(/\s+/g, '-').toLowerCase()}-sheet-title`"
       >
-        <header class="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-gray-700">
+        <header
+          class="flex items-start justify-between gap-4 border-b border-gray-100 px-5 py-4 dark:border-gray-700"
+        >
           <div class="min-w-0">
-            <h2 :id="`${title.replace(/\s+/g, '-').toLowerCase()}-sheet-title`" class="truncate text-lg font-semibold text-gray-950 dark:text-white">
+            <h2
+              :id="`${title.replace(/\s+/g, '-').toLowerCase()}-sheet-title`"
+              class="truncate text-lg font-semibold text-gray-950 dark:text-white"
+            >
               {{ title }}
             </h2>
-            <p v-if="description" class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">{{ description }}</p>
+            <p v-if="description" class="mt-1 text-sm leading-6 text-gray-500 dark:text-gray-400">
+              {{ description }}
+            </p>
           </div>
           <button
             type="button"

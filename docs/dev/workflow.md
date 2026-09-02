@@ -69,6 +69,7 @@ Every PR must satisfy the Definition of Done checklist in the PR template:
 - Tests passing (`pytest`)
 - Type checks passing (`mypy`)
 - Lint/format passing (`ruff`)
+- Frontend lint/format passing (`yarn lint` / `yarn format:check`)
 - Frontend rebuilt and committed (if frontend changed)
 - Documentation updated
 - No regressions
@@ -77,7 +78,7 @@ Every PR must satisfy the Definition of Done checklist in the PR template:
 ## CI Pipeline
 
 The CI workflow (`.github/workflows/ci.yml`) runs on every PR targeting `dev`
-or `v2-dev`. It consists of four jobs:
+or `v2-dev`. It consists of five jobs:
 
 ### 1. `pr-title` — Conventional Commit Validation
 
@@ -93,7 +94,19 @@ mypy src/picframe
 pytest test/
 ```
 
-### 3. `frontend-drift` — Frontend Bundle Consistency
+### 3. `frontend-lint` — Frontend Quality Gates
+
+```bash
+cd frontend && yarn install --frozen-lockfile
+yarn lint
+yarn format:check
+```
+
+Runs ESLint (flat config with `eslint-plugin-vue` + `typescript-eslint`) and
+Prettier. The `no-console` rule blocks `console.log`/`debug`/`info` while
+allowing `console.warn`/`console.error`.
+
+### 4. `frontend-drift` — Frontend Bundle Consistency
 
 ```bash
 cd frontend && yarn install --frozen-lockfile && yarn build
@@ -103,7 +116,7 @@ git diff --exit-code src/picframe/html
 Fails if the committed `src/picframe/html` doesn't match a fresh build.
 This prevents merging stale frontend bundles.
 
-### 4. `package-build` — Python Package Build
+### 5. `package-build` — Python Package Build
 
 ```bash
 pip install build twine

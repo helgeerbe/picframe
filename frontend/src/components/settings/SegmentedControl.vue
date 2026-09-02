@@ -33,7 +33,12 @@ const fieldHelpId = inject<ComputedRef<string | undefined> | undefined>('fieldHe
       :key="String(option.value)"
       type="button"
       :aria-pressed="modelValue === option.value"
-      :class="[modelValue === option.value ? 'bg-indigo-600 text-white shadow-sm' : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700', 'rounded-md px-3 py-1.5 text-sm font-medium transition-colors']"
+      :class="[
+        modelValue === option.value
+          ? 'bg-indigo-600 text-white shadow-sm'
+          : 'text-gray-700 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700',
+        'rounded-md px-3 py-1.5 text-sm font-medium transition-colors'
+      ]"
       @click="emit('update:modelValue', option.value)"
     >
       {{ option.label }}

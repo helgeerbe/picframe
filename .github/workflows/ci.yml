@@ -91,6 +91,31 @@ jobs:
             exit 1
           fi
 
+  frontend-lint:
+    name: ESLint · Prettier
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: frontend
+
+      - name: ESLint
+        run: yarn lint
+        working-directory: frontend
+
+      - name: Prettier check
+        run: yarn format:check
+        working-directory: frontend
+
   package-build:
     name: Python package build
     runs-on: ubuntu-latest

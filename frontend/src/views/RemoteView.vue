@@ -85,7 +85,7 @@ const shuffleModes = [
   { value: 'fewer_repeats', labelKey: 'remote.controls.shuffleModeFewerRepeats' },
   { value: 'age_weighted', labelKey: 'remote.controls.shuffleModeAgeWeighted' }
 ] as const
-type ShuffleMode = typeof shuffleModes[number]['value']
+type ShuffleMode = (typeof shuffleModes)[number]['value']
 
 const normalizeShuffleMode = (value: unknown): ShuffleMode => {
   if (value === 'fewer_repeats' || value === 'age_weighted') return value
@@ -130,13 +130,7 @@ watch(
     () => appConfig.value?.model?.location_filter || '',
     () => appConfig.value?.model?.tags_filter || ''
   ],
-  ([
-    subdirectory,
-    dateFrom,
-    dateTo,
-    locationFilter,
-    tagsFilter
-  ]) => {
+  ([subdirectory, dateFrom, dateTo, locationFilter, tagsFilter]) => {
     mediaSelection.subdirectory = subdirectory
     mediaSelection.date_from = dateFrom
     mediaSelection.date_to = dateTo
@@ -192,7 +186,7 @@ onBeforeUnmount(() => {
 
 watch(
   () => currentMedia.value,
-  (media) => {
+  media => {
     selectedPairIndex.value = media?.primary_index ?? 0
     showPairDeleteDialog.value = false
     isMediaInfoOpen.value = false
@@ -228,7 +222,9 @@ const isShuffleEnabled = computed(() => appConfig.value?.model?.shuffle ?? true)
 const shuffleMode = computed(() => normalizeShuffleMode(appConfig.value?.model?.shuffle_mode))
 
 const displayPowerTitle = computed(() => {
-  return isDisplayOn.value ? t('remote.controls.turnDisplayOff') : t('remote.controls.turnDisplayOn')
+  return isDisplayOn.value
+    ? t('remote.controls.turnDisplayOff')
+    : t('remote.controls.turnDisplayOn')
 })
 
 const playPauseTitle = computed(() => {
@@ -240,7 +236,7 @@ const shuffleTitle = computed(() => {
 })
 
 const selectedShuffleModeLabel = computed(() => {
-  const mode = shuffleModes.find((item) => item.value === shuffleMode.value) ?? shuffleModes[0]
+  const mode = shuffleModes.find(item => item.value === shuffleMode.value) ?? shuffleModes[0]
   return t(mode.labelKey)
 })
 
@@ -390,7 +386,8 @@ const retryMediaImage = (media: MediaItem | null | undefined) => {
   playerStore.sendCommand('REQUEST_STATE')
 }
 
-const pairSideLabel = (index: number) => index === 0 ? t('remote.pair.left') : t('remote.pair.right')
+const pairSideLabel = (index: number) =>
+  index === 0 ? t('remote.pair.left') : t('remote.pair.right')
 
 const handleDeleteClick = () => {
   if (isPortraitPair.value) {
@@ -404,7 +401,7 @@ const pairDeleteIds = (target: 'left' | 'right' | 'both') => {
   const items = currentMediaItems.value
   if (target === 'left') return items[0]?.id != null ? [items[0].id] : []
   if (target === 'right') return items[1]?.id != null ? [items[1].id] : []
-  return items.map((item) => item.id).filter((id): id is number => id != null)
+  return items.map(item => item.id).filter((id): id is number => id != null)
 }
 
 const deletePair = (target: 'left' | 'right' | 'both') => {
@@ -494,7 +491,7 @@ const parseSimpleFilterExpression = (expression: string) => {
       break
     }
 
-    let token = ''
+    let token: string
     let wasQuoted = false
     if (text[index] === '"') {
       wasQuoted = true
@@ -544,10 +541,12 @@ const parseSimpleFilterExpression = (expression: string) => {
 const normalizeFilterTerm = (term: string) => term.trim().replace(/^"([^"]*)"$/, '$1')
 
 const serializeFilterParts = (parts: FilterPart[]) => {
-  return parts.map((part, partIndex) => {
-    const prefix = partIndex === 0 ? '' : `${part.joiner || 'OR'} `
-    return `${prefix}${quoteFilterTerm(part.term)}`
-  }).join(' ')
+  return parts
+    .map((part, partIndex) => {
+      const prefix = partIndex === 0 ? '' : `${part.joiner || 'OR'} `
+      return `${prefix}${quoteFilterTerm(part.term)}`
+    })
+    .join(' ')
 }
 
 const appendFilterTerm = (expression: string, term: string, joiner: FilterJoiner) => {
@@ -558,7 +557,7 @@ const appendFilterTerm = (expression: string, term: string, joiner: FilterJoiner
 const filterContainsTerm = (expression: string, term: string) => {
   const parsed = parseSimpleFilterExpression(expression)
   const normalizedTerm = normalizeFilterTerm(term)
-  return parsed.simple && parsed.parts.some((part) => part.term === normalizedTerm)
+  return parsed.simple && parsed.parts.some(part => part.term === normalizedTerm)
 }
 
 const toggleFilterTerm = (expression: string, term: string, joiner: FilterJoiner) => {
@@ -569,11 +568,11 @@ const toggleFilterTerm = (expression: string, term: string, joiner: FilterJoiner
     return appendFilterTerm(expression, term, joiner)
   }
 
-  if (!parsed.parts.some((part) => part.term === normalizedTerm)) {
+  if (!parsed.parts.some(part => part.term === normalizedTerm)) {
     return appendFilterTerm(expression, term, joiner)
   }
 
-  const nextParts = parsed.parts.filter((part) => part.term !== normalizedTerm)
+  const nextParts = parsed.parts.filter(part => part.term !== normalizedTerm)
   if (nextParts.length) {
     nextParts[0].joiner = null
   }
@@ -583,7 +582,7 @@ const toggleFilterTerm = (expression: string, term: string, joiner: FilterJoiner
 const removeSimpleFilterTerm = (expression: string, term: string) => {
   const parsed = parseSimpleFilterExpression(expression)
   if (!parsed.simple) return expression
-  const nextParts = parsed.parts.filter((part) => part.term !== term)
+  const nextParts = parsed.parts.filter(part => part.term !== term)
   if (nextParts.length) {
     nextParts[0].joiner = null
   }
@@ -604,12 +603,12 @@ const setTagFilter = (tag: string, event?: MouseEvent) => {
 
 const selectedLocationTerms = computed(() => {
   const parsed = parseSimpleFilterExpression(mediaSelection.location_filter)
-  return parsed.simple ? parsed.parts.map((part) => part.term) : []
+  return parsed.simple ? parsed.parts.map(part => part.term) : []
 })
 
 const selectedTagTerms = computed(() => {
   const parsed = parseSimpleFilterExpression(mediaSelection.tags_filter)
-  return parsed.simple ? parsed.parts.map((part) => part.term) : []
+  return parsed.simple ? parsed.parts.map(part => part.term) : []
 })
 
 const useTagSearch = computed(() => filterOptions.value.tags.length > TAG_SEARCH_THRESHOLD)
@@ -619,7 +618,7 @@ const visibleTagOptions = computed(() => {
   if (!useTagSearch.value) return tags
   const query = tagSearch.value.trim().toLowerCase()
   if (query.length < 2) return []
-  return tags.filter((tag) => tag.toLowerCase().includes(query)).slice(0, 25)
+  return tags.filter(tag => tag.toLowerCase().includes(query)).slice(0, 25)
 })
 
 const selectedMediaLocation = computed(() => {
@@ -717,7 +716,7 @@ const currentMediaTags = computed(() => {
   const tags = selectedMediaItem.value?.exif?.tags
   return String(tags || '')
     .split(',')
-    .map((tag) => tag.trim())
+    .map(tag => tag.trim())
     .filter(Boolean)
 })
 
@@ -894,33 +893,32 @@ const metadataFields = computed(() => {
 
   return fields
 })
-
 </script>
 
 <template>
   <div class="space-y-6">
     <div class="grid grid-cols-1 gap-6 xl:grid-cols-12 xl:items-start">
-      
       <!-- Left Column: Media & Controls -->
       <div class="xl:col-span-7 flex flex-col space-y-6">
-        
         <!-- Media Player Card -->
-        <div class="flex flex-grow flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          
+        <div
+          class="flex flex-grow flex-col overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        >
           <!-- Image Preview Area -->
-          <div class="relative w-full bg-black/5 dark:bg-black/40 flex items-center justify-center overflow-hidden group aspect-video">
-            <div
-              v-if="isPortraitPair"
-              class="absolute inset-0 grid grid-cols-2 gap-2 p-2"
-            >
+          <div
+            class="relative w-full bg-black/5 dark:bg-black/40 flex items-center justify-center overflow-hidden group aspect-video"
+          >
+            <div v-if="isPortraitPair" class="absolute inset-0 grid grid-cols-2 gap-2 p-2">
               <button
                 v-for="(item, index) in currentMediaItems.slice(0, 2)"
                 :key="item.id ?? item.file_path"
                 type="button"
-                @click="selectedPairIndex = index"
                 :aria-pressed="selectedPairIndex === index"
                 class="relative min-w-0 overflow-hidden rounded-lg bg-black/40 focus:outline-none focus:ring-2 focus:ring-white/80"
-                :class="selectedPairIndex === index ? 'ring-2 ring-sky-300' : 'ring-1 ring-white/10'"
+                :class="
+                  selectedPairIndex === index ? 'ring-2 ring-sky-300' : 'ring-1 ring-white/10'
+                "
+                @click="selectedPairIndex = index"
               >
                 <template v-if="isVideoMedia(item)">
                   <img
@@ -935,7 +933,9 @@ const metadataFields = computed(() => {
                     class="flex h-full w-full flex-col items-center justify-center px-4 text-center text-gray-200"
                   >
                     <VideoCameraIcon class="mb-2 h-8 w-8 opacity-70" />
-                    <span class="text-xs font-semibold">{{ t('remote.videoPreviewUnavailable') }}</span>
+                    <span class="text-xs font-semibold">{{
+                      t('remote.videoPreviewUnavailable')
+                    }}</span>
                   </div>
                 </template>
                 <img
@@ -952,7 +952,9 @@ const metadataFields = computed(() => {
                   <PhotoIcon class="mb-2 h-8 w-8 opacity-70" />
                   <span class="text-xs font-semibold">{{ t('remote.previewLoadFailed') }}</span>
                 </div>
-                <span class="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm">
+                <span
+                  class="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xs font-semibold text-white backdrop-blur-sm"
+                >
                   {{ pairSideLabel(index) }}
                 </span>
               </button>
@@ -975,7 +977,9 @@ const metadataFields = computed(() => {
                 <VideoCameraIcon class="mb-3 h-16 w-16 opacity-70" />
                 <p class="text-sm font-semibold">{{ t('remote.videoPreviewUnavailable') }}</p>
               </div>
-              <div class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+              <div
+                class="pointer-events-none absolute inset-0 z-10 flex items-center justify-center"
+              >
                 <button
                   type="button"
                   class="pointer-events-auto inline-flex h-20 w-20 items-center justify-center rounded-full border border-white/30 bg-white/90 text-gray-950 shadow-2xl shadow-black/40 transition-transform hover:scale-105 hover:bg-white focus:outline-none focus:ring-4 focus:ring-white/70 active:scale-95"
@@ -997,10 +1001,16 @@ const metadataFields = computed(() => {
             />
             <div v-else class="flex flex-col items-center text-gray-400 dark:text-gray-500">
               <PhotoIcon class="w-24 h-24 mb-4 opacity-20" />
-              <p class="text-sm font-medium uppercase tracking-wide opacity-60">{{ t('remote.noMedia') }}</p>
+              <p class="text-sm font-medium uppercase tracking-wide opacity-60">
+                {{ t('remote.noMedia') }}
+              </p>
             </div>
             <div
-              v-if="selectedMediaItem?.file_path && !isVideoMedia(selectedMediaItem) && hasMediaImageFailed(selectedMediaItem)"
+              v-if="
+                selectedMediaItem?.file_path &&
+                !isVideoMedia(selectedMediaItem) &&
+                hasMediaImageFailed(selectedMediaItem)
+              "
               class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 px-6 text-center text-white"
             >
               <PhotoIcon class="mb-3 h-12 w-12 opacity-70" />
@@ -1013,12 +1023,19 @@ const metadataFields = computed(() => {
                 {{ t('remote.retryPreview') }}
               </button>
             </div>
-            <div v-if="selectedMediaItem" class="absolute right-4 top-4 z-10 flex items-center gap-2">
+            <div
+              v-if="selectedMediaItem"
+              class="absolute right-4 top-4 z-10 flex items-center gap-2"
+            >
               <button
                 v-if="currentMediaTags.length"
                 type="button"
                 class="inline-flex h-10 w-10 items-center justify-center rounded-lg border text-white shadow-sm backdrop-blur-sm transition-colors focus:outline-none focus:ring-2 focus:ring-white/80"
-                :class="isMediaOverlayPinned ? 'border-sky-300 bg-sky-600/85' : 'border-white/20 bg-black/55 hover:bg-black/75'"
+                :class="
+                  isMediaOverlayPinned
+                    ? 'border-sky-300 bg-sky-600/85'
+                    : 'border-white/20 bg-black/55 hover:bg-black/75'
+                "
                 :aria-label="isMediaOverlayPinned ? t('remote.hideTags') : t('remote.showTags')"
                 :title="isMediaOverlayPinned ? t('remote.hideTags') : t('remote.showTags')"
                 :aria-expanded="isMediaOverlayPinned"
@@ -1039,14 +1056,14 @@ const metadataFields = computed(() => {
                 <ArrowsPointingOutIcon class="h-5 w-5" />
               </button>
             </div>
-            
+
             <!-- Adaptive Cinematic Gradient Overlay -->
             <div
               v-if="selectedMediaItem?.file_path"
               class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent transition-opacity duration-500 pointer-events-none"
               :class="isMediaOverlayPinned ? 'opacity-100' : 'opacity-40 group-hover:opacity-100'"
             ></div>
-            
+
             <!-- Narrative Metadata Overlay (Progressive Disclosure) -->
             <div
               v-if="selectedMediaItem?.file_path"
@@ -1061,32 +1078,44 @@ const metadataFields = computed(() => {
                 >
                   {{ selectedMediaItem?.exif?.title || displayFileName }}
                 </h2>
-                
+
                 <!-- Progressive Disclosure: Caption & Tags (Visible on hover) -->
                 <div
                   id="remote-current-media-tags"
                   class="grid transition-all duration-500 ease-in-out"
-                  :class="isMediaOverlayPinned ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0 group-hover:grid-rows-[1fr] group-hover:opacity-100'"
+                  :class="
+                    isMediaOverlayPinned
+                      ? 'grid-rows-[1fr] opacity-100'
+                      : 'grid-rows-[0fr] opacity-0 group-hover:grid-rows-[1fr] group-hover:opacity-100'
+                  "
                 >
                   <div class="overflow-hidden">
-                    <p v-if="selectedMediaItem?.exif?.caption" class="text-sm text-gray-200 mt-2 line-clamp-3 drop-shadow">
+                    <p
+                      v-if="selectedMediaItem?.exif?.caption"
+                      class="text-sm text-gray-200 mt-2 line-clamp-3 drop-shadow"
+                    >
                       {{ selectedMediaItem.exif.caption }}
                     </p>
-                    
-                    <div v-if="currentMediaTags.length" class="flex overflow-x-auto hide-scrollbar space-x-2 mt-3 pb-1 pointer-events-auto">
+
+                    <div
+                      v-if="currentMediaTags.length"
+                      class="flex overflow-x-auto hide-scrollbar space-x-2 mt-3 pb-1 pointer-events-auto"
+                    >
                       <button
                         v-for="tag in currentMediaTags"
                         :key="tag"
                         type="button"
-                        :aria-pressed="filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))"
+                        :aria-pressed="
+                          filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))
+                        "
                         :title="t('remote.mediaSelection.chipTitle')"
-                        @click.stop="setTagFilter(tag, $event)"
                         :class="[
                           'whitespace-nowrap rounded-full border px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-md transition-colors focus:outline-none focus:ring-2 focus:ring-white/70',
                           filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))
                             ? 'border-sky-300 bg-sky-500/90'
                             : 'border-white/15 bg-white/20 hover:bg-white/30'
                         ]"
+                        @click.stop="setTagFilter(tag, $event)"
                       >
                         {{ tag }}
                       </button>
@@ -1094,14 +1123,14 @@ const metadataFields = computed(() => {
                   </div>
                 </div>
               </div>
-              
+
               <button
                 v-if="selectedMediaItem?.file_path"
                 type="button"
-                @click="handleDeleteClick"
                 class="pointer-events-auto inline-flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-full bg-red-600/85 text-white opacity-90 shadow-lg backdrop-blur-sm transition-all hover:scale-105 hover:bg-red-500 focus:scale-105 focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-red-500/50 active:scale-95 lg:opacity-0 lg:group-hover:opacity-100"
                 :aria-label="t('remote.controls.delete')"
                 :title="t('remote.controls.delete')"
+                @click="handleDeleteClick"
               >
                 <TrashIconSolid class="w-6 h-6" />
                 <span class="sr-only">{{ t('remote.controls.delete') }}</span>
@@ -1110,13 +1139,15 @@ const metadataFields = computed(() => {
           </div>
 
           <!-- Controls Area -->
-          <div class="bg-white p-4 dark:bg-gray-800/90 sm:p-6 lg:p-8 border-t border-gray-100 dark:border-gray-700/50">
-            
+          <div
+            class="bg-white p-4 dark:bg-gray-800/90 sm:p-6 lg:p-8 border-t border-gray-100 dark:border-gray-700/50"
+          >
             <!-- Transport Controls -->
-            <div class="mx-auto grid max-w-md grid-cols-5 items-center justify-items-center gap-2 sm:max-w-lg sm:gap-4">
+            <div
+              class="mx-auto grid max-w-md grid-cols-5 items-center justify-items-center gap-2 sm:max-w-lg sm:gap-4"
+            >
               <button
                 type="button"
-                @click="playerStore.toggleDisplayPower()"
                 :aria-label="displayPowerTitle"
                 :title="displayPowerTitle"
                 :class="[
@@ -1125,6 +1156,7 @@ const metadataFields = computed(() => {
                     ? 'border-emerald-100 bg-emerald-50 text-emerald-600 hover:bg-emerald-100 dark:border-emerald-500/20 dark:bg-emerald-500/10 dark:text-emerald-300'
                     : 'border-red-100 bg-red-50 text-red-600 hover:bg-red-100 dark:border-red-500/20 dark:bg-red-500/10 dark:text-red-300'
                 ]"
+                @click="playerStore.toggleDisplayPower()"
               >
                 <PowerIcon class="w-6 h-6" />
                 <span class="sr-only">{{ displayPowerTitle }}</span>
@@ -1132,33 +1164,33 @@ const metadataFields = computed(() => {
 
               <button
                 type="button"
-                @click="playerStore.previous()"
                 class="inline-flex h-14 w-14 items-center justify-center rounded-full text-gray-500 transition-all hover:bg-gray-100 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 active:scale-95 dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-indigo-400"
                 :aria-label="t('remote.controls.previous')"
                 :title="t('remote.controls.previous')"
+                @click="playerStore.previous()"
               >
                 <BackwardIcon class="w-7 h-7" />
                 <span class="sr-only">{{ t('remote.controls.previous') }}</span>
               </button>
-              
+
               <button
                 type="button"
-                @click="togglePlayPause"
                 class="inline-flex h-16 w-16 items-center justify-center rounded-full bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 transition-all hover:-translate-y-0.5 hover:bg-indigo-500 hover:shadow-indigo-600/50 focus:outline-none focus:ring-4 focus:ring-indigo-500/50 active:scale-95 sm:h-[72px] sm:w-[72px]"
                 :aria-label="playPauseTitle"
                 :title="playPauseTitle"
+                @click="togglePlayPause"
               >
                 <PauseIconSolid v-if="isPlaying" class="w-8 h-8 sm:w-9 sm:h-9" />
                 <PlayIconSolid v-else class="ml-1 w-8 h-8 sm:w-9 sm:h-9" />
                 <span class="sr-only">{{ playPauseTitle }}</span>
               </button>
-              
+
               <button
                 type="button"
-                @click="playerStore.next()"
                 class="inline-flex h-14 w-14 items-center justify-center rounded-full text-gray-500 transition-all hover:bg-gray-100 hover:text-indigo-600 focus:outline-none focus:ring-2 focus:ring-indigo-500/50 active:scale-95 dark:text-gray-400 dark:hover:bg-gray-700/50 dark:hover:text-indigo-400"
                 :aria-label="t('remote.controls.next')"
                 :title="t('remote.controls.next')"
+                @click="playerStore.next()"
               >
                 <ForwardIcon class="w-7 h-7" />
                 <span class="sr-only">{{ t('remote.controls.next') }}</span>
@@ -1176,7 +1208,6 @@ const metadataFields = computed(() => {
                 >
                   <button
                     type="button"
-                    @click="toggleShuffle"
                     :disabled="isSavingShuffle || isConfigLoading"
                     :aria-pressed="isShuffleEnabled"
                     :aria-label="shuffleTitle"
@@ -1187,13 +1218,13 @@ const metadataFields = computed(() => {
                         ? 'hover:bg-indigo-100 dark:hover:bg-indigo-500/20'
                         : 'hover:bg-gray-100 hover:text-indigo-600 dark:hover:bg-gray-700/50 dark:hover:text-indigo-400'
                     ]"
+                    @click="toggleShuffle"
                   >
                     <ArrowPathIcon class="w-6 h-6" />
                     <span class="sr-only">{{ shuffleTitle }}</span>
                   </button>
                   <button
                     type="button"
-                    @click.stop="toggleShuffleModeMenu"
                     :disabled="isSavingShuffle || isConfigLoading"
                     :aria-label="shuffleModeTitle"
                     :title="shuffleModeTitle"
@@ -1205,8 +1236,14 @@ const metadataFields = computed(() => {
                         ? 'border-indigo-200/70 hover:bg-indigo-100 dark:border-indigo-500/20 dark:hover:bg-indigo-500/20'
                         : 'border-gray-200 hover:bg-gray-100 hover:text-indigo-600 dark:border-gray-700 dark:hover:bg-gray-700/50 dark:hover:text-indigo-400'
                     ]"
+                    @click.stop="toggleShuffleModeMenu"
                   >
-                    <ChevronDownIcon :class="['h-4 w-4 transition-transform', isShuffleModeMenuOpen ? 'rotate-180' : '']" />
+                    <ChevronDownIcon
+                      :class="[
+                        'h-4 w-4 transition-transform',
+                        isShuffleModeMenuOpen ? 'rotate-180' : ''
+                      ]"
+                    />
                     <span class="sr-only">{{ shuffleModeTitle }}</span>
                   </button>
                 </div>
@@ -1222,10 +1259,15 @@ const metadataFields = computed(() => {
                     type="button"
                     role="menuitemradio"
                     :aria-checked="shuffleMode === mode.value"
-                    @click="setShuffleMode(mode.value)"
                     class="flex h-10 w-full items-center gap-2 px-3 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700 focus:bg-indigo-50 focus:text-indigo-700 focus:outline-none dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 dark:focus:bg-indigo-500/10 dark:focus:text-indigo-200"
+                    @click="setShuffleMode(mode.value)"
                   >
-                    <CheckIcon :class="['h-4 w-4 flex-shrink-0', shuffleMode === mode.value ? 'opacity-100' : 'opacity-0']" />
+                    <CheckIcon
+                      :class="[
+                        'h-4 w-4 flex-shrink-0',
+                        shuffleMode === mode.value ? 'opacity-100' : 'opacity-0'
+                      ]"
+                    />
                     <span class="truncate">{{ t(mode.labelKey) }}</span>
                   </button>
                 </div>
@@ -1234,7 +1276,9 @@ const metadataFields = computed(() => {
 
             <!-- Brightness Control -->
             <div class="mt-5 border-t border-gray-100 pt-5 dark:border-gray-700/50">
-              <label for="remote-brightness" class="sr-only">{{ t('remote.controls.brightness') }}</label>
+              <label for="remote-brightness" class="sr-only">{{
+                t('remote.controls.brightness')
+              }}</label>
               <div class="flex items-center gap-3 sm:gap-4">
                 <SunIcon class="h-6 w-6 flex-shrink-0 text-gray-400 dark:text-gray-500" />
                 <input
@@ -1245,11 +1289,14 @@ const metadataFields = computed(() => {
                   step="0.01"
                   :value="brightness"
                   :aria-label="t('remote.controls.brightness')"
+                  class="h-6 w-full cursor-pointer accent-indigo-600 transition-all hover:accent-indigo-500"
                   @input="handleBrightnessPreview"
                   @change="handleBrightnessCommit"
-                  class="h-6 w-full cursor-pointer accent-indigo-600 transition-all hover:accent-indigo-500"
+                />
+                <span
+                  class="w-14 flex-shrink-0 text-right text-sm font-bold tabular-nums text-gray-600 dark:text-gray-300"
+                  >{{ Math.round(brightness * 100) }}%</span
                 >
-                <span class="w-14 flex-shrink-0 text-right text-sm font-bold tabular-nums text-gray-600 dark:text-gray-300">{{ Math.round(brightness * 100) }}%</span>
               </div>
             </div>
           </div>
@@ -1267,16 +1314,21 @@ const metadataFields = computed(() => {
 
       <!-- Right Column: Metadata & Controls -->
       <div class="xl:col-span-5 flex flex-col space-y-6">
-
         <!-- Media Selection Card -->
-        <div class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800">
-          <div class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between">
+        <div
+          class="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800"
+        >
+          <div
+            class="px-6 py-5 border-b border-gray-100 dark:border-gray-700/50 flex items-center justify-between"
+          >
             <div class="flex items-center space-x-3 min-w-0">
               <div class="p-2 bg-sky-50 dark:bg-sky-500/10 rounded-lg">
                 <FunnelIcon class="w-5 h-5 text-sky-600 dark:text-sky-400" />
               </div>
               <div class="min-w-0">
-                <h3 class="text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">{{ t('remote.mediaSelection.title') }}</h3>
+                <h3 class="text-lg font-bold text-gray-900 dark:text-white tracking-tight truncate">
+                  {{ t('remote.mediaSelection.title') }}
+                </h3>
                 <div class="mt-1 flex items-center gap-1">
                   <span
                     class="inline-flex items-center rounded-full border border-sky-100 bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700 dark:border-sky-500/20 dark:bg-sky-500/10 dark:text-sky-300"
@@ -1290,9 +1342,9 @@ const metadataFields = computed(() => {
             </div>
             <button
               type="button"
-              @click="clearMediaSelection"
               class="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 dark:hover:text-gray-200 dark:hover:bg-gray-700/50 transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500/50"
               :title="t('remote.mediaSelection.clear')"
+              @click="clearMediaSelection"
             >
               <XMarkIcon class="w-5 h-5" />
             </button>
@@ -1301,18 +1353,29 @@ const metadataFields = computed(() => {
           <div class="p-6 space-y-6">
             <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label class="space-y-2 sm:col-span-2">
-                <span class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ t('remote.mediaSelection.subdirectory') }}</span>
+                <span
+                  class="text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                  >{{ t('remote.mediaSelection.subdirectory') }}</span
+                >
                 <select
                   v-model="mediaSelection.subdirectory"
                   class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
                 >
                   <option value="">{{ t('remote.mediaSelection.allFolders') }}</option>
-                  <option v-for="folder in filterOptions.subdirectories" :key="folder" :value="folder">{{ folder }}</option>
+                  <option
+                    v-for="folder in filterOptions.subdirectories"
+                    :key="folder"
+                    :value="folder"
+                  >
+                    {{ folder }}
+                  </option>
                 </select>
               </label>
 
               <label class="space-y-2">
-                <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <span
+                  class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                >
                   <CalendarDaysIcon class="w-4 h-4" />
                   {{ t('remote.mediaSelection.dateFrom') }}
                 </span>
@@ -1320,11 +1383,13 @@ const metadataFields = computed(() => {
                   v-model="mediaSelection.date_from"
                   type="date"
                   class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-                >
+                />
               </label>
 
               <label class="space-y-2">
-                <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <span
+                  class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                >
                   <CalendarDaysIcon class="w-4 h-4" />
                   {{ t('remote.mediaSelection.dateTo') }}
                 </span>
@@ -1332,14 +1397,16 @@ const metadataFields = computed(() => {
                   v-model="mediaSelection.date_to"
                   type="date"
                   class="w-full rounded-xl border border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900/50 px-3 py-2.5 text-sm font-medium text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
-                >
+                />
               </label>
             </div>
 
             <div class="space-y-4">
               <div class="space-y-3">
                 <label class="space-y-2 block">
-                  <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  <span
+                    class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                  >
                     <MapPinIcon class="w-4 h-4" />
                     {{ t('remote.mediaSelection.location') }}
                     <HelperText :text="filterHelpText" mode="dialog" />
@@ -1357,42 +1424,66 @@ const metadataFields = computed(() => {
                     type="button"
                     class="inline-flex items-center gap-1 rounded-full border border-sky-600 bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
                     :title="t('remote.mediaSelection.removeLocation')"
-                    @click="mediaSelection.location_filter = removeSimpleFilterTerm(mediaSelection.location_filter, location)"
+                    @click="
+                      mediaSelection.location_filter = removeSimpleFilterTerm(
+                        mediaSelection.location_filter,
+                        location
+                      )
+                    "
                   >
                     {{ location }}
                     <XMarkIcon class="h-3.5 w-3.5" />
                   </button>
                 </div>
                 <label class="relative block">
-                  <MagnifyingGlassIcon class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <MagnifyingGlassIcon
+                    class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                  />
                   <input
                     v-model="locationSearch"
                     type="search"
                     :placeholder="t('remote.mediaSelection.searchLocations')"
                     class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-sky-500/50 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-100"
-                  >
+                  />
                 </label>
                 <div class="min-h-8">
-                  <p v-if="locationSearch.trim().length > 0 && locationSearch.trim().length < 2" class="text-xs text-gray-500 dark:text-gray-400">
+                  <p
+                    v-if="locationSearch.trim().length > 0 && locationSearch.trim().length < 2"
+                    class="text-xs text-gray-500 dark:text-gray-400"
+                  >
                     {{ t('remote.mediaSelection.searchMore') }}
                   </p>
-                  <p v-else-if="isLocationSearchLoading" class="text-xs text-gray-500 dark:text-gray-400">
+                  <p
+                    v-else-if="isLocationSearchLoading"
+                    class="text-xs text-gray-500 dark:text-gray-400"
+                  >
                     {{ t('remote.mediaSelection.searching') }}
                   </p>
-                  <div v-else-if="locationSearchResults.length" class="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1 custom-scrollbar">
+                  <div
+                    v-else-if="locationSearchResults.length"
+                    class="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1 custom-scrollbar"
+                  >
                     <button
                       v-for="location in locationSearchResults"
                       :key="location.value"
                       type="button"
-                      :aria-pressed="filterContainsTerm(mediaSelection.location_filter, quoteFilterTerm(location.value))"
+                      :aria-pressed="
+                        filterContainsTerm(
+                          mediaSelection.location_filter,
+                          quoteFilterTerm(location.value)
+                        )
+                      "
                       :title="t('remote.mediaSelection.chipTitle')"
-                      @click="setLocationFilter(location.value, $event)"
                       :class="[
                         'px-2.5 py-1 rounded-full text-xs font-semibold transition-colors border',
-                        filterContainsTerm(mediaSelection.location_filter, quoteFilterTerm(location.value))
+                        filterContainsTerm(
+                          mediaSelection.location_filter,
+                          quoteFilterTerm(location.value)
+                        )
                           ? 'bg-sky-600 text-white border-sky-600'
                           : 'bg-white dark:bg-gray-900/50 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-sky-400'
                       ]"
+                      @click="setLocationFilter(location.value, $event)"
                     >
                       {{ location.value }}
                       <span class="ml-1 opacity-70">{{ formatCount(location.count) }}</span>
@@ -1403,7 +1494,9 @@ const metadataFields = computed(() => {
 
               <div class="space-y-3">
                 <label class="space-y-2 block">
-                  <span class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                  <span
+                    class="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+                  >
                     <TagIcon class="w-4 h-4" />
                     {{ t('remote.mediaSelection.tags') }}
                     <HelperText :text="filterHelpText" mode="dialog" />
@@ -1421,35 +1514,47 @@ const metadataFields = computed(() => {
                     type="button"
                     class="inline-flex items-center gap-1 rounded-full border border-sky-600 bg-sky-600 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/50"
                     :title="t('remote.mediaSelection.removeTag')"
-                    @click="mediaSelection.tags_filter = removeSimpleFilterTerm(mediaSelection.tags_filter, tag)"
+                    @click="
+                      mediaSelection.tags_filter = removeSimpleFilterTerm(
+                        mediaSelection.tags_filter,
+                        tag
+                      )
+                    "
                   >
                     {{ tag }}
                     <XMarkIcon class="h-3.5 w-3.5" />
                   </button>
                 </div>
                 <label v-if="useTagSearch" class="relative block">
-                  <MagnifyingGlassIcon class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                  <MagnifyingGlassIcon
+                    class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400"
+                  />
                   <input
                     v-model="tagSearch"
                     type="search"
                     :placeholder="t('remote.mediaSelection.searchTags')"
                     class="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm font-medium text-gray-900 focus:outline-none focus:ring-2 focus:ring-sky-500/50 dark:border-gray-700 dark:bg-gray-900/50 dark:text-gray-100"
-                  >
+                  />
                 </label>
-                <div v-if="visibleTagOptions.length" class="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1 custom-scrollbar">
+                <div
+                  v-if="visibleTagOptions.length"
+                  class="flex max-h-32 flex-wrap gap-2 overflow-y-auto pr-1 custom-scrollbar"
+                >
                   <button
                     v-for="tag in visibleTagOptions"
                     :key="tag"
                     type="button"
-                    :aria-pressed="filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))"
+                    :aria-pressed="
+                      filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))
+                    "
                     :title="t('remote.mediaSelection.chipTitle')"
-                    @click="setTagFilter(tag, $event)"
                     :class="[
                       'px-2.5 py-1 rounded-full text-xs font-semibold transition-colors border',
                       filterContainsTerm(mediaSelection.tags_filter, quoteFilterTerm(tag))
                         ? 'bg-sky-600 text-white border-sky-600'
                         : 'bg-white dark:bg-gray-900/50 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-700 hover:border-sky-400'
                     ]"
+                    @click="setTagFilter(tag, $event)"
                   >
                     {{ tag }}
                   </button>
@@ -1460,12 +1565,16 @@ const metadataFields = computed(() => {
             <div class="flex flex-col sm:flex-row sm:items-center gap-3">
               <button
                 type="button"
-                @click="applyMediaSelection"
                 :disabled="isApplyingSelection || isConfigLoading"
                 class="inline-flex items-center justify-center px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-emerald-500/50"
+                @click="applyMediaSelection"
               >
                 <CheckIcon class="w-4 h-4 mr-2" />
-                {{ isApplyingSelection ? t('remote.mediaSelection.applying') : t('remote.mediaSelection.apply') }}
+                {{
+                  isApplyingSelection
+                    ? t('remote.mediaSelection.applying')
+                    : t('remote.mediaSelection.apply')
+                }}
               </button>
             </div>
 
@@ -1482,7 +1591,6 @@ const metadataFields = computed(() => {
             />
           </div>
         </div>
-
       </div>
     </div>
 
@@ -1502,7 +1610,9 @@ const metadataFields = computed(() => {
       class="fixed inset-0 z-50 flex flex-col bg-gray-950/90 p-3 backdrop-blur-sm sm:p-4"
       role="dialog"
       aria-modal="true"
-      :aria-label="expandedPanel === 'map' ? t('remote.location') : t('remote.controls.currentMedia')"
+      :aria-label="
+        expandedPanel === 'map' ? t('remote.location') : t('remote.controls.currentMedia')
+      "
       @click.self="closeExpandedPanel"
     >
       <div class="relative z-[10000] mb-3 flex h-12 shrink-0 justify-end">
@@ -1562,7 +1672,9 @@ const metadataFields = computed(() => {
                 {{ t('remote.retryPreview') }}
               </button>
             </div>
-            <figcaption class="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-sm font-semibold text-white backdrop-blur-sm">
+            <figcaption
+              class="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-sm font-semibold text-white backdrop-blur-sm"
+            >
               {{ pairSideLabel(index) }}
             </figcaption>
           </figure>
@@ -1587,7 +1699,11 @@ const metadataFields = computed(() => {
             @error="handleMediaImageError(selectedMediaItem)"
           />
           <div
-            v-if="selectedMediaItem?.file_path && !isVideoMedia(selectedMediaItem) && hasMediaImageFailed(selectedMediaItem)"
+            v-if="
+              selectedMediaItem?.file_path &&
+              !isVideoMedia(selectedMediaItem) &&
+              hasMediaImageFailed(selectedMediaItem)
+            "
             class="absolute inset-0 flex flex-col items-center justify-center bg-black/70 px-6 text-center text-white"
           >
             <PhotoIcon class="mb-3 h-12 w-12 opacity-70" />
@@ -1603,7 +1719,10 @@ const metadataFields = computed(() => {
         </div>
       </div>
 
-      <div v-else-if="expandedPanel === 'map'" class="min-h-0 flex-1 w-full overflow-hidden rounded-xl bg-white dark:bg-gray-800">
+      <div
+        v-else-if="expandedPanel === 'map'"
+        class="min-h-0 flex-1 w-full overflow-hidden rounded-xl bg-white dark:bg-gray-800"
+      >
         <MapComponent
           :latitude="selectedMediaItem?.location?.lat"
           :longitude="selectedMediaItem?.location?.lon"
@@ -1620,69 +1739,74 @@ const metadataFields = computed(() => {
       max-width="lg"
       @close="showPairDeleteDialog = false"
     >
-        <div class="mt-5 grid grid-cols-2 gap-3">
-          <div
-            v-for="(item, index) in currentMediaItems.slice(0, 2)"
-            :key="item.id ?? item.file_path"
-            class="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50"
-          >
-            <div class="aspect-video bg-black/80">
-              <template v-if="isVideoMedia(item)">
-                <img
-                  v-if="mediaPosterSrc(item) && !hasVideoPosterFailed(item)"
-                  :src="mediaPosterSrc(item)"
-                  :alt="t('remote.videoPreview')"
-                  class="h-full w-full object-contain"
-                  @error="handleVideoPosterError(item)"
-                />
-                <div
-                  v-else
-                  class="flex h-full w-full flex-col items-center justify-center px-3 text-center text-gray-200"
-                >
-                  <VideoCameraIcon class="mb-2 h-8 w-8 opacity-70" />
-                  <span class="text-xs font-semibold">{{ t('remote.videoPreviewUnavailable') }}</span>
-                </div>
-              </template>
+      <div class="mt-5 grid grid-cols-2 gap-3">
+        <div
+          v-for="(item, index) in currentMediaItems.slice(0, 2)"
+          :key="item.id ?? item.file_path"
+          class="overflow-hidden rounded-xl border border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-900/50"
+        >
+          <div class="aspect-video bg-black/80">
+            <template v-if="isVideoMedia(item)">
               <img
-                v-else
-                :src="mediaImageSrc(item)"
-                :alt="pairSideLabel(index)"
+                v-if="mediaPosterSrc(item) && !hasVideoPosterFailed(item)"
+                :src="mediaPosterSrc(item)"
+                :alt="t('remote.videoPreview')"
                 class="h-full w-full object-contain"
-                @error="handleMediaImageError(item)"
+                @error="handleVideoPosterError(item)"
               />
-            </div>
-            <div class="p-3">
-              <p class="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">{{ pairSideLabel(index) }}</p>
-              <p class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100" :title="fileNameFor(item)">
-                {{ fileNameFor(item) }}
-              </p>
-            </div>
+              <div
+                v-else
+                class="flex h-full w-full flex-col items-center justify-center px-3 text-center text-gray-200"
+              >
+                <VideoCameraIcon class="mb-2 h-8 w-8 opacity-70" />
+                <span class="text-xs font-semibold">{{ t('remote.videoPreviewUnavailable') }}</span>
+              </div>
+            </template>
+            <img
+              v-else
+              :src="mediaImageSrc(item)"
+              :alt="pairSideLabel(index)"
+              class="h-full w-full object-contain"
+              @error="handleMediaImageError(item)"
+            />
+          </div>
+          <div class="p-3">
+            <p class="text-xs font-bold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+              {{ pairSideLabel(index) }}
+            </p>
+            <p
+              class="mt-1 truncate text-sm font-semibold text-gray-900 dark:text-gray-100"
+              :title="fileNameFor(item)"
+            >
+              {{ fileNameFor(item) }}
+            </p>
           </div>
         </div>
+      </div>
 
-        <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <button
-            type="button"
-            @click="deletePair('left')"
-            class="inline-flex items-center justify-center rounded-xl bg-red-100 px-4 py-2.5 text-sm font-bold text-red-700 transition-colors hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500/50 dark:bg-red-600 dark:text-white dark:hover:bg-red-500"
-          >
-            {{ t('remote.pair.deleteLeft') }}
-          </button>
-          <button
-            type="button"
-            @click="deletePair('right')"
-            class="inline-flex items-center justify-center rounded-xl bg-red-100 px-4 py-2.5 text-sm font-bold text-red-700 transition-colors hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500/50 dark:bg-red-600 dark:text-white dark:hover:bg-red-500"
-          >
-            {{ t('remote.pair.deleteRight') }}
-          </button>
-          <button
-            type="button"
-            @click="deletePair('both')"
-            class="inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/50"
-          >
-            {{ t('remote.pair.deleteBoth') }}
-          </button>
-        </div>
+      <div class="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <button
+          type="button"
+          class="inline-flex items-center justify-center rounded-xl bg-red-100 px-4 py-2.5 text-sm font-bold text-red-700 transition-colors hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500/50 dark:bg-red-600 dark:text-white dark:hover:bg-red-500"
+          @click="deletePair('left')"
+        >
+          {{ t('remote.pair.deleteLeft') }}
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center justify-center rounded-xl bg-red-100 px-4 py-2.5 text-sm font-bold text-red-700 transition-colors hover:bg-red-200 focus:outline-none focus:ring-2 focus:ring-red-500/50 dark:bg-red-600 dark:text-white dark:hover:bg-red-500"
+          @click="deletePair('right')"
+        >
+          {{ t('remote.pair.deleteRight') }}
+        </button>
+        <button
+          type="button"
+          class="inline-flex items-center justify-center rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-500 focus:outline-none focus:ring-2 focus:ring-red-500/50"
+          @click="deletePair('both')"
+        >
+          {{ t('remote.pair.deleteBoth') }}
+        </button>
+      </div>
     </AppDialog>
   </div>
 </template>
@@ -1716,7 +1840,7 @@ const metadataFields = computed(() => {
 }
 
 /* Custom range slider styling for WebKit */
-input[type=range]::-webkit-slider-thumb {
+input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
   width: 24px;
@@ -1724,39 +1848,42 @@ input[type=range]::-webkit-slider-thumb {
   border-radius: 50%;
   background: #4f46e5;
   cursor: pointer;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
   transition: all 0.2s ease;
   border: 2px solid white;
 }
 
-.dark input[type=range]::-webkit-slider-thumb {
+.dark input[type='range']::-webkit-slider-thumb {
   border-color: #1f2937;
 }
 
-input[type=range]::-webkit-slider-thumb:hover {
+input[type='range']::-webkit-slider-thumb:hover {
   transform: scale(1.15);
   background: #4338ca;
 }
 
 /* Custom range slider styling for Firefox */
-input[type=range]::-moz-range-thumb {
+input[type='range']::-moz-range-thumb {
   width: 24px;
   height: 24px;
   border-radius: 50%;
   background: #4f46e5;
   cursor: pointer;
   border: 2px solid white;
-  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  box-shadow:
+    0 4px 6px -1px rgba(0, 0, 0, 0.1),
+    0 2px 4px -1px rgba(0, 0, 0, 0.06);
   transition: all 0.2s ease;
 }
 
-.dark input[type=range]::-moz-range-thumb {
+.dark input[type='range']::-moz-range-thumb {
   border-color: #1f2937;
 }
 
-input[type=range]::-moz-range-thumb:hover {
+input[type='range']::-moz-range-thumb:hover {
   transform: scale(1.15);
   background: #4338ca;
 }
-
 </style>

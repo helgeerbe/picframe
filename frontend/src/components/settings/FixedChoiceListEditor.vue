@@ -29,7 +29,10 @@ function add(value: string) {
 }
 
 function remove(value: string) {
-  emit('update:modelValue', props.modelValue.filter(item => item !== value))
+  emit(
+    'update:modelValue',
+    props.modelValue.filter(item => item !== value)
+  )
 }
 
 function move(value: string, direction: -1 | 1) {
@@ -45,21 +48,40 @@ function move(value: string, direction: -1 | 1) {
 
 <template>
   <div class="space-y-3">
-    <div class="flex min-h-11 flex-wrap gap-2 rounded-lg border border-gray-300 bg-white p-2 dark:border-gray-600 dark:bg-gray-700">
+    <div
+      class="flex min-h-11 flex-wrap gap-2 rounded-lg border border-gray-300 bg-white p-2 dark:border-gray-600 dark:bg-gray-700"
+    >
       <span
         v-for="value in modelValue"
         :key="value"
-        :class="[isSupported(value) ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' : 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300', 'inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium']"
+        :class="[
+          isSupported(value)
+            ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300'
+            : 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300',
+          'inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium'
+        ]"
       >
         {{ labelFor(value) }}
         <span v-if="!isSupported(value)" class="text-xs opacity-75">(unsupported)</span>
-        <button type="button" class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10" @click="move(value, -1)">
+        <button
+          type="button"
+          class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+          @click="move(value, -1)"
+        >
           <ArrowUpIcon class="h-3.5 w-3.5" />
         </button>
-        <button type="button" class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10" @click="move(value, 1)">
+        <button
+          type="button"
+          class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+          @click="move(value, 1)"
+        >
           <ArrowDownIcon class="h-3.5 w-3.5" />
         </button>
-        <button type="button" class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10" @click="remove(value)">
+        <button
+          type="button"
+          class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+          @click="remove(value)"
+        >
           <XMarkIcon class="h-3.5 w-3.5" />
         </button>
       </span>

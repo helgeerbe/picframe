@@ -1,13 +1,16 @@
 <script setup lang="ts">
-withDefaults(defineProps<{
-  as?: string
-  padded?: boolean
-  tone?: 'default' | 'muted'
-}>(), {
-  as: 'section',
-  padded: false,
-  tone: 'default'
-})
+withDefaults(
+  defineProps<{
+    as?: string
+    padded?: boolean
+    tone?: 'default' | 'muted'
+  }>(),
+  {
+    as: 'section',
+    padded: false,
+    tone: 'default'
+  }
+)
 </script>
 
 <template>

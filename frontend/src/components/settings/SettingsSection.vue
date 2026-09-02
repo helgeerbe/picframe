@@ -2,16 +2,19 @@
 import { computed, ref } from 'vue'
 import { ChevronDownIcon } from '@heroicons/vue/24/outline'
 
-const props = withDefaults(defineProps<{
-  title: string
-  description?: string
-  defaultOpen?: boolean
-  id?: string
-  tone?: 'default' | 'danger'
-}>(), {
-  defaultOpen: false,
-  tone: 'default'
-})
+const props = withDefaults(
+  defineProps<{
+    title: string
+    description?: string
+    defaultOpen?: boolean
+    id?: string
+    tone?: 'default' | 'danger'
+  }>(),
+  {
+    defaultOpen: false,
+    tone: 'default'
+  }
+)
 
 const open = ref(props.defaultOpen)
 const generatedId = `settings-section-${Math.random().toString(36).slice(2)}`
@@ -38,13 +41,21 @@ const sectionClasses = computed(() => {
       @click="open = !open"
     >
       <span class="min-w-0">
-        <span class="block text-sm font-semibold text-gray-950 dark:text-white sm:text-base">{{ title }}</span>
-        <span v-if="description" class="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400 sm:text-sm">
+        <span class="block text-sm font-semibold text-gray-950 dark:text-white sm:text-base">{{
+          title
+        }}</span>
+        <span
+          v-if="description"
+          class="mt-1 block text-xs leading-5 text-gray-500 dark:text-gray-400 sm:text-sm"
+        >
           {{ description }}
         </span>
       </span>
       <ChevronDownIcon
-        :class="[open ? 'rotate-180' : '', 'mt-0.5 h-5 w-5 flex-shrink-0 text-gray-500 transition-transform dark:text-gray-400']"
+        :class="[
+          open ? 'rotate-180' : '',
+          'mt-0.5 h-5 w-5 flex-shrink-0 text-gray-500 transition-transform dark:text-gray-400'
+        ]"
       />
     </button>
     <div

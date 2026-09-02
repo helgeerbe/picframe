@@ -115,7 +115,9 @@ watch(
   <div class="space-y-6">
     <PageHeader :title="t('appearance.title')" :description="t('appearance.description')">
       <template #icon>
-        <div class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300">
+        <div
+          class="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg bg-sky-100 text-sky-700 dark:bg-sky-500/15 dark:text-sky-300"
+        >
           <AdjustmentsHorizontalIcon class="h-6 w-6" />
         </div>
       </template>
@@ -142,8 +144,12 @@ watch(
     <Panel padded>
       <form class="space-y-6" @submit.prevent="saveAppearance">
         <div class="border-b border-gray-100 pb-5 dark:border-gray-700/60">
-          <h2 class="text-lg font-semibold text-gray-950 dark:text-white">{{ t('appearance.slideshow.title') }}</h2>
-          <p class="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">{{ t('appearance.slideshow.description') }}</p>
+          <h2 class="text-lg font-semibold text-gray-950 dark:text-white">
+            {{ t('appearance.slideshow.title') }}
+          </h2>
+          <p class="mt-1 text-sm leading-6 text-gray-600 dark:text-gray-300">
+            {{ t('appearance.slideshow.description') }}
+          </p>
         </div>
 
         <div class="space-y-5">
@@ -155,17 +161,19 @@ watch(
             <NumberField v-model="appearance.fade_time" :min="0" :step="0.5" unit="s" />
           </FieldRow>
 
-          <FieldRow :label="t('appearance.portraitPairs.label')" :help="t('appearance.portraitPairs.help')">
+          <FieldRow
+            :label="t('appearance.portraitPairs.label')"
+            :help="t('appearance.portraitPairs.help')"
+          >
             <ToggleSwitch v-model="appearance.portrait_pairs" />
           </FieldRow>
         </div>
 
-        <div class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-gray-700/60 sm:flex-row sm:items-center sm:justify-between">
+        <div
+          class="flex flex-col gap-3 border-t border-gray-100 pt-5 dark:border-gray-700/60 sm:flex-row sm:items-center sm:justify-between"
+        >
           <div v-if="statusMessage" class="min-w-0 sm:flex-1">
-            <StatusBanner
-              :tone="statusTone"
-              :message="statusMessage"
-            />
+            <StatusBanner :tone="statusTone" :message="statusMessage" />
           </div>
           <div v-else class="hidden sm:block"></div>
 

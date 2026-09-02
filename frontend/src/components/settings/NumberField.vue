@@ -1,16 +1,19 @@
 <script setup lang="ts">
 import { inject, type ComputedRef } from 'vue'
 
-const props = withDefaults(defineProps<{
-  modelValue: number | string | null | undefined
-  min?: number
-  max?: number
-  step?: number
-  unit?: string
-  label?: string
-}>(), {
-  step: 1
-})
+const props = withDefaults(
+  defineProps<{
+    modelValue: number | string | null | undefined
+    min?: number
+    max?: number
+    step?: number
+    unit?: string
+    label?: string
+  }>(),
+  {
+    step: 1
+  }
+)
 
 const emit = defineEmits<{
   'update:modelValue': [value: number]
@@ -52,7 +55,9 @@ const fieldHelpId = inject<ComputedRef<string | undefined> | undefined>('fieldHe
       :aria-describedby="fieldHelpId"
       class="block w-full rounded-lg border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
       @input="handleInput"
-    >
-    <span v-if="props.unit" class="text-xs font-medium text-gray-500 dark:text-gray-300">{{ props.unit }}</span>
+    />
+    <span v-if="props.unit" class="text-xs font-medium text-gray-500 dark:text-gray-300">{{
+      props.unit
+    }}</span>
   </div>
 </template>

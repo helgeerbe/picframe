@@ -6,13 +6,16 @@ import {
   XCircleIcon
 } from '@heroicons/vue/24/outline'
 
-withDefaults(defineProps<{
-  tone?: 'info' | 'success' | 'warning' | 'danger'
-  title?: string
-  message: string
-}>(), {
-  tone: 'info'
-})
+withDefaults(
+  defineProps<{
+    tone?: 'info' | 'success' | 'warning' | 'danger'
+    title?: string
+    message: string
+  }>(),
+  {
+    tone: 'info'
+  }
+)
 
 const iconMap = {
   info: InformationCircleIcon,

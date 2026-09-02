@@ -10,11 +10,16 @@ defineProps<{
     <div class="min-w-0 xl:flex-1">
       <div class="flex min-w-0 items-center gap-3">
         <slot name="icon" />
-        <h1 class="min-w-0 break-words text-2xl font-bold tracking-normal text-gray-950 dark:text-white sm:text-3xl xl:text-4xl">
+        <h1
+          class="min-w-0 break-words text-2xl font-bold tracking-normal text-gray-950 dark:text-white sm:text-3xl xl:text-4xl"
+        >
           {{ title }}
         </h1>
       </div>
-      <p v-if="description" class="mt-2 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300">
+      <p
+        v-if="description"
+        class="mt-2 max-w-3xl text-sm leading-6 text-gray-600 dark:text-gray-300"
+      >
         {{ description }}
       </p>
     </div>

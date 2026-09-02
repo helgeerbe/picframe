@@ -20,8 +20,9 @@ export function useFocusTrap(
     await nextTick()
     const element = container.value
     if (!element) return
-    const focusable = Array.from(element.querySelectorAll<HTMLElement>(focusableSelector))
-      .filter((item) => item.offsetParent !== null || item === document.activeElement)
+    const focusable = Array.from(element.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+      item => item.offsetParent !== null || item === document.activeElement
+    )
     ;(focusable[0] || element).focus()
   }
 
@@ -36,8 +37,9 @@ export function useFocusTrap(
 
     const element = container.value
     if (!element) return
-    const focusable = Array.from(element.querySelectorAll<HTMLElement>(focusableSelector))
-      .filter((item) => item.offsetParent !== null || item === document.activeElement)
+    const focusable = Array.from(element.querySelectorAll<HTMLElement>(focusableSelector)).filter(
+      item => item.offsetParent !== null || item === document.activeElement
+    )
     if (!focusable.length) {
       event.preventDefault()
       element.focus()
@@ -55,7 +57,7 @@ export function useFocusTrap(
     }
   }
 
-  watch(isOpen, (open) => {
+  watch(isOpen, open => {
     if (open) {
       previousFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null
       document.addEventListener('keydown', handleKeydown)

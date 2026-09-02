@@ -37,22 +37,28 @@ const defaultRows = [
 
 const presets = computed(() => [
   { label: t('settings.geocoding.presetDefault'), rows: defaultRows },
-  { label: t('settings.geocoding.presetDetailed'), rows: [
-    ['tourism', 'amenity', 'historic', 'leisure'],
-    ['road', 'square', 'suburb', 'neighbourhood'],
-    ['city', 'town', 'village'],
-    ['region', 'state', 'province'],
-    ['country']
-  ] },
-  { label: t('settings.geocoding.presetCityRegionCountry'), rows: [
-    ['city', 'town', 'village', 'municipality'],
-    ['region', 'state', 'province'],
-    ['country']
-  ] },
-  { label: t('settings.geocoding.presetCityCountry'), rows: [
-    ['city', 'town', 'village', 'municipality'],
-    ['country']
-  ] }
+  {
+    label: t('settings.geocoding.presetDetailed'),
+    rows: [
+      ['tourism', 'amenity', 'historic', 'leisure'],
+      ['road', 'square', 'suburb', 'neighbourhood'],
+      ['city', 'town', 'village'],
+      ['region', 'state', 'province'],
+      ['country']
+    ]
+  },
+  {
+    label: t('settings.geocoding.presetCityRegionCountry'),
+    rows: [
+      ['city', 'town', 'village', 'municipality'],
+      ['region', 'state', 'province'],
+      ['country']
+    ]
+  },
+  {
+    label: t('settings.geocoding.presetCityCountry'),
+    rows: [['city', 'town', 'village', 'municipality'], ['country']]
+  }
 ])
 
 const sampleAddress: Record<string, string> = {
@@ -91,7 +97,7 @@ const sampleAddress: Record<string, string> = {
 
 const rows = computed(() => {
   if (!Array.isArray(props.modelValue)) return []
-  return props.modelValue.map(row => Array.isArray(row) ? row.map(String).filter(Boolean) : [])
+  return props.modelValue.map(row => (Array.isArray(row) ? row.map(String).filter(Boolean) : []))
 })
 
 const preview = computed(() => {
@@ -110,7 +116,10 @@ function isSupported(value: string) {
 }
 
 function updateRows(nextRows: string[][]) {
-  emit('update:modelValue', nextRows.map(row => [...row]))
+  emit(
+    'update:modelValue',
+    nextRows.map(row => [...row])
+  )
 }
 
 function addRow() {
@@ -195,13 +204,30 @@ function handleSelect(event: Event, rowIndex: number) {
             {{ t('settings.geocoding.part', { number: rowIndex + 1 }) }}
           </div>
           <div class="flex items-center gap-1">
-            <button type="button" class="rounded p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:text-gray-300 dark:hover:bg-gray-700" :disabled="rowIndex === 0" :title="t('settings.geocoding.moveUp')" @click="moveRow(rowIndex, -1)">
+            <button
+              type="button"
+              class="rounded p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:text-gray-300 dark:hover:bg-gray-700"
+              :disabled="rowIndex === 0"
+              :title="t('settings.geocoding.moveUp')"
+              @click="moveRow(rowIndex, -1)"
+            >
               <ArrowUpIcon class="h-4 w-4" />
             </button>
-            <button type="button" class="rounded p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:text-gray-300 dark:hover:bg-gray-700" :disabled="rowIndex === rows.length - 1" :title="t('settings.geocoding.moveDown')" @click="moveRow(rowIndex, 1)">
+            <button
+              type="button"
+              class="rounded p-1 text-gray-500 hover:bg-gray-100 disabled:opacity-30 dark:text-gray-300 dark:hover:bg-gray-700"
+              :disabled="rowIndex === rows.length - 1"
+              :title="t('settings.geocoding.moveDown')"
+              @click="moveRow(rowIndex, 1)"
+            >
               <ArrowDownIcon class="h-4 w-4" />
             </button>
-            <button type="button" class="rounded p-1 text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10" :title="t('settings.geocoding.removePart')" @click="removeRow(rowIndex)">
+            <button
+              type="button"
+              class="rounded p-1 text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-500/10"
+              :title="t('settings.geocoding.removePart')"
+              @click="removeRow(rowIndex)"
+            >
               <TrashIcon class="h-4 w-4" />
             </button>
           </div>
@@ -211,17 +237,39 @@ function handleSelect(event: Event, rowIndex: number) {
           <span
             v-for="key in row"
             :key="key"
-            :class="[isSupported(key) ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300' : 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300', 'inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium']"
+            :class="[
+              isSupported(key)
+                ? 'bg-indigo-50 text-indigo-700 dark:bg-indigo-500/10 dark:text-indigo-300'
+                : 'bg-amber-50 text-amber-800 dark:bg-amber-500/10 dark:text-amber-300',
+              'inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium'
+            ]"
           >
             {{ labelFor(key) }}
-            <span v-if="!isSupported(key)" class="text-xs opacity-75">{{ t('settings.geocoding.unsupported') }}</span>
-            <button type="button" class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10" :title="t('settings.geocoding.moveLeft')" @click="moveKey(rowIndex, key, -1)">
+            <span v-if="!isSupported(key)" class="text-xs opacity-75">{{
+              t('settings.geocoding.unsupported')
+            }}</span>
+            <button
+              type="button"
+              class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+              :title="t('settings.geocoding.moveLeft')"
+              @click="moveKey(rowIndex, key, -1)"
+            >
               <ArrowLeftIcon class="h-3.5 w-3.5" />
             </button>
-            <button type="button" class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10" :title="t('settings.geocoding.moveRight')" @click="moveKey(rowIndex, key, 1)">
+            <button
+              type="button"
+              class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+              :title="t('settings.geocoding.moveRight')"
+              @click="moveKey(rowIndex, key, 1)"
+            >
               <ArrowRightIcon class="h-3.5 w-3.5" />
             </button>
-            <button type="button" class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10" :title="t('settings.geocoding.removeKey')" @click="removeKey(rowIndex, key)">
+            <button
+              type="button"
+              class="rounded p-0.5 hover:bg-black/5 dark:hover:bg-white/10"
+              :title="t('settings.geocoding.removeKey')"
+              @click="removeKey(rowIndex, key)"
+            >
               <XMarkIcon class="h-3.5 w-3.5" />
             </button>
           </span>
@@ -233,7 +281,9 @@ function handleSelect(event: Event, rowIndex: number) {
           @change="handleSelect($event, rowIndex)"
         >
           <option value="">{{ t('settings.geocoding.addFallback') }}</option>
-          <option v-for="choice in availableChoices(row)" :key="choice.value" :value="choice.value">{{ choice.label || choice.value }}</option>
+          <option v-for="choice in availableChoices(row)" :key="choice.value" :value="choice.value">
+            {{ choice.label || choice.value }}
+          </option>
         </select>
       </div>
     </div>
@@ -247,7 +297,10 @@ function handleSelect(event: Event, rowIndex: number) {
       {{ t('settings.geocoding.addPart') }}
     </button>
 
-    <div v-if="preview" class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-gray-900/40 dark:text-gray-300">
+    <div
+      v-if="preview"
+      class="rounded-lg bg-gray-50 px-3 py-2 text-sm text-gray-600 dark:bg-gray-900/40 dark:text-gray-300"
+    >
       <span class="font-medium">{{ t('settings.geocoding.preview') }}:</span>
       {{ preview }}
     </div>
