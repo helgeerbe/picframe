@@ -22,7 +22,7 @@ import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
 from picframe.core.services.resource_paths import PICFRAME_DATA_TOKEN, ResourcePaths
-from picframe.mat_image import MatImage
+from picframe.core.utils.mat_image import MatImage
 
 _image_file_lock = threading.Lock()
 VIDEO_TRANSITION_FRAME_PROCESSING_VERSION = 6
