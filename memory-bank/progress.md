@@ -146,70 +146,46 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   display-init failure for signal-killed workers. Merged via PR #731
   (squash-merged into `v2-dev`, commit 69b2445, feature branch deleted). The
   reporter's on-device crash was not re-confirmed; merged on owner judgment.
+- **`v2-dev → dev` transition (PR #737):** the full Picframe 2.0 modernization
+  merged into `dev`. Pre-merge cleanup issues #736 (frontend lint/format) and
+  #738 (ESLint + Prettier + CI gate baseline) closed.
+- **#741 — geo_reverse relocation:** moved `geo_reverse.py` →
+  `infrastructure/geo_reverse.py` (PR #744, `b5e8a1f`). Reverse geocoding is now
+  an infrastructure concern behind the existing geocoding port.
+- **#742 — mat_image relocation:** moved `mat_image.py` →
+  `core/utils/mat_image.py` (PR #745, `989f186`). Matting helper now lives with
+  the other renderer utility modules in core.
+- **#743 — no-explicit-any tightening:** `@typescript-eslint/no-explicit-any`
+  raised from `warn` → `error` (PR #746, `9b86cf8`). 52 warnings converted to
+  `unknown`/typed via new `errors.ts` helpers (`getErrorMessage`,
+  `getApiErrorMessage`); 20 `catch (e: any)` → `catch (e: unknown)`; 5
+  genuinely-dynamic blobs kept with scoped disables + rationale. A Sourcery
+  review nit on `getErrorMessage` was addressed in follow-up commit `a307cec`.
 
 ## Current / In Progress
-- Phase 2 Control Plane/UI remains the broad current phase in local documentation; #648 is closed after the playlist-filter and Remote media-selection slice was implemented and verified.
-- Video engine integration remains an active architectural stream: caps-driven hardware discovery, fallback observability, software fallback limits, and Raspberry Pi/labwc validation of the GTK4 handoff behavior.
-- #691 is merged into `v2-dev`, pushed to `origin/v2-dev`, and closed. Additional Raspberry Pi/labwc validation of the handoff behavior remains useful target coverage.
-- #635 remains open for Raspberry Pi manual validation and final closeout decision after implementation verification.
+- Nothing. All planned post-merge cleanup work is complete. Local `dev` is
+  synced to `origin/dev` (`a307cec`), clean working tree. All merged feature
+  branches deleted (local + remote).
+
 ## Next
-- Continue caps-driven hardware capability discovery in the GStreamer worker, with Pi V4L2 probing enabled before worker startup.
-- Validate more H.264 1080p60 and HEVC container variants before relaxing additional guards.
-- Surface software fallback / unsupported-media decisions as events visible to logs and the UI.
-- Continue Raspberry Pi/labwc validation of GTK4 video handoff timing, especially EOS redraw behavior and custom display geometry.
-- Reconcile frontend specification with actual implemented UI and fill gaps only through tracked issues.
-- Keep legacy import documentation aligned with the explicit UI/API import path rather than adding a separate `picframe migrate` command unless a new tracked requirement asks for headless migration.
+- **`dev → main` release PR** (deferred, user's call): `dev` is
+  +62,857/−9,123 across 280 files vs `main`. Pushing to `main` triggers
+  `release.yml` (calver auto-tag + PyPI trusted publishing + GitHub Release
+  with PR-title changelog categories). Verify the release workflow
+  end-to-end before relying on it.
+- **Done:** superseded `v2-dev` branch deleted (local + remote, `cb69484`);
+  all commits preserved on `dev`.
 
 ## Known Verification State
-- Latest backend verification on `v2-dev` (2026-06-19): `.venv/bin/python -m pytest` passed with 640 tests and 1 GI deprecation warning.
-- Latest frontend verification on `v2-dev` (2026-06-19): `npm run build` passed, with only sandbox stream-fd warnings before Vite completed.
-- Latest video hardening verification on this workspace: touched-file Ruff passed, and `.venv/bin/python -m pytest test/core/metadata/test_video_strategy.py test/core/services/test_media_indexer.py test/core/renderers test/core/engine/test_playback.py` passed with 123 tests.
-- Latest #691 cleanup verification: `.venv/bin/python -m pytest test/core/utils/test_video_frame_extractor.py test/core/engine/test_playback.py test/core/renderers/test_gst_pipeline_builder.py test/core/renderers/test_gst_video_renderer.py test/core/renderers/test_gst_worker.py test/core/renderers/test_gtk_video_presenter.py` passed with 190 tests; targeted Ruff correctness check passed.
-- Latest #693 target verification: `.venv/bin/python -m pytest test/core/repositories/test_sqlite_media.py test/core/services/test_geocoding_worker.py test/core/services/test_locale_utils.py test/core/services/test_renderer_config.py test/core/engine/test_playback.py test/core/renderers/test_pi3d_renderer.py test/api/test_app.py` passed with 189 tests; `git diff --check` and targeted Ruff on the new locale helper tests passed.
-- Latest #694 target verification: `.venv/bin/python -m pytest test/infrastructure/os/test_wayland_power.py test/test_remote_brightness_controls.py` passed with 13 tests; targeted Ruff for the touched Python files passed.
-- Latest #695 target verification: `.venv/bin/python -m pytest test/test_settings_clock_format_controls.py` passed with 2 tests; targeted Ruff for the new source guard passed.
-- Latest #696 target verification: `.venv/bin/python -m pytest test/core/repositories/test_sqlite_media.py` passed with 23 tests; targeted Ruff for the touched media repository files passed.
-- Latest #697 target verification: `.venv/bin/python -m pytest test/core/repositories/test_sqlite_media.py test/core/services/test_playlist.py test/api/test_app.py` passed with 96 tests; targeted Ruff for the touched Python files passed.
-- Latest #698 target verification: `.venv/bin/python -m pytest test/core/utils/test_mat_image.py test/core/utils/test_video_frame_extractor.py test/core/engine/test_playback.py test/core/renderers/test_pi3d_renderer.py test/core/events/test_dto.py` passed with 164 tests; full `.venv/bin/python -m pytest` passed with 645 tests and 1 GI deprecation warning; targeted Ruff for touched Python files and `git diff --check` passed.
-- Latest #699 verification: full `.venv/bin/python -m pytest` passed with 662 tests and 1 GI deprecation warning; focused `.venv/bin/python -m pytest test/api/test_app.py test/test_remote_brightness_controls.py` passed with 67 tests; targeted Ruff for touched Python files passed; `npm run build` passed with the known sandbox stream-fd warnings before Vite completed; `git diff --check` passed.
-- Latest #701 paused-overlay verification: focused resume regression tests (`test_parse_resume_command`, `test_pause_resume_video`, `test_resume_request_resumes_existing_pipeline`, `test_pause_request_prevents_async_done_from_resuming_pipeline`) passed with 4 tests after adding explicit resume IPC. Focused fade-freeze and text-timer regressions for animation controller, playback pause/resume, and pi3d renderer passed with 7 tests; broader `.venv/bin/python -m pytest test/core/renderers/test_animation_controller.py test/core/renderers/test_pi3d_renderer.py test/core/engine/test_playback.py` passed with 130 tests. The expanded #701 suite `.venv/bin/python -m pytest test/core/renderers/test_animation_controller.py test/core/renderers/test_gst_worker.py test/core/renderers/components/test_text_renderer.py test/core/renderers/test_pi3d_renderer.py test/core/engine/test_playback.py test/core/renderers/test_gst_video_renderer.py test/core/renderers/test_gtk_video_presenter.py` passed with 234 tests; targeted Ruff for touched Python files passed. The latest pending-video pause race guard `.venv/bin/python -m pytest test/core/engine/test_playback.py test/core/renderers/test_animation_controller.py test/core/renderers/test_pi3d_renderer.py test/core/renderers/test_gst_video_renderer.py test/core/renderers/test_gst_worker.py test/core/renderers/test_gtk_video_presenter.py` passed with 226 tests; full `.venv/bin/python -m pytest` passed with 690 tests and 1 GI deprecation warning.
-- Latest #705 verification: backend hardware-input validation and the Settings
-  GPIO source guard reject/exclude unsupported `WAKE`/`SLEEP` selections while
-  preserving `DISPLAY_ON`/`DISPLAY_OFF`; the active `Command` enum no longer
-  includes the legacy names; focused event/hardware/API pytest passed with 101
-  tests; full `.venv/bin/python -m pytest` passed with 699 tests and 1 GI
-  deprecation warning; targeted Ruff, `npm run build`, and `git diff --check`
-  passed.
-- Latest #708 verification: `.venv/bin/python -m pytest` passed with 700 tests
-  and 1 GI deprecation warning; targeted Ruff for
-  `src/picframe/core/repositories/sqlite_config.py` and
-  `test/core/repositories/test_sqlite_config.py` passed; `git diff --check`
-  passed.
-- Latest #714 verification: targeted
-  `.venv/bin/python -m pytest test/core/engine/test_playback.py` passed; ruff
-  format/check and mypy on touched files passed; `git diff --check` passed.
-- Latest #716 verification: full `.venv/bin/python -m pytest` passed with 721
-  tests and 1 GI deprecation warning; targeted
-  `.venv/bin/python -m pytest test/core/renderers/components/test_clock_renderer.py
-  test/core/events/test_dto.py test/core/engine/test_playback.py test/api/test_app.py`
-  passed; ruff format/check passed after import ordering fix; `git diff --check`
-  passed.
-- Latest #680/#668 target diagnostics: docs/user/video-format-validation.md summarizes VLC and GStreamer file matrices, including Pi V4L2 probing, DMABuf hardware success, validated HEVC MKV 4K60, and guarded MOV/Main10 paths.
-- Latest #719 verification: full `.venv/bin/python -m pytest` passed with 753
-  tests and 1 GI deprecation warning; focused text/clock renderer tests passed
-  with 30 tests including the z-order fix and the rebuild-on-text-change case;
-  `ruff check` and `mypy` passed clean on touched files; `git diff --check`
-  passed. Remaining: docs z-order convention, frontend rebuild, commit, push,
-  ticket close, and Discussion #682 comment.
-- Latest #724 verification: targeted
-  `.venv/bin/python -m pytest test/core/repositories/test_sqlite_config.py
-  test/core/repositories/test_sqlite_media.py test/core/engine/test_playback.py`
-  passed with 128 tests; `mypy` passed clean on 5 source files; `ruff check`
-  and `ruff format --check` passed on 8 files; `git diff --check` passed.
-  Remaining: commit, push, create PR, close ticket.
-- Latest #725 verification: targeted
-  `.venv/bin/python -m pytest test/core/metadata/test_image_strategy.py -v`
-  passed with 14 tests; `mypy` passed clean on 2 source files; `ruff check`
-  and `ruff format --check` passed on 2 files. Remaining: commit, force-push
-  to update PR #732, close ticket.
-- Latest #726 verification: `.venv/bin/python -m pytest test/core/renderers/test_pi3d_renderer.py` passed with 56 tests; `ruff check` and `ruff format --check` passed on 2 files; `mypy` passed clean. PR #733 squash-merged into `v2-dev`, issue #726 closed, feature branch deleted.
+- Backend: full `.venv/bin/python -m pytest` was last reported green (753
+  tests, 1 GI deprecation warning) on the `v2-dev` line before the `dev` merge.
+  The 3 follow-up PRs (#744/#745/#746) passed their targeted CI checks
+  (ruff, mypy, pytest, ESLint, Prettier, frontend build) before squash-merge.
+- Frontend: `yarn build` + `yarn lint` + `yarn format:check` pass clean on
+  `dev` after #743 (#746's initial CI failure from a stray blank line in
+  `errors.ts` was caught and fixed via `yarn format` before merge).
+- Current `dev` head: `a307cec` (Sourcery fixup to `getErrorMessage`).
+- Note: backend test counts grew through the modernization (640 → 753+ on
+  `v2-dev`); the exact count on post-merge `dev` should be re-verified with
+  a fresh `.venv/bin/python -m pytest` run before the release.
+

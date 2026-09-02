@@ -106,7 +106,35 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   Mac writes keywords under Seq/li instead of the common Bag/li; Bag/li
   remains the preferred path when both are present (#725).
 
-- Use the GitHub MCP agent for all GitHub operations (issues, PRs, branches, commits, releases, comments, reviews, searches) on `helgeerbe/picframe`; prefer it over shell `gh` or manual web edits. Verified read-only live on 2026-09-01.
+- Use the GitHub MCP agent for all GitHub operations (issues, PRs, branches, commits, releases, comments, reviews, searches) on `helgeerbe/picframe`; prefer it over shell `gh` or manual web edits. Verified read-only live on 2026-09-01; mutating operations exercised in production during the post-merge cleanup (PRs #744/#745/#746 created/merged, issues #736/#738/#741/#742/#743 created/closed, branches created/deleted, review comments/replies posted).
+
+- `v2-dev → dev` transition (PR #737): the full Picframe 2.0 modernization
+  merged into `dev`, making `dev` the integration branch. The long-lived
+  `v2-dev` branch is superseded and deleted (local + remote, `cb69484`;
+  commits preserved on `dev`). `main` remains the release branch; `release.yml`
+  auto-tags (calver), publishes to PyPI, and creates a GitHub Release on
+  `dev → main` merge.
+
+- Reverse geocoding is an infrastructure concern: `geo_reverse.py` moved from
+  the top-level package to `infrastructure/geo_reverse.py` (#741, PR #744),
+  keeping geocoding network/IO details out of core behind the existing port.
+
+- Matting helper `mat_image.py` moved from the top-level package to
+  `core/utils/mat_image.py` (#742, PR #745), colocating it with the other
+  renderer utility modules in core.
+
+- Frontend `@typescript-eslint/no-explicit-any` is `error`, not `warn` (#743,
+  PR #746). Catch handlers use `catch (e: unknown)` with typed
+  `frontend/src/utils/errors.ts` helpers (`getErrorMessage` reads `.message`
+  from `Error`/plain objects; `getApiErrorMessage` unwraps API error shapes).
+  Five genuinely-dynamic blobs retain scoped `eslint-disable-next-line` with
+  rationale: store `config` ref, `MediaItem.exif`, and `SettingsView`
+  `localConfig`/`initializeConfig` param/`initialized`. New frontend catch
+  handlers must use `unknown` + the `errors.ts` helpers, never bare `any`.
+
+- Direct pushes to `dev` bypassing branch protection may succeed for the owner
+  (bypass actor) but are not guaranteed; the 3-line Sourcery fixup (`a307cec`)
+  was pushed directly as a one-off. Prefer the PR-based flow for future fixes.
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.
