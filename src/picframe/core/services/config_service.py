@@ -11,6 +11,7 @@ from typing import Any
 from picframe.core.events.dto import (
     Command,
     CommandEvent,
+    OverlayConfigChangedEvent,
     RendererConfigUpdatedEvent,
     State,
     StateEvent,
@@ -82,6 +83,7 @@ class ConfigService:
             "mqtt": {},
             "http": {},
             "hardware_inputs": {},
+            "overlay": {},
         }
 
         if hasattr(self._config_repository, "get_all_app_config"):
@@ -105,6 +107,7 @@ class ConfigService:
                 "mqtt": self._config_repository.get_app_config("mqtt", {}),
                 "http": self._config_repository.get_app_config("http", {}),
                 "hardware_inputs": self._config_repository.get_app_config("hardware_inputs", {}),
+                "overlay": self._config_repository.get_app_config("overlay", {}),
             }
 
         return config
@@ -139,6 +142,23 @@ class ConfigService:
         for key, value in flat_payload.items():
             self._config_repository.set_app_config(key, value)
 
+    def update_plugin_config(self, plugin_id: str, plugin_config: dict[str, Any]) -> None:
+        """Persist a single plugin's config under ``overlay.plugin_config.<id>.*``.
+
+        Reuses the same ``delete_app_config_prefix`` + re-write pattern as
+        ``hardware_inputs``, but scoped to one plugin so the rest of the
+        ``overlay`` section is never wiped. Stale keys from a previous version
+        of the plugin config are removed before the new values are written.
+        """
+        if not self._config_repository:
+            logger.warning("Cannot update plugin config: no config repository is available")
+            return
+
+        prefix = f"overlay.plugin_config.{plugin_id}"
+        self._config_repository.delete_app_config_prefix(prefix)
+        for key, value in plugin_config.items():
+            self._config_repository.set_app_config(f"{prefix}.{key}", value)
+
     def _handle_set_config(self, payload: Any) -> None:
         """
         Process a SET_CONFIG payload.
@@ -171,8 +191,38 @@ class ConfigService:
                 ):
                     self._publish_renderer_config()
 
+                if "overlay" in updated_sections:
+                    self._publish_overlay_config_changed(payload["overlay"])
+
         except Exception as e:
             logger.error(f"Error processing SET_CONFIG payload: {e}", exc_info=True)
+
+    def _publish_overlay_config_changed(self, overlay_payload: Any) -> None:
+        """Publish an ``OverlayConfigChangedEvent`` with the merged overlay config.
+
+        ``overlay_payload`` is the ``overlay`` section of the SET_CONFIG payload.
+        When it contains only a ``plugin_config`` with a single plugin id, that id
+        is reported as ``updated_plugin_id`` so subscribers can scope their work.
+        """
+        if not self._config_repository:
+            return
+
+        try:
+            nested = self.get_nested_config()
+            overlay_config = nested.get("overlay", {})
+            updated_plugin_id: str | None = None
+            if isinstance(overlay_payload, dict):
+                plugin_config = overlay_payload.get("plugin_config")
+                if isinstance(plugin_config, dict) and len(plugin_config) == 1:
+                    updated_plugin_id = next(iter(plugin_config))
+            self._event_publisher.publish(
+                OverlayConfigChangedEvent(
+                    overlay_config=dict(overlay_config),
+                    updated_plugin_id=updated_plugin_id,
+                )
+            )
+        except Exception as e:
+            logger.error(f"Failed to publish OverlayConfigChangedEvent: {e}", exc_info=True)
 
     def _publish_renderer_config(self) -> None:
         """

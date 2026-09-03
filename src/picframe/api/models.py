@@ -343,12 +343,71 @@ class HardwareInputsUpdateResponse(StatusMessageResponse):
     )
 
 
+class OverlayConfig(BaseModel):
+    """Pydantic model for the ``overlay`` config section (#739).
+
+    This is the single blocking prerequisite for the feature: Pydantic v2
+    ``extra='ignore'`` silently drops unknown YAML keys, so an ``overlay``
+    section absent from the Pydantic schema would be dropped entirely during
+    ``picframe init`` seeding. Note this is unrelated to the existing
+    ``picframe.core.events.dto.OverlayConfig`` dataclass (the pi3d text/clock
+    overlay config).
+    """
+
+    enabled: bool = False
+    backend: Literal["webkit"] = "webkit"
+    plugin_dir: str = "~/.picframe/overlay-plugins"
+    enabled_plugins: list[str] = Field(default_factory=lambda: ["clock", "meta"])
+    visible_plugin: str | None = "clock"
+    display_mode: Literal["persistent", "auto_hide"] = "auto_hide"
+    auto_hide_seconds: float = 5.0
+    enabled_input_types: list[str] = Field(default_factory=lambda: ["touch", "mouse", "keyboard"])
+    idle_hide_seconds: float = 5.0
+    transparent: bool = True
+    plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+
+class OverlayPluginResponse(BaseModel):
+    """A discovered overlay plugin with its effective (merged) config."""
+
+    id: str
+    name: str
+    description: str = ""
+    icon: str = ""
+    trigger: str = "icon"
+    position: str = "top-right"
+    has_config: bool = False
+    config_schema: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Effective config: manifest defaults merged with persisted user values.",
+    )
+
+
+class OverlayPluginConfigResponse(BaseModel):
+    """Effective per-plugin config (manifest defaults <- db overrides)."""
+
+    plugin_id: str
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class OverlayPluginConfigUpdateResponse(StatusMessageResponse):
+    """Result returned after updating a single plugin's config."""
+
+    plugin_id: str
+    config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validated per-plugin config that was persisted.",
+    )
+
+
 class AppConfig(BaseModel):
     viewer: ViewerConfig = Field(default_factory=ViewerConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
     mqtt: MqttConfig = Field(default_factory=MqttConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)
     hardware_inputs: HardwareInputsConfig = Field(default_factory=HardwareInputsConfig)
+    overlay: OverlayConfig = Field(default_factory=OverlayConfig)
 
 
 class EmptyConfigResponse(BaseModel):

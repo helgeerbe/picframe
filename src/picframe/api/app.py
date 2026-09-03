@@ -54,6 +54,9 @@ from picframe.api.models import (
     MediaResponseDTO,
     MediaSelectionCountRequest,
     MediaSelectionCountResponse,
+    OverlayPluginConfigResponse,
+    OverlayPluginConfigUpdateResponse,
+    OverlayPluginResponse,
     StateWebSocketMessage,
     StatusMessageResponse,
     StatusResponse,
@@ -63,8 +66,13 @@ from picframe.api.models import (
 )
 from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
+from picframe.core.models.overlay import (
+    PluginDescriptor,
+    plugin_config_defaults,
+    validate_plugin_config,
+)
 from picframe.core.models.playlist import PlaylistCriteria
-from picframe.core.ports import ISystemManager
+from picframe.core.ports import IOverlayController, ISystemManager
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 from picframe.core.services.basic_auth import AUTH_COOKIE_NAME, BasicAuthStore
 from picframe.core.services.locale_utils import language_from_locale
@@ -122,6 +130,10 @@ OPENAPI_TAGS = [
     {"name": "Configuration", "description": "Runtime Picframe configuration endpoints."},
     {"name": "Media", "description": "Media selection helpers and media file serving."},
     {"name": "Hardware Inputs", "description": "GPIO button and PIR sensor configuration."},
+    {
+        "name": "Overlay",
+        "description": "WebKitGTK touch overlay plugin discovery and per-plugin config.",
+    },
 ]
 BAD_REQUEST_RESPONSE: dict[int | str, dict[str, Any]] = {
     400: {"model": APIErrorResponse, "description": "Invalid request for the endpoint."},
@@ -152,6 +164,7 @@ AUTH_PROTECTED_API_PREFIXES = (
     "/api/hardware-inputs",
     "/api/maintenance",
     "/api/auth/config",
+    "/api/overlay",
 )
 AUTH_PROTECTED_EXACT_PATHS = {
     "/api/system/reboot",
@@ -1010,6 +1023,7 @@ def create_app(
     log_event_buffer: LogEventBuffer | None = None,
     auth_store: BasicAuthStore | None = None,
     system_manager: ISystemManager | None = None,
+    overlay_controller: IOverlayController | None = None,
 ) -> FastAPI:
     """
     Create and configure the FastAPI application instance.
@@ -1896,6 +1910,145 @@ def create_app(
             "status": "success",
             "hardware_inputs": config_dict,
         }
+
+    def _overlay_descriptor_map() -> dict[str, PluginDescriptor]:
+        """Return discovered plugin descriptors keyed by id (empty if no controller)."""
+        if overlay_controller is None:
+            return {}
+        return {descriptor.id: descriptor for descriptor in overlay_controller.list_plugins()}
+
+    def _merged_plugin_config(descriptor: PluginDescriptor) -> dict[str, Any]:
+        """Effective config = manifest defaults <- persisted db overrides."""
+        if not config_repository:
+            return plugin_config_defaults(descriptor.config_schema)
+
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None:
+                pass
+
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+        from picframe.core.services.config_service import ConfigService
+
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+        nested = temp_service.get_nested_config()
+        plugin_config_section = nested.get("overlay", {}).get("plugin_config", {})
+        db_values = plugin_config_section.get(descriptor.id, {})
+        if not isinstance(db_values, dict):
+            db_values = {}
+        merged = plugin_config_defaults(descriptor.config_schema)
+        merged.update(db_values)
+        return merged
+
+    @app.get(
+        "/api/overlay/plugins",
+        response_model=list[OverlayPluginResponse],
+        tags=["Overlay"],
+        summary="List discovered overlay plugins",
+        description=(
+            "Return discovered overlay plugin descriptors (from the overlay controller, "
+            "which scans the configured plugin directory) with their effective config "
+            "(manifest defaults merged with persisted user values). Returns an empty list "
+            "when no overlay controller is available."
+        ),
+    )
+    async def api_get_overlay_plugins() -> list[dict[str, Any]]:
+        """List discovered overlay plugins with merged effective config."""
+        descriptors = _overlay_descriptor_map()
+        return [
+            {
+                "id": descriptor.id,
+                "name": descriptor.name,
+                "description": descriptor.description,
+                "icon": descriptor.icon,
+                "trigger": descriptor.trigger,
+                "position": descriptor.position,
+                "has_config": bool(descriptor.config_schema),
+                "config_schema": descriptor.config_schema,
+                "config": _merged_plugin_config(descriptor),
+            }
+            for descriptor in sorted(descriptors.values(), key=lambda d: d.id)
+        ]
+
+    @app.get(
+        "/api/overlay/plugins/{plugin_id}/config",
+        response_model=OverlayPluginConfigResponse,
+        tags=["Overlay"],
+        summary="Get a plugin's effective config",
+        description=(
+            "Return a single plugin's effective config (manifest defaults merged with "
+            "persisted user values from `overlay.plugin_config.<id>.*`)."
+        ),
+        responses={**NOT_FOUND_RESPONSE},
+    )
+    async def api_get_overlay_plugin_config(plugin_id: str) -> dict[str, Any]:
+        """Get a plugin's effective config."""
+        descriptors = _overlay_descriptor_map()
+        descriptor = descriptors.get(plugin_id)
+        if descriptor is None:
+            raise HTTPException(status_code=404, detail=f"Overlay plugin '{plugin_id}' not found")
+        return {"plugin_id": plugin_id, "config": _merged_plugin_config(descriptor)}
+
+    @app.put(
+        "/api/overlay/plugins/{plugin_id}/config",
+        response_model=OverlayPluginConfigUpdateResponse,
+        response_model_exclude_none=True,
+        tags=["Overlay"],
+        summary="Update a plugin's config",
+        description=(
+            "Validate a plugin's config against its manifest `config_schema`, persist it "
+            "under `overlay.plugin_config.<id>.*`, and broadcast an "
+            "`OverlayConfigChangedEvent` so the overlay applies it live."
+        ),
+        responses={**NOT_FOUND_RESPONSE, **VALIDATION_RESPONSE, **BAD_REQUEST_RESPONSE},
+    )
+    async def api_put_overlay_plugin_config(
+        plugin_id: str,
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, Any]:
+        """Validate and persist a single plugin's config."""
+        descriptors = _overlay_descriptor_map()
+        descriptor = descriptors.get(plugin_id)
+        if descriptor is None:
+            raise HTTPException(status_code=404, detail=f"Overlay plugin '{plugin_id}' not found")
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+
+        try:
+            validated_config = validate_plugin_config(descriptor.config_schema, payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None:
+                pass
+
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+        from picframe.core.services.config_service import ConfigService
+
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+        temp_service.update_plugin_config(plugin_id, validated_config)
+
+        if event_publisher:
+            event_publisher.publish(
+                CommandEvent(
+                    command=Command.SET_CONFIG,
+                    payload={"overlay": {"plugin_config": {plugin_id: validated_config}}},
+                )
+            )
+
+        return {"status": "success", "plugin_id": plugin_id, "config": validated_config}
 
     @app.post(
         "/api/config/import-yaml",

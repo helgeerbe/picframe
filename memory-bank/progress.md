@@ -174,22 +174,61 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 ## Current / In Progress
 - **#739 — WebKitGTK touch overlay + plugin system** (feature branch
   `feat/739-webkit-overlay`, cut from `dev` `4217f6e`). Six locked design
-  decisions recorded in `decisionLog.md`. Prerequisite **#749** (remove dead
-  `peripherals` config section) is complete and committed (`5924130`):
-  `peripherals` removed from backend models/config/service/app, frontend
-  `configSchema.json`/locales, tests, and docs; SPA rebuilt; all gates green
-  (ruff, ruff format, mypy, pytest 801 passed, yarn lint/format/tsc/build);
-  pushed to `origin`. Currently in Step 0d (memory-bank refresh) before
-  starting Phase 0 (#739 task list items 1–7): `overlay` section in
-  `default_config.yaml`, `OverlayConfig` Pydantic model, `ConfigService`
-  flatten/unflatten + whitelist, `PluginDescriptor` DTO + `IOverlayController`
-  port, plugin manifest loader, overlay API endpoints,
-  `OverlayConfigChangedEvent`.
+  decisions recorded in `decisionLog.md`. Prerequisite **#749** complete
+  (`5924130`). **Phase 0 (items 1–7) is now complete** — config + port + API
+  foundation, TDD throughout, all gates green (see Verification below).
+
+## Phase 0 Done (#739 items 1–7)
+- `overlay` section added to `default_config.yaml` (enabled/backend/plugin_dir/
+  enabled_plugins/visible_plugin/display_mode/auto_hide_seconds/
+  enabled_input_types/idle_hide_seconds/transparent/plugin_config).
+- Pydantic `OverlayConfig` model + `overlay` field on `AppConfig`
+  (`src/picframe/api/models.py`). Also `OverlayPluginResponse`,
+  `OverlayPluginConfigResponse`, `OverlayPluginConfigUpdateResponse`.
+  Fixed a pre-existing seed bug: `viewer.clock_extra_source: off` (YAML 1.1
+  bool coercion) → `'off'`, so `AppConfig(**seed)` validates and `picframe init`
+  re-seeding works. Guard test added in `test_bootstrapper.py`.
+- `ConfigService`: `overlay` added to `get_nested_config` read whitelist + fallback;
+  `OverlayConfigChangedEvent` published on `overlay` writes (distinct from
+  `RENDER_UPDATE_OVERLAY`); new `update_plugin_config(plugin_id, config)` does
+  scoped `delete_app_config_prefix("overlay.plugin_config.<id>")` + re-write
+  (reuses the `hardware_inputs` pattern, scoped so it never wipes the rest of
+  `overlay`). No blanket overlay delete in `update_nested_config` (avoids wiping
+  the section on a single-plugin SET_CONFIG).
+- `PluginDescriptor` core DTO + `plugin_config_defaults` +
+  `validate_plugin_config` (`src/picframe/core/models/overlay.py`, pure, no GTK).
+- `IOverlayController` port (`src/picframe/core/ports/overlay.py`, exported from
+  `core/ports/__init__.py`): `list_plugins`, `is_available`, `start`, `stop`,
+  `set_opacity`, `reload`.
+- `OverlayConfigChangedEvent` DTO (`src/picframe/core/events/dto.py`).
+- Plugin manifest loader (`src/picframe/infrastructure/overlay/plugin_loader.py`,
+  `PluginLoader`): scan `plugin_dir`, read each `plugin.json`, return sorted
+  `PluginDescriptor` list. No WebKitGTK import.
+- API endpoints (`src/picframe/api/app.py`, injected `overlay_controller:
+  IOverlayController | None`): `GET /api/overlay/plugins` (descriptors with
+  merged effective config = manifest defaults <- db overrides),
+  `GET /api/overlay/plugins/{id}/config`, `PUT /api/overlay/plugins/{id}/config`
+  (validate against `config_schema`, persist under `overlay.plugin_config.<id>.*`,
+  broadcast SET_CONFIG → OverlayConfigChangedEvent). `/api/overlay` added to
+  `AUTH_PROTECTED_API_PREFIXES`; "Overlay" OpenAPI tag added.
+- Tests: `test/core/models/test_overlay.py` (13), `test/infrastructure/overlay/
+  test_plugin_loader.py` (8), `test/core/services/test_config_service.py`
+  overlay tests (6), `test/api/test_app.py` overlay endpoint + openapi tests (8),
+  seed-validation guard test (1). No frontend changes (Phase 2); no
+  `configSchema.json` entries (overlay is in dedicated components).
 
 ## Next
-- **#739 Phase 0** (next): the config + port + API foundation (items 1–7
-  above), TDD throughout. Then Phases 1–4 (worker + IPC, composition-root
-  wiring, frontend panels, built-in plugins, docs).
+- **#739 Phase 1** — out-of-process WebKitGTK worker (`overlay_worker.py`),
+  `WebKitOverlayRenderer` IPC client implementing `IOverlayController`
+  (spawn worker, `GDK_BACKEND=wayland`, Unix-domain-socket IPC, mock `gi`/WebKit
+  in tests), overlay HTML shell (Vite multi-page → `src/picframe/html/overlay/`),
+  pointer+keyboard input routing, video opacity transitions, wire into `main.py`
+  behind the port when `overlay.enabled` and `is_available()`.
+- **#739 Phase 2** — frontend: Remote Overlay panel (plugin enable/disable,
+  visible-plugin selector, per-plugin config form), Appearance Overlay section
+  (display mode + auto-hide seconds), i18n. #14 can develop against a mocked API.
+- **#739 Phase 3** — built-in plugins: clock, weather, meta.
+- **#739 Phase 4** — tests + `docs/dev/architecture/overlay.md` + `docs/user/overlay.md`.
 - **`dev → main` release PR** (deferred, user's call): `dev` is
   +62,857/−9,123 across 280 files vs `main`. Pushing to `main` triggers
   `release.yml` (calver auto-tag + PyPI trusted publishing + GitHub Release
@@ -199,14 +238,12 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   all commits preserved on `dev`.
 
 ## Known Verification State
-- Backend: `.venv/bin/python -m pytest` ran green (801 passed) on
-  `feat/739-webkit-overlay` after #749. ruff, ruff format, and mypy strict
-  were clean. (Earlier `dev` baseline: 753 tests on the `v2-dev` line before the
-  merge; counts grew through the modernization and should be re-verified
-  before the release.)
-- Frontend: `yarn build` + `yarn lint` + `yarn format:check` + `vue-tsc -b`
-  pass clean on `feat/739-webkit-overlay` after #749.
-- Current `feat/739-webkit-overlay` head: `5924130` (refactor(#749): remove
-  dead legacy `peripherals` config section).
+- Backend: `.venv/bin/python -m pytest` ran green (**833 passed**, +32 vs the
+  801 baseline after #749) on `feat/739-webkit-overlay` after Phase 0. ruff,
+  ruff format, and mypy strict (84 files) were clean.
+- Frontend: unchanged by Phase 0; `yarn build` + `yarn lint` + `yarn format:check`
+  + `vue-tsc -b` pass clean on `feat/739-webkit-overlay` after #749.
+- Current `feat/739-webkit-overlay` head: Phase 0 changes (uncommitted, ready to
+  commit and push).
 - Current `dev` head: `4217f6e` (chore: remove stale v2-dev references, #747).
 

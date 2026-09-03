@@ -193,3 +193,106 @@ def test_renderer_config_update_includes_matting_values(config_service, mock_rep
     assert event.config.outer_mat_use_texture is False
     assert event.config.inner_mat_use_texture is True
     assert event.config.mat_resource_folder == os.path.expanduser("~/mat")
+
+
+def test_get_nested_config_includes_overlay_section(config_service, mock_repo):
+    mock_repo.get_all_app_config.return_value = {
+        "overlay.enabled": True,
+        "overlay.display_mode": "persistent",
+        "overlay.enabled_plugins": ["clock"],
+        "overlay.plugin_config.weather.api_key": "secret",
+    }
+
+    config = config_service.get_nested_config()
+
+    overlay = config["overlay"]
+    assert overlay["enabled"] is True
+    assert overlay["display_mode"] == "persistent"
+    assert overlay["enabled_plugins"] == ["clock"]
+    assert overlay["plugin_config"]["weather"]["api_key"] == "secret"
+
+
+def test_update_nested_config_persists_overlay(config_service, mock_repo):
+    nested_config = {
+        "overlay": {
+            "enabled": True,
+            "display_mode": "persistent",
+            "enabled_plugins": ["clock"],
+            "plugin_config": {"weather": {"api_key": "secret"}},
+        }
+    }
+
+    config_service.update_nested_config(nested_config)
+
+    mock_repo.set_app_config.assert_any_call("overlay.enabled", True)
+    mock_repo.set_app_config.assert_any_call("overlay.display_mode", "persistent")
+    mock_repo.set_app_config.assert_any_call("overlay.enabled_plugins", ["clock"])
+    mock_repo.set_app_config.assert_any_call("overlay.plugin_config.weather.api_key", "secret")
+    # overlay must NOT trigger a blanket delete-prefix (unlike hardware_inputs)
+    mock_repo.delete_app_config_prefix.assert_not_called()
+
+
+def test_update_plugin_config_scoped_delete_and_write():
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        repo.set_app_config("overlay.enabled", True)
+        repo.set_app_config("overlay.plugin_config.weather.api_key", "old-key")
+        repo.set_app_config("overlay.plugin_config.weather.units", "imperial")
+        repo.set_app_config("overlay.plugin_config.clock.format", "%H:%M")
+
+        service = ConfigService(repo, MagicMock(), MagicMock())
+        service.update_plugin_config("weather", {"api_key": "new-key"})
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.plugin_config.weather.api_key"] == "new-key"
+        # stale units key removed by scoped delete
+        assert "overlay.plugin_config.weather.units" not in all_config
+        # other plugins untouched
+        assert all_config["overlay.plugin_config.clock.format"] == "%H:%M"
+        # rest of overlay untouched
+        assert all_config["overlay.enabled"] is True
+    finally:
+        repo.close()
+
+
+def test_handle_set_config_overlay_publishes_overlay_config_changed_event(
+    config_service, mock_repo, mock_publisher
+):
+    mock_repo.get_all_app_config.return_value = {
+        "overlay.enabled": True,
+        "overlay.display_mode": "persistent",
+    }
+    event = CommandEvent(
+        command=Command.SET_CONFIG,
+        payload={"overlay": {"display_mode": "persistent"}},
+    )
+
+    config_service._handle_command_event(event)
+
+    from picframe.core.events.dto import OverlayConfigChangedEvent
+
+    published = [call.args[0] for call in mock_publisher.publish.call_args_list]
+    overlay_events = [e for e in published if isinstance(e, OverlayConfigChangedEvent)]
+    assert len(overlay_events) == 1
+    overlay_event = overlay_events[0]
+    assert overlay_event.overlay_config["display_mode"] == "persistent"
+    assert overlay_event.overlay_config["enabled"] is True
+    assert overlay_event.updated_plugin_id is None
+
+
+def test_handle_set_config_plugin_config_reports_updated_plugin_id(
+    config_service, mock_repo, mock_publisher
+):
+    mock_repo.get_all_app_config.return_value = {}
+    event = CommandEvent(
+        command=Command.SET_CONFIG,
+        payload={"overlay": {"plugin_config": {"weather": {"api_key": "k"}}}},
+    )
+
+    config_service._handle_command_event(event)
+
+    from picframe.core.events.dto import OverlayConfigChangedEvent
+
+    published = [call.args[0] for call in mock_publisher.publish.call_args_list]
+    overlay_event = next(e for e in published if isinstance(e, OverlayConfigChangedEvent))
+    assert overlay_event.updated_plugin_id == "weather"

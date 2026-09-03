@@ -116,3 +116,29 @@ def test_bootstrap_full(temp_dir: Path) -> None:
         mock_copy_assets.assert_called_once()
         assert mock_prompt.call_count == 2
         mock_seed.assert_called_once_with(mock_repo_instance)
+
+
+def test_default_config_yaml_validates_through_app_config() -> None:
+    """The seed YAML must survive AppConfig validation so `picframe init` re-seeding works.
+
+    Guards against YAML 1.1 bool coercion of unquoted values like ``off``/``on``
+    into Python bools for string-typed fields (e.g. ``viewer.clock_extra_source``),
+    which would raise a Pydantic ValidationError during seeding.
+    """
+    import yaml
+
+    import picframe
+    from picframe.api.models import AppConfig
+
+    pkg_dir = Path(picframe.__file__).parent
+    default_yaml = pkg_dir / "config" / "default_config.yaml"
+    raw = yaml.safe_load(default_yaml.read_text())
+    config = AppConfig(**raw)
+    assert config.overlay.enabled is False
+    assert config.overlay.backend == "webkit"
+    assert config.overlay.display_mode == "auto_hide"
+    assert config.overlay.enabled_plugins == ["clock", "meta"]
+    assert config.overlay.visible_plugin == "clock"
+    assert config.overlay.enabled_input_types == ["touch", "mouse", "keyboard"]
+    assert config.overlay.idle_hide_seconds == 5.0
+    assert config.overlay.plugin_config == {}

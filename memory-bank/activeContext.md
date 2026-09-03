@@ -10,34 +10,41 @@ worker mirroring `gst_worker.py`, opacity-based hide/wake with
 `RENDER_UPDATE_OVERLAY`, parallel Pointer+keyboard input, Vite multi-page).
 
 **Prerequisite done:** issue **#749** (remove dead legacy `peripherals` config
-section) is implemented and committed (`5924130`) on the feature branch. The
-`peripherals` block was removed from backend models/config/service/app,
-frontend `configSchema.json`/locales, tests, and docs; the SPA was rebuilt.
-All quality gates were green: ruff, ruff format, mypy, pytest (801 passed),
-yarn lint/format/tsc/build. The branch was pushed to `origin`.
+section) is implemented and committed (`5924130`) on the feature branch.
 
-**Next:** Step 1 — Phase 0 (#739 task list), TDD throughout:
-1. Add `overlay` section to `default_config.yaml`.
-2. Add Pydantic `OverlayConfig` model (the single blocking prerequisite —
-   Pydantic v2 `extra='ignore'` silently drops unmodeled sections).
-3. `ConfigService` flatten/unflatten for `overlay.*` (reuse the
-   `hardware_inputs` pattern: `delete_app_config_prefix("overlay")` +
-   re-write; add `overlay` to the `get_nested_config` section whitelist).
-4. Define `PluginDescriptor` core DTO + `IOverlayController` port.
-5. Plugin manifest loader (infrastructure adapter): scan `plugin_dir`, read
-   each `plugin.json`, return `PluginDescriptor` list + `config_schema`
-   defaults. No WebKitGTK import here.
-6. API: `GET /api/overlay/plugins`; `GET/PUT /api/overlay/plugins/{id}/config`
-   (validate against `config_schema`, persist under
-   `overlay.plugin_config.<id>.*`).
-7. `OverlayConfigChangedEvent` DTO; `ConfigService` publishes it on `overlay`
-   writes.
+**Phase 0 DONE** (#739 task list items 1–7), TDD throughout, all gates green:
+ruff, ruff format, mypy strict (84 files), **pytest 833 passed** (+32). The
+config + port + API foundation is in place (see `progress.md` "Phase 0 Done"):
+`overlay` section in `default_config.yaml`, Pydantic `OverlayConfig` on
+`AppConfig`, `ConfigService` overlay read-whitelist + `OverlayConfigChangedEvent`
+publishing + scoped `update_plugin_config`, `PluginDescriptor` core DTO +
+`validate_plugin_config`/`plugin_config_defaults`, `IOverlayController` port,
+`PluginLoader` infrastructure adapter, and the three overlay API endpoints
+(`GET /api/overlay/plugins`, `GET/PUT /api/overlay/plugins/{id}/config`). Also
+fixed a pre-existing seed bug (`viewer.clock_extra_source: off` → `'off'` YAML
+1.1 bool coercion) so `picframe init` re-seeding validates; guard test added.
+Phase 0 changes are uncommitted (ready to commit + push).
 
-Then Phases 1–4: out-of-process worker + IPC, composition-root wiring, frontend
-panels, built-in plugins, docs.
+**Next: Phase 1** — out-of-process WebKitGTK worker + IPC:
+8. `overlay_worker.py` subprocess (GLib MainLoop + WebKitGTK WebView,
+   transparent `wlr-layer-shell` surface, JS bridge, `file://` load, `/ws/state`
+   WS client). Phase-1 spike: validate `file://`→`ws://localhost` cross-origin WS
+   + `wlr-layer-shell` on labwc.
+9. `WebKitOverlayRenderer` IPC client implementing `IOverlayController`: spawn
+   worker, `GDK_BACKEND=wayland`, Unix-domain-socket IPC, forward state/config,
+   republish worker input as `CommandEvent`s; graceful degradation
+   (`SystemErrorEvent(code="webkit_unavailable")`); mock `gi`/WebKit in tests.
+10. Overlay HTML shell (second Vite multi-page entry → `src/picframe/html/overlay/`).
+11. Pointer + keyboard input routing (parallel, always-on, opacity-transparent).
+12. Video opacity transitions (SHOW_VIDEO/HIDE_VIDEO → SetOpacity over IPC).
+13. Wire renderer into `main.py` behind the port (`overlay.enabled` + `is_available()`).
+
+Then Phase 2 (frontend Remote/Appearance panels), Phase 3 (built-in plugins),
+Phase 4 (tests + docs).
 
 ## Current Repo State
-- Branch: `feat/739-webkit-overlay` (HEAD `5924130`), clean, pushed to `origin`.
+- Branch: `feat/739-webkit-overlay`, HEAD `54a17c4` + uncommitted Phase 0
+  changes, pushed to `origin` (through `54a17c4`).
 - Cut from `dev` at `4217f6e` (chore: remove stale v2-dev references, #747).
   `dev` tip is `4217f6e`; `main` release PR remains deferred.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and
