@@ -152,7 +152,7 @@
       "title": "Touch-Overlay",
       "description": "WebKitGTK-Overlay-Plugins auf dem Bilderrahmen entdecken und konfigurieren.",
       "loading": "Overlay-Plugins werden geladen",
-      "empty": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu oder aktivieren Sie das Overlay in den Einstellungen.",
+      "empty": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu oder aktivieren Sie das Overlay in der Darstellung.",
       "visiblePlugin": "Sichtbares Plugin",
       "visiblePluginHelp": "Das auf dem Bilderrahmen ausgeklappte Plugin. Wählen Sie das Dock, um nur die Symbolleiste zu zeigen.",
       "dockOnly": "Nur Dock",
@@ -193,6 +193,11 @@
     "overlay": {
       "title": "Touch-Overlay",
       "description": "Verhalten des WebKitGTK-Touch-Overlays und seiner Eingabebehandlung.",
+      "enable": {
+        "label": "Touch-Overlay aktivieren",
+        "help": "Das transparente WebKitGTK-Touch-Overlay ein- oder ausschalten."
+      },
+      "restartRequired": "Erfordert einen Neustart des Picframe-Dienstes, um wirksam zu werden.",
       "displayMode": {
         "label": "Anzeigemodus",
         "help": "Ob das Overlay bis zum Ausschalten offen bleibt oder nach Inaktivität ausgeblendet wird.",

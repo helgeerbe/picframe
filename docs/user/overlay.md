@@ -13,12 +13,14 @@ overlay.
 ## Enabling the overlay
 
 1. Open the web UI (the SPA served by picframe).
-2. Go to **Settings**, enable `overlay.enabled`, and save.
-   (Or set `overlay.enabled: true` and run `picframe init`.)
+2. Go to **Appearance → Touch Overlay → Enable touch overlay**, turn it on, and save.
+   (Or set `overlay.enabled: true` and run `picframe init`, or write
+   `overlay.enabled: 1` to the config database.)
 3. Make sure the built-in plugins are present in `~/.picframe/overlay-plugins/`
    — `picframe init` copies them there (see *Plugin directory & updates*
    below).
-4. Restart picframe (`picframe run`).
+4. Restart picframe (`picframe run`). Enabling the overlay is boot-gated, so a
+   service restart is required for the change to take effect.
 
 When WebKitGTK is available the overlay appears over the photo/video. When it
 is not, picframe logs a `webkit_unavailable` system error and continues.

@@ -193,6 +193,14 @@ PUBLIC_WORKFLOW_KEYS = {
         "text_overlay_format",
         "show_text_on_video",
     },
+    "overlay": {
+        "enabled",
+        "display_mode",
+        "auto_hide_seconds",
+        "idle_hide_seconds",
+        "enabled_input_types",
+        "transparent",
+    },
 }
 
 
@@ -251,9 +259,11 @@ def _filter_public_workflow_config(payload: dict[str, Any]) -> dict[str, dict[st
 def _workflow_config_from_app_config(config: AppConfig) -> dict[str, dict[str, Any]]:
     model_dump = config.model.model_dump()
     viewer_dump = config.viewer.model_dump()
+    overlay_dump = config.overlay.model_dump()
     return {
         "model": {key: model_dump[key] for key in PUBLIC_WORKFLOW_KEYS["model"]},
         "viewer": {key: viewer_dump[key] for key in PUBLIC_WORKFLOW_KEYS["viewer"]},
+        "overlay": {key: overlay_dump[key] for key in PUBLIC_WORKFLOW_KEYS["overlay"]},
     }
 
 

@@ -128,8 +128,10 @@ The installer **installs the WebKitGTK touch overlay packages by default**
 (`gir1.2-webkit-6.0` and `gir1.2-gtk4layershell-1.0`). These are needed for the
 touch overlay and plugin system described in
 [Overlay & Plugins](overlay.md). Installing them does not turn the overlay
-on by itself — you still enable it at runtime by setting `overlay.enabled`
-to `true` (see the overlay docs).
+on by itself — you still enable it at runtime from the web UI's
+**Appearance → Touch Overlay → Enable touch overlay** toggle (or by setting
+`overlay.enabled` to `true`; see the overlay docs). The toggle is boot-gated,
+so restart the picframe service after changing it.
 
 The packages require Raspberry Pi OS **Trixie** or Ubuntu **24.04+**. On older
 releases (e.g. Bookworm) the typelib is absent, so the installer **soft-fails**:

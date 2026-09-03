@@ -883,6 +883,12 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
         "viewer.show_clock": False,
         "viewer.show_text_enabled": True,
         "viewer.text_overlay_format": "title location",
+        "overlay.enabled": True,
+        "overlay.display_mode": "persistent",
+        "overlay.auto_hide_seconds": 8.0,
+        "overlay.idle_hide_seconds": 0.0,
+        "overlay.enabled_input_types": ["touch", "mouse"],
+        "overlay.transparent": False,
     }
     mock_publisher = MagicMock()
     app = create_app(
@@ -900,10 +906,22 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     assert data["model"]["portrait_pairs"] is True
     assert "log_level" not in data["model"]
     assert data["viewer"]["text_overlay_format"] == "title location"
+    assert data["overlay"]["enabled"] is True
+    assert data["overlay"]["display_mode"] == "persistent"
+    assert data["overlay"]["auto_hide_seconds"] == 8.0
+    assert data["overlay"]["enabled_input_types"] == ["touch", "mouse"]
+    assert data["overlay"]["transparent"] is False
+    # Advanced/plugin-specific keys stay on PUT /api/config, not workflow-config.
+    assert "backend" not in data["overlay"]
+    assert "plugin_dir" not in data["overlay"]
+    assert "enabled_plugins" not in data["overlay"]
+    assert "visible_plugin" not in data["overlay"]
+    assert "plugin_config" not in data["overlay"]
 
     update = {
         "model": {"shuffle": False, "portrait_pairs": False},
         "viewer": {"show_clock": True},
+        "overlay": {"enabled": False, "display_mode": "auto_hide"},
     }
     response = client.put("/api/workflow-config", json=update)
 
@@ -911,6 +929,8 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     mock_repo.set_app_config.assert_any_call("model.shuffle", False)
     mock_repo.set_app_config.assert_any_call("model.portrait_pairs", False)
     mock_repo.set_app_config.assert_any_call("viewer.show_clock", True)
+    mock_repo.set_app_config.assert_any_call("overlay.enabled", False)
+    mock_repo.set_app_config.assert_any_call("overlay.display_mode", "auto_hide")
     event = mock_publisher.publish.call_args[0][0]
     assert event.command is Command.SET_CONFIG
     assert event.payload == update

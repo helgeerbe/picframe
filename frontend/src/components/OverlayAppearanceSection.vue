@@ -21,6 +21,7 @@ const statusTone = ref<'success' | 'danger'>('success')
 let statusTimer: number | undefined
 
 const overlay = reactive({
+  enabled: false,
   display_mode: 'auto_hide' as 'persistent' | 'auto_hide',
   auto_hide_seconds: 5,
   idle_hide_seconds: 5,
@@ -46,6 +47,7 @@ const asNumber = (value: unknown, fallback: number) => {
 
 const syncFromConfig = () => {
   const ov = config.value?.overlay || {}
+  overlay.enabled = ov.enabled === true
   overlay.display_mode = ov.display_mode === 'persistent' ? 'persistent' : 'auto_hide'
   overlay.auto_hide_seconds = asNumber(ov.auto_hide_seconds, 5)
   overlay.idle_hide_seconds = asNumber(ov.idle_hide_seconds, 5)
@@ -62,6 +64,7 @@ const save = async () => {
   try {
     await configStore.savePartialConfig({
       overlay: {
+        enabled: Boolean(overlay.enabled),
         display_mode: overlay.display_mode,
         auto_hide_seconds: Number(overlay.auto_hide_seconds),
         idle_hide_seconds: Number(overlay.idle_hide_seconds),
@@ -132,78 +135,92 @@ watch(
       </div>
 
       <FieldRow
-        :label="t('appearance.overlay.displayMode.label')"
-        :help="t('appearance.overlay.displayMode.help')"
+        :label="t('appearance.overlay.enable.label')"
+        :help="t('appearance.overlay.enable.help')"
       >
-        <SegmentedControl
-          :model-value="overlay.display_mode"
-          :options="[
-            { value: 'persistent', label: t('appearance.overlay.displayMode.persistent') },
-            { value: 'auto_hide', label: t('appearance.overlay.displayMode.autoHide') }
-          ]"
-          @update:model-value="
-            value => {
-              overlay.display_mode = value as 'persistent' | 'auto_hide'
-              save()
-            }
-          "
-        />
-      </FieldRow>
-
-      <FieldRow
-        v-if="overlay.display_mode === 'auto_hide'"
-        :label="t('appearance.overlay.autoHideSeconds.label')"
-        :help="t('appearance.overlay.autoHideSeconds.help')"
-      >
-        <NumberField
-          v-model="overlay.auto_hide_seconds"
-          :min="1"
-          :step="1"
-          unit="s"
-          @update:model-value="save()"
-        />
-      </FieldRow>
-
-      <FieldRow
-        :label="t('appearance.overlay.idleHideSeconds.label')"
-        :help="t('appearance.overlay.idleHideSeconds.help')"
-      >
-        <NumberField
-          v-model="overlay.idle_hide_seconds"
-          :min="0"
-          :step="0.5"
-          unit="s"
-          @update:model-value="save()"
-        />
-      </FieldRow>
-
-      <FieldRow
-        :label="t('appearance.overlay.inputTypes.label')"
-        :help="t('appearance.overlay.inputTypes.help')"
-      >
-        <div class="flex flex-wrap gap-4">
-          <label
-            v-for="type in INPUT_TYPES"
-            :key="type"
-            class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300"
-          >
-            <input
-              type="checkbox"
-              :checked="overlay.enabled_input_types.includes(type)"
-              class="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-700"
-              @change="toggleInputType(type, ($event.target as HTMLInputElement).checked)"
-            />
-            {{ inputTypeLabel(type) }}
-          </label>
+        <div class="space-y-2">
+          <ToggleSwitch v-model="overlay.enabled" @update:model-value="save()" />
+          <p class="text-xs leading-relaxed text-amber-700 dark:text-amber-300">
+            {{ t('appearance.overlay.restartRequired') }}
+          </p>
         </div>
       </FieldRow>
 
-      <FieldRow
-        :label="t('appearance.overlay.transparent.label')"
-        :help="t('appearance.overlay.transparent.help')"
-      >
-        <ToggleSwitch v-model="overlay.transparent" @update:model-value="save()" />
-      </FieldRow>
+      <div :class="{ 'pointer-events-none opacity-50': !overlay.enabled }">
+        <FieldRow
+          :label="t('appearance.overlay.displayMode.label')"
+          :help="t('appearance.overlay.displayMode.help')"
+        >
+          <SegmentedControl
+            :model-value="overlay.display_mode"
+            :options="[
+              { value: 'persistent', label: t('appearance.overlay.displayMode.persistent') },
+              { value: 'auto_hide', label: t('appearance.overlay.displayMode.autoHide') }
+            ]"
+            @update:model-value="
+              value => {
+                overlay.display_mode = value as 'persistent' | 'auto_hide'
+                save()
+              }
+            "
+          />
+        </FieldRow>
+
+        <FieldRow
+          v-if="overlay.display_mode === 'auto_hide'"
+          :label="t('appearance.overlay.autoHideSeconds.label')"
+          :help="t('appearance.overlay.autoHideSeconds.help')"
+        >
+          <NumberField
+            v-model="overlay.auto_hide_seconds"
+            :min="1"
+            :step="1"
+            unit="s"
+            @update:model-value="save()"
+          />
+        </FieldRow>
+
+        <FieldRow
+          :label="t('appearance.overlay.idleHideSeconds.label')"
+          :help="t('appearance.overlay.idleHideSeconds.help')"
+        >
+          <NumberField
+            v-model="overlay.idle_hide_seconds"
+            :min="0"
+            :step="0.5"
+            unit="s"
+            @update:model-value="save()"
+          />
+        </FieldRow>
+
+        <FieldRow
+          :label="t('appearance.overlay.inputTypes.label')"
+          :help="t('appearance.overlay.inputTypes.help')"
+        >
+          <div class="flex flex-wrap gap-4">
+            <label
+              v-for="type in INPUT_TYPES"
+              :key="type"
+              class="flex items-center gap-2 text-sm font-medium text-gray-700 dark:text-gray-300"
+            >
+              <input
+                type="checkbox"
+                :checked="overlay.enabled_input_types.includes(type)"
+                class="h-4 w-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500 dark:border-gray-600 dark:bg-gray-700"
+                @change="toggleInputType(type, ($event.target as HTMLInputElement).checked)"
+              />
+              {{ inputTypeLabel(type) }}
+            </label>
+          </div>
+        </FieldRow>
+
+        <FieldRow
+          :label="t('appearance.overlay.transparent.label')"
+          :help="t('appearance.overlay.transparent.help')"
+        >
+          <ToggleSwitch v-model="overlay.transparent" @update:model-value="save()" />
+        </FieldRow>
+      </div>
 
       <div v-if="statusMessage">
         <StatusBanner :tone="statusTone" :message="statusMessage" />
