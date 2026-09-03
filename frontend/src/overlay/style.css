@@ -1,0 +1,112 @@
+/*
+ * Overlay shell styles (#739). The surface is transparent so pi3d/GStreamer
+ * video shows through; only the dock + visible-plugin panel are drawn.
+ */
+
+:root {
+  --pf-dock-bg: rgba(0, 0, 0, 0.45);
+  --pf-dock-fg: rgba(255, 255, 255, 0.92);
+  --pf-content-opacity: 1;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: 'Noto Sans', 'Segoe UI', system-ui, sans-serif;
+  /* The GTK surface captures input; the page itself must not select/scroll. */
+  user-select: none;
+  touch-action: none;
+}
+
+#overlay-root {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+}
+
+#pf-content {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+#pf-plugin-panel {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: min(38vw, 480px);
+  height: min(46vh, 360px);
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+.pf-plugin-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+#pf-veil {
+  position: absolute;
+  inset: 0;
+  /* Transparent but input-capturing: the wake tap always lands here. */
+  background: transparent;
+  z-index: 10;
+}
+
+#pf-dock {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--pf-dock-bg);
+  backdrop-filter: blur(6px);
+  z-index: 20;
+  pointer-events: auto;
+  transition: opacity 0.4s ease;
+}
+
+.pf-dock-icon {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--pf-dock-fg);
+  font-size: 24px;
+  line-height: 1;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.pf-dock-icon:hover,
+.pf-dock-icon:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+.pf-dock-icon--active {
+  background: rgba(255, 255, 255, 0.28);
+  transform: scale(1.08);
+}
+
+/* Idle hide: fade the dock + visible plugin, keep the veil active. */
+#overlay-root.pf-root--idle #pf-dock,
+#overlay-root.pf-root--idle #pf-plugin-panel {
+  opacity: 0;
+}

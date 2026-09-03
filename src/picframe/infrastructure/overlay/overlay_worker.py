@@ -23,9 +23,12 @@ import json
 import logging
 import os
 import sys
+import urllib.parse
 from multiprocessing.connection import Connection, Listener
+from pathlib import Path
 from typing import Any
 
+from picframe.core.models.overlay import PluginDescriptor
 from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_HIDE,
     INPUT_ACTION_NEXT,
@@ -41,6 +44,7 @@ from picframe.core.renderers.overlay_ipc import (
     ShutdownCommand,
     parse_overlay_ipc_message,
 )
+from picframe.infrastructure.overlay.plugin_loader import PluginLoader
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -88,6 +92,7 @@ class OverlayWorker:
         self.html_dir = html_dir
         self.plugin_dir = plugin_dir
         self.ws_port = ws_port
+        self._plugin_loader = PluginLoader(plugin_dir)
         self._opacity = 1.0
         self._config: dict[str, Any] = {}
         self._listener: Listener | None = None
@@ -127,7 +132,83 @@ class OverlayWorker:
 
     def _apply_config(self) -> None:
         """Apply the current config to the shell (the JS shell reads /ws/state)."""
-        logger.debug("Config applied (no surface in headless mode).")
+        if self._web_view is not None and WEBKIT_AVAILABLE:
+            self._push_config_to_shell()
+        else:
+            logger.debug("Config applied (no surface in headless mode).")
+
+    def _handle_bridge_message(self, data: dict[str, Any]) -> None:
+        """Handle a parsed message from the JS shell bridge (GTK-free, testable).
+
+        Called by the GTK ``user-message-received`` closure so the message
+        dispatch stays pure and unit-testable.
+        """
+        action = str(data.get("action", ""))
+        if action in (
+            INPUT_ACTION_PREV,
+            INPUT_ACTION_NEXT,
+            INPUT_ACTION_TOGGLE,
+            INPUT_ACTION_HIDE,
+        ):
+            self.emit_input(action)
+        elif action == "__request_config":
+            self._push_config_to_shell()
+
+    def _build_shell_config(self) -> dict[str, Any]:
+        """Build the config payload pushed to the JS shell.
+
+        Merges the live overlay config (received via ``set_config``) with the
+        discovered plugin list (slim descriptors carrying the plugin ``entry``
+        as a ``file://`` URI) plus the connection info the shell cannot derive
+        from its ``file://`` origin: the picframe WS port and the plugin dir URI.
+        """
+        config: dict[str, Any] = dict(self._config)
+        config["_plugins"] = [self._plugin_payload(p) for p in self._plugin_loader.list_plugins()]
+        config["_ws_port"] = self.ws_port
+        config["_plugin_uri"] = self._plugin_dir_uri()
+        return config
+
+    def _plugin_payload(self, descriptor: PluginDescriptor) -> dict[str, Any]:
+        """Slim a ``PluginDescriptor`` to the fields the shell dock needs."""
+        entry = Path(descriptor.directory) / descriptor.entry
+        return {
+            "id": descriptor.id,
+            "name": descriptor.name,
+            "icon": descriptor.icon,
+            "position": descriptor.position,
+            "entry_uri": entry.resolve().absolute().as_uri(),
+        }
+
+    def _plugin_dir_uri(self) -> str:
+        """Return the plugin directory as a ``file://`` URI."""
+        return Path(self.plugin_dir).expanduser().resolve().absolute().as_uri()
+
+    def _push_config_to_shell(self) -> None:
+        """Push the current shell config to the WebView (no-op in headless mode)."""
+        if self._web_view is None or not WEBKIT_AVAILABLE:
+            return
+        payload = json.dumps(self._build_shell_config())
+        # Guard against the shell not having registered applyConfig yet (a race
+        # between an early set_config and the page finishing boot).
+        js = (
+            "if(window.picframe&&window.picframe.applyConfig)"
+            f"{{window.picframe.applyConfig({payload});}}"
+        )
+        self._push_to_shell(js)
+
+    def _push_to_shell(self, js: str) -> None:
+        """Run ``js`` in the WebView on the GLib main thread (no-op headless)."""
+        if self._web_view is None or not WEBKIT_AVAILABLE or self._loop is None:
+            return
+
+        def _run() -> bool:
+            try:
+                self._web_view.evaluate_javascript(js, -1, None, None, None)
+            except Exception as exc:
+                logger.error("Failed to push to overlay shell: %s", exc)
+            return False
+
+        GLib.idle_add(_run)
 
     def emit_input(self, action: str) -> None:
         """Send an input event to the main process."""
@@ -198,12 +279,17 @@ class OverlayWorker:
         self._window.present()
 
     def _shell_uri(self) -> str:
-        from pathlib import Path
+        """Return the ``file://`` URI of the overlay shell, with query params.
 
+        The shell cannot derive the picframe WS port or the plugin dir from its
+        ``file://`` origin, so the worker appends ``?ws=<port>&plugins=<uri>``.
+        """
         path = Path(self.html_dir) / "overlay" / "index.html"
         if not path.is_file():
             path = Path(self.html_dir) / "overlay.html"
-        return path.resolve().absolute().as_uri()
+        base = path.resolve().absolute().as_uri()
+        params = urllib.parse.urlencode({"ws": self.ws_port, "plugins": self._plugin_dir_uri()})
+        return f"{base}?{params}"
 
     def _install_js_bridge(self) -> None:
         """Inject ``window.picframe`` for shell<->worker bidirectional calls."""
@@ -215,14 +301,8 @@ class OverlayWorker:
                 data = json.loads(args) if args else {}
             except (json.JSONDecodeError, ValueError):
                 return
-            action = str(data.get("action", ""))
-            if action in (
-                INPUT_ACTION_PREV,
-                INPUT_ACTION_NEXT,
-                INPUT_ACTION_TOGGLE,
-                INPUT_ACTION_HIDE,
-            ):
-                self.emit_input(action)
+            if isinstance(data, dict):
+                self._handle_bridge_message(data)
 
         manager.register_script_message_handler("picframe")
         self._web_view.connect("user-message-received", _bridge_call)

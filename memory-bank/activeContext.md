@@ -22,9 +22,9 @@ on `AppConfig`, `ConfigService` overlay read-whitelist + scoped
 endpoints. Also fixed a pre-existing seed bug
 (`viewer.clock_extra_source: off` → `'off'` YAML 1.1 bool coercion).
 
-**Phase 1 backend DONE (committed, pending push):** #739 items **9, 12, 13**
-complete + tested (40 new tests, all gates green: ruff, ruff format 161 files,
-mypy strict 87 files, **pytest 873 passed**):
+**Phase 1 backend DONE + pushed** (`18061d8`, on `origin`): #739 items **9, 12,
+13** complete + tested (40 new tests, all gates green: ruff, ruff format 161
+files, mypy strict 87 files, **pytest 873 passed**):
 - `core/renderers/overlay_ipc.py` — overlay IPC protocol (SetOpacity/SetConfig/
   Reload/Shutdown commands; Ready/Input/Error events) + parser.
 - `core/renderers/webkit_overlay_renderer.py` — `WebKitOverlayRenderer`
@@ -41,19 +41,40 @@ mypy strict 87 files, **pytest 873 passed**):
   `is_available()`; `overlay_controller` injected into `create_app`;
   start/stop in both shutdown paths.
 
+**Phase 1 frontend DONE (tasks 10–11, uncommitted):** the WebKitGTK overlay
+HTML shell + input routing, all gates green (ruff, ruff format 161 files, mypy
+strict 87 files, **pytest 880 passed**, `yarn lint` 0 errors, `yarn build` both
+Vite builds succeed):
+- **Overlay shell** (10 new files under `frontend/src/overlay/`): `overlay.html`
+  entry, `types.ts`, `env.ts` (parses `?ws=&plugins=` from `location.search`),
+  `bridge.ts` (`window.picframe.send`/`applyConfig` JS bridge),
+  `state-client.ts` (best-effort `/ws/state` WebSocket + auto-reconnect),
+  `input.ts` (pointer zone routing: left=prev, right=next, center=toggle,
+  Escape=hide; device-class filtering; idle timer), `dock.ts` (plugin icons +
+  iframe panel), `shell.ts` (orchestrator: DOM veil/content/dock, idle-hide
+  content fade, config apply), `main.ts`, `style.css`.
+- `vite.overlay.config.ts` — second Vite build (`base: './'`,
+  `outDir: ../src/picframe/html/overlay`) for `file://`-loadable relative assets;
+  `package.json` `build` runs both; built overlay output committed to
+  `src/picframe/html/overlay/` (matches the tracked main-SPA convention).
+- **Worker enhancements** (`overlay_worker.py`): `_plugin_loader` injected,
+  `_shell_uri()` appends `?ws=<port>&plugins=<file uri>`,
+  `_build_shell_config()` enriches overlay config with `_plugins`/`_ws_port`/
+  `_plugin_uri`, `_push_to_shell()`/`_push_config_to_shell()` (guarded no-op
+  headless), `_handle_bridge_message()` (input actions + `__request_config`),
+  `_apply_config` pushes shell config to WebView. 7 new worker tests.
+
 **Phase 1 still open:** task **8** — worker uses a plain borderless `Gtk.Window`
 (transparent) rather than `wlr-layer-shell`, and the Phase-1 spike
 (`file://`→`ws://localhost` cross-origin WS + `wlr-layer-shell` on labwc) still
-needs a real Wayland display to validate. Tasks **10** (overlay HTML shell,
-Vite multi-page → `src/picframe/html/overlay/`) and **11** (pointer + keyboard
-input routing) are the next chunk (frontend/WebKit-dependent).
+needs a real Wayland display to validate.
 
 Then Phase 2 (frontend Remote/Appearance panels), Phase 3 (built-in plugins),
 Phase 4 (tests + docs).
 
 ## Current Repo State
-- Branch: `feat/739-webkit-overlay`, HEAD `4393ffd` (Phase 0) + uncommitted
-  Phase 1 backend changes (items 9/12/13), pushed to `origin` (through `4393ffd`).
+- Branch: `feat/739-webkit-overlay`, HEAD `18061d8` (Phase 1 backend, pushed to
+  `origin`) + uncommitted Phase 1 frontend (tasks 10–11).
 - Cut from `dev` at `4217f6e` (chore: remove stale v2-dev references, #747).
   `dev` tip is `4217f6e`; `main` release PR remains deferred.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and
