@@ -190,6 +190,8 @@
     "overlay": {
       "title": "Touch-Overlay",
       "description": "Verhalten und Darstellung des auf dem Bilderrahmen angezeigten WebKitGTK-Touch-Overlays.",
+      "disabledTitle": "Touch-Overlay ist deaktiviert",
+      "disabledMessage": "Aktivieren Sie den Touch-Overlay in den Einstellungen, um sein Aussehen und die Plugins zu konfigurieren.",
       "displayMode": {
         "label": "Anzeigemodus",
         "help": "Ob das Overlay bis zum Ausschalten offen bleibt oder nach Inaktivität ausgeblendet wird.",
@@ -245,6 +247,7 @@
     "saved": "Einstellungen gespeichert.",
     "actionCompleted": "Aktion erfolgreich abgeschlossen.",
     "imported": "Legacy-YAML-Konfiguration erfolgreich importiert.",
+    "importedJson": "Konfiguration erfolgreich importiert.",
     "importedNeedsSave": "Konfiguration importiert. Speichern, um sie anzuwenden.",
     "importFailed": "Konfiguration konnte nicht importiert werden.",
     "invalidJson": "Ungültige JSON-Konfigurationsdatei.",

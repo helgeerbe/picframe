@@ -7,6 +7,7 @@ import { useConfigStore } from '../stores/config'
 import { usePlayerStore } from '../stores/player'
 import TextOverlayControls from '../components/TextOverlayControls.vue'
 import OverlayAppearanceSection from '../components/OverlayAppearanceSection.vue'
+import EmptyState from '../components/ui/EmptyState.vue'
 import FieldRow from '../components/settings/FieldRow.vue'
 import NumberField from '../components/settings/NumberField.vue'
 import ToggleSwitch from '../components/settings/ToggleSwitch.vue'
@@ -34,6 +35,12 @@ const unavailableMessage = computed(() => {
   if (!configError.value) return t('appearance.unavailable')
   return t('appearance.unavailableWithDetail', { detail: configError.value })
 })
+
+// The touch overlay appearance controls only apply when the master overlay
+// toggle (managed in Settings) is on. The overlay renderer starts only at
+// service startup, so this gate reads the live `overlay.enabled` from the
+// shared config blob (populated by the workflow-config allowlist).
+const overlayEnabled = computed(() => config.value?.overlay?.enabled === true)
 
 const asNumber = (value: unknown, fallback: number) => {
   const nextValue = Number(value)
@@ -192,6 +199,11 @@ watch(
 
     <TextOverlayControls />
 
-    <OverlayAppearanceSection />
+    <OverlayAppearanceSection v-if="overlayEnabled" />
+    <EmptyState
+      v-else
+      :title="t('appearance.overlay.disabledTitle')"
+      :message="t('appearance.overlay.disabledMessage')"
+    />
   </div>
 </template>

@@ -339,5 +339,16 @@
         "type": "string"
       }
     }
+  },
+  "overlay": {
+    "enabled": {
+      "type": "boolean"
+    },
+    "enabled_input_types": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    }
   }
 }

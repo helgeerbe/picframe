@@ -51,6 +51,11 @@ const {
   selectionCountError
 } = storeToRefs(configStore)
 
+// The touch overlay dock only applies when the master overlay toggle (managed
+// in Settings) is on. `overlay.enabled` is part of the workflow-config allowlist,
+// so it is present after the onMounted fetchWorkflowConfig() call.
+const overlayEnabled = computed(() => appConfig.value?.overlay?.enabled === true)
+
 const mediaSelection = reactive({
   subdirectory: '',
   date_from: '',
@@ -1593,7 +1598,7 @@ const metadataFields = computed(() => {
           </div>
         </div>
 
-        <OverlayPanel />
+        <OverlayPanel v-if="overlayEnabled" />
       </div>
     </div>
 

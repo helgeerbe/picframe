@@ -321,17 +321,28 @@ function normalizeAuthScope(value: unknown, enabled?: boolean): AuthScope {
 function serviceRestartSettingsChanged() {
   const savedViewer = config.value?.viewer || {}
   const draftViewer = localConfig.value?.viewer || {}
-  return serviceRestartViewerKeys.some(
+  const viewerChanged = serviceRestartViewerKeys.some(
     key => Boolean(savedViewer[key]) !== Boolean(draftViewer[key])
   )
+  // The WebKitGTK touch overlay renderer starts only at service startup
+  // (main.py composition root); there is no dynamic start/stop. Toggling its
+  // master enable therefore requires a restart to take effect, exactly like
+  // the viewer GL backend switches above.
+  const overlayChanged =
+    Boolean(config.value?.overlay?.enabled) !== Boolean(localConfig.value?.overlay?.enabled)
+  return viewerChanged || overlayChanged
 }
 
 function restoreServiceRestartSettings() {
   const savedViewer = config.value?.viewer || {}
   const draftViewer = localConfig.value?.viewer
-  if (!draftViewer) return
-  for (const key of serviceRestartViewerKeys) {
-    draftViewer[key] = Boolean(savedViewer[key])
+  if (draftViewer) {
+    for (const key of serviceRestartViewerKeys) {
+      draftViewer[key] = Boolean(savedViewer[key])
+    }
+  }
+  if (localConfig.value?.overlay) {
+    localConfig.value.overlay.enabled = Boolean(config.value?.overlay?.enabled)
   }
 }
 
@@ -520,13 +531,36 @@ async function importConfig(event: Event) {
     }
   } else {
     const reader = new FileReader()
-    reader.onload = e => {
+    reader.onload = async e => {
       try {
         const imported = JSON.parse(e.target?.result as string)
-        localConfig.value = initializeConfig(imported)
-        showSuccess(t('settings.importedNeedsSave'))
+        if (!imported || typeof imported !== 'object' || Array.isArray(imported)) {
+          alert(t('settings.invalidJson'))
+          return
+        }
+        // Persist the full imported blob through the validated PUT /api/config
+        // path (the same one Settings Save uses), then refresh — so JSON import
+        // behaves identically to YAML import and round-trips the ENTIRE config,
+        // including the Appearance-managed overlay fields + per-plugin config
+        // (which the schema-only initializeConfig() path would drop, since the
+        // configSchema only models `overlay.enabled` + `overlay.enabled_input_types`).
+        const response = await fetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(imported)
+        })
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.detail || t('settings.importFailed'))
+        }
+        await configStore.fetchConfig()
+        showSuccess(t('settings.importedJson'))
       } catch (err) {
-        alert(t('settings.invalidJson'))
+        if (err instanceof SyntaxError) {
+          alert(t('settings.invalidJson'))
+        } else {
+          alert(err instanceof Error ? err.message : t('settings.importFailed'))
+        }
       }
     }
     reader.readAsText(file)
@@ -1673,7 +1707,7 @@ function setBackgroundColor(event: Event) {
           </section>
 
           <section v-else-if="activeTab === 'touch_overlay'" class="space-y-8 p-6 sm:p-8">
-            <TouchOverlaySettingsSection />
+            <TouchOverlaySettingsSection v-model="localConfig.overlay" />
           </section>
 
           <section v-else-if="activeTab === 'danger'" class="space-y-6 p-6 sm:p-8">

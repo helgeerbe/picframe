@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
 import { Cog6ToothIcon, CheckIcon } from '@heroicons/vue/24/outline'
@@ -9,6 +9,25 @@ import FieldRow from './settings/FieldRow.vue'
 import SettingsSection from './settings/SettingsSection.vue'
 import StatusBanner from './ui/StatusBanner.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+
+// The two Settings-tab-owned overlay fields are bound to the schema-driven
+// `localConfig.overlay` working copy (passed via v-model) and persisted by the
+// global Settings Save. Appearance-managed overlay fields (display_mode, the
+// hide timers, transparent, enabled_plugins, visible_plugin) stay auto-save in
+// Appearance and are intentionally NOT modeled here — modeling them would let a
+// once-initialized localConfig.overlay clobber Appearance's live edits on Save.
+interface OverlaySettingsModel {
+  enabled: boolean
+  enabled_input_types: string[]
+}
+
+const props = defineProps<{
+  modelValue: OverlaySettingsModel
+}>()
+
+const emit = defineEmits<{
+  'update:modelValue': [value: OverlaySettingsModel]
+}>()
 
 const { t } = useI18n()
 const configStore = useConfigStore()
@@ -29,9 +48,20 @@ let statusTimer: number | undefined
 
 const INPUT_TYPES = ['touch', 'mouse', 'keyboard']
 
-const overlay = reactive({
-  enabled: false,
-  enabled_input_types: [...INPUT_TYPES] as string[]
+// Master enable + enabled input types are pure local mutations on the working
+// copy; they are persisted by the global Settings Save button (no auto-save
+// here, consistent with the other schema-driven Settings sections).
+const enabled = computed<boolean>({
+  get: () => Boolean(props.modelValue?.enabled),
+  set: v => emit('update:modelValue', { ...props.modelValue, enabled: v })
+})
+
+const enabledInputTypes = computed<string[]>({
+  get: () =>
+    Array.isArray(props.modelValue?.enabled_input_types)
+      ? [...props.modelValue.enabled_input_types]
+      : [...INPUT_TYPES],
+  set: v => emit('update:modelValue', { ...props.modelValue, enabled_input_types: v })
 })
 
 const enabledPlugins = computed<string[]>(() => {
@@ -53,40 +83,10 @@ const showStatus = (tone: 'success' | 'danger', message: string) => {
   }, 3000)
 }
 
-const syncFromConfig = () => {
-  const ov = config.value?.overlay || {}
-  overlay.enabled = ov.enabled === true
-  overlay.enabled_input_types = Array.isArray(ov.enabled_input_types)
-    ? [...(ov.enabled_input_types as string[])]
-    : [...INPUT_TYPES]
-}
-
-const save = async () => {
-  if (isSaving.value) return
-  isSaving.value = true
-  statusMessage.value = ''
-  try {
-    await configStore.savePartialConfig({
-      overlay: {
-        enabled: Boolean(overlay.enabled),
-        enabled_input_types: [...overlay.enabled_input_types]
-      }
-    })
-    showStatus('success', t('settings.touchOverlay.saved'))
-  } catch (e) {
-    console.error(e)
-    showStatus('danger', t('settings.touchOverlay.failed'))
-    syncFromConfig()
-  } finally {
-    isSaving.value = false
-  }
-}
-
-const toggleInputType = async (type: string, enabled: boolean) => {
-  overlay.enabled_input_types = enabled
-    ? [...new Set([...overlay.enabled_input_types, type])]
-    : overlay.enabled_input_types.filter(it => it !== type)
-  await save()
+const toggleInputType = (type: string, isEnabled: boolean) => {
+  enabledInputTypes.value = isEnabled
+    ? [...new Set([...enabledInputTypes.value, type])]
+    : enabledInputTypes.value.filter(it => it !== type)
 }
 
 const inputTypeLabel = (type: string): string => {
@@ -140,21 +140,15 @@ const fieldHelp = (pluginId: string, fieldName: string): string => {
 
 onMounted(async () => {
   // Settings already fetches the full config, but guard for a direct tab visit
-  // or a config blob that only has the workflow-config allowlist.
+  // or a config blob that only has the workflow-config allowlist. The Appearance
+  // overlay fields (enabled_plugins etc.) are read live from the shared config
+  // blob, so the full config must be present for the per-plugin list below.
   const ov = config.value?.overlay
   if (!config.value || Object.keys(config.value).length === 0 || typeof ov?.enabled !== 'boolean') {
     await configStore.fetchConfig()
   }
   await overlayStore.fetchPlugins()
-  syncFromConfig()
 })
-
-watch(
-  () => [config.value?.overlay?.enabled, config.value?.overlay?.enabled_input_types],
-  () => {
-    if (!isSaving.value) syncFromConfig()
-  }
-)
 </script>
 <template>
   <div class="space-y-8">
@@ -175,7 +169,7 @@ watch(
         :help="t('settings.touchOverlay.enable.help')"
       >
         <div class="space-y-2">
-          <ToggleSwitch v-model="overlay.enabled" @update:model-value="save()" />
+          <ToggleSwitch v-model="enabled" />
           <p class="text-xs leading-relaxed text-amber-700 dark:text-amber-300">
             {{ t('settings.touchOverlay.restartRequired') }}
           </p>
@@ -194,7 +188,7 @@ watch(
           >
             <input
               type="checkbox"
-              :checked="overlay.enabled_input_types.includes(type)"
+              :checked="enabledInputTypes.includes(type)"
               class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700"
               @change="toggleInputType(type, ($event.target as HTMLInputElement).checked)"
             />
@@ -230,11 +224,8 @@ watch(
         {{ t('settings.touchOverlay.pluginConfig.noPlugins') }}
       </div>
 
-      <div v-else :class="{ 'pointer-events-none opacity-50': !overlay.enabled }">
-        <p
-          v-if="!overlay.enabled"
-          class="mb-4 text-xs leading-relaxed text-amber-700 dark:text-amber-300"
-        >
+      <div v-else :class="{ 'pointer-events-none opacity-50': !enabled }">
+        <p v-if="!enabled" class="mb-4 text-xs leading-relaxed text-amber-700 dark:text-amber-300">
           {{ t('settings.touchOverlay.pluginConfig.disabledHint') }}
         </p>
         <ul class="divide-y divide-gray-100 dark:divide-gray-700/60">
