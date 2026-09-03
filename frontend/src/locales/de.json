@@ -4,7 +4,10 @@
     "close": "Schließen",
     "dismiss": "Ausblenden",
     "systemError": "Systemfehler",
-    "retry": "Erneut versuchen"
+    "retry": "Erneut versuchen",
+    "save": "Speichern",
+    "saving": "Speichere...",
+    "cancel": "Abbrechen"
   },
   "nav": {
     "primary": "Hauptnavigation",
@@ -144,6 +147,21 @@
       "textLocationHelper": "Zeigt den Ort an, an dem das Medium aufgenommen wurde.",
       "saved": "Overlay-Einstellungen gespeichert.",
       "failed": "Overlay-Einstellungen konnten nicht gespeichert werden."
+    },
+    "touchOverlay": {
+      "title": "Touch-Overlay",
+      "description": "WebKitGTK-Overlay-Plugins auf dem Bilderrahmen entdecken und konfigurieren.",
+      "loading": "Overlay-Plugins werden geladen",
+      "empty": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu oder aktivieren Sie das Overlay in den Einstellungen.",
+      "visiblePlugin": "Sichtbares Plugin",
+      "visiblePluginHelp": "Das auf dem Bilderrahmen ausgeklappte Plugin. Wählen Sie das Dock, um nur die Symbolleiste zu zeigen.",
+      "dockOnly": "Nur Dock",
+      "editConfig": "Konfigurieren",
+      "hideConfig": "Einstellungen ausblenden",
+      "configSaved": "Plugin-Einstellungen gespeichert.",
+      "configFailed": "Plugin-Einstellungen konnten nicht gespeichert werden.",
+      "saved": "Overlay-Plugin-Auswahl gespeichert.",
+      "failed": "Overlay-Plugin-Auswahl konnte nicht gespeichert werden."
     }
   },
   "appearance": {
@@ -171,6 +189,37 @@
     "portraitPairs": {
       "label": "Portrait-Paare",
       "help": "Passende Hochformatfotos nebeneinander anzeigen."
+    },
+    "overlay": {
+      "title": "Touch-Overlay",
+      "description": "Verhalten des WebKitGTK-Touch-Overlays und seiner Eingabebehandlung.",
+      "displayMode": {
+        "label": "Anzeigemodus",
+        "help": "Ob das Overlay bis zum Ausschalten offen bleibt oder nach Inaktivität ausgeblendet wird.",
+        "persistent": "Bis ausgeschaltet",
+        "autoHide": "Auto-Ausblenden"
+      },
+      "autoHideSeconds": {
+        "label": "Ausblenden nach",
+        "help": "Sekunden Inaktivität bevor das Overlay ausgeblendet wird (nur Auto-Ausblenden-Modus)."
+      },
+      "idleHideSeconds": {
+        "label": "Leerlauf-Verblassen",
+        "help": "Sekunden Leerlauf bevor das Overlay ausblendt. 0 hält es stets sichtbar. Jede Eingabe weckt es."
+      },
+      "inputTypes": {
+        "label": "Aktive Eingaben",
+        "help": "Welche Eingabegeräte-Klassen das Overlay aktivieren. Eine Klasse entfernen, um sie zu deaktivieren, z. B. für einen reinen Touch-Kiosk."
+      },
+      "inputTouch": "Touch",
+      "inputMouse": "Maus",
+      "inputKeyboard": "Tastatur",
+      "transparent": {
+        "label": "Transparente Oberfläche",
+        "help": "Overlay-Oberfläche transparent halten, sodass Fotos und Video durchscheinen."
+      },
+      "saved": "Overlay-Darstellung gespeichert.",
+      "failed": "Overlay-Darstellung konnte nicht gespeichert werden."
     }
   },
   "logs": {

@@ -6,6 +6,7 @@ import { AdjustmentsHorizontalIcon, ArrowPathIcon, CheckIcon } from '@heroicons/
 import { useConfigStore } from '../stores/config'
 import { usePlayerStore } from '../stores/player'
 import TextOverlayControls from '../components/TextOverlayControls.vue'
+import OverlayAppearanceSection from '../components/OverlayAppearanceSection.vue'
 import FieldRow from '../components/settings/FieldRow.vue'
 import NumberField from '../components/settings/NumberField.vue'
 import ToggleSwitch from '../components/settings/ToggleSwitch.vue'
@@ -190,5 +191,7 @@ watch(
     </Panel>
 
     <TextOverlayControls />
+
+    <OverlayAppearanceSection />
   </div>
 </template>

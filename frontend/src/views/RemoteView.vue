@@ -32,6 +32,7 @@ import {
 import MapComponent from '../components/MapComponent.vue'
 import HelperText from '../components/HelperText.vue'
 import MediaInfoSheet from '../components/remote/MediaInfoSheet.vue'
+import OverlayPanel from '../components/remote/OverlayPanel.vue'
 import InfoButton from '../components/ui/InfoButton.vue'
 import AppDialog from '../components/ui/AppDialog.vue'
 import StatusBanner from '../components/ui/StatusBanner.vue'
@@ -1591,6 +1592,8 @@ const metadataFields = computed(() => {
             />
           </div>
         </div>
+
+        <OverlayPanel />
       </div>
     </div>
 

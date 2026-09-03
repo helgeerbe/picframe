@@ -76,8 +76,31 @@ worker tests; **pytest 883 passed**). All gates green.
 (`file://`→`ws://localhost` cross-origin WS + `wlr-layer-shell` on labwc)
 still needs a real Wayland display + WebKitGTK typelib to validate end-to-end.
 
-Then Phase 2 (frontend Remote/Appearance panels), Phase 3 (built-in plugins),
-Phase 4 (tests + docs).
+**Phase 2 DONE (frontend SPA panels, #739 items 14–16):** Remote/Appearance
+overlay controls, all frontend gates green (`yarn lint` 0 errors,
+`yarn format:check` clean, `vue-tsc -b` clean, `yarn build` both Vite builds
+succeed; no Python changed, so pytest/mypy/ruff unaffected):
+- `stores/overlay.ts` — Pinia store: `fetchPlugins()` (`GET
+  /api/overlay/plugins`), `updatePluginConfig()` (`PUT
+  /api/overlay/plugins/{id}/config`). `overlay.*` settings persist via the
+  existing `configStore.savePartialConfig({ overlay })` (live — backend
+  publishes `SET_CONFIG`/`OverlayConfigChangedEvent`).
+- `components/remote/OverlayPanel.vue` — collapsible Remote panel: discovered
+  plugin list with enable/disable toggles + visible-plugin selector (with
+  "Dock only" = null); per-plugin config editor rendering `config_schema`
+  fields by type (boolean→ToggleSwitch, integer/number→NumberField,
+  enum→select, string→input). No `configSchema.json` entries (data-driven
+  SettingsView only).
+- `components/OverlayAppearanceSection.vue` — Appearance section: display-mode
+  SegmentedControl (persistent vs auto_hide) + auto-hide seconds (shown only in
+  auto_hide), idle-fade seconds, enabled-input-types checkboxes
+  (touch/mouse/keyboard), transparent-surface toggle.
+- i18n: `remote.touchOverlay.*`, `appearance.overlay.*`, and `common.save`/
+  `saving`/`cancel` added to `en.json` + `de.json` (full key parity verified).
+- Wired into `RemoteView.vue` (right column) and `AppearanceView.vue` (after
+  the slideshow panel). Rebuilt `src/picframe/html/` committed (hash churn).
+
+Then Phase 3 (built-in plugins), Phase 4 (tests + docs).
 
 ## Current Repo State
 - Branch: `feat/739-webkit-overlay`, HEAD `683ad07` (task 8 wlr-layer-shell);
