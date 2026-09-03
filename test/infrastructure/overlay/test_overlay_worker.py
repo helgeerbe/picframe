@@ -1,6 +1,7 @@
 """Tests for the out-of-process overlay worker IPC plumbing (GTK-free)."""
 
 import json
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -238,3 +239,72 @@ def test_shell_uri_includes_query_params(tmp_path) -> None:
     assert uri.startswith("file://")
     assert "ws=9000" in uri
     assert "plugins=file" in uri
+
+
+def test_setup_layer_shell_configures_fullscreen_overlay(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """wlr-layer-shell wiring: overlay layer, anchored to all edges, no exclusive
+    zone, on-demand keyboard (#739 task 8). GTK-free except the typelib calls."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake = MagicMock()
+    monkeypatch.setattr(mod, "Gtk4LayerShell", fake)
+    worker = make_worker()
+    window = MagicMock()
+    worker._setup_layer_shell(window)
+
+    fake.init_for_window.assert_called_once_with(window)
+    fake.set_layer.assert_called_once_with(window, fake.Layer.OVERLAY)
+    # Anchored to all four edges with True.
+    assert fake.set_anchor.call_count == 4
+    for call in fake.set_anchor.call_args_list:
+        window_arg, _edge_arg, anchor_arg = call[0]
+        assert window_arg is window
+        assert anchor_arg is True
+    # -1 = float on top without reserving space.
+    fake.set_exclusive_zone.assert_called_once_with(window, -1)
+    fake.set_keyboard_mode.assert_called_once_with(window, fake.KeyboardMode.ON_DEMAND)
+
+
+def test_build_surface_uses_layer_shell_when_available(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """When the typelib is present the surface is initialized as a layer shell."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    fake_webkit = MagicMock()
+    monkeypatch.setattr(mod, "LAYER_SHELL_AVAILABLE", True)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+    monkeypatch.setattr(mod, "WebKit", fake_webkit)
+    setup_calls: list[Any] = []
+    worker = make_worker()
+    monkeypatch.setattr(worker, "_setup_layer_shell", lambda w: setup_calls.append(w))
+    worker._build_surface()
+
+    assert len(setup_calls) == 1
+    assert setup_calls[0] is fake_gtk.Window.return_value
+    fake_webkit.WebView.return_value.load_uri.assert_called_once()
+
+
+def test_build_surface_skips_layer_shell_when_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without the typelib the worker falls back to a plain borderless window."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    fake_webkit = MagicMock()
+    monkeypatch.setattr(mod, "LAYER_SHELL_AVAILABLE", False)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+    monkeypatch.setattr(mod, "WebKit", fake_webkit)
+    setup_calls: list[Any] = []
+    worker = make_worker()
+    monkeypatch.setattr(worker, "_setup_layer_shell", lambda w: setup_calls.append(w))
+    worker._build_surface()
+
+    assert setup_calls == []
+    assert worker._web_view is fake_webkit.WebView.return_value
+    # Still a borderless window so the rest of the surface setup is unchanged.
+    fake_gtk.Window.return_value.set_decorated.assert_called_once_with(False)

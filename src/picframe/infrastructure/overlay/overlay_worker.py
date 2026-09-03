@@ -70,6 +70,22 @@ except (ImportError, ValueError) as exc:
     logger.error("WebKitGTK not available. Worker cannot start: %s", exc)
     WEBKIT_AVAILABLE = False
 
+# Optional wlr-layer-shell binding (``gtk4-layer-shell``). When the typelib is
+# absent the worker falls back to a plain borderless ``Gtk.Window`` (#739 task
+# 8), so this is a graceful degrade rather than a hard requirement. Probed only
+# when WebKitGTK itself imported, since both need a running GTK/Wayland session.
+LAYER_SHELL_AVAILABLE = False
+Gtk4LayerShell: Any = Any
+if WEBKIT_AVAILABLE:
+    try:
+        gi.require_version("Gtk4LayerShell", "1.0")
+        from gi.repository import Gtk4LayerShell as _Gtk4LayerShell
+
+        Gtk4LayerShell = _Gtk4LayerShell
+        LAYER_SHELL_AVAILABLE = True
+    except (ImportError, ValueError):
+        logger.info("gtk4-layer-shell not available; using a plain borderless window.")
+
 logger.info(
     "Overlay worker display environment: "
     "WAYLAND_DISPLAY=%s DISPLAY=%s XDG_RUNTIME_DIR=%s GDK_BACKEND=%s",
@@ -264,11 +280,21 @@ class OverlayWorker:
         self._loop.run()
 
     def _build_surface(self) -> None:
-        """Create the transparent borderless Wayland window + WebKit WebView."""
+        """Create the transparent overlay surface + WebKit WebView.
+
+        Uses the ``wlr-layer-shell`` protocol (via ``gtk4-layer-shell``) when the
+        typelib is available so the overlay sits above pi3d/video, covers the
+        whole output, and stays input-capturing at every opacity (#739 task 8).
+        Falls back to a plain borderless ``Gtk.Window`` on compositors without
+        layer-shell; the rest of the surface setup is identical.
+        """
         self._window = Gtk.Window()
         self._window.set_decorated(False)
         self._window.set_default_size(1920, 1080)
         self._window.connect("close-request", lambda *_: self._shutdown())
+
+        if LAYER_SHELL_AVAILABLE:
+            self._setup_layer_shell(self._window)
 
         self._web_view = WebKit.WebView()
         # The shell connects to the picframe state WebSocket itself; we only
@@ -277,6 +303,30 @@ class OverlayWorker:
         self._install_js_bridge()
         self._window.set_child(self._web_view)
         self._window.present()
+
+    def _setup_layer_shell(self, window: Any) -> None:
+        """Configure ``window`` as a fullscreen overlay layer surface.
+
+        Kept GTK-free apart from the ``Gtk4LayerShell`` calls (which receive a
+        ready window) so the layer wiring can be unit-tested with a mock window
+        and a mocked ``Gtk4LayerShell`` module.
+        """
+        Gtk4LayerShell.init_for_window(window)
+        # OVERLAY is the topmost layer, above normal application windows.
+        Gtk4LayerShell.set_layer(window, Gtk4LayerShell.Layer.OVERLAY)
+        # Anchor to all four edges so the surface covers the whole output.
+        for edge in (
+            Gtk4LayerShell.Edge.TOP,
+            Gtk4LayerShell.Edge.LEFT,
+            Gtk4LayerShell.Edge.RIGHT,
+            Gtk4LayerShell.Edge.BOTTOM,
+        ):
+            Gtk4LayerShell.set_anchor(window, edge, True)
+        # -1 = do not reserve exclusive space; the overlay floats on top.
+        Gtk4LayerShell.set_exclusive_zone(window, -1)
+        # Receive keyboard when the surface has focus without globally stealing
+        # it (Escape/arrows still work after a tap focuses the surface).
+        Gtk4LayerShell.set_keyboard_mode(window, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
 
     def _shell_uri(self) -> str:
         """Return the ``file://`` URI of the overlay shell, with query params.
