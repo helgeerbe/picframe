@@ -241,6 +241,23 @@ def test_shell_uri_includes_query_params(tmp_path) -> None:
     assert "plugins=file" in uri
 
 
+def test_shell_uri_prefers_vite_build_layout(tmp_path) -> None:
+    """The Vite overlay build emits ``overlay/overlay.html`` (not ``index.html``);
+    the worker must resolve that file when present (#739)."""
+    overlay_dir = tmp_path / "html" / "overlay"
+    overlay_dir.mkdir(parents=True)
+    (overlay_dir / "overlay.html").write_text("<html></html>")
+    worker = OverlayWorker(
+        socket_path="/tmp/x.sock",
+        html_dir=str(tmp_path / "html"),
+        plugin_dir=str(tmp_path / "plugins"),
+        ws_port=9000,
+    )
+    uri = worker._shell_uri()
+    assert uri.startswith("file://")
+    assert "overlay/overlay.html" in uri
+
+
 def test_setup_layer_shell_configures_fullscreen_overlay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -265,6 +282,33 @@ def test_setup_layer_shell_configures_fullscreen_overlay(
     # -1 = float on top without reserving space.
     fake.set_exclusive_zone.assert_called_once_with(window, -1)
     fake.set_keyboard_mode.assert_called_once_with(window, fake.KeyboardMode.ON_DEMAND)
+
+
+def test_setup_layer_shell_degrades_when_shared_library_missing(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Typelib present but backing ``.so`` absent: first runtime call raises
+    ``GLib.GError`` (GObject-introspection loads the shared library lazily). The
+    worker must fall back to a plain borderless window instead of crashing —
+    matching the documented graceful degrade (#739 task 8)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake = MagicMock()
+    # The typelib imported fine, but the first call fails to load the .so.
+    fake.init_for_window.side_effect = Exception("could not locate gtk_layer_init_for_window")
+    monkeypatch.setattr(mod, "Gtk4LayerShell", fake)
+    monkeypatch.setattr(mod, "LAYER_SHELL_AVAILABLE", True)
+    worker = make_worker()
+    window = MagicMock()
+
+    # Must not raise.
+    worker._setup_layer_shell(window)
+
+    # The runtime failure flips the availability flag so later checks degrade.
+    assert mod.LAYER_SHELL_AVAILABLE is False
+    # init_for_window was attempted, but the later calls were never reached.
+    fake.init_for_window.assert_called_once_with(window)
+    fake.set_layer.assert_not_called()
 
 
 def test_build_surface_uses_layer_shell_when_available(

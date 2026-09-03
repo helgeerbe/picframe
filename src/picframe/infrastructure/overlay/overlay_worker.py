@@ -60,9 +60,28 @@ try:
     gi.require_version("WebKit", "6.0")
     from gi.repository import GLib, Gtk, WebKit
 
-    Gtk.init(None)
+    # GTK4 init. ``Gtk.init()`` takes no argv in GTK4 (unlike GTK3's
+    # ``Gtk.init(sys.argv)``); passing ``None`` raises ``TypeError``. Use the
+    # same robust ``init_check``-first pattern as ``gtk_video_presenter.py`` so
+    # the worker fails gracefully (and logs) instead of crashing when no
+    # display/Wayland session is available.
+    if hasattr(Gtk, "init_check"):
+        try:
+            init_result = Gtk.init_check()
+        except TypeError:
+            init_result = Gtk.init_check([])
+        gtk_initialized = (
+            bool(init_result[0]) if isinstance(init_result, tuple) else bool(init_result)
+        )
+        if not gtk_initialized:
+            raise RuntimeError("Gtk.init_check returned False (no display available)")
+    else:
+        try:
+            Gtk.init()
+        except TypeError:
+            Gtk.init([])
     WEBKIT_AVAILABLE = True
-except (ImportError, ValueError) as exc:
+except (ImportError, ValueError, RuntimeError) as exc:
     gi = Any
     Gtk = Any
     WebKit = Any
@@ -310,33 +329,59 @@ class OverlayWorker:
         Kept GTK-free apart from the ``Gtk4LayerShell`` calls (which receive a
         ready window) so the layer wiring can be unit-tested with a mock window
         and a mocked ``Gtk4LayerShell`` module.
+
+        The typelib import can succeed while the backing shared library
+        (``libgtk4-layer-shell.so.0``) is absent — GObject-introspection loads
+        the ``.so`` lazily on first call, not at import. In that case the first
+        ``Gtk4LayerShell.*`` invocation raises ``GLib.GError``. We degrade
+        gracefully: log the failure and leave the window as the plain borderless
+        ``Gtk.Window`` already constructed by the caller, matching the
+        documented fallback (#739 task 8).
         """
-        Gtk4LayerShell.init_for_window(window)
-        # OVERLAY is the topmost layer, above normal application windows.
-        Gtk4LayerShell.set_layer(window, Gtk4LayerShell.Layer.OVERLAY)
-        # Anchor to all four edges so the surface covers the whole output.
-        for edge in (
-            Gtk4LayerShell.Edge.TOP,
-            Gtk4LayerShell.Edge.LEFT,
-            Gtk4LayerShell.Edge.RIGHT,
-            Gtk4LayerShell.Edge.BOTTOM,
-        ):
-            Gtk4LayerShell.set_anchor(window, edge, True)
-        # -1 = do not reserve exclusive space; the overlay floats on top.
-        Gtk4LayerShell.set_exclusive_zone(window, -1)
-        # Receive keyboard when the surface has focus without globally stealing
-        # it (Escape/arrows still work after a tap focuses the surface).
-        Gtk4LayerShell.set_keyboard_mode(window, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
+        try:
+            Gtk4LayerShell.init_for_window(window)
+            # OVERLAY is the topmost layer, above normal application windows.
+            Gtk4LayerShell.set_layer(window, Gtk4LayerShell.Layer.OVERLAY)
+            # Anchor to all four edges so the surface covers the whole output.
+            for edge in (
+                Gtk4LayerShell.Edge.TOP,
+                Gtk4LayerShell.Edge.LEFT,
+                Gtk4LayerShell.Edge.RIGHT,
+                Gtk4LayerShell.Edge.BOTTOM,
+            ):
+                Gtk4LayerShell.set_anchor(window, edge, True)
+            # -1 = do not reserve exclusive space; the overlay floats on top.
+            Gtk4LayerShell.set_exclusive_zone(window, -1)
+            # Receive keyboard when the surface has focus without globally stealing
+            # it (Escape/arrows still work after a tap focuses the surface).
+            Gtk4LayerShell.set_keyboard_mode(window, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
+        except Exception as exc:  # noqa: BLE001 - graceful degrade, see docstring
+            global LAYER_SHELL_AVAILABLE
+            LAYER_SHELL_AVAILABLE = False
+            logger.warning(
+                "gtk4-layer-shell runtime call failed (libgtk4-layer-shell.so.0 "
+                "missing or incompatible); falling back to a plain borderless "
+                "window. Detail: %s",
+                exc,
+            )
 
     def _shell_uri(self) -> str:
         """Return the ``file://`` URI of the overlay shell, with query params.
 
         The shell cannot derive the picframe WS port or the plugin dir from its
         ``file://`` origin, so the worker appends ``?ws=<port>&plugins=<uri>``.
+
+        The frontend overlay build (``vite.overlay.config.ts``) emits the shell
+        to ``<html>/overlay/overlay.html``. Older layouts used
+        ``<html>/overlay/index.html`` or ``<html>/overlay.html``; those are kept
+        as fallbacks so the worker is robust to either layout.
         """
-        path = Path(self.html_dir) / "overlay" / "index.html"
-        if not path.is_file():
-            path = Path(self.html_dir) / "overlay.html"
+        candidates = (
+            Path(self.html_dir) / "overlay" / "overlay.html",
+            Path(self.html_dir) / "overlay" / "index.html",
+            Path(self.html_dir) / "overlay.html",
+        )
+        path = next((c for c in candidates if c.is_file()), candidates[0])
         base = path.resolve().absolute().as_uri()
         params = urllib.parse.urlencode({"ws": self.ws_port, "plugins": self._plugin_dir_uri()})
         return f"{base}?{params}"
