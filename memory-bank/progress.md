@@ -272,10 +272,12 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   both Vite builds succeed.
 
 ## Next
-- **#739 Phase 4** — tests + `docs/dev/architecture/overlay.md` + `docs/user/overlay.md`
-  (incl. "create your own plugin"); integration test spawning a real worker on
-  Wayland. End-to-end Phase-1 spike still blocked on real Wayland display +
-  WebKitGTK typelib.
+- **#739 Phase 4 (docs)** — `docs/dev/architecture/overlay.md` +
+  `docs/user/overlay.md` (incl. "create your own plugin"). Task 20 (unit tests)
+  is done — all listed test categories exist and gates are green (pytest 891,
+  mypy strict 88, ruff clean, frontend lint 0). Only the **real-Wayland
+  integration test** (spawning a live worker on labwc) remains, hardware-blocked
+  and tracked in the issue's verification criteria.
 - **`dev → main` release PR** (deferred, user's call): `dev` is
   +62,857/−9,123 across 280 files vs `main`. Pushing to `main` triggers
   `release.yml` (calver auto-tag + PyPI trusted publishing + GitHub Release

@@ -134,8 +134,10 @@ frontend lint 0 errors, format:check clean, both Vite builds succeed):
   (`test_builtin_plugins.py`) + bootstrapper copy (overwrites built-ins,
   preserves user plugins); `test_bootstrap_full` patched for the new step.
 
-Then Phase 4 (tests + docs: `docs/dev/architecture/overlay.md`,
-`docs/user/overlay.md`, integration test spawning a real worker on Wayland).
+Then Phase 4 (docs: `docs/dev/architecture/overlay.md`,
+`docs/user/overlay.md`). Task 20 (unit tests) is now done — all listed test
+categories exist and gates are green; only the real-Wayland integration test
+remains (hardware-blocked, tracked in the issue verification criteria).
 
 ## Current Repo State
 - Branch: `feat/739-webkit-overlay`, HEAD `cacf113` (Phase 3 built-in plugins);
