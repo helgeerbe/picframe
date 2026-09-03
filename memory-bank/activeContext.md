@@ -1,31 +1,50 @@
 # Active Context
 
 ## Current Focus
-Post-merge cleanup for the Picframe 2.0 modernization is **complete**. PR #737
-merged the full modernization into `dev`. Pre-merge cleanup
-issues #736 (frontend lint/format) and #738 (ESLint + Prettier + CI gate
-baseline) are closed. Three deferred follow-up tracking issues were created
-and fully implemented on `dev`:
-- **#741** — relocate `geo_reverse.py` → `infrastructure/` (PR #744, `b5e8a1f`).
-- **#742** — relocate `mat_image.py` → `core/utils/` (PR #745, `989f186`).
-- **#743** — tighten `@typescript-eslint/no-explicit-any` from `warn` → `error`
-  (PR #746, `9b86cf8`); converted 52 `any` warnings to `unknown`/typed, kept 5
-  genuinely-dynamic blobs with scoped disables. A Sourcery review nit on
-  `getErrorMessage` was addressed in a follow-up commit (`a307cec`) on `dev`.
-All five issues are closed. Local `dev` is synced to `origin/dev` (`a307cec`),
-clean working tree. All merged feature branches deleted (local + remote).
+Implementing **issue #739** — the WebKitGTK touch overlay + plugin system — on
+feature branch `feat/739-webkit-overlay` (cut from `dev` `4217f6e`). The six
+locked design decisions are recorded in `decisionLog.md` (out-of-process
+worker mirroring `gst_worker.py`, opacity-based hide/wake with
+`idle_hide_seconds`, `OverlayConfig` Pydantic model, `wlr-layer-shell`,
+`file://` load model, `OverlayConfigChangedEvent` distinct from
+`RENDER_UPDATE_OVERLAY`, parallel Pointer+keyboard input, Vite multi-page).
 
-**Next:** prepare the `dev → main` release PR (deferred). `dev` is
-+62,857/−9,123 across 280 files vs `main`; `release.yml` will auto-tag
-(calver) + publish to PyPI + create the GitHub Release on push to `main`.
+**Prerequisite done:** issue **#749** (remove dead legacy `peripherals` config
+section) is implemented and committed (`5924130`) on the feature branch. The
+`peripherals` block was removed from backend models/config/service/app,
+frontend `configSchema.json`/locales, tests, and docs; the SPA was rebuilt.
+All quality gates were green: ruff, ruff format, mypy, pytest (801 passed),
+yarn lint/format/tsc/build. The branch was pushed to `origin`.
+
+**Next:** Step 1 — Phase 0 (#739 task list), TDD throughout:
+1. Add `overlay` section to `default_config.yaml`.
+2. Add Pydantic `OverlayConfig` model (the single blocking prerequisite —
+   Pydantic v2 `extra='ignore'` silently drops unmodeled sections).
+3. `ConfigService` flatten/unflatten for `overlay.*` (reuse the
+   `hardware_inputs` pattern: `delete_app_config_prefix("overlay")` +
+   re-write; add `overlay` to the `get_nested_config` section whitelist).
+4. Define `PluginDescriptor` core DTO + `IOverlayController` port.
+5. Plugin manifest loader (infrastructure adapter): scan `plugin_dir`, read
+   each `plugin.json`, return `PluginDescriptor` list + `config_schema`
+   defaults. No WebKitGTK import here.
+6. API: `GET /api/overlay/plugins`; `GET/PUT /api/overlay/plugins/{id}/config`
+   (validate against `config_schema`, persist under
+   `overlay.plugin_config.<id>.*`).
+7. `OverlayConfigChangedEvent` DTO; `ConfigService` publishes it on `overlay`
+   writes.
+
+Then Phases 1–4: out-of-process worker + IPC, composition-root wiring, frontend
+panels, built-in plugins, docs.
 
 ## Current Repo State
-- Branch: `dev` (local = `origin/dev` = `a307cec`), clean.
+- Branch: `feat/739-webkit-overlay` (HEAD `5924130`), clean, pushed to `origin`.
+- Cut from `dev` at `4217f6e` (chore: remove stale v2-dev references, #747).
+  `dev` tip is `4217f6e`; `main` release PR remains deferred.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and
   `infrastructure` architecture. Legacy top-level helpers have been relocated:
   `geo_reverse.py` → `infrastructure/geo_reverse.py` (#741), `mat_image.py` →
   `core/utils/mat_image.py` (#742). Broad legacy runtime modules were removed
-  during #678.
+  during #678. The dead `peripherals` config section is now removed (#749).
 
 ## Established Context (post-modernization merge)
 All Picframe 2.0 modernization work has merged into `dev` via PR #737. The

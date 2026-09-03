@@ -161,13 +161,35 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `getApiErrorMessage`); 20 `catch (e: any)` → `catch (e: unknown)`; 5
   genuinely-dynamic blobs kept with scoped disables + rationale. A Sourcery
   review nit on `getErrorMessage` was addressed in follow-up commit `a307cec`.
+- **#749 — remove dead `peripherals` config section** (prerequisite for #739,
+  branch `feat/739-webkit-overlay`, `5924130`): removed the unused legacy
+  `peripherals` block from backend models/config/service/app, frontend
+  `configSchema.json`/locales, tests, and docs; SPA rebuilt. Note: Pydantic v2
+  default `extra='ignore'` silently drops unknown YAML keys (no validation
+  error), so the issue's "blocks `picframe init`" wording is imprecise — the
+  real failure mode is silent default-drop. `update_nested_config` has no write
+  whitelist (persists any section); only `get_nested_config` filters on read.
+  Tests were updated to use the `http` section instead of `peripherals`.
 
 ## Current / In Progress
-- Nothing. All planned post-merge cleanup work is complete. Local `dev` is
-  synced to `origin/dev` (`a307cec`), clean working tree. All merged feature
-  branches deleted (local + remote).
+- **#739 — WebKitGTK touch overlay + plugin system** (feature branch
+  `feat/739-webkit-overlay`, cut from `dev` `4217f6e`). Six locked design
+  decisions recorded in `decisionLog.md`. Prerequisite **#749** (remove dead
+  `peripherals` config section) is complete and committed (`5924130`):
+  `peripherals` removed from backend models/config/service/app, frontend
+  `configSchema.json`/locales, tests, and docs; SPA rebuilt; all gates green
+  (ruff, ruff format, mypy, pytest 801 passed, yarn lint/format/tsc/build);
+  pushed to `origin`. Currently in Step 0d (memory-bank refresh) before
+  starting Phase 0 (#739 task list items 1–7): `overlay` section in
+  `default_config.yaml`, `OverlayConfig` Pydantic model, `ConfigService`
+  flatten/unflatten + whitelist, `PluginDescriptor` DTO + `IOverlayController`
+  port, plugin manifest loader, overlay API endpoints,
+  `OverlayConfigChangedEvent`.
 
 ## Next
+- **#739 Phase 0** (next): the config + port + API foundation (items 1–7
+  above), TDD throughout. Then Phases 1–4 (worker + IPC, composition-root
+  wiring, frontend panels, built-in plugins, docs).
 - **`dev → main` release PR** (deferred, user's call): `dev` is
   +62,857/−9,123 across 280 files vs `main`. Pushing to `main` triggers
   `release.yml` (calver auto-tag + PyPI trusted publishing + GitHub Release
@@ -177,15 +199,14 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   all commits preserved on `dev`.
 
 ## Known Verification State
-- Backend: full `.venv/bin/python -m pytest` was last reported green (753
-  tests, 1 GI deprecation warning) on the `v2-dev` line before the `dev` merge.
-  The 3 follow-up PRs (#744/#745/#746) passed their targeted CI checks
-  (ruff, mypy, pytest, ESLint, Prettier, frontend build) before squash-merge.
-- Frontend: `yarn build` + `yarn lint` + `yarn format:check` pass clean on
-  `dev` after #743 (#746's initial CI failure from a stray blank line in
-  `errors.ts` was caught and fixed via `yarn format` before merge).
-- Current `dev` head: `a307cec` (Sourcery fixup to `getErrorMessage`).
-- Note: backend test counts grew through the modernization (640 → 753+ on
-  `v2-dev`); the exact count on post-merge `dev` should be re-verified with
-  a fresh `.venv/bin/python -m pytest` run before the release.
+- Backend: `.venv/bin/python -m pytest` ran green (801 passed) on
+  `feat/739-webkit-overlay` after #749. ruff, ruff format, and mypy strict
+  were clean. (Earlier `dev` baseline: 753 tests on the `v2-dev` line before the
+  merge; counts grew through the modernization and should be re-verified
+  before the release.)
+- Frontend: `yarn build` + `yarn lint` + `yarn format:check` + `vue-tsc -b`
+  pass clean on `feat/739-webkit-overlay` after #749.
+- Current `feat/739-webkit-overlay` head: `5924130` (refactor(#749): remove
+  dead legacy `peripherals` config section).
+- Current `dev` head: `4217f6e` (chore: remove stale v2-dev references, #747).
 

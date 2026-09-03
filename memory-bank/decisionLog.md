@@ -136,5 +136,61 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   (bypass actor) but are not guaranteed; the 3-line Sourcery fixup (`a307cec`)
   was pushed directly as a one-off. Prefer the PR-based flow for future fixes.
 
+- **#739 — WebKitGTK touch overlay + plugin system** (locked design decisions,
+  branch `feat/739-webkit-overlay`). Detailed design lives in GitHub issue #739
+  and (pending) `docs/dev/architecture/overlay.md`:
+  - **Process model:** the overlay runs in its own process
+    (`overlay_worker.py`, spawned via `subprocess.Popen`), mirroring the
+    `gst_worker.py` GStreamer worker. The main process contains no GTK/WebKit;
+    the in-process `WebKitOverlayRenderer` is a thin IPC client (like
+    `GstVideoRenderer`) over a Unix-domain socket. A WebKitGTK crash/leak is
+    confined to the overlay and never takes down the frame.
+  - **Video + overlay stacking:** the overlay is always present and always the
+    input surface; "hide" = opacity 0 (transparent), not withdrawn. On video
+    start the renderer sets opacity 0 (video shows through); any
+    touch/keyboard/mouse event wakes it to opacity 1; after
+    `overlay.idle_hide_seconds` idle it fades back to 0 — this generalizes the
+    video case to photos too (auto-hide when idle, wake on any input).
+  - **`wlr-layer-shell`:** the worker uses `wlr-layer-shell` to keep the
+    transparent surface above the GTK4 video host on Wayland (labwc-supported)
+    while still receiving input when visually transparent. Fallback is raising
+    the window + keeping it above (less robust). Validated in the Phase-1
+    worker spike.
+  - **Load model:** shell + plugins load via `file://` URIs (shell at
+    `~/.picframe/html/overlay/index.html`, plugins from
+    `~/.picframe/overlay-plugins/<id>/`). No FastAPI route serves user dirs →
+    no path-traversal surface. The WebView connects to `ws://localhost:<port>/ws/state`
+    as a WS client (like the SPA). The Phase-1 spike validates WebKitGTK
+    `file://`→`ws://localhost` cross-origin WS (fallback: a localhost http
+    origin for the shell).
+  - **Config:** a new `overlay` section in `default_config.yaml` backed by a
+    Pydantic `OverlayConfig` model. Pydantic v2 default `extra='ignore'`
+    silently drops unknown YAML keys, so an `overlay` section absent from the
+    Pydantic schema would silently drop the whole feature — the model is the
+    single blocking prerequisite. Per-plugin user values persist in
+    `config.db3` under `overlay.plugin_config.<id>.*` (flat dotted keys,
+    JSON-encoded), not inside the plugin directory; effective config = manifest
+    defaults ← db overrides (reuses `ConfigService` flatten/unflatten +
+    `delete_app_config_prefix`, same as `hardware_inputs`).
+  - **Event:** `OverlayConfigChangedEvent` (new DTO) is published by
+    `ConfigService` on `overlay` writes. This is **distinct from** the existing
+    `RENDER_UPDATE_OVERLAY` constant in `dto.py`, which is the unrelated pi3d
+    text/clock overlay and must not be conflated.
+  - **Input:** parallel, always-on Pointer Events (`pointerdown`, unifying
+    mouse/touch/pen) and keyboard (`keydown`) — one code path for all devices.
+    `overlay.enabled_input_types` (default
+    `["touch","mouse","keyboard"]`) only lets users disable a device class;
+    activity tracking for auto-hide counts any enabled pointer/keyboard event.
+  - **Vite multi-page:** the overlay HTML shell is a second Vite multi-page
+    entry (`rollupOptions.input`) built alongside the SPA into
+    `src/picframe/html/overlay/`; the bootstrapper's existing
+    `pkg_dir/html → ~/.picframe/html` copy delivers it to the worker's WebView.
+    Third-party plugins are plain HTML/CSS/JS requiring no build step.
+  - **Prerequisite (#749, done on this branch):** the dead legacy `peripherals`
+    config section was removed from all layers (backend models/config/service/
+    app, frontend schema/locales, tests, docs) before adding `overlay`, because
+    an unmodeled `peripherals` block would be silently ignored by the new
+    `OverlayConfig` and risk confusion.
+
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.
