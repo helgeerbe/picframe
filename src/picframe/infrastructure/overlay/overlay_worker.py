@@ -322,6 +322,16 @@ class OverlayWorker:
             self._setup_layer_shell(self._window)
 
         self._web_view = WebKit.WebView()
+        # The overlay shell loads from a ``file://`` URI. WebKitGTK treats ES
+        # module scripts (``<script type="module">``, which Vite emits) as
+        # CORS-requiring and silently blocks them under ``file://``; it also
+        # blocks the cross-origin ``ws://localhost`` state WebSocket the shell
+        # opens for live media/state. Lift both file-access restrictions so
+        # the Vite-built shell boots and connects (#739). Without this the
+        # worker reports ``ready`` but the JS never executes -> no clock.
+        settings = self._web_view.get_settings()
+        settings.set_allow_file_access_from_file_urls(True)
+        settings.set_allow_universal_access_from_file_urls(True)
         # The shell connects to the picframe state WebSocket itself; we only
         # load the local file:// entry here.
         self._web_view.load_uri(self._shell_uri())
@@ -392,22 +402,34 @@ class OverlayWorker:
             return
         if not bool(self._config.get("transparent", True)):
             return
-        # Transparent window background via a CSS provider.
+        # Transparent window background via a CSS provider. Use the GTK4
+        # non-deprecated ``add_provider_for_display`` (the per-widget
+        # ``get_style_context().add_provider()`` path is deprecated in GTK4).
         css_provider = Gtk.CssProvider()
         css_provider.load_from_data(
             b"window { background-color: transparent; }"
             b" window decoration { background-color: transparent; box-shadow: none; }"
         )
-        self._window.get_style_context().add_provider(
-            css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
-        )
+        display = self._window.get_display()
+        if display is not None:
+            Gtk.StyleContext.add_provider_for_display(
+                display, css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+            )
         # The compositor blends the surface with what is below only when it
         # knows the surface is not opaque. ``set_opaque(False)`` must run after
         # the GdkSurface exists (window realized, which happens during
         # ``present()``), so connect the handler before presenting.
         self._window.connect("realize", self._on_realize_transparent)
         # WebKit WebView transparent background (overrides its default white).
-        self._web_view.set_background_color(Gdk.RGBA(0.0, 0.0, 0.0, 0.0))
+        # Construct ``Gdk.RGBA`` without positional args (passing them is
+        # deprecated in newer PyGObject and the args are ignored); set the
+        # channel fields explicitly for a fully transparent black.
+        bg = Gdk.RGBA()
+        bg.red = 0.0
+        bg.green = 0.0
+        bg.blue = 0.0
+        bg.alpha = 0.0
+        self._web_view.set_background_color(bg)
 
     def _on_realize_transparent(self, window: Any) -> None:
         """Mark the realized Wayland surface as non-opaque for alpha blending."""

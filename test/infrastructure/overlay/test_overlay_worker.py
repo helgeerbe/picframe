@@ -355,6 +355,46 @@ def test_build_surface_skips_layer_shell_when_unavailable(
     fake_gtk.Window.return_value.set_decorated.assert_called_once_with(False)
 
 
+def test_build_surface_lifts_file_access_for_file_origin_shell(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The overlay shell loads from ``file://``; WebKitGTK blocks ES module
+    scripts (``<script type="module">``) and the cross-origin ``ws://localhost``
+    state WebSocket under ``file://`` unless file-access is lifted. Without
+    this the worker reports ``ready`` but the JS never executes -> no clock
+    (#739). Both settings must be enabled on the WebView before ``load_uri``.
+    """
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    fake_webkit = MagicMock()
+    monkeypatch.setattr(mod, "LAYER_SHELL_AVAILABLE", False)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+    monkeypatch.setattr(mod, "WebKit", fake_webkit)
+
+    # Capture call order robustly via side effects.
+    order: list[str] = []
+    settings = MagicMock()
+    settings.set_allow_file_access_from_file_urls.side_effect = lambda v: order.append(
+        "file_access"
+    )
+    settings.set_allow_universal_access_from_file_urls.side_effect = lambda v: order.append(
+        "universal"
+    )
+    fake_webkit.WebView.return_value.get_settings.return_value = settings
+    fake_webkit.WebView.return_value.load_uri.side_effect = lambda *_: order.append("load_uri")
+
+    worker = make_worker()
+    monkeypatch.setattr(worker, "_setup_layer_shell", lambda w: None)
+    worker._build_surface()
+
+    settings.set_allow_file_access_from_file_urls.assert_called_once_with(True)
+    settings.set_allow_universal_access_from_file_urls.assert_called_once_with(True)
+    # Both file-access flags are set before the shell URI loads so they are
+    # in effect when the ES module script is first evaluated.
+    assert order == ["file_access", "universal", "load_uri"]
+
+
 def test_display_env_log_precedes_gtk_init_block() -> None:
     """The display-environment log line must run *before* the GTK import/init
     block (mirrors gst_worker.py). If the worker segfaults during
@@ -393,9 +433,12 @@ def test_apply_transparency_makes_surface_transparent(
     worker._apply_transparency()
 
     fake_gtk.CssProvider.return_value.load_from_data.assert_called_once()
-    window.get_style_context.return_value.add_provider.assert_called_once()
+    # GTK4 non-deprecated path: add_provider_for_display (not get_style_context).
+    fake_gtk.StyleContext.add_provider_for_display.assert_called_once()
     window.connect.assert_any_call("realize", worker._on_realize_transparent)
-    web_view.set_background_color.assert_called_once_with(fake_gdk.RGBA(0.0, 0.0, 0.0, 0.0))
+    # Gdk.RGBA constructed without deprecated positional args; channels set.
+    web_view.set_background_color.assert_called_once()
+    assert web_view.set_background_color.call_args[0][0] is fake_gdk.RGBA.return_value
 
 
 def test_apply_transparency_skipped_when_disabled(
