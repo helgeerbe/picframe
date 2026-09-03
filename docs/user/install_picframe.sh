@@ -525,7 +525,7 @@ fi
 # older OS releases (e.g. Bookworm, which lacks gir1.2-webkit-6.0) still install.
 if [ "$ENABLE_OVERLAY" = true ]; then
     echo "  -> Installing WebKitGTK touch overlay packages..."
-    if apt-get install -y gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0; then
+    if apt-get install -y gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0; then
         echo "  -> WebKitGTK overlay packages installed."
     else
         echo "  -> Warning: overlay packages unavailable on this OS release" >&2
@@ -535,7 +535,7 @@ if [ "$ENABLE_OVERLAY" = true ]; then
     fi
 else
     echo "  -> WebKitGTK overlay packages skipped. Install later with:"
-    echo "     sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0"
+    echo "     sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0"
 fi
 
 # 4. Configure user privileges
@@ -595,21 +595,32 @@ PY
 if [ "$ENABLE_OVERLAY" = true ]; then
     echo "  -> Verifying WebKitGTK bindings..."
     if sudo -u "$ACTUAL_USER" "$VENV_DIR/bin/python" - <<'PY'
+import ctypes
+
 import gi
 
 gi.require_version("Gtk", "4.0")
 gi.require_version("WebKit", "6.0")
 from gi.repository import WebKit  # noqa: F401
+# The gtk4-layer-shell *typelib* imports without the runtime shared library:
+# GObject-introspection dlopens libgtk4-layer-shell.so.0 lazily on first call,
+# not at import. That mismatch (typelib present, .so absent) is the exact cause
+# of the overlay rendering invisibly behind pi3d. So when the typelib is present
+# we also probe the runtime .so directly and fail the verification if missing.
 try:
     gi.require_version("Gtk4LayerShell", "1.0")
     from gi.repository import Gtk4LayerShell  # noqa: F401
+    ctypes.CDLL("libgtk4-layer-shell.so.0")
 except (ImportError, ValueError):
     pass  # gir1.2-gtk4layershell-1.0 optional; worker falls back to a plain window
+except OSError as exc:
+    raise SystemExit(f"libgtk4-layer-shell.so.0 not found: {exc}")
 PY
     then
-        echo "  -> WebKitGTK bindings verified."
+        echo "  -> WebKitGTK bindings verified (layer-shell runtime present)."
     else
-        echo "  -> Warning: WebKitGTK import failed; overlay will stay disabled." >&2
+        echo "  -> Warning: WebKitGTK/layer-shell runtime missing; overlay will stay disabled." >&2
+        echo "     Install: sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0" >&2
     fi
 fi
 
@@ -675,7 +686,7 @@ fi
 if [ "$ENABLE_OVERLAY" = true ]; then
     echo "Touch overlay packages installed. Enable at runtime by setting overlay.enabled = true."
 else
-    echo "Touch overlay packages skipped. To enable later: sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0"
+    echo "Touch overlay packages skipped. To enable later: sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0"
 fi
 echo "Note: You may need to log out and log back in for group changes (i2c, video, render, input, seat) to take effect."
 echo "======================================================="

@@ -126,6 +126,24 @@ def _resolve_layer_shell_so() -> str | None:
     return None
 
 
+def _layer_shell_typelib_present() -> bool:
+    """Return ``True`` when the gtk4-layer-shell *typelib* is importable.
+
+    GObject-introspection loads the backing ``.so`` lazily on first call, not
+    at import, so this can be ``True`` while the runtime
+    ``libgtk4-layer-shell.so.0`` is absent — the exact mismatch that makes the
+    overlay render invisibly behind pi3d. Safe to call from the main process
+    (it does not dlopen the ``.so``), mirroring :func:`_probe_webkit`.
+    """
+    try:
+        import gi
+
+        gi.require_version("Gtk4LayerShell", "1.0")
+        return True
+    except (ImportError, ValueError):
+        return False
+
+
 class WebKitOverlayRenderer(IOverlayController):
     """Out-of-process WebKitGTK overlay controller (IPC client)."""
 
@@ -284,6 +302,19 @@ class WebKitOverlayRenderer(IOverlayController):
             existing = env.get("LD_PRELOAD", "")
             env["LD_PRELOAD"] = f"{layer_shell_so}:{existing}" if existing else layer_shell_so
             logger.info("Preloading gtk4-layer-shell for overlay worker: %s", layer_shell_so)
+        elif _layer_shell_typelib_present():
+            # The typelib is installed but its backing runtime .so is missing:
+            # ``init_for_window`` will fail to dlopen it and the layer surface
+            # never renders on top of pi3d, so the clock stays invisible. This
+            # is the common "no clock, photos fine" failure mode — surface it at
+            # the default (WARNING) log level instead of only as a worker-side
+            # GTK warning buried in INFO-piped output.
+            logger.warning(
+                "gtk4-layer-shell typelib is installed but the runtime "
+                "libgtk4-layer-shell.so.0 could not be resolved; the overlay "
+                "surface will render behind pi3d and be invisible. Install the "
+                "runtime package, e.g.: sudo apt install libgtk4-layer-shell0"
+            )
         return env
 
     def _start_worker_log_reader(self) -> None:

@@ -370,3 +370,117 @@ def test_display_env_log_precedes_gtk_init_block() -> None:
     assert log_idx != -1, "display-environment log line not found in worker source"
     assert gtk_idx != -1, "GTK require_version line not found in worker source"
     assert log_idx < gtk_idx, "display-environment log must precede the GTK init block"
+
+
+def test_apply_transparency_makes_surface_transparent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """With ``transparent`` true the window, surface and WebView go transparent."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    fake_gdk = MagicMock()
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+    monkeypatch.setattr(mod, "Gdk", fake_gdk)
+    worker = make_worker()
+    worker._config = {"transparent": True}
+    window = MagicMock()
+    web_view = MagicMock()
+    worker._window = window
+    worker._web_view = web_view
+
+    worker._apply_transparency()
+
+    fake_gtk.CssProvider.return_value.load_from_data.assert_called_once()
+    window.get_style_context.return_value.add_provider.assert_called_once()
+    window.connect.assert_any_call("realize", worker._on_realize_transparent)
+    web_view.set_background_color.assert_called_once_with(fake_gdk.RGBA(0.0, 0.0, 0.0, 0.0))
+
+
+def test_apply_transparency_skipped_when_disabled(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``transparent: false`` leaves the (opaque) surface untouched."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    fake_gdk = MagicMock()
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+    monkeypatch.setattr(mod, "Gdk", fake_gdk)
+    worker = make_worker()
+    worker._config = {"transparent": False}
+    window = MagicMock()
+    web_view = MagicMock()
+    worker._window = window
+    worker._web_view = web_view
+
+    worker._apply_transparency()
+
+    fake_gtk.CssProvider.assert_not_called()
+    web_view.set_background_color.assert_not_called()
+    window.connect.assert_not_called()
+
+
+def test_apply_transparency_noop_in_headless_mode(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No surface / WebKitGTK absent -> nothing applied (keeps IPC testable)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", False)
+    worker = make_worker()
+    worker._config = {"transparent": True}
+    worker._window = MagicMock()
+    worker._web_view = MagicMock()
+
+    # Must not raise and must not touch GTK.
+    worker._apply_transparency()
+
+
+def test_on_realize_transparent_marks_surface_non_opaque() -> None:
+    """The realize callback flips the compositor opacity hint when supported."""
+    worker = make_worker()
+    surface = MagicMock()
+    window = MagicMock()
+    window.get_surface.return_value = surface
+
+    worker._on_realize_transparent(window)
+
+    surface.set_opaque.assert_called_once_with(False)
+
+
+def test_on_realize_transparent_skips_surface_without_set_opaque() -> None:
+    """A surface lacking ``set_opaque`` (mocked/older API) is handled gracefully."""
+    worker = make_worker()
+    surface = MagicMock(spec=[])  # no set_opaque attribute
+    window = MagicMock()
+    window.get_surface.return_value = surface
+
+    # Must not raise.
+    worker._on_realize_transparent(window)
+
+
+def test_build_surface_applies_transparency(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_build_surface`` wires transparency into the freshly built surface."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    fake_webkit = MagicMock()
+    fake_gdk = MagicMock()
+    monkeypatch.setattr(mod, "LAYER_SHELL_AVAILABLE", True)
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+    monkeypatch.setattr(mod, "WebKit", fake_webkit)
+    monkeypatch.setattr(mod, "Gdk", fake_gdk)
+    transparency_calls: list[bool] = []
+    worker = make_worker()
+    monkeypatch.setattr(worker, "_setup_layer_shell", lambda w: None)
+    monkeypatch.setattr(worker, "_apply_transparency", lambda: transparency_calls.append(True))
+    worker._build_surface()
+
+    assert transparency_calls == [True]
+    fake_webkit.WebView.return_value.load_uri.assert_called_once()

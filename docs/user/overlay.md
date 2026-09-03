@@ -302,16 +302,35 @@ overlay** tile dock.
 
 - **Overlay does not appear.** Ensure `overlay.enabled` is on and WebKitGTK is
   installed. The installer installs the WebKitGTK packages by default
-  (`gir1.2-webkit-6.0` and `gir1.2-gtk4layershell-1.0`); if you used `--disable-overlay`
-  or are on an older OS release that lacks them, add them manually:
+  (`gir1.2-webkit-6.0`, `gir1.2-gtk4layershell-1.0`, and
+  `libgtk4-layer-shell0`); if you used `--disable-overlay` or are on an older
+  OS release that lacks them, add them manually:
 
   ```bash
-  sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0
+  sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0
   ```
 
   The renderer probes the GTK4 typelib (`WebKit 6.0`) first, then the GTK3
   fallback (`WebKit2 4.1`). If WebKitGTK is absent, picframe logs a
   `webkit_unavailable` system error and continues without the overlay.
+- **Clock overlay invisible, but photos/video play fine.** The `wlr-layer-shell`
+  surface is created via `gtk4-layer-shell`. That project ships two packages:
+  `gir1.2-gtk4layershell-1.0` (the *typelib*, which imports without the runtime
+  library) and `libgtk4-layer-shell0` (the *runtime* `.so`, which the typelib
+  `dlopen`s lazily on first call). If only the typelib is installed,
+  `Gtk4LayerShell.init_for_window()` silently fails, the surface never becomes
+  a layer surface, and it renders behind pi3d — so the clock (white text on a
+  transparent surface) is invisible while photos keep playing. The fix is to
+  install the runtime package and restart the service:
+
+  ```bash
+  sudo apt install libgtk4-layer-shell0
+  sudo systemctl restart picframe.service
+  ```
+
+  Picframe detects this mismatch at startup and logs a WARNING naming the
+  missing package; the installer's verification step also probes the runtime
+  `.so` directly (via `ctypes`) so it catches "typelib present, `.so` absent".
 - **Built-in plugins missing.** Run `picframe init` to copy them to
   `~/.picframe/overlay-plugins/`.
 - **Plugin not listed.** Check that the directory contains a valid

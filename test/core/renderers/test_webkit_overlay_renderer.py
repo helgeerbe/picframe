@@ -1,5 +1,6 @@
 """Tests for the WebKitOverlayRenderer IPC client (mocked worker + probe)."""
 
+import logging
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -30,6 +31,7 @@ from picframe.core.renderers.overlay_ipc import (
 from picframe.core.renderers.webkit_overlay_renderer import (
     WebKitOverlayRenderer,
     _command_for_input_action,
+    _layer_shell_typelib_present,
     _resolve_layer_shell_so,
 )
 from picframe.infrastructure.overlay.plugin_loader import PluginLoader
@@ -400,3 +402,66 @@ def test_resolve_layer_shell_so_parses_ldconfig_path(
         lambda p: p == "/usr/lib/aarch64-linux-gnu/libgtk4-layer-shell.so.0",
     )
     assert _resolve_layer_shell_so() == "/usr/lib/aarch64-linux-gnu/libgtk4-layer-shell.so.0"
+
+
+def test_layer_shell_typelib_present_returns_bool() -> None:
+    """The probe returns a bool whether or not gi/the typelib is installed."""
+    assert isinstance(_layer_shell_typelib_present(), bool)
+
+
+def test_worker_environment_warns_when_typelib_present_but_so_missing(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Typelib installed + runtime .so absent is the "no clock" failure mode;
+    surface it at WARNING level so it is not buried in INFO-piped worker logs."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    monkeypatch.setattr(wor, "_resolve_layer_shell_so", lambda: None)
+    monkeypatch.setattr(wor, "_layer_shell_typelib_present", lambda: True)
+    with caplog.at_level(logging.WARNING, logger=wor.logger.name):
+        env = renderer._worker_environment()
+    assert env["GDK_BACKEND"] == "wayland"
+    assert "LD_PRELOAD" not in env
+    assert any("libgtk4-layer-shell0" in r.message for r in caplog.records)
+
+
+def test_worker_environment_no_warning_when_both_typelib_and_so_absent(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """On dev boxes / OSes without the package at all, keep quiet (graceful)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    monkeypatch.setattr(wor, "_resolve_layer_shell_so", lambda: None)
+    monkeypatch.setattr(wor, "_layer_shell_typelib_present", lambda: False)
+    with caplog.at_level(logging.WARNING, logger=wor.logger.name):
+        env = renderer._worker_environment()
+    assert "LD_PRELOAD" not in env
+    assert not any("libgtk4-layer-shell0" in r.message for r in caplog.records)
+
+
+def test_worker_environment_no_warning_when_so_resolved(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """When the runtime .so is found and preloaded there is nothing to warn."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    so_path = "/usr/lib/aarch64-linux-gnu/libgtk4-layer-shell.so.0"
+    monkeypatch.setattr(wor, "_resolve_layer_shell_so", lambda: so_path)
+    # Even if the typelib probe would say True, the resolved .so wins.
+    monkeypatch.setattr(wor, "_layer_shell_typelib_present", lambda: True)
+    with caplog.at_level(logging.WARNING, logger=wor.logger.name):
+        env = renderer._worker_environment()
+    assert env["LD_PRELOAD"] == so_path
+    assert not any("libgtk4-layer-shell0" in r.message for r in caplog.records)

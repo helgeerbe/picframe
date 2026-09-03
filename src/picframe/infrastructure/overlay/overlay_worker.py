@@ -71,7 +71,8 @@ try:
 
     gi.require_version("Gtk", "4.0")
     gi.require_version("WebKit", "6.0")
-    from gi.repository import GLib, Gtk, WebKit
+    gi.require_version("Gdk", "4.0")
+    from gi.repository import Gdk, GLib, Gtk, WebKit
 
     # GTK4 init. ``Gtk.init()`` takes no argv in GTK4 (unlike GTK3's
     # ``Gtk.init(sys.argv)``); passing ``None`` raises ``TypeError``. Use the
@@ -99,6 +100,7 @@ except (ImportError, ValueError, RuntimeError) as exc:
     Gtk = Any
     WebKit = Any
     GLib = Any
+    Gdk = Any
     logger.error("WebKitGTK not available. Worker cannot start: %s", exc)
     WEBKIT_AVAILABLE = False
 
@@ -325,6 +327,7 @@ class OverlayWorker:
         self._web_view.load_uri(self._shell_uri())
         self._install_js_bridge()
         self._window.set_child(self._web_view)
+        self._apply_transparency()
         self._window.present()
 
     def _setup_layer_shell(self, window: Any) -> None:
@@ -368,6 +371,49 @@ class OverlayWorker:
                 "window. Detail: %s",
                 exc,
             )
+
+    def _apply_transparency(self) -> None:
+        """Make the overlay surface transparent so pi3d/video shows through.
+
+        WebKitGTK defaults to an opaque white surface, so without this the clock
+        (white text) renders invisible and the overlay hides the photo beneath
+        (see ``docs/dev/architecture/overlay.md`` §1 and the
+        ``overlay.transparent`` config). The window background, the WebKit
+        background, and the Wayland surface opacity hint are all set
+        transparent. Gated by ``overlay.transparent`` (default ``true``).
+
+        Applied once at surface build time (before the first ``set_config`` IPC
+        arrives) using the config default, so a ``transparent: false`` override
+        takes effect on the next service restart. No-op in headless mode (no
+        surface / WebKitGTK absent) so the GTK-free IPC plumbing stays
+        unit-testable.
+        """
+        if self._window is None or self._web_view is None or not WEBKIT_AVAILABLE:
+            return
+        if not bool(self._config.get("transparent", True)):
+            return
+        # Transparent window background via a CSS provider.
+        css_provider = Gtk.CssProvider()
+        css_provider.load_from_data(
+            b"window { background-color: transparent; }"
+            b" window decoration { background-color: transparent; box-shadow: none; }"
+        )
+        self._window.get_style_context().add_provider(
+            css_provider, Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
+        )
+        # The compositor blends the surface with what is below only when it
+        # knows the surface is not opaque. ``set_opaque(False)`` must run after
+        # the GdkSurface exists (window realized, which happens during
+        # ``present()``), so connect the handler before presenting.
+        self._window.connect("realize", self._on_realize_transparent)
+        # WebKit WebView transparent background (overrides its default white).
+        self._web_view.set_background_color(Gdk.RGBA(0.0, 0.0, 0.0, 0.0))
+
+    def _on_realize_transparent(self, window: Any) -> None:
+        """Mark the realized Wayland surface as non-opaque for alpha blending."""
+        surface = window.get_surface()
+        if surface is not None and hasattr(surface, "set_opaque"):
+            surface.set_opaque(False)
 
     def _shell_uri(self) -> str:
         """Return the ``file://`` URI of the overlay shell, with query params.
