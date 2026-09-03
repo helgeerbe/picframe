@@ -285,11 +285,11 @@ config.
 
 - **Overlay does not appear.** Ensure `overlay.enabled` is on and WebKitGTK is
   installed. The installer installs the WebKitGTK packages by default
-  (`gir1.2-webkit-6.0` and `gtk4-layer-shell`); if you used `--disable-overlay`
+  (`gir1.2-webkit-6.0` and `gir1.2-gtk4layershell-1.0`); if you used `--disable-overlay`
   or are on an older OS release that lacks them, add them manually:
 
   ```bash
-  sudo apt install gir1.2-webkit-6.0 gtk4-layer-shell
+  sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0
   ```
 
   The renderer probes the GTK4 typelib (`WebKit 6.0`) first, then the GTK3

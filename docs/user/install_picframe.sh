@@ -525,7 +525,7 @@ fi
 # older OS releases (e.g. Bookworm, which lacks gir1.2-webkit-6.0) still install.
 if [ "$ENABLE_OVERLAY" = true ]; then
     echo "  -> Installing WebKitGTK touch overlay packages..."
-    if apt-get install -y gir1.2-webkit-6.0 gtk4-layer-shell; then
+    if apt-get install -y gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0; then
         echo "  -> WebKitGTK overlay packages installed."
     else
         echo "  -> Warning: overlay packages unavailable on this OS release" >&2
@@ -535,7 +535,7 @@ if [ "$ENABLE_OVERLAY" = true ]; then
     fi
 else
     echo "  -> WebKitGTK overlay packages skipped. Install later with:"
-    echo "     sudo apt install gir1.2-webkit-6.0 gtk4-layer-shell"
+    echo "     sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0"
 fi
 
 # 4. Configure user privileges
@@ -604,7 +604,7 @@ try:
     gi.require_version("Gtk4LayerShell", "1.0")
     from gi.repository import Gtk4LayerShell  # noqa: F401
 except (ImportError, ValueError):
-    pass  # gtk4-layer-shell optional; worker falls back to a plain window
+    pass  # gir1.2-gtk4layershell-1.0 optional; worker falls back to a plain window
 PY
     then
         echo "  -> WebKitGTK bindings verified."
@@ -675,7 +675,7 @@ fi
 if [ "$ENABLE_OVERLAY" = true ]; then
     echo "Touch overlay packages installed. Enable at runtime by setting overlay.enabled = true."
 else
-    echo "Touch overlay packages skipped. To enable later: sudo apt install gir1.2-webkit-6.0 gtk4-layer-shell"
+    echo "Touch overlay packages skipped. To enable later: sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0"
 fi
 echo "Note: You may need to log out and log back in for group changes (i2c, video, render, input, seat) to take effect."
 echo "======================================================="

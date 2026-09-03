@@ -125,7 +125,7 @@ sudo systemctl disable picframe.service
 #### Touch Overlay Packages (WebKitGTK)
 
 The installer **installs the WebKitGTK touch overlay packages by default**
-(`gir1.2-webkit-6.0` and `gtk4-layer-shell`). These are needed for the
+(`gir1.2-webkit-6.0` and `gir1.2-gtk4layershell-1.0`). These are needed for the
 touch overlay and plugin system described in
 [Overlay & Plugins](overlay.md). Installing them does not turn the overlay
 on by itself — you still enable it at runtime by setting `overlay.enabled`
@@ -153,7 +153,7 @@ To add the overlay packages later on a box that was installed with
 `--disable-overlay`:
 
 ```bash
-sudo apt install gir1.2-webkit-6.0 gtk4-layer-shell
+sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0
 ```
 
 #### Updating an Existing Service Install
