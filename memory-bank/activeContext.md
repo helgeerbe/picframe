@@ -100,12 +100,47 @@ succeed; no Python changed, so pytest/mypy/ruff unaffected):
 - Wired into `RemoteView.vue` (right column) and `AppearanceView.vue` (after
   the slideshow panel). Rebuilt `src/picframe/html/` committed (hash churn).
 
-Then Phase 3 (built-in plugins), Phase 4 (tests + docs).
+**Phase 3 DONE (built-in plugins, #739 items 17–19, committed `cacf113`,
+pushed):** three built-in overlay plugins shipped as package data under
+`src/picframe/overlay_plugins/` (a real Python package so setuptools
+includes it via `picframe.overlay_plugins = ["**"]` package-data) and copied
+to `~/.picframe/overlay-plugins/` during `picframe init`. All gates green
+(pytest 891 passed, mypy strict 88 files, ruff clean, ruff format 163 files,
+frontend lint 0 errors, format:check clean, both Vite builds succeed):
+- **clock** (`overlay_plugins/clock/`): analog/digital styles, 12h/24h
+  format, `show_seconds`/`show_date`; self-contained `index.html` (SVG analog
+  or digital text), listens for `picframe:config`. config_schema: style,
+  clock_format, show_seconds, show_date.
+- **weather** (`overlay_plugins/weather/`): OpenWeatherMap One Call 3.0 fetch
+  (api_key/lat/lon/units/language/refresh_seconds); graceful error handling;
+  icon + temp + condition + wind/humidity.
+- **meta** (`overlay_plugins/meta/`): current image metadata (camera, lens,
+  aperture, exposure, ISO, focal, size) + Leaflet map at GPS coords (CDN
+  with offline text-coordinate fallback); tap-to-expand full map; updates on
+  photo change via `picframe:media`.
+- **postMessage protocol** (shell → plugin iframe):
+  `{type:'picframe:config', pluginId, config}` (existing) +
+  `{type:'picframe:media', media}` (new — for meta).
+- **Frontend shell wiring:** `dock.ts` gains
+  `postToActivePlugin(message)`; `shell.ts` wires `StateClient.onMedia` →
+  `dock.postToActivePlugin({type:'picframe:media', media})` so plugins react
+  to photo changes without their own WS client; `types.ts` `CurrentMedia`
+  gains `location?: { lat; lon } | null`.
+- **Bootstrapper** (`bootstrapper.py`): `_copy_overlay_plugins()` copies
+  built-in plugin dirs to `~/.picframe/overlay-plugins/`, force-overwriting
+  built-ins (updates propagate) while preserving user-created plugins;
+  called in `bootstrap()` after `_copy_assets()`.
+- **Tests:** 7 new — built-in manifest/config_schema validation
+  (`test_builtin_plugins.py`) + bootstrapper copy (overwrites built-ins,
+  preserves user plugins); `test_bootstrap_full` patched for the new step.
+
+Then Phase 4 (tests + docs: `docs/dev/architecture/overlay.md`,
+`docs/user/overlay.md`, integration test spawning a real worker on Wayland).
 
 ## Current Repo State
-- Branch: `feat/739-webkit-overlay`, HEAD `2ec6f84` (Phase 2 frontend SPA
-  panels); task 8 `683ad07`, Phase 1 backend `18061d8`, Phase 1 frontend
-  `3bfaff3` all committed and pushed to `origin`.
+- Branch: `feat/739-webkit-overlay`, HEAD `cacf113` (Phase 3 built-in plugins);
+  Phase 2 frontend SPA panels `2ec6f84`, task 8 `683ad07`, Phase 1 backend
+  `18061d8`, Phase 1 frontend `3bfaff3` all committed and pushed to `origin`.
 - Cut from `dev` at `4217f6e` (chore: remove stale v2-dev references, #747).
   `dev` tip is `4217f6e`; `main` release PR remains deferred.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and

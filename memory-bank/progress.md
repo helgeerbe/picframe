@@ -253,14 +253,29 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `src/picframe/html/overlay/`) and **11** (pointer + keyboard input routing)
   — the next chunk (frontend/WebKit-dependent).
 
+## Phase 3 Done (built-in plugins, `cacf113`)
+- Three built-in overlay plugins shipped under `src/picframe/overlay_plugins/`
+  (package data, `picframe.overlay_plugins = ["**"]`): **clock** (analog/digital,
+  12h/24h, show_seconds/show_date), **weather** (OpenWeatherMap One Call 3.0;
+  api_key/lat/lon/units/language/refresh_seconds), **meta** (current image
+  EXIF + Leaflet GPS map with offline fallback + tap-to-expand; updates on
+  photo change via `picframe:media`).
+- Bootstrapper `_copy_overlay_plugins()` copies built-ins to
+  `~/.picframe/overlay-plugins/` on `picframe init` (force-overwrites built-ins,
+  preserves user plugins).
+- Shell media forwarding: `dock.postToActivePlugin()` + `shell.ts`
+  `StateClient.onMedia` → `picframe:media` postMessage to the active plugin;
+  `CurrentMedia.location` added.
+- Tests: 7 new (`test_builtin_plugins.py`, bootstrapper copy) + patched
+  `test_bootstrap_full`. All gates green: pytest 891, mypy strict 88, ruff
+  clean, ruff format 163 files, frontend lint 0 errors, format:check clean,
+  both Vite builds succeed.
+
 ## Next
-- **#739 Phase 1 remainder** — `wlr-layer-shell` surface + Phase-1 spike
-  validation (item 8); overlay HTML shell + input routing (items 10–11).
-- **#739 Phase 2** — frontend: Remote Overlay panel (plugin enable/disable,
-  visible-plugin selector, per-plugin config form), Appearance Overlay section
-  (display mode + auto-hide seconds), i18n. #14 can develop against a mocked API.
-- **#739 Phase 3** — built-in plugins: clock, weather, meta.
-- **#739 Phase 4** — tests + `docs/dev/architecture/overlay.md` + `docs/user/overlay.md`.
+- **#739 Phase 4** — tests + `docs/dev/architecture/overlay.md` + `docs/user/overlay.md`
+  (incl. "create your own plugin"); integration test spawning a real worker on
+  Wayland. End-to-end Phase-1 spike still blocked on real Wayland display +
+  WebKitGTK typelib.
 - **`dev → main` release PR** (deferred, user's call): `dev` is
   +62,857/−9,123 across 280 files vs `main`. Pushing to `main` triggers
   `release.yml` (calver auto-tag + PyPI trusted publishing + GitHub Release
