@@ -1,13 +1,15 @@
 # Active Context
 
 ## Current Focus
-Implementing **issue #739** — the WebKitGTK touch overlay + plugin system — on
-feature branch `feat/739-webkit-overlay` (cut from `dev` `4217f6e`). The six
-locked design decisions are recorded in `decisionLog.md` (out-of-process
-worker mirroring `gst_worker.py`, opacity-based hide/wake with
-`idle_hide_seconds`, `OverlayConfig` Pydantic model, `wlr-layer-shell`,
-`file://` load model, `OverlayConfigChangedEvent` distinct from
-`RENDER_UPDATE_OVERLAY`, parallel Pointer+keyboard input, Vite multi-page).
+**Issue #739 — WebKitGTK touch overlay + plugin system** is feature-complete on
+branch `feat/739-webkit-overlay`: all 21 numbered tasks done (Phases 0–3 pushed
+through `cacf113`; Phase 4 docs committed). The six locked design decisions are
+recorded in `decisionLog.md` (out-of-process worker mirroring `gst_worker.py`,
+opacity-based hide/wake with `idle_hide_seconds`, `OverlayConfig` Pydantic
+model, `wlr-layer-shell`, `file://` load model, `OverlayConfigChangedEvent`
+distinct from `RENDER_UPDATE_OVERLAY`, parallel Pointer+keyboard input, Vite
+multi-page). Only the hardware-blocked real-Wayland integration test (live worker
+on labwc) remains, tracked in the issue's verification criteria.
 
 **Prerequisite done:** issue **#749** (remove dead legacy `peripherals` config
 section) is implemented and committed (`5924130`) on the feature branch.

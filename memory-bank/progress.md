@@ -271,13 +271,29 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   clean, ruff format 163 files, frontend lint 0 errors, format:check clean,
   both Vite builds succeed.
 
+## Phase 4 Done (docs, task 21)
+- Wrote `docs/dev/architecture/overlay.md` (337 lines): goal/constraints, runtime
+  component diagram, out-of-process process model, IPC protocol tables, config
+  & plugin storage, manifest/loader, API, composition root + graceful
+  degradation, frontend shell (file table + parallel input routing), video
+  stacking/Z-order/opacity, built-in plugins + `postMessage` protocol, web UI
+  controls, tests index, open/hardware-blocked items.
+- Wrote `docs/user/overlay.md` (300 lines): enabling, overlay settings table,
+  navigation, the three built-in plugins with full config tables, web UI
+  management, plugin directory/updates, and a complete "Create your own
+  plugin" guide (manifest fields, `config_schema` field definitions, an example
+  `index.html`, the `postMessage` protocol with `CurrentMedia` shape, reload
+  steps) plus a troubleshooting section.
+- All doc claims verified against the source tree (package-data declaration,
+  component/store/test paths, i18n namespaces). All #739 numbered tasks 1–21
+  now complete; only the hardware-blocked real-Wayland integration test remains
+  (tracked in the issue's verification criteria, not a numbered task).
+
 ## Next
-- **#739 Phase 4 (docs)** — `docs/dev/architecture/overlay.md` +
-  `docs/user/overlay.md` (incl. "create your own plugin"). Task 20 (unit tests)
-  is done — all listed test categories exist and gates are green (pytest 891,
-  mypy strict 88, ruff clean, frontend lint 0). Only the **real-Wayland
-  integration test** (spawning a live worker on labwc) remains, hardware-blocked
-  and tracked in the issue's verification criteria.
+- **#739 final close-out:** flip task 21 to `[x]` and post the final progress
+  comment on the issue (GitHub Issues/board is the authoritative tracker).
+- **Real-Wayland integration test** (spawning a live worker on labwc) —
+  hardware-blocked, tracked in #739 verification criteria.
 - **`dev → main` release PR** (deferred, user's call): `dev` is
   +62,857/−9,123 across 280 files vs `main`. Pushing to `main` triggers
   `release.yml` (calver auto-tag + PyPI trusted publishing + GitHub Release
