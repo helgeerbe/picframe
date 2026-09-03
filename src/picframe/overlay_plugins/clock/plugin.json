@@ -1,0 +1,37 @@
+{
+  "id": "clock",
+  "name": "Clock",
+  "description": "Analog or digital clock with optional date.",
+  "icon": "🕐",
+  "trigger": "icon",
+  "position": "top-right",
+  "size": { "w": 320, "h": 240 },
+  "config_schema": {
+    "style": {
+      "type": "string",
+      "default": "digital",
+      "enum": ["digital", "analog"],
+      "label": "Style",
+      "help": "Digital text clock or analog clock face."
+    },
+    "clock_format": {
+      "type": "string",
+      "default": "24h",
+      "enum": ["12h", "24h"],
+      "label": "Hour format",
+      "help": "12-hour (AM/PM) or 24-hour."
+    },
+    "show_seconds": {
+      "type": "boolean",
+      "default": false,
+      "label": "Show seconds",
+      "help": "Display a seconds indicator (updates every second)."
+    },
+    "show_date": {
+      "type": "boolean",
+      "default": true,
+      "label": "Show date",
+      "help": "Display the current date below the time."
+    }
+  }
+}

@@ -48,6 +48,23 @@ export class Dock {
     this.callbacks.onVisiblePluginChange(next)
   }
 
+  /**
+   * Forward a `postMessage` to the currently expanded plugin's iframe. Used to
+   * push live media/state (e.g. `{ type: 'picframe:media', media }`) from the
+   * shell's `/ws/state` client into the active plugin without the plugin having
+   * to connect to the WebSocket itself.
+   */
+  postToActivePlugin(message: unknown): void {
+    const panel = this.root.querySelector<HTMLElement>(`#${PANEL_ID}`)
+    const frame = panel?.querySelector<HTMLIFrameElement>('iframe')
+    if (!frame?.contentWindow) return
+    try {
+      frame.contentWindow.postMessage(message, '*')
+    } catch {
+      /* cross-origin frames may reject postMessage; ignore */
+    }
+  }
+
   private isPluginEnabled(id: string | null | undefined): id is string {
     return !!id && this.enabledPlugins.includes(id)
   }

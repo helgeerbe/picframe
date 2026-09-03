@@ -91,6 +91,7 @@ class EnvironmentBootstrapper:
         logger.info(f"Bootstrapping environment at {self.base_dir}")
         self._create_directories()
         self._copy_assets()
+        self._copy_overlay_plugins()
 
         # 1. Handle existing databases
         config_cleared = self._prompt_deletion(self.config_db_path, "Configuration")
@@ -159,6 +160,39 @@ class EnvironmentBootstrapper:
                 shutil.rmtree(dest_html_dir)
             shutil.copytree(pkg_html_dir, dest_html_dir)
             logger.debug(f"Copied HTML directory to {dest_html_dir}")
+
+    def _copy_overlay_plugins(self) -> None:
+        """Copy built-in overlay plugins to ``~/.picframe/overlay-plugins/`` (#739).
+
+        Built-in plugins ship as package data under ``picframe/overlay_plugins``.
+        Each built-in plugin directory is force-overwritten on every init so that
+        code/manifest updates propagate, while any *user-created* plugin
+        directories (not present in the package) are left untouched. Per-plugin
+        user config persists in ``config.db3`` (never in the plugin dir), so
+        overwriting the built-in code is safe.
+        """
+        import picframe
+
+        pkg_dir = Path(picframe.__file__).parent
+        pkg_plugins_dir = pkg_dir / "overlay_plugins"
+        dest_plugins_dir = self.base_dir / "overlay-plugins"
+
+        if not pkg_plugins_dir.exists():
+            logger.debug(
+                "Built-in overlay plugins directory not found; skipping overlay plugin copy."
+            )
+            return
+
+        dest_plugins_dir.mkdir(parents=True, exist_ok=True)
+        for item in sorted(pkg_plugins_dir.iterdir()):
+            # Skip the package marker; only copy real plugin sub-directories.
+            if item.name == "__init__.py" or not item.is_dir():
+                continue
+            dest_item = dest_plugins_dir / item.name
+            if dest_item.exists():
+                shutil.rmtree(dest_item)
+            shutil.copytree(item, dest_item)
+            logger.debug(f"Copied built-in overlay plugin {item.name} to {dest_item}")
 
     def _flatten_dict(self, d: dict[str, Any], parent_key: str = "") -> dict[str, Any]:
         items: list[tuple[str, Any]] = []

@@ -62,7 +62,11 @@ export class OverlayShell {
 
     const env = readEnv()
     if (env.wsPort) {
-      this.state = new StateClient(env.wsPort, {})
+      this.state = new StateClient(env.wsPort, {
+        // Forward live media changes into the active plugin iframe so plugins
+        // (e.g. `meta`) can react to photo changes without their own WS client.
+        onMedia: media => this.dock.postToActivePlugin({ type: 'picframe:media', media })
+      })
       this.state.connect()
     }
 

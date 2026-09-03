@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Picframe Photo Info</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    :root { --fg: #f8fafc; --bg: rgba(15,23,42,0.78); --muted: rgba(248,250,252,0.65); --accent: #38bdf8; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg); color: var(--fg); backdrop-filter: blur(6px);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex; flex-direction: column; overflow: hidden; padding: 0.75rem;
+      -webkit-user-select: none; user-select: none;
+    }
+    .pf-meta__title { font-weight: 700; font-size: clamp(0.95rem, 2.4vw, 1.15rem); margin-bottom: 0.4rem; word-break: break-word; }
+    .pf-meta__date { color: var(--muted); font-size: clamp(0.8rem, 2vw, 0.95rem); margin-bottom: 0.5rem; }
+    .pf-meta__grid { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; font-size: clamp(0.8rem, 2vw, 0.92rem); }
+    .pf-meta__grid dt { color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-size: 0.72rem; align-self: center; }
+    .pf-meta__grid dd { font-variant-numeric: tabular-nums; }
+    .pf-meta__loc { color: var(--accent); font-size: clamp(0.8rem, 2vw, 0.92rem); margin-top: 0.35rem; }
+    .pf-meta__map { flex: 1; min-height: 7rem; margin-top: 0.5rem; border-radius: 0.5rem; overflow: hidden; transition: position 0.2s; }
+    .pf-meta__map--expanded { position: fixed; inset: 0; z-index: 10; min-height: 100%; border-radius: 0; margin: 0; }
+    .pf-meta__placeholder { color: var(--muted); font-size: 0.9rem; text-align: center; padding: 1.5rem 0.5rem; }
+    #pf-map { width: 100%; height: 100%; }
+  </style>
+</head>
+<body>
+  <div class="pf-meta__placeholder" id="placeholder">Waiting for current photo…</div>
+  <div id="content" style="display:none; flex-direction:column; height:100%;">
+    <div class="pf-meta__title" id="title"></div>
+    <div class="pf-meta__date" id="date"></div>
+    <dl class="pf-meta__grid" id="exif"></dl>
+    <div class="pf-meta__loc" id="location"></div>
+    <div class="pf-meta__map" id="mapWrap">
+      <div id="pf-map"></div>
+    </div>
+  </div>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    (function () {
+      "use strict";
+      var cfg = { show_map: true, map_zoom: 13, show_exif: true, date_format: "YYYY-MM-DD HH:mm" };
+      var currentMedia = null;
+      var map = null, marker = null, mapReady = false;
+      var expanded = false;
+      var placeholder = document.getElementById("placeholder");
+      var content = document.getElementById("content");
+      var titleEl = document.getElementById("title");
+      var dateEl = document.getElementById("date");
+      var exifEl = document.getElementById("exif");
+      var locEl = document.getElementById("location");
+      var mapWrap = document.getElementById("mapWrap");
+      function applyConfig(config) {
+        if (!config) return;
+        Object.keys(cfg).forEach(function (k) { if (config[k] !== undefined) cfg[k] = config[k]; });
+        render();
+      }
+      function applyMedia(media) {
+        currentMedia = media || null;
+        render();
+      }
+      function escapeHtml(s) {
+        return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+      }
+      function basename(p) { return p ? String(p).split("/").pop().split("\\").pop() : ""; }
+      function formatDate(value) {
+        if (!value) return "";
+        var d = new Date(value);
+        if (isNaN(d.getTime())) return String(value);
+        var pad = function (n) { return n < 10 ? "0" + n : String(n); };
+        return cfg.date_format
+          .replace("YYYY", d.getFullYear())
+          .replace("MM", pad(d.getMonth() + 1))
+          .replace("DD", pad(d.getDate()))
+          .replace("HH", pad(d.getHours()))
+          .replace("mm", pad(d.getMinutes()))
+          .replace("ss", pad(d.getSeconds()));
+      }
+      function render() {
+        if (!currentMedia) { placeholder.style.display = ""; content.style.display = "none"; return; }
+        placeholder.style.display = "none";
+        content.style.display = "flex";
+        var exif = currentMedia.exif || {};
+        titleEl.textContent = basename(currentMedia.file_path);
+        dateEl.textContent = formatDate(exif.exif_datetime || exif.DateTimeOriginal || "");
+        var rows = [];
+        if (cfg.show_exif) {
+          var fields = [
+            ["Camera", [exif.make, exif.model].filter(Boolean).join(" ")],
+            ["Lens", exif.lens],
+            ["Aperture", exif.f_number != null ? "f/" + exif.f_number : ""],
+            ["Exposure", exif.exposure_time],
+            ["ISO", exif.iso != null ? exif.iso : ""],
+            ["Focal", exif.focal_length != null ? exif.focal_length + "mm" : ""],
+            ["Size", (exif.width && exif.height) ? exif.width + " × " + exif.height : ""]
+          ];
+          fields.forEach(function (f) { if (f[1]) rows.push(f); });
+        }
+        exifEl.innerHTML = rows.map(function (f) {
+          return "<dt>" + escapeHtml(f[0]) + "</dt><dd>" + escapeHtml(f[1]) + "</dd>";
+        }).join("");
+        var locName = exif.location_name || "";
+        locEl.textContent = locName ? "📍 " + locName : "";
+        renderMap(currentMedia);
+      }
+      function renderMap(media) {
+        var hasLoc = media && media.location && media.location.lat != null && media.location.lon != null;
+        if (!cfg.show_map || !hasLoc) { mapWrap.style.display = "none"; return; }
+        mapWrap.style.display = "";
+        var lat = media.location.lat, lon = media.location.lon;
+        if (typeof L === "undefined") { mapWrap.innerHTML = "<div class='pf-meta__placeholder'>Map offline — " + lat.toFixed(4) + ", " + lon.toFixed(4) + "</div>"; return; }
+        if (!map) {
+          try { map = L.map("pf-map", { zoomControl: false, attributionControl: false }); }
+          catch (e) { mapWrap.innerHTML = "<div class='pf-meta__placeholder'>" + lat.toFixed(4) + ", " + lon.toFixed(4) + "</div>"; return; }
+          L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19 }).addTo(map);
+          marker = L.marker([lat, lon]).addTo(map);
+          mapReady = true;
+          mapWrap.addEventListener("click", toggleExpand);
+        }
+        if (map && mapReady) {
+          marker.setLatLng([lat, lon]);
+          map.setView([lat, lon], cfg.map_zoom);
+          setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 100);
+        }
+      }
+      function toggleExpand() {
+        expanded = !expanded;
+        if (expanded) mapWrap.classList.add("pf-meta__map--expanded"); else mapWrap.classList.remove("pf-meta__map--expanded");
+        if (map) setTimeout(function () { try { map.invalidateSize(); } catch (e) {} }, 150);
+      }
+      window.addEventListener("message", function (event) {
+        var data = event.data || {};
+        if (data.type === "picframe:config" && data.config) applyConfig(data.config);
+        else if (data.type === "picframe:media") applyMedia(data.media);
+      });
+    })();
+  </script>
+</body>
+</html>

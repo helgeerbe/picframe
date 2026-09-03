@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Picframe Clock</title>
+  <style>
+    :root { --fg: #f8fafc; --bg: transparent; --accent: #38bdf8; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex; align-items: center; justify-content: center;
+      -webkit-user-select: none; user-select: none; overflow: hidden;
+    }
+    .pf-clock { text-align: center; padding: 1rem 1.5rem; }
+    .pf-clock__time {
+      font-size: clamp(2.5rem, 8vw, 5rem); font-weight: 700;
+      letter-spacing: 0.02em; line-height: 1; font-variant-numeric: tabular-nums;
+    }
+    .pf-clock__date {
+      margin-top: 0.5rem; font-size: clamp(0.9rem, 2.5vw, 1.25rem);
+      opacity: 0.85; font-weight: 500;
+    }
+    .pf-clock--hidden { display: none; }
+    svg.pf-analog { width: min(70vw, 18rem); height: min(70vw, 18rem); }
+    .pf-analog .pf-hand { stroke: var(--fg); stroke-linecap: round; }
+    .pf-analog .pf-hand--hour { stroke-width: 6; }
+    .pf-analog .pf-hand--minute { stroke-width: 4; }
+    .pf-analog .pf-hand--second { stroke-width: 2; stroke: var(--accent); }
+    .pf-analog .pf-tick { stroke: var(--fg); stroke-width: 2; opacity: 0.6; }
+    .pf-analog .pf-center { fill: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="pf-clock pf-digital" id="digital">
+    <div class="pf-clock__time" id="time"></div>
+    <div class="pf-clock__date" id="date"></div>
+  </div>
+  <svg class="pf-clock pf-analog pf-clock--hidden" id="analog" viewBox="-100 -100 200 200">
+    <circle r="95" fill="none" stroke="var(--fg)" stroke-width="3" opacity="0.5" />
+    <g id="ticks"></g>
+    <line class="pf-hand pf-hand--hour" id="hand-hour" x1="0" y1="0" x2="0" y2="-50" />
+    <line class="pf-hand pf-hand--minute" id="hand-minute" x1="0" y1="0" x2="0" y2="-72" />
+    <line class="pf-hand pf-hand--second" id="hand-second" x1="0" y1="0" x2="0" y2="-82" />
+    <circle class="pf-center" r="4" />
+  </svg>
+  <script>
+    (function () {
+      "use strict";
+      var cfg = { style: "digital", clock_format: "24h", show_seconds: false, show_date: true };
+      var timer = null;
+      function applyConfig(config) {
+        if (!config) return;
+        Object.keys(cfg).forEach(function (k) { if (config[k] !== undefined) cfg[k] = config[k]; });
+        render(); restartTimer();
+      }
+      function isAnalog() { return cfg.style === "analog"; }
+      function use12h() { return cfg.clock_format === "12h"; }
+      function pad(n) { return n < 10 ? "0" + n : String(n); }
+      function render() {
+        var now = new Date();
+        var digital = document.getElementById("digital");
+        var analog = document.getElementById("analog");
+        if (isAnalog()) {
+          digital.classList.add("pf-clock--hidden"); analog.classList.remove("pf-clock--hidden"); drawAnalog(now);
+        } else {
+          analog.classList.add("pf-clock--hidden"); digital.classList.remove("pf-clock--hidden"); drawDigital(now);
+        }
+      }
+      function drawDigital(now) {
+        var h = now.getHours();
+        var m = pad(now.getMinutes());
+        var s = pad(now.getSeconds());
+        var suffix = "";
+        if (use12h()) { suffix = h >= 12 ? " PM" : " AM"; h = h % 12 || 12; }
+        var time = h + ":" + m;
+        if (cfg.show_seconds) time += ":" + s;
+        time += suffix;
+        document.getElementById("time").textContent = time;
+        var dateEl = document.getElementById("date");
+        if (cfg.show_date) {
+          dateEl.classList.remove("pf-clock--hidden");
+          dateEl.textContent = now.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        } else { dateEl.classList.add("pf-clock--hidden"); }
+      }
+      function drawAnalog(now) {
+        var h = now.getHours() % 12, m = now.getMinutes(), s = now.getSeconds();
+        document.getElementById("hand-hour").setAttribute("transform", "rotate(" + ((h + m / 60) * 30) + ")");
+        document.getElementById("hand-minute").setAttribute("transform", "rotate(" + ((m + s / 60) * 6) + ")");
+        var secHand = document.getElementById("hand-second");
+        if (cfg.show_seconds) { secHand.style.display = ""; secHand.setAttribute("transform", "rotate(" + (s * 6) + ")"); }
+        else { secHand.style.display = "none"; }
+      }
+      function buildTicks() {
+        var g = document.getElementById("ticks"), ns = "http://www.w3.org/2000/svg";
+        for (var i = 0; i < 12; i++) {
+          var line = document.createElementNS(ns, "line"), a = (i * 30 * Math.PI) / 180;
+          line.setAttribute("x1", Math.sin(a) * 82); line.setAttribute("y1", -Math.cos(a) * 82);
+          line.setAttribute("x2", Math.sin(a) * 90); line.setAttribute("y2", -Math.cos(a) * 90);
+          line.setAttribute("class", "pf-tick"); g.appendChild(line);
+        }
+      }
+      function restartTimer() {
+        if (timer) { clearInterval(timer); timer = null; }
+        timer = setInterval(render, cfg.show_seconds ? 1000 : 1000);
+        render();
+      }
+      buildTicks();
+      window.addEventListener("message", function (event) {
+        var data = event.data || {};
+        if (data.type === "picframe:config" && data.config) applyConfig(data.config);
+      });
+    })();
+  </script>
+</body>
+</html>

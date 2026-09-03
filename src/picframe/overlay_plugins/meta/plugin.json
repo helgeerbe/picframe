@@ -1,0 +1,36 @@
+{
+  "id": "meta",
+  "name": "Photo Info",
+  "description": "Current image metadata + GPS map (Leaflet). Updates on photo change.",
+  "icon": "ℹ️",
+  "trigger": "icon",
+  "position": "bottom-right",
+  "size": { "w": 420, "h": 320 },
+  "requires": ["map"],
+  "config_schema": {
+    "show_map": {
+      "type": "boolean",
+      "default": true,
+      "label": "Show map",
+      "help": "Render a Leaflet map when GPS coordinates are present."
+    },
+    "map_zoom": {
+      "type": "integer",
+      "default": 13,
+      "label": "Map zoom",
+      "help": "Leaflet zoom level (1–19)."
+    },
+    "show_exif": {
+      "type": "boolean",
+      "default": true,
+      "label": "Show EXIF",
+      "help": "Display camera/lens/exposure metadata."
+    },
+    "date_format": {
+      "type": "string",
+      "default": "YYYY-MM-DD HH:mm",
+      "label": "Date format",
+      "help": "moment-style token format for the capture date."
+    }
+  }
+}

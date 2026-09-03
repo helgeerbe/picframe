@@ -101,6 +101,7 @@ def test_bootstrap_full(temp_dir: Path) -> None:
     with (
         patch.object(bootstrapper, "_create_directories") as mock_create_dir,
         patch.object(bootstrapper, "_copy_assets") as mock_copy_assets,
+        patch.object(bootstrapper, "_copy_overlay_plugins") as mock_copy_plugins,
         patch.object(bootstrapper, "_prompt_deletion", return_value=True) as mock_prompt,
         patch("picframe.core.services.bootstrapper.SQLiteConfigRepository") as mock_config_repo,
         patch("picframe.core.services.bootstrapper.SQLiteMediaRepository"),
@@ -114,8 +115,45 @@ def test_bootstrap_full(temp_dir: Path) -> None:
 
         mock_create_dir.assert_called_once()
         mock_copy_assets.assert_called_once()
+        mock_copy_plugins.assert_called_once()
         assert mock_prompt.call_count == 2
         mock_seed.assert_called_once_with(mock_repo_instance)
+
+
+def test_copy_overlay_plugins_copies_builtins(tmp_path: Path) -> None:
+    """Built-in overlay plugins are copied to ``~/.picframe/overlay-plugins`` on init (#739)."""
+    bootstrapper = EnvironmentBootstrapper(base_dir=str(tmp_path / ".picframe"))
+    bootstrapper._create_directories()
+    bootstrapper._copy_overlay_plugins()
+
+    plugins_dest = bootstrapper.base_dir / "overlay-plugins"
+    assert plugins_dest.is_dir()
+    # The three built-in plugins must be present with their manifest + entry.
+    for plugin_id in ("clock", "weather", "meta"):
+        assert (plugins_dest / plugin_id / "plugin.json").is_file(), plugin_id
+        assert (plugins_dest / plugin_id / "index.html").is_file(), plugin_id
+
+
+def test_copy_overlay_plugins_overwrites_existing(tmp_path: Path) -> None:
+    """Re-init force-overwrites built-in plugin dirs (updates propagate) but keeps user plugins."""
+    bootstrapper = EnvironmentBootstrapper(base_dir=str(tmp_path / ".picframe"))
+    bootstrapper._create_directories()
+    bootstrapper._copy_overlay_plugins()
+    plugins_dest = bootstrapper.base_dir / "overlay-plugins"
+
+    # Simulate a user modification inside a built-in plugin dir.
+    (plugins_dest / "clock" / "user-edit.txt").write_text("mine", encoding="utf-8")
+    # Add a user-created plugin that is NOT built-in.
+    (plugins_dest / "myplugin").mkdir()
+    (plugins_dest / "myplugin" / "plugin.json").write_text("{}", encoding="utf-8")
+
+    bootstrapper._copy_overlay_plugins()
+
+    # Built-in clock dir was overwritten: user edit gone, manifest refreshed.
+    assert not (plugins_dest / "clock" / "user-edit.txt").exists()
+    assert (plugins_dest / "clock" / "plugin.json").is_file()
+    # User-created plugin is preserved.
+    assert (plugins_dest / "myplugin" / "plugin.json").is_file()
 
 
 def test_default_config_yaml_validates_through_app_config() -> None:
@@ -125,6 +163,7 @@ def test_default_config_yaml_validates_through_app_config() -> None:
     into Python bools for string-typed fields (e.g. ``viewer.clock_extra_source``),
     which would raise a Pydantic ValidationError during seeding.
     """
+
     import yaml
 
     import picframe

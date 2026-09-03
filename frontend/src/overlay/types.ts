@@ -55,6 +55,8 @@ export interface OverlayShellConfig {
 export interface CurrentMedia {
   file_path: string
   media_type?: string
+  /** GPS coordinates when the media has them (forwarded to the meta plugin). */
+  location?: { lat: number; lon: number } | null
   // EXIF is an open-ended metadata blob; plugins access arbitrary keys.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   exif?: Record<string, any>
