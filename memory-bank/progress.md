@@ -217,13 +217,45 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   seed-validation guard test (1). No frontend changes (Phase 2); no
   `configSchema.json` entries (overlay is in dedicated components).
 
+## Phase 1 Backend Done (#739 items 9, 12, 13)
+- `core/renderers/overlay_ipc.py`: overlay IPC protocol mirroring
+  `ipc_protocol.py` — commands `SetOpacity`/`SetConfig`/`Reload`/`Shutdown`,
+  events `Ready`/`Input`/`Error`, `parse_overlay_ipc_message` parser.
+- `core/renderers/webkit_overlay_renderer.py`: `WebKitOverlayRenderer`
+  implements `IOverlayController` as an IPC client — spawns
+  `overlay_worker.py` via `subprocess.Popen` (env `GDK_BACKEND=wayland`),
+  AF_UNIX socket IPC, listener thread translating worker `InputEvent` →
+  `CommandEvent` (prev/next/toggle=play/hide=stop), subscribes to
+  `OverlayConfigChangedEvent` (forwards `SetConfig`) and `RenderCommand`
+  (PROMOTE_VIDEO_REVEAL → opacity 0, PARK/WAKE → opacity 1), graceful
+  degradation probe (`_probe_webkit` → `SystemErrorEvent(code="webkit_unavailable")`,
+  no worker spawn when absent). `list_plugins` delegates to `PluginLoader`.
+- `infrastructure/overlay/overlay_worker.py`: out-of-process worker — guarded
+  `gi`/Gtk/WebKit import, GLib `MainLoop` + WebKitGTK `WebView` + JS bridge
+  (`window.picframe` user-message handler), transparent borderless `Gtk.Window`,
+  `_apply_opacity` calls `window.set_opacity` (hide = opacity 0, never
+  withdrawn). GTK-free IPC plumbing (`handle_command`/`_serve`/`emit_input`)
+  unit-tested headless.
+- `main.py`: composition-root wiring behind `overlay.enabled` +
+  `is_available()`; `overlay_controller` injected into `create_app`;
+  start/stop in the signal handler + the engine `finally` block.
+- Tests (40 new): `test/core/renderers/test_overlay_ipc.py` (12),
+  `test/core/renderers/test_webkit_overlay_renderer.py` (16),
+  `test/infrastructure/overlay/test_overlay_worker.py` (12). All gates green:
+  ruff, ruff format (161 files), mypy strict (87 files), pytest 873 passed.
+
+## Phase 1 Still Open
+- Item **8**: worker uses a plain borderless `Gtk.Window` instead of
+  `wlr-layer-shell`, and the Phase-1 spike (`file://`→`ws://localhost`
+  cross-origin WS + `wlr-layer-shell` on labwc) needs a real Wayland display
+  to validate.
+- Items **10** (overlay HTML shell, Vite multi-page →
+  `src/picframe/html/overlay/`) and **11** (pointer + keyboard input routing)
+  — the next chunk (frontend/WebKit-dependent).
+
 ## Next
-- **#739 Phase 1** — out-of-process WebKitGTK worker (`overlay_worker.py`),
-  `WebKitOverlayRenderer` IPC client implementing `IOverlayController`
-  (spawn worker, `GDK_BACKEND=wayland`, Unix-domain-socket IPC, mock `gi`/WebKit
-  in tests), overlay HTML shell (Vite multi-page → `src/picframe/html/overlay/`),
-  pointer+keyboard input routing, video opacity transitions, wire into `main.py`
-  behind the port when `overlay.enabled` and `is_available()`.
+- **#739 Phase 1 remainder** — `wlr-layer-shell` surface + Phase-1 spike
+  validation (item 8); overlay HTML shell + input routing (items 10–11).
 - **#739 Phase 2** — frontend: Remote Overlay panel (plugin enable/disable,
   visible-plugin selector, per-plugin config form), Appearance Overlay section
   (display mode + auto-hide seconds), i18n. #14 can develop against a mocked API.

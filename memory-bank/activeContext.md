@@ -12,39 +12,48 @@ worker mirroring `gst_worker.py`, opacity-based hide/wake with
 **Prerequisite done:** issue **#749** (remove dead legacy `peripherals` config
 section) is implemented and committed (`5924130`) on the feature branch.
 
-**Phase 0 DONE** (#739 task list items 1–7), TDD throughout, all gates green:
-ruff, ruff format, mypy strict (84 files), **pytest 833 passed** (+32). The
-config + port + API foundation is in place (see `progress.md` "Phase 0 Done"):
-`overlay` section in `default_config.yaml`, Pydantic `OverlayConfig` on
-`AppConfig`, `ConfigService` overlay read-whitelist + `OverlayConfigChangedEvent`
-publishing + scoped `update_plugin_config`, `PluginDescriptor` core DTO +
-`validate_plugin_config`/`plugin_config_defaults`, `IOverlayController` port,
-`PluginLoader` infrastructure adapter, and the three overlay API endpoints
-(`GET /api/overlay/plugins`, `GET/PUT /api/overlay/plugins/{id}/config`). Also
-fixed a pre-existing seed bug (`viewer.clock_extra_source: off` → `'off'` YAML
-1.1 bool coercion) so `picframe init` re-seeding validates; guard test added.
-Phase 0 changes are uncommitted (ready to commit + push).
+**Phase 0 DONE + committed** (`4393ffd`, pushed to `origin`): #739 task list
+items 1–7, TDD throughout, all gates green. The config + port + API foundation
+is in place: `overlay` section in `default_config.yaml`, Pydantic `OverlayConfig`
+on `AppConfig`, `ConfigService` overlay read-whitelist + scoped
+`update_plugin_config` + `OverlayConfigChangedEvent` publishing,
+`PluginDescriptor` core DTO + `validate_plugin_config`/`plugin_config_defaults`,
+`IOverlayController` port, `PluginLoader` adapter, and the three overlay API
+endpoints. Also fixed a pre-existing seed bug
+(`viewer.clock_extra_source: off` → `'off'` YAML 1.1 bool coercion).
 
-**Next: Phase 1** — out-of-process WebKitGTK worker + IPC:
-8. `overlay_worker.py` subprocess (GLib MainLoop + WebKitGTK WebView,
-   transparent `wlr-layer-shell` surface, JS bridge, `file://` load, `/ws/state`
-   WS client). Phase-1 spike: validate `file://`→`ws://localhost` cross-origin WS
-   + `wlr-layer-shell` on labwc.
-9. `WebKitOverlayRenderer` IPC client implementing `IOverlayController`: spawn
-   worker, `GDK_BACKEND=wayland`, Unix-domain-socket IPC, forward state/config,
-   republish worker input as `CommandEvent`s; graceful degradation
-   (`SystemErrorEvent(code="webkit_unavailable")`); mock `gi`/WebKit in tests.
-10. Overlay HTML shell (second Vite multi-page entry → `src/picframe/html/overlay/`).
-11. Pointer + keyboard input routing (parallel, always-on, opacity-transparent).
-12. Video opacity transitions (SHOW_VIDEO/HIDE_VIDEO → SetOpacity over IPC).
-13. Wire renderer into `main.py` behind the port (`overlay.enabled` + `is_available()`).
+**Phase 1 backend DONE (committed, pending push):** #739 items **9, 12, 13**
+complete + tested (40 new tests, all gates green: ruff, ruff format 161 files,
+mypy strict 87 files, **pytest 873 passed**):
+- `core/renderers/overlay_ipc.py` — overlay IPC protocol (SetOpacity/SetConfig/
+  Reload/Shutdown commands; Ready/Input/Error events) + parser.
+- `core/renderers/webkit_overlay_renderer.py` — `WebKitOverlayRenderer`
+  (`IOverlayController` IPC client): spawns `overlay_worker.py` via
+  `subprocess.Popen`, AF_UNIX socket IPC, listener thread republishing worker
+  `InputEvent` → `CommandEvent`, subscribes to `OverlayConfigChangedEvent`
+  (forward SetConfig) + `RenderCommand` (video reveal actions → opacity),
+  graceful-degradation probe publishing `SystemErrorEvent(code="webkit_unavailable")`.
+- `infrastructure/overlay/overlay_worker.py` — out-of-process worker: guarded
+  `gi`/Gtk/WebKit import, GLib MainLoop + WebKitGTK WebView + JS bridge
+  (`window.picframe`), GTK-free IPC plumbing (`handle_command`/`_serve`)
+  unit-tested headless.
+- `main.py` — composition-root wiring behind `overlay.enabled` +
+  `is_available()`; `overlay_controller` injected into `create_app`;
+  start/stop in both shutdown paths.
+
+**Phase 1 still open:** task **8** — worker uses a plain borderless `Gtk.Window`
+(transparent) rather than `wlr-layer-shell`, and the Phase-1 spike
+(`file://`→`ws://localhost` cross-origin WS + `wlr-layer-shell` on labwc) still
+needs a real Wayland display to validate. Tasks **10** (overlay HTML shell,
+Vite multi-page → `src/picframe/html/overlay/`) and **11** (pointer + keyboard
+input routing) are the next chunk (frontend/WebKit-dependent).
 
 Then Phase 2 (frontend Remote/Appearance panels), Phase 3 (built-in plugins),
 Phase 4 (tests + docs).
 
 ## Current Repo State
-- Branch: `feat/739-webkit-overlay`, HEAD `54a17c4` + uncommitted Phase 0
-  changes, pushed to `origin` (through `54a17c4`).
+- Branch: `feat/739-webkit-overlay`, HEAD `4393ffd` (Phase 0) + uncommitted
+  Phase 1 backend changes (items 9/12/13), pushed to `origin` (through `4393ffd`).
 - Cut from `dev` at `4217f6e` (chore: remove stale v2-dev references, #747).
   `dev` tip is `4217f6e`; `main` release PR remains deferred.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and
