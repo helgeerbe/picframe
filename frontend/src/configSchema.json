@@ -296,41 +296,6 @@
       "type": "string"
     }
   },
-  "peripherals": {
-    "input_type": {
-      "type": "select",
-      "options": ["null", "keyboard", "touch", "mouse"]
-    },
-    "buttons": {
-      "type": "object",
-      "properties": {
-        "pause": {
-          "type": "string"
-        },
-        "display_off": {
-          "type": "string"
-        },
-        "location": {
-          "type": "string"
-        },
-        "exit": {
-          "type": "string"
-        },
-        "power_down": {
-          "type": "string"
-        }
-      }
-    },
-    "enable": {
-      "type": "boolean"
-    },
-    "label": {
-      "type": "string"
-    },
-    "shortcut": {
-      "type": "string"
-    }
-  },
   "hardware_inputs": {
     "enabled": {
       "type": "boolean"

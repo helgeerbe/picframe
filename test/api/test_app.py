@@ -813,7 +813,6 @@ def test_api_get_config_with_repo() -> None:
         "model.date_from": "2024-01-01",
         "model.date_to": "2024-02-01",
         "mqtt.use_mqtt": False,
-        "peripherals.enable": True,
     }
 
     app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
@@ -827,8 +826,6 @@ def test_api_get_config_with_repo() -> None:
     assert data["model"]["date_from"] == "2024-01-01"
     assert data["model"]["date_to"] == "2024-02-01"
     assert data["mqtt"]["use_mqtt"] is False
-
-    assert data["peripherals"]["enable"] is True
 
 
 def test_api_put_config() -> None:

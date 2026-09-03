@@ -81,7 +81,6 @@ class ConfigService:
             "model": {},
             "mqtt": {},
             "http": {},
-            "peripherals": {},
             "hardware_inputs": {},
         }
 
@@ -105,7 +104,6 @@ class ConfigService:
                 "model": self._config_repository.get_app_config("model", {}),
                 "mqtt": self._config_repository.get_app_config("mqtt", {}),
                 "http": self._config_repository.get_app_config("http", {}),
-                "peripherals": self._config_repository.get_app_config("peripherals", {}),
                 "hardware_inputs": self._config_repository.get_app_config("hardware_inputs", {}),
             }
 

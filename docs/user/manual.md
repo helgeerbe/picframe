@@ -405,8 +405,6 @@ Settings:
     `${PICFRAME_DATA}/basic_auth.json`.
 *   `http.use_ssl`, `http.keyfile`, and `http.certfile`: accepted by config
     import/API models but not wired into FastAPI/Uvicorn.
-*   `peripherals.*`: legacy keyboard/touch settings; GPIO runtime inputs use
-    `hardware_inputs`.
 
 The MQTT current-media sensor publishes compact state (`filename`, `layout`,
 and `id`) on `media/state` and all known normalized `MediaItem` attributes on
@@ -439,8 +437,7 @@ change playback state.
 ### GPIO Hardware Inputs
 
 Raspberry Pi GPIO inputs are configured from the Settings UI under **GPIO Inputs**.
-These mappings are stored in `config.db3` as `hardware_inputs` and are separate
-from the legacy-style keyboard/touch `peripherals` settings.
+These mappings are stored in `config.db3` as `hardware_inputs`.
 
 Pins use BCM numbering. Each input has a label, a device type, a BCM pin, and
 one or more action mappings:

@@ -297,7 +297,6 @@
       "model": "Modell-Einstellungen",
       "mqtt": "MQTT-Einstellungen",
       "http": "HTTP-Einstellungen",
-      "peripherals": "Peripherie-Einstellungen",
       "hardware_inputs": "GPIO-Eingänge"
     },
     "domain": {
@@ -477,21 +476,6 @@
       "websocket_broadcast_capacity": "default=20, maximale Burst-Größe für Statusaktualisierungen",
       "command_debounce_ms": "default=200, Verzögerung in Millisekunden zum Entprellen hochfrequenter eingehender Befehle",
       "cors_allowed_origins": "default=[\"*\"]. Sicherheitseinstellung, um anderen Websites die Verbindung zu Ihrem Rahmen zu erlauben. Beispiel: [\"http://localhost:5173\"] für lokale Entwicklung oder [\"*\"] um alle zuzulassen."
-    },
-    "peripherals": {
-      "_title": "Peripherals",
-      "input_type": "default=null, valid options: [null, \"keyboard\", \"touch\", \"mouse\"]",
-      "buttons": {
-        "_title": "Buttons",
-        "pause": "",
-        "display_off": "",
-        "location": "",
-        "exit": "",
-        "power_down": ""
-      },
-      "enable": "default=False",
-      "label": "default=\"Power down\"",
-      "shortcut": "default=\"p\""
     },
     "hardware_inputs": {
       "_title": "GPIO-Eingänge",

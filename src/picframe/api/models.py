@@ -324,22 +324,6 @@ class HttpConfig(BaseModel):
     cors_allowed_origins: list[str] = Field(default_factory=lambda: ["*"])
 
 
-class PeripheralButtons(BaseModel):
-    pause: str = " "
-    display_off: str = "o"
-    location: str = "l"
-    exit: str = "e"
-    power_down: str = "p"
-
-
-class PeripheralsConfig(BaseModel):
-    input_type: str | None = None
-    buttons: PeripheralButtons = Field(default_factory=PeripheralButtons)
-    enable: bool = True
-    label: str = ""
-    shortcut: str = ""
-
-
 class HardwareInputsConfig(BaseModel):
     enabled: bool = False
     inputs: dict[str, dict[str, Any]] = Field(default_factory=dict)
@@ -364,7 +348,6 @@ class AppConfig(BaseModel):
     model: ModelConfig = Field(default_factory=ModelConfig)
     mqtt: MqttConfig = Field(default_factory=MqttConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)
-    peripherals: PeripheralsConfig = Field(default_factory=PeripheralsConfig)
     hardware_inputs: HardwareInputsConfig = Field(default_factory=HardwareInputsConfig)
 
 

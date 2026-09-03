@@ -184,18 +184,6 @@ http:
   command_debounce_ms: 200
   cors_allowed_origins:
     - "*"
-peripherals:
-  # Optional local input shortcuts.
-  input_type: null
-  buttons:
-    pause: ' '
-    display_off: o
-    location: l
-    exit: e
-    power_down: p
-  enable: true
-  label: ''
-  shortcut: ''
 hardware_inputs:
   # Optional Raspberry Pi GPIO inputs. Pins use BCM numbering.
   enabled: false

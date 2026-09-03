@@ -944,14 +944,6 @@ def _normalize_legacy_yaml_config(yaml_data: dict[str, Any]) -> dict[str, Any]:
         for key in STARTUP_ONLY_LEGACY_HTTP_KEYS:
             http.pop(key, None)
 
-    peripherals = yaml_data.get("peripherals")
-    if isinstance(peripherals, dict):
-        buttons = peripherals.get("buttons")
-        if isinstance(buttons, dict):
-            for key, value in buttons.items():
-                if isinstance(value, dict) and "shortcut" in value:
-                    buttons[key] = value["shortcut"]
-
     return yaml_data
 
 

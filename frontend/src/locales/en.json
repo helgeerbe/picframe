@@ -297,7 +297,6 @@
       "model": "Model Settings",
       "mqtt": "MQTT Settings",
       "http": "HTTP Settings",
-      "peripherals": "Peripherals Settings",
       "hardware_inputs": "GPIO Inputs"
     },
     "domain": {
@@ -477,21 +476,6 @@
       "websocket_broadcast_capacity": "default=20, maximum burst size for state updates",
       "command_debounce_ms": "default=200, delay in milliseconds to debounce high-frequency inbound commands",
       "cors_allowed_origins": "default=[\"*\"]. Security setting to allow other websites to connect to your frame. Example: [\"http://localhost:5173\"] for local development, or [\"*\"] to allow all."
-    },
-    "peripherals": {
-      "_title": "Peripherals",
-      "input_type": "default=null, valid options: [null, \"keyboard\", \"touch\", \"mouse\"]",
-      "buttons": {
-        "_title": "Buttons",
-        "pause": "",
-        "display_off": "",
-        "location": "",
-        "exit": "",
-        "power_down": ""
-      },
-      "enable": "default=False",
-      "label": "default=\"Power down\"",
-      "shortcut": "default=\"p\""
     },
     "hardware_inputs": {
       "_title": "GPIO Inputs",
