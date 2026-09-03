@@ -103,9 +103,9 @@ succeed; no Python changed, so pytest/mypy/ruff unaffected):
 Then Phase 3 (built-in plugins), Phase 4 (tests + docs).
 
 ## Current Repo State
-- Branch: `feat/739-webkit-overlay`, HEAD `683ad07` (task 8 wlr-layer-shell);
-  Phase 1 backend `18061d8`, Phase 1 frontend `3bfaff3` all committed and pushed
-  to `origin`.
+- Branch: `feat/739-webkit-overlay`, HEAD `2ec6f84` (Phase 2 frontend SPA
+  panels); task 8 `683ad07`, Phase 1 backend `18061d8`, Phase 1 frontend
+  `3bfaff3` all committed and pushed to `origin`.
 - Cut from `dev` at `4217f6e` (chore: remove stale v2-dev references, #747).
   `dev` tip is `4217f6e`; `main` release PR remains deferred.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and
