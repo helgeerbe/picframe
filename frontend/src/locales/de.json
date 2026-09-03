@@ -434,13 +434,15 @@
       "failed": "Overlay-Einstellungen konnten nicht gespeichert werden.",
       "pluginConfig": {
         "title": "Plugin-Konfiguration",
-        "description": "Passen Sie die Einstellungen der in der Darstellung aktivierten Overlay-Plugins an.",
-        "noPlugins": "Keine aktivierten Overlay-Plugins zu konfigurieren. Aktivieren Sie zuerst Plugins in der Darstellung.",
+        "description": "Passen Sie die Einstellungen für alle gefundenen Overlay-Plugins an. Aktivieren Sie ein Plugin in der Darstellung, um es im Remote-Dock anzuzeigen.",
+        "noPlugins": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu.",
         "disabledHint": "Das Overlay ist deaktiviert — aktivieren Sie es oben, damit diese Einstellungen wirksam werden.",
         "hideConfig": "Einstellungen ausblenden",
         "editConfig": "Konfigurieren",
         "configSaved": "Plugin-Einstellungen gespeichert.",
-        "configFailed": "Plugin-Einstellungen konnten nicht gespeichert werden."
+        "configFailed": "Plugin-Einstellungen konnten nicht gespeichert werden.",
+        "activatedBadge": "Im Remote sichtbar",
+        "inactiveBadge": "In der Darstellung aktivieren, um im Remote anzuzeigen"
       }
     }
   },

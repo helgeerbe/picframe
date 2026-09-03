@@ -434,13 +434,15 @@
       "failed": "Could not save overlay settings.",
       "pluginConfig": {
         "title": "Plugin configuration",
-        "description": "Adjust settings for the overlay plugins you have activated in Appearance.",
-        "noPlugins": "No activated overlay plugins to configure. Activate plugins in Appearance first.",
+        "description": "Adjust settings for every discovered overlay plugin. Activate a plugin in Appearance to show it in the Remote dock.",
+        "noPlugins": "No overlay plugins discovered. Add plugin directories to the configured plugin folder.",
         "disabledHint": "The overlay is disabled — enable it above to make these settings take effect.",
         "hideConfig": "Hide settings",
         "editConfig": "Configure",
         "configSaved": "Plugin settings saved.",
-        "configFailed": "Could not save plugin settings."
+        "configFailed": "Could not save plugin settings.",
+        "activatedBadge": "Shown in Remote",
+        "inactiveBadge": "Activate in Appearance to show in Remote"
       }
     }
   },

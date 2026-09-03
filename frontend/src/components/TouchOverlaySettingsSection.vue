@@ -69,10 +69,10 @@ const enabledPlugins = computed<string[]>(() => {
   return Array.isArray(ov?.enabled_plugins) ? [...(ov!.enabled_plugins as string[])] : []
 })
 
-// Only plugins the user has activated (via Appearance) are configurable here.
-const activatedPlugins = computed<OverlayPlugin[]>(() =>
-  plugins.value.filter(p => enabledPlugins.value.includes(p.id))
-)
+// Settings configures EVERY discovered plugin regardless of its Appearance
+// activation state: a plugin deactivated in Appearance must stay configurable
+// here (it simply won't appear as a tile in the Remote dock until re-activated).
+// `enabledPlugins` is read live only to render the activation status badge.
 
 const showStatus = (tone: 'success' | 'danger', message: string) => {
   if (statusTimer !== undefined) window.clearTimeout(statusTimer)
@@ -218,7 +218,7 @@ onMounted(async () => {
       </div>
 
       <div
-        v-else-if="activatedPlugins.length === 0"
+        v-else-if="plugins.length === 0"
         class="py-4 text-center text-sm text-gray-500 dark:text-gray-400"
       >
         {{ t('settings.touchOverlay.pluginConfig.noPlugins') }}
@@ -229,13 +229,25 @@ onMounted(async () => {
           {{ t('settings.touchOverlay.pluginConfig.disabledHint') }}
         </p>
         <ul class="divide-y divide-gray-100 dark:divide-gray-700/60">
-          <li v-for="plugin in activatedPlugins" :key="plugin.id" class="py-4 first:pt-0 last:pb-0">
+          <li v-for="plugin in plugins" :key="plugin.id" class="py-4 first:pt-0 last:pb-0">
             <div class="flex items-start justify-between gap-3">
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2">
                   <span v-if="plugin.icon" class="text-base leading-none">{{ plugin.icon }}</span>
                   <span class="truncate text-sm font-semibold text-gray-900 dark:text-white">
                     {{ plugin.name || plugin.id }}
+                  </span>
+                  <span
+                    v-if="enabledPlugins.includes(plugin.id)"
+                    class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                  >
+                    {{ t('settings.touchOverlay.pluginConfig.activatedBadge') }}
+                  </span>
+                  <span
+                    v-else
+                    class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500 dark:bg-gray-700/60 dark:text-gray-400"
+                  >
+                    {{ t('settings.touchOverlay.pluginConfig.inactiveBadge') }}
                   </span>
                 </div>
                 <p v-if="plugin.description" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
