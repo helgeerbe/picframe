@@ -74,6 +74,57 @@ _WORKER_SOCKET_POLL_SECONDS = 0.1
 # whichever imports first.
 _WEBKIT_PROBE_VERSIONS = (("WebKit", "6.0"), ("WebKit2", "4.1"))
 
+# The gtk4-layer-shell runtime .so must be loaded *before* libwayland-client or
+# ``Gtk4LayerShell.init_for_window()`` returns without raising but never
+# actually creates a layer surface (the window then renders invisibly behind
+# pi3d). The official workaround is ``LD_PRELOAD`` (see gtk4-layer-shell's
+# linking.md). We resolve the .so once at spawn time.
+_LAYER_SHELL_SONAME = "libgtk4-layer-shell.so.0"
+_LAYER_SHELL_SEARCH_DIRS = (
+    "/usr/lib/aarch64-linux-gnu",
+    "/usr/lib/arm-linux-gnueabihf",
+    "/usr/lib/x86_64-linux-gnu",
+    "/usr/lib",
+    "/usr/local/lib",
+)
+
+
+def _resolve_layer_shell_so() -> str | None:
+    """Return the absolute path to the gtk4-layer-shell runtime ``.so``.
+
+    Prefers the path reported by ``ldconfig -p`` (the canonical resolution), and
+    falls back to globbing the common multiarch library directories. Returns
+    ``None`` when the library is not installed, which keeps the worker env a
+    no-op on dev boxes / OSes without the package (the plain-window graceful
+    degrade still applies).
+    """
+    try:
+        result = subprocess.run(
+            ["ldconfig", "-p"],
+            check=False,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=5.0,
+        )
+    except (OSError, subprocess.SubprocessError):
+        result = None
+    if result is not None and result.returncode == 0:
+        for line in result.stdout.splitlines():
+            # ldconfig lines look like: "\tlibgtk4-layer-shell.so.0 (libc6,AArch64) => /path"
+            if _LAYER_SHELL_SONAME in line and "=>" in line:
+                path = line.rsplit("=>", 1)[1].strip()
+                if path and os.path.exists(path):
+                    return path
+    for directory in _LAYER_SHELL_SEARCH_DIRS:
+        candidate = os.path.join(directory, _LAYER_SHELL_SONAME)
+        if os.path.exists(candidate):
+            try:
+                return os.path.realpath(candidate)
+            except OSError:
+                return candidate
+    return None
+
 
 class WebKitOverlayRenderer(IOverlayController):
     """Out-of-process WebKitGTK overlay controller (IPC client)."""
@@ -219,10 +270,20 @@ class WebKitOverlayRenderer(IOverlayController):
         """Return the environment for the overlay worker process.
 
         Enforce ``GDK_BACKEND=wayland`` so GTK4/WebKitGTK always uses native
-        Wayland (X11 is not a supported target - see .clinerules).
+        Wayland (X11 is not a supported target - see .clinerules). When the
+        gtk4-layer-shell runtime ``.so`` is installed, preload it so the library
+        links before ``libwayland-client``; otherwise
+        ``Gtk4LayerShell.init_for_window()`` silently fails to create a layer
+        surface (the window renders invisibly behind pi3d). See
+        gtk4-layer-shell's linking.md for the rationale.
         """
         env = os.environ.copy()
         env["GDK_BACKEND"] = "wayland"
+        layer_shell_so = _resolve_layer_shell_so()
+        if layer_shell_so:
+            existing = env.get("LD_PRELOAD", "")
+            env["LD_PRELOAD"] = f"{layer_shell_so}:{existing}" if existing else layer_shell_so
+            logger.info("Preloading gtk4-layer-shell for overlay worker: %s", layer_shell_so)
         return env
 
     def _start_worker_log_reader(self) -> None:

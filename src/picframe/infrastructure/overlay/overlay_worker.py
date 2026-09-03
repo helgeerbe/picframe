@@ -53,6 +53,19 @@ logging.basicConfig(
 )
 logger = logging.getLogger("overlay_worker")
 
+# Log display-related environment variables *before* the GTK import/init block
+# (mirrors gst_worker.py). The worker may segfault during ``Gtk.init_check()``
+# before any surface code runs, so this log line is often the only output
+# visible when that happens; it shows which Wayland display the worker tried.
+logger.info(
+    "Overlay worker display environment: "
+    "WAYLAND_DISPLAY=%s DISPLAY=%s XDG_RUNTIME_DIR=%s GDK_BACKEND=%s",
+    os.environ.get("WAYLAND_DISPLAY", ""),
+    os.environ.get("DISPLAY", ""),
+    os.environ.get("XDG_RUNTIME_DIR", ""),
+    os.environ.get("GDK_BACKEND", ""),
+)
+
 try:
     import gi
 
@@ -104,15 +117,6 @@ if WEBKIT_AVAILABLE:
         LAYER_SHELL_AVAILABLE = True
     except (ImportError, ValueError):
         logger.info("gtk4-layer-shell not available; using a plain borderless window.")
-
-logger.info(
-    "Overlay worker display environment: "
-    "WAYLAND_DISPLAY=%s DISPLAY=%s XDG_RUNTIME_DIR=%s GDK_BACKEND=%s",
-    os.environ.get("WAYLAND_DISPLAY", ""),
-    os.environ.get("DISPLAY", ""),
-    os.environ.get("XDG_RUNTIME_DIR", ""),
-    os.environ.get("GDK_BACKEND", ""),
-)
 
 
 class OverlayWorker:

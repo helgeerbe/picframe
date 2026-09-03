@@ -1,5 +1,6 @@
 """Tests for the WebKitOverlayRenderer IPC client (mocked worker + probe)."""
 
+from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -29,6 +30,7 @@ from picframe.core.renderers.overlay_ipc import (
 from picframe.core.renderers.webkit_overlay_renderer import (
     WebKitOverlayRenderer,
     _command_for_input_action,
+    _resolve_layer_shell_so,
 )
 from picframe.infrastructure.overlay.plugin_loader import PluginLoader
 
@@ -86,7 +88,11 @@ def test_start_spawns_worker_and_applies_initial_config(
     mock_subscriber: MagicMock,
     plugin_loader: PluginLoader,
     tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    # The resolver shells out to ldconfig (subprocess.run -> Popen); since Popen
+    # is mocked here, short-circuit it so no LD_PRELOAD is injected.
+    monkeypatch.setattr(wor, "_resolve_layer_shell_so", lambda: None)
     renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
 
     renderer.start()
@@ -293,7 +299,9 @@ def test_stop_unsubscribes_and_sends_shutdown_and_terminates(
     mock_subscriber: MagicMock,
     plugin_loader: PluginLoader,
     tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    monkeypatch.setattr(wor, "_resolve_layer_shell_so", lambda: None)
     renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
     renderer.start()
     conn = renderer._conn
@@ -312,3 +320,83 @@ def test_command_for_input_action_mapping() -> None:
     assert _command_for_input_action(INPUT_ACTION_TOGGLE) == Command.PLAY
     assert _command_for_input_action(INPUT_ACTION_HIDE) == Command.STOP
     assert _command_for_input_action("??") is None
+
+
+def test_worker_environment_sets_gdk_backend_wayland(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    monkeypatch.setattr(wor, "_resolve_layer_shell_so", lambda: None)
+    env = renderer._worker_environment()
+    assert env["GDK_BACKEND"] == "wayland"
+    assert "LD_PRELOAD" not in env
+
+
+def test_worker_environment_preloads_layer_shell_so(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    so_path = "/usr/lib/aarch64-linux-gnu/libgtk4-layer-shell.so.0"
+    monkeypatch.setattr(wor, "_resolve_layer_shell_so", lambda: so_path)
+    env = renderer._worker_environment()
+    assert env["GDK_BACKEND"] == "wayland"
+    assert env["LD_PRELOAD"] == so_path
+
+
+def test_worker_environment_preserves_existing_ld_preload(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    monkeypatch.setenv("LD_PRELOAD", "/usr/lib/preexisting.so")
+    so_path = "/usr/lib/aarch64-linux-gnu/libgtk4-layer-shell.so.0"
+    monkeypatch.setattr(wor, "_resolve_layer_shell_so", lambda: so_path)
+    env = renderer._worker_environment()
+    assert env["LD_PRELOAD"] == f"{so_path}:/usr/lib/preexisting.so"
+
+
+def test_resolve_layer_shell_so_returns_none_when_absent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Simulate an ldconfig that has no gtk4-layer-shell entry and no fallback dir.
+    def _empty_ldconfig(*_args: Any, **_kwargs: Any) -> Any:
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = ""
+        return m
+
+    monkeypatch.setattr(wor.subprocess, "run", _empty_ldconfig)
+    monkeypatch.setattr(wor.os.path, "exists", lambda p: False)
+    assert _resolve_layer_shell_so() is None
+
+
+def test_resolve_layer_shell_so_parses_ldconfig_path(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _ldconfig(*_args: Any, **_kwargs: Any) -> Any:
+        m = MagicMock()
+        m.returncode = 0
+        m.stdout = (
+            "\tlibgtk4-layer-shell.so.0 (libc6,AArch64) "
+            "=> /usr/lib/aarch64-linux-gnu/libgtk4-layer-shell.so.0\n"
+        )
+        return m
+
+    monkeypatch.setattr(wor.subprocess, "run", _ldconfig)
+    monkeypatch.setattr(
+        wor.os.path,
+        "exists",
+        lambda p: p == "/usr/lib/aarch64-linux-gnu/libgtk4-layer-shell.so.0",
+    )
+    assert _resolve_layer_shell_so() == "/usr/lib/aarch64-linux-gnu/libgtk4-layer-shell.so.0"

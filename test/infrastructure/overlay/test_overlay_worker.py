@@ -1,6 +1,7 @@
 """Tests for the out-of-process overlay worker IPC plumbing (GTK-free)."""
 
 import json
+from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -352,3 +353,20 @@ def test_build_surface_skips_layer_shell_when_unavailable(
     assert worker._web_view is fake_webkit.WebView.return_value
     # Still a borderless window so the rest of the surface setup is unchanged.
     fake_gtk.Window.return_value.set_decorated.assert_called_once_with(False)
+
+
+def test_display_env_log_precedes_gtk_init_block() -> None:
+    """The display-environment log line must run *before* the GTK import/init
+    block (mirrors gst_worker.py). If the worker segfaults during
+    ``Gtk.init_check()``, this log line is often the only output visible, so it
+    must be emitted first. This structural test guards against regressions that
+    move it back below the init block.
+    """
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    source = Path(mod.__file__).read_text()
+    log_idx = source.find("Overlay worker display environment:")
+    gtk_idx = source.find('gi.require_version("Gtk", "4.0")')
+    assert log_idx != -1, "display-environment log line not found in worker source"
+    assert gtk_idx != -1, "GTK require_version line not found in worker source"
+    assert log_idx < gtk_idx, "display-environment log must precede the GTK init block"
