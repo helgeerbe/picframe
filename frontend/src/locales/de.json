@@ -153,15 +153,12 @@
       "description": "WebKitGTK-Overlay-Plugins auf dem Bilderrahmen entdecken und konfigurieren.",
       "loading": "Overlay-Plugins werden geladen",
       "empty": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu oder aktivieren Sie das Overlay in der Darstellung.",
-      "visiblePlugin": "Sichtbares Plugin",
-      "visiblePluginHelp": "Das auf dem Bilderrahmen ausgeklappte Plugin. Wählen Sie das Dock, um nur die Symbolleiste zu zeigen.",
       "dockOnly": "Nur Dock",
-      "editConfig": "Konfigurieren",
-      "hideConfig": "Einstellungen ausblenden",
-      "configSaved": "Plugin-Einstellungen gespeichert.",
-      "configFailed": "Plugin-Einstellungen konnten nicht gespeichert werden.",
       "saved": "Overlay-Plugin-Auswahl gespeichert.",
-      "failed": "Overlay-Plugin-Auswahl konnte nicht gespeichert werden."
+      "failed": "Overlay-Plugin-Auswahl konnte nicht gespeichert werden.",
+      "collapse": "Einklappen",
+      "expand": "{plugin} ausklappen",
+      "noPluginsDiscovered": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu oder aktivieren Sie das Overlay in den Einstellungen."
     }
   },
   "appearance": {
@@ -192,12 +189,7 @@
     },
     "overlay": {
       "title": "Touch-Overlay",
-      "description": "Verhalten des WebKitGTK-Touch-Overlays und seiner Eingabebehandlung.",
-      "enable": {
-        "label": "Touch-Overlay aktivieren",
-        "help": "Das transparente WebKitGTK-Touch-Overlay ein- oder ausschalten."
-      },
-      "restartRequired": "Erfordert einen Neustart des Picframe-Dienstes, um wirksam zu werden.",
+      "description": "Verhalten und Darstellung des auf dem Bilderrahmen angezeigten WebKitGTK-Touch-Overlays.",
       "displayMode": {
         "label": "Anzeigemodus",
         "help": "Ob das Overlay bis zum Ausschalten offen bleibt oder nach Inaktivität ausgeblendet wird.",
@@ -212,19 +204,21 @@
         "label": "Leerlauf-Verblassen",
         "help": "Sekunden Leerlauf bevor das Overlay ausblendt. 0 hält es stets sichtbar. Jede Eingabe weckt es."
       },
-      "inputTypes": {
-        "label": "Aktive Eingaben",
-        "help": "Welche Eingabegeräte-Klassen das Overlay aktivieren. Eine Klasse entfernen, um sie zu deaktivieren, z. B. für einen reinen Touch-Kiosk."
-      },
-      "inputTouch": "Touch",
-      "inputMouse": "Maus",
-      "inputKeyboard": "Tastatur",
       "transparent": {
         "label": "Transparente Oberfläche",
         "help": "Overlay-Oberfläche transparent halten, sodass Fotos und Video durchscheinen."
       },
       "saved": "Overlay-Darstellung gespeichert.",
-      "failed": "Overlay-Darstellung konnte nicht gespeichert werden."
+      "failed": "Overlay-Darstellung konnte nicht gespeichert werden.",
+      "plugins": {
+        "title": "Overlay-Plugins",
+        "description": "Aktivieren Sie, welche Overlay-Plugins der Bilderrahmen anbietet. Konfigurieren Sie aktivierte Plugins unter Einstellungen.",
+        "noPlugins": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu.",
+        "enableFirstHint": "Aktivieren Sie das Touch-Overlay in den Einstellungen, um aktivierte Plugins auf dem Bilderrahmen verfügbar zu machen.",
+        "activate": "Aktivieren",
+        "saved": "Overlay-Plugin-Auswahl gespeichert.",
+        "failed": "Overlay-Plugin-Auswahl konnte nicht gespeichert werden."
+      }
     }
   },
   "logs": {
@@ -417,6 +411,34 @@
       "moveRight": "Fallback später verwenden",
       "removePart": "Ortsteil entfernen",
       "removeKey": "Fallback entfernen"
+    },
+    "touchOverlay": {
+      "title": "Touch-Overlay",
+      "description": "Aktivieren Sie das WebKitGTK-Touch-Overlay und wählen Sie, welche Eingabegeräte es aktivieren.",
+      "enable": {
+        "label": "Touch-Overlay aktivieren",
+        "help": "Das transparente WebKitGTK-Touch-Overlay ein- oder ausschalten."
+      },
+      "restartRequired": "Erfordert einen Neustart des Picframe-Dienstes, um wirksam zu werden.",
+      "inputTypes": {
+        "label": "Aktive Eingaben",
+        "help": "Welche Eingabegeräte-Klassen das Overlay aktivieren. Eine Klasse entfernen, um sie zu deaktivieren, z. B. für einen reinen Touch-Kiosk."
+      },
+      "inputTouch": "Touch",
+      "inputMouse": "Maus",
+      "inputKeyboard": "Tastatur",
+      "saved": "Overlay-Einstellungen gespeichert.",
+      "failed": "Overlay-Einstellungen konnten nicht gespeichert werden.",
+      "pluginConfig": {
+        "title": "Plugin-Konfiguration",
+        "description": "Passen Sie die Einstellungen der in der Darstellung aktivierten Overlay-Plugins an.",
+        "noPlugins": "Keine aktivierten Overlay-Plugins zu konfigurieren. Aktivieren Sie zuerst Plugins in der Darstellung.",
+        "disabledHint": "Das Overlay ist deaktiviert — aktivieren Sie es oben, damit diese Einstellungen wirksam werden.",
+        "hideConfig": "Einstellungen ausblenden",
+        "editConfig": "Konfigurieren",
+        "configSaved": "Plugin-Einstellungen gespeichert.",
+        "configFailed": "Plugin-Einstellungen konnten nicht gespeichert werden."
+      }
     }
   },
   "config": {

@@ -10,6 +10,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import configSchema from '../configSchema.json'
 import HardwareInputsEditor from '../components/HardwareInputsEditor.vue'
+import TouchOverlaySettingsSection from '../components/TouchOverlaySettingsSection.vue'
 import ColorField from '../components/settings/ColorField.vue'
 import FieldRow from '../components/settings/FieldRow.vue'
 import FixedChoiceListEditor from '../components/settings/FixedChoiceListEditor.vue'
@@ -85,7 +86,8 @@ const tabs = [
   { id: 'model', labelKey: 'config.model._title' },
   { id: 'mqtt', labelKey: 'config.mqtt._title' },
   { id: 'http', labelKey: 'config.http._title' },
-  { id: 'hardware_inputs', labelKey: 'config.hardware_inputs._title' }
+  { id: 'hardware_inputs', labelKey: 'config.hardware_inputs._title' },
+  { id: 'touch_overlay', labelKey: 'settings.touchOverlay.tab' }
 ]
 
 const matStyleOptions = [
@@ -727,7 +729,12 @@ function setBackgroundColor(event: Event) {
           class="min-h-[600px] rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800/90"
         >
           <div
-            v-if="configError && activeTab !== 'danger' && !localConfig[activeTab]"
+            v-if="
+              configError &&
+              activeTab !== 'danger' &&
+              activeTab !== 'touch_overlay' &&
+              !localConfig[activeTab]
+            "
             class="p-6 sm:p-8"
           >
             <EmptyState
@@ -1658,6 +1665,10 @@ function setBackgroundColor(event: Event) {
             >
               <HardwareInputsEditor v-model="localConfig.hardware_inputs" />
             </SettingsSection>
+          </section>
+
+          <section v-else-if="activeTab === 'touch_overlay'" class="space-y-8 p-6 sm:p-8">
+            <TouchOverlaySettingsSection />
           </section>
 
           <section v-else-if="activeTab === 'danger'" class="space-y-6 p-6 sm:p-8">
