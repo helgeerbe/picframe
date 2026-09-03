@@ -84,6 +84,9 @@ sudo ./install_picframe.sh --source local --local-path /home/pi/Development/picf
 
 # Install from PyPI
 sudo ./install_picframe.sh --source pypi
+
+# Skip the WebKitGTK touch overlay packages (low-perf platforms)
+sudo ./install_picframe.sh --disable-overlay
 ```
 
 #### Optional Systemd Boot Service
@@ -117,6 +120,40 @@ sudo systemctl status picframe.service
 sudo systemctl start picframe.service
 sudo systemctl stop picframe.service
 sudo systemctl disable picframe.service
+```
+
+#### Touch Overlay Packages (WebKitGTK)
+
+The installer **installs the WebKitGTK touch overlay packages by default**
+(`gir1.2-webkit-6.0` and `gtk4-layer-shell`). These are needed for the
+touch overlay and plugin system described in
+[Overlay & Plugins](overlay.md). Installing them does not turn the overlay
+on by itself — you still enable it at runtime by setting `overlay.enabled`
+to `true` (see the overlay docs).
+
+The packages require Raspberry Pi OS **Trixie** or Ubuntu **24.04+**. On older
+releases (e.g. Bookworm) the typelib is absent, so the installer **soft-fails**:
+it prints a warning, skips the overlay packages, and Picframe runs unchanged
+without the overlay.
+
+On a low-performance platform where you want to skip the overlay packages
+entirely, pass `--disable-overlay`:
+
+```bash
+sudo ./install_picframe.sh --disable-overlay
+```
+
+A typical full install with boot service and the overlay ready is simply:
+
+```bash
+sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
+```
+
+To add the overlay packages later on a box that was installed with
+`--disable-overlay`:
+
+```bash
+sudo apt install gir1.2-webkit-6.0 gtk4-layer-shell
 ```
 
 #### Updating an Existing Service Install

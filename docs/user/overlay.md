@@ -284,8 +284,16 @@ config.
 ## Troubleshooting
 
 - **Overlay does not appear.** Ensure `overlay.enabled` is on and WebKitGTK is
-  installed. On a Pi, install the WebKitGTK typelib for GTK4 (`WebKit 6.0`) or
-  GTK3 (`WebKit2 4.1`). If WebKitGTK is absent, picframe logs a
+  installed. The installer installs the WebKitGTK packages by default
+  (`gir1.2-webkit-6.0` and `gtk4-layer-shell`); if you used `--disable-overlay`
+  or are on an older OS release that lacks them, add them manually:
+
+  ```bash
+  sudo apt install gir1.2-webkit-6.0 gtk4-layer-shell
+  ```
+
+  The renderer probes the GTK4 typelib (`WebKit 6.0`) first, then the GTK3
+  fallback (`WebKit2 4.1`). If WebKitGTK is absent, picframe logs a
   `webkit_unavailable` system error and continues without the overlay.
 - **Built-in plugins missing.** Run `picframe init` to copy them to
   `~/.picframe/overlay-plugins/`.
