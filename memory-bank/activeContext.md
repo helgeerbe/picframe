@@ -41,10 +41,10 @@ files, mypy strict 87 files, **pytest 873 passed**):
   `is_available()`; `overlay_controller` injected into `create_app`;
   start/stop in both shutdown paths.
 
-**Phase 1 frontend DONE (tasks 10–11, uncommitted):** the WebKitGTK overlay
-HTML shell + input routing, all gates green (ruff, ruff format 161 files, mypy
-strict 87 files, **pytest 880 passed**, `yarn lint` 0 errors, `yarn build` both
-Vite builds succeed):
+**Phase 1 frontend DONE (tasks 10–11, committed `3bfaff3`, pushed):** the
+WebKitGTK overlay HTML shell + input routing, all gates green (ruff, ruff
+format 161 files, mypy strict 87 files, **pytest 880 passed**, `yarn lint` 0
+errors, `yarn build` both Vite builds succeed):
 - **Overlay shell** (10 new files under `frontend/src/overlay/`): `overlay.html`
   entry, `types.ts`, `env.ts` (parses `?ws=&plugins=` from `location.search`),
   `bridge.ts` (`window.picframe.send`/`applyConfig` JS bridge),
@@ -64,17 +64,25 @@ Vite builds succeed):
   headless), `_handle_bridge_message()` (input actions + `__request_config`),
   `_apply_config` pushes shell config to WebView. 7 new worker tests.
 
-**Phase 1 still open:** task **8** — worker uses a plain borderless `Gtk.Window`
-(transparent) rather than `wlr-layer-shell`, and the Phase-1 spike
-(`file://`→`ws://localhost` cross-origin WS + `wlr-layer-shell` on labwc) still
-needs a real Wayland display to validate.
+**Task 8 DONE (committed `683ad07`):** the worker's `_build_surface()` now uses
+`wlr-layer-shell` via the guarded `gtk4-layer-shell` typelib (`LAYER_SHELL_AVAILABLE`
+flag), anchoring the overlay to all four edges in the `OVERLAY` layer with a -1
+exclusive zone and on-demand keyboard; it degrades to the previous plain
+borderless `Gtk.Window` when the typelib is absent. `_setup_layer_shell()` is
+GTK-free apart from the typelib calls, so it is unit-tested headless (3 new
+worker tests; **pytest 883 passed**). All gates green.
+
+**Still open (blocked on hardware):** the Phase-1 spike
+(`file://`→`ws://localhost` cross-origin WS + `wlr-layer-shell` on labwc)
+still needs a real Wayland display + WebKitGTK typelib to validate end-to-end.
 
 Then Phase 2 (frontend Remote/Appearance panels), Phase 3 (built-in plugins),
 Phase 4 (tests + docs).
 
 ## Current Repo State
-- Branch: `feat/739-webkit-overlay`, HEAD `18061d8` (Phase 1 backend, pushed to
-  `origin`) + uncommitted Phase 1 frontend (tasks 10–11).
+- Branch: `feat/739-webkit-overlay`, HEAD `683ad07` (task 8 wlr-layer-shell);
+  Phase 1 backend `18061d8`, Phase 1 frontend `3bfaff3` all committed and pushed
+  to `origin`.
 - Cut from `dev` at `4217f6e` (chore: remove stale v2-dev references, #747).
   `dev` tip is `4217f6e`; `main` release PR remains deferred.
 - The source tree is centered on the next-gen `main.py`, `core`, `api`, and
