@@ -2,6 +2,7 @@
 import { computed, onErrorCaptured, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
+  mergeConfig,
   useConfigStore,
   useSystemStore,
   type AuthScope,
@@ -478,8 +479,12 @@ async function executeConfirm() {
 }
 
 function exportConfig() {
+  // Export the full config: stored blob deep-merged with the editable
+  // schema-driven `localConfig` so non-schema sections (e.g. `overlay`) are
+  // included alongside the user's working-copy edits.
+  const exportBlob = mergeConfig(config.value, localConfig.value)
   const dataStr =
-    'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(localConfig.value, null, 2))
+    'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportBlob, null, 2))
   const downloadAnchorNode = document.createElement('a')
   downloadAnchorNode.setAttribute('href', dataStr)
   downloadAnchorNode.setAttribute('download', 'picframe_config.json')

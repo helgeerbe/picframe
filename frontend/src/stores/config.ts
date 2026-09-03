@@ -73,7 +73,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
-function mergeConfig(
+export function mergeConfig(
   base: Record<string, unknown>,
   patch: Record<string, unknown>
 ): Record<string, unknown> {
@@ -155,7 +155,11 @@ export const useConfigStore = defineStore('config', () => {
     error.value = null
     try {
       await api.put('/config', newConfig)
-      config.value = newConfig
+      // Merge (not replace) so non-schema sections such as `overlay` — which
+      // SettingsView's schema-driven `localConfig` does not include — are
+      // preserved in the shared config blob. Mirrors the backend's own
+      // partial-persist (PUT /api/config uses Pydantic `exclude_unset`).
+      config.value = mergeConfig(config.value, newConfig)
     } catch (e: unknown) {
       error.value = getErrorMessage(e, 'Failed to save configuration')
       console.error(e)
