@@ -129,7 +129,7 @@ The installer **installs the WebKitGTK touch overlay packages by default**
 touch overlay and plugin system described in
 [Overlay & Plugins](overlay.md). Installing them does not turn the overlay
 on by itself — you still enable it at runtime from the web UI's
-**Appearance → Touch Overlay → Enable touch overlay** toggle (or by setting
+**Settings → Touch Overlay → Enable touch overlay** toggle (or by setting
 `overlay.enabled` to `true`; see the overlay docs). The toggle is boot-gated,
 so restart the picframe service after changing it.
 
@@ -264,11 +264,15 @@ The Vue SPA is served by the FastAPI backend from `~/.picframe/html` by
 default. The main views are:
 
 *   **Remote:** playback controls, current media details, selected media
-    filters, shuffle controls, display controls, and current-media delete actions.
-*   **Appearance:** text overlays, slideshow delay/fade timing, and portrait
-    pair presentation.
+    filters, shuffle controls, display controls, current-media delete actions,
+    and the Touch overlay tile dock for picking which overlay plugin is expanded
+    on the frame.
+*   **Appearance:** text overlays, slideshow delay/fade timing, portrait
+    pair presentation, and Touch overlay behavior (display mode, auto/idle hide,
+    transparency, and which overlay plugins are activated).
 *   **Settings:** runtime configuration stored in `config.db3`, media/library
-    paths, renderer options, MQTT, GPIO inputs, legacy YAML import, and
+    paths, renderer options, MQTT, GPIO inputs, the Touch overlay master toggle
+    and input devices plus per-plugin configuration, legacy YAML import, and
     maintenance actions.
 
 The Remote play/pause button reflects the backend playback state delivered over

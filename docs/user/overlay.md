@@ -13,7 +13,7 @@ overlay.
 ## Enabling the overlay
 
 1. Open the web UI (the SPA served by picframe).
-2. Go to **Appearance → Touch Overlay → Enable touch overlay**, turn it on, and save.
+2. Go to **Settings → Touch Overlay → Enable touch overlay**, turn it on, and save.
    (Or set `overlay.enabled: true` and run `picframe init`, or write
    `overlay.enabled: 1` to the config database.)
 3. Make sure the built-in plugins are present in `~/.picframe/overlay-plugins/`
@@ -27,7 +27,19 @@ is not, picframe logs a `webkit_unavailable` system error and continues.
 
 ## Overlay settings
 
-Configured from the **Appearance** tab (or the `overlay` config section):
+The overlay controls are spread across the three web UI views:
+
+- **Settings → Touch Overlay** — the master on/off toggle, the active input
+  device classes (`enabled_input_types`), and per-plugin configuration for the
+  plugins you have activated.
+- **Appearance → Touch Overlay** — display behavior: `display_mode`,
+  `auto_hide_seconds`, `idle_hide_seconds`, `transparent`, and the plugin
+  catalog where you activate which plugins the frame offers
+  (`enabled_plugins`).
+- **Remote → Touch overlay** — the tile dock where you pick which activated
+  plugin is expanded on the frame (`visible_plugin`), or collapse to dock only.
+
+The full `overlay` config section (all keys below) is also writable directly:
 
 | Setting | Values | Meaning |
 |---|---|---|
@@ -61,8 +73,10 @@ overlay works identically once a touchscreen is connected.
 ## Built-in plugins
 
 Three plugins ship with picframe and are copied to
-`~/.picframe/overlay-plugins/` by `picframe init`. Enable/disable them from the
-**Remote** tab (Touch overlay panel) and configure each plugin's options inline.
+`~/.picframe/overlay-plugins/` by `picframe init`. Activate the ones you want from
+the **Appearance** tab (Touch Overlay → Overlay plugins), configure their
+options under **Settings → Touch Overlay → Plugin configuration**, and pick the
+one to show on the frame from the **Remote** tab (Touch overlay tile dock).
 
 ### Clock
 
@@ -279,9 +293,10 @@ origin; note `requires: ["network"]` is informational only.
 
 After adding the plugin, trigger a reload so picframe re-scans the plugin
 directory (the web UI does this automatically when you change overlay settings;
-or run `picframe init` / restart). Your plugin appears in **Remote → Touch
-overlay**, where you can enable it, make it the visible plugin, and edit its
-config.
+or run `picframe init` / restart). Activate it under **Appearance → Touch
+Overlay → Overlay plugins**, configure it under **Settings → Touch Overlay →
+Plugin configuration**, and expand it on the frame from the **Remote → Touch
+overlay** tile dock.
 
 ## Troubleshooting
 
