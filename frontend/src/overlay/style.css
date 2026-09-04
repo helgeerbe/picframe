@@ -61,6 +61,17 @@ body {
   transition: opacity 0.4s ease;
 }
 
+/* Scale-mode panels (#752): a plugin with a manifest `size` paints its own
+ * readability background on its content container (which scales with the
+ * widget), so the shell panel is transparent and the photo shows through
+ * everywhere except behind the content — as small a background as possible.
+ * Fill-mode panels (no `size`, e.g. the future meta plugin) keep the panel
+ * background above. */
+.pf-plugin-panel--scale {
+  background: transparent;
+  box-shadow: none;
+}
+
 /* Nine-anchor placement. Center/middle anchors use transforms; combined with
  * the inline width/height these keep the panel flush to the chosen edge. */
 .pf-anchor-top-left {

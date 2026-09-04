@@ -359,10 +359,16 @@ WebKitGTK overlay iframe (see *Why not container queries* below).
   N/100)` reproduces it exactly at the design size and the shell's `scale()`
   handles all resizing. The `max()` floors a shrunk widget at a legible size;
   there is **no upper cap** — the user decides how big is too big via the Scale
-  slider. Keep container padding **minimal** (≤ 0.25rem) and tighten flex
-  gaps/margins: the shell scales the whole widget uniformly, so inner padding
-  scales too — larger padding becomes a visible empty semi-transparent band
-  between the content and the panel border at scale 1.
+  slider.
+- **Scale-mode panel is transparent; plugins paint their own background** —
+  a scale-mode shell panel (`.pf-plugin-panel--scale`) has no background or
+  shadow, so the photo shows through everywhere except behind the content.
+  Each plugin paints its readability background on its *content container*
+  (e.g. `.pf-digital` / `.pf-weather`) so the dark area hugs the content as
+  tightly as possible; the analog clock uses a filled disc matching the face
+  diameter instead of a square. Because the background is inside the iframe,
+  `transform: scale()` scales it with the rest of the widget. Fill-mode
+  panels (no manifest `size`) keep the shell `.pf-plugin-panel` background.
 - **Plugin content units (fill mode)** — set `--w`/`--h` in px from
   `window.innerWidth/innerHeight` (and update them on `resize`) so
   `calc(var(--w) * N/100)` text sizing tracks the user-chosen panel dimensions.

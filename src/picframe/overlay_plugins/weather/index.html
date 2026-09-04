@@ -22,10 +22,16 @@
       display: flex; align-items: center; justify-content: center;
       -webkit-user-select: none; user-select: none; overflow: hidden;
     }
-    /* Minimal padding so the panel background hugs the content — the shell
-       scales the whole widget, so inner padding scales too and larger padding
-       becomes visible empty background at scale 1. #752 */
-    .pf-weather { padding: 0.25rem; text-align: center; }
+    /* The shell scale-mode panel is transparent; the readability background is
+       painted here on the content container so the dark area hugs the content
+       as tightly as possible and the photo shows through everywhere else.
+       The background scales with `transform: scale()`. #752 */
+    .pf-weather {
+      text-align: center;
+      padding: 0.15rem 0.5rem;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 8px;
+    }
     .pf-weather__main { display: flex; align-items: center; justify-content: center; gap: 0.5rem; }
     .pf-weather__icon { font-size: max(1.5rem, calc(var(--w) * 0.11)); line-height: 1; }
     .pf-weather__temp { font-size: max(1.5rem, calc(var(--w) * 0.13)); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }

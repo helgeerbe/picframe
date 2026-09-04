@@ -150,6 +150,11 @@ export class Dock {
     panel.style.zIndex = String(layout.z_order)
     const design = plugin.size
     if (design) {
+      // Scale mode (#752): the shell panel is transparent so the photo shows
+      // through everywhere except behind the plugin content. Each plugin
+      // paints its own readability background on its content container, which
+      // scales with `transform: scale()` exactly like the rest of the widget.
+      panel.classList.add('pf-plugin-panel--scale')
       const scale = layout.scale ?? 1
       panel.style.width = `${Math.round(design.w * scale)}px`
       panel.style.height = `${Math.round(design.h * scale)}px`

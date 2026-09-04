@@ -22,10 +22,16 @@
       display: flex; align-items: center; justify-content: center;
       -webkit-user-select: none; user-select: none; overflow: hidden;
     }
-    /* Minimal padding so the panel background hugs the content — the shell
-       scales the whole widget, so inner padding scales too and larger padding
-       becomes visible empty background at scale 1. #752 */
-    .pf-clock { text-align: center; padding: 0.25rem; }
+    /* The shell scale-mode panel is transparent; each clock style paints its
+       own readability background on its content container so the dark area
+       hugs the content as tightly as possible and the photo shows through
+       everywhere else. The background scales with `transform: scale()`. #752 */
+    .pf-digital {
+      text-align: center;
+      padding: 0.15rem 0.5rem;
+      background: rgba(0, 0, 0, 0.35);
+      border-radius: 8px;
+    }
     /* max() floors legibility at small scales; no upper cap — the shell scales
        the whole widget, so when the user shrinks the panel the widget shrinks
        with it. #752 */
@@ -34,10 +40,13 @@
       letter-spacing: 0.02em; line-height: 1; font-variant-numeric: tabular-nums;
     }
     .pf-clock__date {
-      margin-top: 0.25rem; font-size: max(0.9rem, calc(var(--w) * 0.045));
+      margin-top: 0.15rem; font-size: max(0.9rem, calc(var(--w) * 0.045));
       opacity: 0.85; font-weight: 500;
     }
     .pf-clock--hidden { display: none; }
+    /* Analog: a filled disc behind the face gives readability without a square
+       background. The disc diameter (r=95 → 190px) matches the clock outline,
+       so it covers only the face, not the full 320x240 panel. #752 */
     svg.pf-analog { width: min(calc(var(--w) * 0.9), calc(var(--h) * 0.9)); height: min(calc(var(--w) * 0.9), calc(var(--h) * 0.9)); }
     .pf-analog .pf-hand { stroke: var(--fg); stroke-linecap: round; }
     .pf-analog .pf-hand--hour { stroke-width: 6; }
@@ -53,7 +62,8 @@
     <div class="pf-clock__date" id="date"></div>
   </div>
   <svg class="pf-clock pf-analog pf-clock--hidden" id="analog" viewBox="-100 -100 200 200">
-    <circle r="95" fill="none" stroke="var(--fg)" stroke-width="3" opacity="0.5" />
+    <circle r="95" fill="#000000" fill-opacity="0.35" />
+    <circle r="95" fill="none" stroke="var(--fg)" stroke-width="3" stroke-opacity="0.5" />
     <g id="ticks"></g>
     <line class="pf-hand pf-hand--hour" id="hand-hour" x1="0" y1="0" x2="0" y2="-50" />
     <line class="pf-hand pf-hand--minute" id="hand-minute" x1="0" y1="0" x2="0" y2="-72" />
