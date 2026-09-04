@@ -32,11 +32,11 @@ export interface PluginEntry {
    * text color and renders without an emoji font. */
   icon_svg?: string
   position: string
-  /** Manifest design size `{ w, h }` in CSS px. The shell uses this as the
-   * scale basis: it lays the iframe out at this fixed size and applies
-   * `transform: scale(min(panelW/w, panelH/h))` so the whole widget scales
-   * uniformly to fit the panel (contain fit), like an embedded web widget.
-   * `null` (plugin without a manifest `size`) → scale 1 (iframe fills panel). */
+  /** Manifest design size `{ w, h }` in CSS px. A plugin with a `size` is in
+   * *scale mode*: the shell sizes the panel to `design × scale` (so its aspect
+   * matches the widget — no contain-fit gaps) and zooms the iframe with
+   * `transform: scale(layout.scale)`. `null` (no manifest `size`) → *fill mode*:
+   * the iframe fills the panel 100% × 100% and `width`/`height` size it. */
   size?: { w: number; h: number } | null
   /** Manifest default duration policy; superseded by `layout.display_mode`. */
   default_display_mode?: DisplayMode
@@ -61,16 +61,18 @@ export type OverlayAnchor =
   | 'bottom-right'
 
 /**
- * Effective per-plugin panel layout (#752). `null`-able fields mean
- * "inherit" (`content_align`/`idle_hide_seconds`) or "use plugin default"
- * (`width`/`height`); the worker merges defaults before sending, so the shell
- * receives concrete values, but the type keeps `null` for robustness.
+ * Effective per-plugin panel layout (#752). A plugin with a manifest `size`
+ * is in *scale mode* (`scale` zooms the widget; `width`/`height` ignored); a
+ * plugin without `size` is in *fill mode* (`width`/`height` size the panel).
+ * `null`-able fields mean "inherit" (`idle_hide_seconds`) or "use default"
+ * (`width`/`height`/`scale`); the worker merges defaults before sending, so the
+ * shell receives concrete values, but the type keeps `null` for robustness.
  */
 export interface PluginLayout {
   position: OverlayAnchor
   width: number | null
   height: number | null
-  content_align: OverlayAnchor | null
+  scale: number | null
   display_mode: DisplayMode
   idle_hide_seconds: number | null
   z_order: number

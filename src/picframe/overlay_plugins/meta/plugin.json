@@ -5,7 +5,6 @@
   "icon": "ℹ️",
   "trigger": "icon",
   "position": "bottom-right",
-  "size": { "w": 420, "h": 320 },
   "requires": ["map"],
   "config_schema": {
     "show_map": {

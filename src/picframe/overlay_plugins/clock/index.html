@@ -7,12 +7,14 @@
   <style>
     :root { --fg: #f8fafc; --bg: transparent; --accent: #38bdf8; --w: 320px; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    /* The shell lays this iframe out at a fixed design size (--w × --h, from the
-       plugin manifest `size`) and applies `transform: scale()` to fit the panel
-       (contain fit), so the whole widget scales uniformly. Content is sized once
-       at the design size using `calc(var(--w) * N/100)` (N = the old `Ncqw`
-       value). This replaces container queries, which WebKitGTK does not resolve
-       reliably in the overlay iframe (cqw → 0 on <html> and <body>). #752 */
+    /* The shell lays this iframe out at the fixed design size (--w × --h, from
+       the plugin manifest `size`) and applies `transform: scale(layout.scale)`
+       (a user-controlled zoom factor). The panel is sized to design × scale so
+       its aspect matches the widget exactly — no contain-fit background gaps.
+       Content is sized once at the design size using `calc(var(--w) * N/100)`
+       (N = the old `Ncqw` value). This replaces container queries, which
+       WebKitGTK does not resolve reliably in the overlay iframe (cqw → 0 on
+       <html> and <body>). #752 */
     html, body { height: 100%; }
     body {
       background: var(--bg); color: var(--fg);
@@ -20,7 +22,7 @@
       display: flex; align-items: center; justify-content: center;
       -webkit-user-select: none; user-select: none; overflow: hidden;
     }
-    .pf-clock { text-align: center; padding: 1rem 1.5rem; }
+    .pf-clock { text-align: center; padding: 0.5rem; }
     /* max() floors legibility at small scales; no upper cap — the shell scales
        the whole widget, so when the user shrinks the panel the widget shrinks
        with it. #752 */

@@ -6,15 +6,14 @@
   <title>Picframe Photo Info</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
-    :root { --fg: #f8fafc; --bg: rgba(15,23,42,0.78); --muted: rgba(248,250,252,0.65); --accent: #38bdf8; --w: 420px; }
+    :root { --fg: #f8fafc; --bg: rgba(15,23,42,0.78); --muted: rgba(248,250,252,0.65); --accent: #38bdf8; --w: 100vw; --h: 100vh; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    /* The shell lays this iframe out at a fixed design size (--w × --h, from the
-       plugin manifest `size`) and applies `transform: scale()` to fit the panel
-       (contain fit), so the whole widget scales uniformly. Content is sized once
-       at the design size using `calc(var(--w) * N/100)` (N = the old `Ncqw`
-       value). This replaces container queries, which WebKitGTK does not resolve
-       reliably in the overlay iframe (cqw → 0 on <html> and <body>). The Leaflet
-       map fills the remaining flex space at the design size. #752 */
+    /* This plugin has no manifest `size` (fill mode): the shell's iframe fills
+       the panel 100% × 100%, and `width`/`height` in the panel layout enlarge
+       the panel — the Leaflet map below absorbs the extra space. `--w`/`--h`
+       are set in px from `window.innerWidth/innerHeight` (and updated on
+       resize) so `calc(var(--w) * N/100)` text sizing stays responsive to the
+       user-chosen panel dimensions. #752 */
     html, body { height: 100%; }
     body {
       background: var(--bg); color: var(--fg); backdrop-filter: blur(6px);
@@ -53,6 +52,18 @@
       var currentMedia = null;
       var map = null, marker = null, mapReady = false;
       var expanded = false;
+      // Sync the --w/--h design variables to the actual iframe (panel) size so
+      // `calc(var(--w) * N/100)` text sizing tracks the user-chosen panel
+      // dimensions. Fill mode: the iframe fills the panel, so innerWidth/Height
+      // ARE the panel size. #752
+      function setVars() {
+        var root = document.documentElement;
+        root.style.setProperty("--w", window.innerWidth + "px");
+        root.style.setProperty("--h", window.innerHeight + "px");
+        if (map) map.invalidateSize();
+      }
+      window.addEventListener("resize", setVars);
+      setVars();
       var placeholder = document.getElementById("placeholder");
       var content = document.getElementById("content");
       var titleEl = document.getElementById("title");

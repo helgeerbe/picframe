@@ -2166,9 +2166,9 @@ def test_get_overlay_plugins_includes_effective_layout() -> None:
         weather_plugin = next(p for p in plugins if p["id"] == "weather")
         assert weather_plugin["layout"] == {
             "position": "top-right",
-            "width": 300,
-            "height": 150,
-            "content_align": None,
+            "width": None,
+            "height": None,
+            "scale": 1.0,
             "display_mode": "persistent",
             "idle_hide_seconds": 12.0,
             "z_order": 0,
@@ -2221,9 +2221,10 @@ def test_put_overlay_plugin_layout_validates_and_persists() -> None:
         assert body["layout"]["position"] == "middle-center"
         assert body["layout"]["display_mode"] == "persistent"
         assert body["layout"]["z_order"] == 3
-        # manifest-default size carried through
-        assert body["layout"]["width"] == 300
-        assert body["layout"]["height"] == 150
+        # scale-mode plugin: width/height unused (None), scale defaults to 1.0
+        assert body["layout"]["width"] is None
+        assert body["layout"]["height"] is None
+        assert body["layout"]["scale"] == 1.0
 
         all_config = repo.get_all_app_config()
         assert all_config["overlay.plugin_layout.weather.position"] == "middle-center"

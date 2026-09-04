@@ -27,8 +27,8 @@ _CONFIG_FIELD_TYPES: dict[str, tuple[type[Any], ...]] = {
     "boolean": (bool,),
 }
 
-# Nine-anchor screen positions used for both ``position`` (panel placement)
-# and ``content_align`` (text alignment inside the panel) — issue #752.
+# Nine-anchor screen positions used for panel placement (``position``) —
+# issue #752.
 OVERLAY_ANCHORS: tuple[str, ...] = (
     "top-left",
     "top-center",
@@ -161,12 +161,14 @@ def validate_plugin_config(
 # ---------------------------------------------------------------------------
 
 # Fields of a PluginLayout, in stable order. ``None`` means "inherit"
-# (content_align/idle_hide_seconds) or "use plugin default" (width/height).
+# (idle_hide_seconds), "use plugin default" (width/height), or "no scaling"
+# (scale, for fill-mode plugins). ``scale`` zooms a scale-mode plugin (one with
+# a manifest ``size``); ``width``/``height`` size a fill-mode panel (no ``size``).
 _LAYOUT_FIELDS: tuple[str, ...] = (
     "position",
     "width",
     "height",
-    "content_align",
+    "scale",
     "display_mode",
     "idle_hide_seconds",
     "z_order",
@@ -180,18 +182,25 @@ class PluginLayoutError(ValueError):
 def plugin_layout_defaults(descriptor: PluginDescriptor) -> dict[str, Any]:
     """Return the default layout for a plugin derived from its manifest.
 
-    ``position`` comes from the manifest ``position``; ``width``/``height`` from
-    the manifest ``size`` (``{"w", "h"}``) when present; ``display_mode`` from
-    the manifest ``default_display_mode``. ``content_align`` and
-    ``idle_hide_seconds`` default to ``None`` (inherit the panel ``position`` /
-    the global ``idle_hide_seconds``); ``z_order`` defaults to 0.
+    A plugin **with** a manifest ``size`` is in *scale mode*: the shell sizes the
+    panel to ``design × scale`` (so its aspect matches the widget — no
+    contain-fit gaps) and zooms the iframe with ``transform: scale(scale)``.
+    ``scale`` defaults to ``1.0``; ``width``/``height`` are unused (``None``).
+
+    A plugin **without** a manifest ``size`` is in *fill mode*: the iframe fills
+    the panel (``100% × 100%``) and ``width``/``height`` enlarge the panel (the
+    Leaflet map absorbs the extra space). ``scale`` is ``None`` (no transform).
+
+    ``position`` comes from the manifest; ``display_mode`` from
+    ``default_display_mode``; ``idle_hide_seconds`` defaults to ``None``
+    (inherit the global value); ``z_order`` defaults to ``0``.
     """
-    size = descriptor.size or {}
+    has_size = bool(descriptor.size)
     return {
         "position": descriptor.position,
-        "width": size.get("w"),
-        "height": size.get("h"),
-        "content_align": None,
+        "width": None,
+        "height": None,
+        "scale": 1.0 if has_size else None,
         "display_mode": descriptor.default_display_mode,
         "idle_hide_seconds": None,
         "z_order": 0,
@@ -202,10 +211,10 @@ def validate_plugin_layout(payload: Any) -> dict[str, Any]:
     """Validate a per-plugin layout payload against the fixed overlay schema.
 
     Returns the normalized layout with defaults filled for absent fields,
-    enforcing the 9-anchor enum (``position``/``content_align``), the
-    display-mode enum, positive-integer sizes, a non-negative
-    ``idle_hide_seconds`` (or ``None`` = inherit) and an integer ``z_order``.
-    Unknown keys are rejected.
+    enforcing the 9-anchor enum (``position``), the display-mode enum,
+    positive-integer sizes (``width``/``height``), a positive ``scale`` (or
+    ``None`` = no scaling), a non-negative ``idle_hide_seconds`` (or ``None`` =
+    inherit) and an integer ``z_order``. Unknown keys are rejected.
     """
     if not isinstance(payload, dict):
         raise PluginLayoutError("Plugin layout must be an object")
@@ -218,7 +227,7 @@ def validate_plugin_layout(payload: Any) -> dict[str, Any]:
         "position": "top-right",
         "width": None,
         "height": None,
-        "content_align": None,
+        "scale": None,
         "display_mode": "auto_hide",
         "idle_hide_seconds": None,
         "z_order": 0,
@@ -243,13 +252,13 @@ def validate_plugin_layout(payload: Any) -> dict[str, Any]:
             raise PluginLayoutError(f"Plugin layout '{dim}' must be a positive integer or null")
         result[dim] = value
 
-    content_align = payload.get("content_align")
-    if content_align is not None:
-        if not isinstance(content_align, str) or content_align not in OVERLAY_ANCHORS:
-            raise PluginLayoutError(
-                f"Plugin layout 'content_align' must be one of {list(OVERLAY_ANCHORS)} or null"
-            )
-        result["content_align"] = content_align
+    scale = payload.get("scale")
+    if scale is not None:
+        if isinstance(scale, bool) or not isinstance(scale, (int, float)):
+            raise PluginLayoutError("Plugin layout 'scale' must be a positive number or null")
+        if scale <= 0:
+            raise PluginLayoutError("Plugin layout 'scale' must be a positive number or null")
+        result["scale"] = float(scale)
 
     display_mode = payload.get("display_mode")
     if display_mode is not None:

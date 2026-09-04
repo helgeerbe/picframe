@@ -2021,6 +2021,7 @@ def create_app(
                 "trigger": descriptor.trigger,
                 "position": descriptor.position,
                 "has_config": bool(descriptor.config_schema),
+                "size": descriptor.size,
                 "config_schema": descriptor.config_schema,
                 "config": _merged_plugin_config(descriptor),
                 "layout": _effective_plugin_layout(descriptor),
@@ -2110,7 +2111,7 @@ def create_app(
         tags=["Overlay"],
         summary="Update a plugin's panel layout",
         description=(
-            "Validate a plugin's per-plugin layout (position/size/content_align/"
+            "Validate a plugin's per-plugin layout (position/scale/width/height/"
             "display_mode/idle_hide_seconds/z_order) against the fixed overlay "
             "schema, persist it under `overlay.plugin_layout.<id>.*`, and "
             "broadcast an `OverlayConfigChangedEvent` so the overlay applies it "

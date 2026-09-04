@@ -19,6 +19,10 @@ export interface OverlayPlugin {
   trigger: string
   position: string
   has_config: boolean
+  /** Manifest design size `{ w, h }` in CSS px; `null` for fill-mode plugins.
+   * The settings UI branches on this: scale-mode plugins show a Scale slider,
+   * fill-mode plugins show Width/Height (#752). */
+  size?: { w: number; h: number } | null
   // The dynamic config_schema is an arbitrary mapping the UI renders by type;
   // `unknown`/`Record<string, unknown>` keeps the index accesses ergonomic.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -70,8 +74,8 @@ export const useOverlayStore = defineStore('overlay', () => {
   }
 
   /**
-   * Validate and persist a single plugin's layout (#752): position/size/
-   * content_align/display_mode/idle_hide_seconds/z_order. Returns the
+   * Validate and persist a single plugin's layout (#752): position/scale/
+   * width/height/display_mode/idle_hide_seconds/z_order. Returns the
    * effective (merged) layout the backend persisted, or throws on
    * validation/HTTP error. `null` values mean "inherit/default" and are not
    * stored (an absent key reads back as the manifest default).

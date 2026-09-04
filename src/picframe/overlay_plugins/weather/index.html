@@ -7,12 +7,14 @@
   <style>
     :root { --fg: #f8fafc; --bg: transparent; --muted: rgba(248,250,252,0.7); --accent: #38bdf8; --w: 360px; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    /* The shell lays this iframe out at a fixed design size (--w × --h, from the
-       plugin manifest `size`) and applies `transform: scale()` to fit the panel
-       (contain fit), so the whole widget scales uniformly. Content is sized once
-       at the design size using `calc(var(--w) * N/100)` (N = the old `Ncqw`
-       value). This replaces container queries, which WebKitGTK does not resolve
-       reliably in the overlay iframe (cqw → 0 on <html> and <body>). #752 */
+    /* The shell lays this iframe out at the fixed design size (--w × --h, from
+       the plugin manifest `size`) and applies `transform: scale(layout.scale)`
+       (a user-controlled zoom factor). The panel is sized to design × scale so
+       its aspect matches the widget exactly — no contain-fit background gaps.
+       Content is sized once at the design size using `calc(var(--w) * N/100)`
+       (N = the old `Ncqw` value). This replaces container queries, which
+       WebKitGTK does not resolve reliably in the overlay iframe (cqw → 0 on
+       <html> and <body>). #752 */
     html, body { height: 100%; }
     body {
       background: var(--bg); color: var(--fg);
@@ -20,7 +22,7 @@
       display: flex; align-items: center; justify-content: center;
       -webkit-user-select: none; user-select: none; overflow: hidden;
     }
-    .pf-weather { padding: 1.25rem 1.75rem; text-align: center; min-width: 12rem; }
+    .pf-weather { padding: 0.5rem; text-align: center; }
     .pf-weather__main { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
     .pf-weather__icon { font-size: max(1.5rem, calc(var(--w) * 0.08)); line-height: 1; }
     .pf-weather__temp { font-size: max(1.5rem, calc(var(--w) * 0.09)); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }

@@ -115,9 +115,9 @@ def test_plugin_layout_defaults_derived_from_manifest() -> None:
     )
     assert plugin_layout_defaults(descriptor) == {
         "position": "bottom-left",
-        "width": 320,
-        "height": 180,
-        "content_align": None,
+        "width": None,
+        "height": None,
+        "scale": 1.0,
         "display_mode": "persistent",
         "idle_hide_seconds": None,
         "z_order": 0,
@@ -131,6 +131,7 @@ def test_plugin_layout_defaults_when_size_absent() -> None:
     defaults = plugin_layout_defaults(descriptor)
     assert defaults["width"] is None
     assert defaults["height"] is None
+    assert defaults["scale"] is None
     assert defaults["display_mode"] == "auto_hide"
 
 
@@ -142,7 +143,7 @@ def test_validate_plugin_layout_fills_defaults_for_absent_fields() -> None:
         "position": "top-right",
         "width": None,
         "height": None,
-        "content_align": None,
+        "scale": None,
         "display_mode": "auto_hide",
         "idle_hide_seconds": None,
         "z_order": 0,
@@ -156,7 +157,7 @@ def test_validate_plugin_layout_accepts_full_payload() -> None:
         "position": "middle-center",
         "width": 400,
         "height": 200,
-        "content_align": "top-left",
+        "scale": 1.5,
         "display_mode": "persistent",
         "idle_hide_seconds": 10.0,
         "z_order": 5,
@@ -185,11 +186,27 @@ def test_validate_plugin_layout_rejects_bad_anchor() -> None:
         validate_plugin_layout({"position": "nowhere"})
 
 
-def test_validate_plugin_layout_rejects_bad_content_align() -> None:
+def test_validate_plugin_layout_rejects_bad_scale() -> None:
     from picframe.core.models.overlay import PluginLayoutError, validate_plugin_layout
 
-    with pytest.raises(PluginLayoutError, match="content_align"):
-        validate_plugin_layout({"content_align": "nowhere"})
+    with pytest.raises(PluginLayoutError, match="scale"):
+        validate_plugin_layout({"scale": 0})
+    with pytest.raises(PluginLayoutError, match="scale"):
+        validate_plugin_layout({"scale": -1.0})
+
+
+def test_validate_plugin_layout_rejects_non_number_scale() -> None:
+    from picframe.core.models.overlay import PluginLayoutError, validate_plugin_layout
+
+    with pytest.raises(PluginLayoutError, match="scale"):
+        validate_plugin_layout({"scale": "big"})
+
+
+def test_validate_plugin_layout_rejects_bool_scale() -> None:
+    from picframe.core.models.overlay import PluginLayoutError, validate_plugin_layout
+
+    with pytest.raises(PluginLayoutError, match="scale"):
+        validate_plugin_layout({"scale": True})
 
 
 def test_validate_plugin_layout_rejects_bad_display_mode() -> None:
@@ -256,9 +273,9 @@ def test_effective_plugin_layout_merges_defaults_with_overrides() -> None:
     effective = effective_plugin_layout(descriptor, db_layout)
     assert effective == {
         "position": "top-right",
-        "width": 320,
-        "height": 180,
-        "content_align": None,
+        "width": None,
+        "height": None,
+        "scale": 1.0,
         "display_mode": "persistent",
         "idle_hide_seconds": 8.0,
         "z_order": 0,
@@ -271,6 +288,31 @@ def test_effective_plugin_layout_ignores_non_dict_db_layout() -> None:
     descriptor = PluginDescriptor(id="clock")
     assert effective_plugin_layout(descriptor, None)["position"] == "top-right"
     assert effective_plugin_layout(descriptor, "nope")["position"] == "top-right"  # type: ignore[arg-type]
+
+
+def test_effective_plugin_layout_fill_mode_applies_width_height() -> None:
+    """A plugin without a manifest `size` (fill mode, e.g. meta) starts with
+    `scale=None` and `width`/`height=None`; a db override on `width`/`height`
+    enlarges the panel (#752)."""
+    from picframe.core.models.overlay import effective_plugin_layout
+
+    descriptor = PluginDescriptor(id="meta", position="bottom-right")
+    assert effective_plugin_layout(descriptor, None) == {
+        "position": "bottom-right",
+        "width": None,
+        "height": None,
+        "scale": None,
+        "display_mode": "auto_hide",
+        "idle_hide_seconds": None,
+        "z_order": 0,
+    }
+    effective = effective_plugin_layout(
+        descriptor, {"width": 600, "height": 400, "display_mode": "persistent"}
+    )
+    assert effective["width"] == 600
+    assert effective["height"] == 400
+    assert effective["scale"] is None
+    assert effective["display_mode"] == "persistent"
 
 
 # ---------------------------------------------------------------------------

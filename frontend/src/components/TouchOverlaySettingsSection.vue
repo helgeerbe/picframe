@@ -58,7 +58,7 @@ const overlay = reactive({
   idle_hide_seconds: 5
 })
 
-/** Nine anchors for the position/content_align selects. */
+/** Nine anchors for the position select. */
 const ANCHORS = [
   'top-left',
   'top-center',
@@ -200,7 +200,7 @@ const layoutOf = (plugin: OverlayPlugin): Record<string, unknown> => {
     position: l.position ?? plugin.position ?? 'top-right',
     width: l.width ?? 0,
     height: l.height ?? 0,
-    content_align: l.content_align ?? '',
+    scale: l.scale ?? (plugin.size ? 1 : 0),
     display_mode: l.display_mode ?? 'auto_hide',
     idle_hide_seconds: l.idle_hide_seconds ?? 0,
     z_order: l.z_order ?? 0
@@ -230,7 +230,7 @@ const openLayout = (plugin: OverlayPlugin) => {
 }
 
 /** Save a plugin's layout via the dedicated PUT endpoint (#752/#754). 0/empty
- *  for width/height/idle_hide_seconds/content_align is sent as null
+ *  for width/height/scale/idle_hide_seconds is sent as null
  *  (inherit/default). */
 const saveLayout = async (plugin: OverlayPlugin) => {
   if (isSaving.value) return
@@ -245,8 +245,8 @@ const saveLayout = async (plugin: OverlayPlugin) => {
   payload.width = Number.isFinite(w) && w > 0 ? Math.round(w) : null
   const h = Number(draft.height)
   payload.height = Number.isFinite(h) && h > 0 ? Math.round(h) : null
-  const align = draft.content_align
-  payload.content_align = align && align !== '' ? align : null
+  const scale = Number(draft.scale)
+  payload.scale = Number.isFinite(scale) && scale > 0 ? scale : null
   const idle = Number(draft.idle_hide_seconds)
   payload.idle_hide_seconds = Number.isFinite(idle) && idle > 0 ? idle : null
   isSaving.value = true
@@ -549,22 +549,18 @@ watch(
                     <option v-for="a in ANCHORS" :key="a" :value="a">{{ a }}</option>
                   </select>
                 </div>
-                <div>
+                <div v-if="plugin.size">
                   <label
                     class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
-                    :for="`layout-${plugin.id}-content-align`"
-                    >{{ t('settings.touchOverlay.layout.contentAlign') }}</label
+                    :for="`layout-${plugin.id}-scale`"
+                    >{{ t('settings.touchOverlay.layout.scale') }}</label
                   >
-                  <select
-                    :id="`layout-${plugin.id}-content-align`"
-                    v-model="ensureDraft(plugin)['content_align']"
-                    class="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
-                  >
-                    <option value="">
-                      {{ t('settings.touchOverlay.layout.contentAlignInherit') }}
-                    </option>
-                    <option v-for="a in ANCHORS" :key="a" :value="a">{{ a }}</option>
-                  </select>
+                  <NumberField
+                    :model-value="(ensureDraft(plugin)['scale'] as number) ?? 0"
+                    :min="0"
+                    :step="0.1"
+                    @update:model-value="ensureDraft(plugin)['scale'] = $event"
+                  />
                 </div>
                 <div>
                   <label
@@ -587,7 +583,7 @@ watch(
                     @update:model-value="ensureDraft(plugin)['display_mode'] = $event as string"
                   />
                 </div>
-                <div>
+                <div v-if="!plugin.size">
                   <label
                     class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
                     :for="`layout-${plugin.id}-width`"
@@ -601,7 +597,7 @@ watch(
                     @update:model-value="ensureDraft(plugin)['width'] = $event"
                   />
                 </div>
-                <div>
+                <div v-if="!plugin.size">
                   <label
                     class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
                     :for="`layout-${plugin.id}-height`"

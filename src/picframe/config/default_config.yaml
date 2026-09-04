@@ -219,7 +219,7 @@ overlay:
   # in the plugin directory; effective config = manifest defaults <- db overrides.
   plugin_config: {}
   # Per-plugin panel layout map (#752): { "<plugin_id>": { position, width,
-  # height, content_align, display_mode, idle_hide_seconds, z_order } }. Empty
+  # height, scale, display_mode, idle_hide_seconds, z_order } }. Empty
   # = each plugin uses its manifest defaults. display_mode is per-plugin here
   # (persistent | auto_hide), replacing the old global display_mode.
   plugin_layout: {}

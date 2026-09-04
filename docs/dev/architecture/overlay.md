@@ -324,47 +324,47 @@ The shell pushes data into the active plugin's iframe via `postMessage`
 
 ### Content sizing & alignment convention
 
-Plugins are **embedded widgets with a fixed design size**: the plugin lays out
-its content once at the dimensions declared in its manifest `size` (`{ w, h }`
-in CSS px), and the **shell scales the whole widget** to fit the panel. This is
-the "draw a box, the widget fills it" model, implemented with a shell-level
-`transform: scale()` rather than container queries — container queries turned
-out to be unreliable in the WebKitGTK overlay iframe (see *Why not container
-queries* below).
+Plugins use one of two layout **modes**, driven entirely by whether the
+manifest declares a `size`:
 
-- **Design size** — declare `"size": { "w": 320, "h": 240 }` in `plugin.json`.
-  The worker forwards it as `_plugins[i].size` in the shell config; the shell
-  uses it as the scale basis. A plugin **without** a manifest `size` keeps the
-  legacy fill (`width:100%; height:100%`, no scaling) — useful for plugins that
-  are pure background panels.
-- **Shell contain-fit scaling** (`dock.ts`) — for each panel the shell measures
-  the resolved panel box (`panel.clientWidth/clientHeight`, which forces a
-  synchronous reflow so `min(vw,vh)` defaults resolve to px), then lays the
-  iframe out at the design size and applies
-  `transform: scale(min(panelW/designW, panelH/designH))` with
-  `transform-origin: top left`. The whole widget — text, SVG, card, Leaflet map
-  — scales **uniformly**, preserving aspect ratio like an embedded web widget.
-  No container queries, no `cqw`, no WebKitGTK quirk dependency.
-- **Plugin content units** — size content at the design size with
+- **Scale mode** (manifest `size` present — clock, weather): the plugin lays
+  out its content once at the fixed design size, and the **shell zooms the whole
+  widget** with `transform: scale(layout.scale)`. The panel is sized to
+  `design × scale`, so its aspect matches the widget **exactly** — no contain-fit
+  background strips. The user controls one **Scale** slider; there is no
+  width/height or content-alignment control.
+- **Fill mode** (no manifest `size` — meta/Photo Info): the iframe fills the
+  panel `100% × 100%`, and the user-controlled **Width**/**Height** enlarge the
+  panel. The plugin's own content (e.g. the Leaflet map with `flex: 1`) absorbs
+  the extra space, so a bigger panel shows a bigger map.
+
+Both modes avoid container queries, which turned out to be unreliable in the
+WebKitGTK overlay iframe (see *Why not container queries* below).
+
+- **Design size** — declare `"size": { "w": 320, "h": 240 }` in `plugin.json`
+  to opt into scale mode. The worker forwards it as `_plugins[i].size` in the
+  shell config. Omitting `size` opts into fill mode.
+- **Shell scaling** (`dock.ts`) — for a scale-mode panel the shell sizes the
+  panel to `design × scale` (`applyPanelLayout`), lays the iframe out at the
+  design size, and applies `transform: scale(layout.scale)` with
+  `transform-origin: top left` anchored at `(0, 0)`. The whole widget — text,
+  SVG, card — scales **uniformly**; because the panel aspect matches the
+  widget, the scaled iframe fills the panel with no gaps. No `clientWidth`
+  measurement or reflow is needed. For a fill-mode panel the iframe simply
+  fills it (`100% × 100%`, no transform).
+- **Plugin content units (scale mode)** — size content at the design size with
   `max(min_floor, calc(var(--w) * N/100))`, where `--w` is the design width
   declared once on `:root` (e.g. `:root { --w: 320px; }`). `N/100` is the old
   `Ncqw` value expressed as a fraction of the design width; `calc(var(--w) *
   N/100)` reproduces it exactly at the design size and the shell's `scale()`
-  handles all resizing. The `max()` floors a shrunk panel at a legible size;
-  there is **no upper cap** — the user decides how big is too big by shrinking
-  the panel. The meta plugin's Leaflet map keeps `flex: 1` and fills the
-  remaining space at the design size, then scales with the rest.
-- **Anchor = widget placement, not text alignment** — `content_align` (null →
-  inherit the panel `position`) places the **scaled widget box** inside the
-  panel, computed by the shell (`dock.ts anchorOffset`): a 9-anchor maps to an
-  `(x, y)` offset of the scaled box within the panel. The panel keeps its
-  rounded background, so where the panel's aspect ratio differs from the
-  widget's the background shows around the widget — the panel is the anchor
-  box. The shell **does not forward `content_align` to plugins**; a plugin's
-  internal layout stays as designed (e.g. a clock centers itself in its own
-  design box), and only the box's position within the panel changes. This is
-  the inverse of the previous convention, which aligned content *within* the
-  widget.
+  handles all resizing. The `max()` floors a shrunk widget at a legible size;
+  there is **no upper cap** — the user decides how big is too big via the Scale
+  slider.
+- **Plugin content units (fill mode)** — set `--w`/`--h` in px from
+  `window.innerWidth/innerHeight` (and update them on `resize`) so
+  `calc(var(--w) * N/100)` text sizing tracks the user-chosen panel dimensions.
+  The meta plugin does this in `setVars()` and calls `map.invalidateSize()` on
+  resize so the Leaflet map reflows.
 
 **Why not container queries:** two on-device attempts failed against WebKitGTK
 2.52 — `container-type` on `<html>` (`cqw` → 0 on the root element, whose
@@ -376,9 +376,9 @@ model. `transform: scale()` scales the entire iframe (content *and* its own
 background) uniformly and works regardless of the WebKitGTK container-query
 quirk, so it is the long-term approach.
 
-A plugin that needs both-axis fit beyond contain (e.g. a different aspect crop)
-can still compute its own layout in JS, but contain-fit `scale()` covers the
-common case.
+A plugin that needs both-axis fit beyond uniform scale (e.g. a different
+aspect crop) can still compute its own layout in JS, but the scale/fill modes
+cover the common cases.
 
 ## 12. Web UI controls
 

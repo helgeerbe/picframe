@@ -360,11 +360,17 @@ PluginLayoutAnchor = Literal[
 class PluginLayout(BaseModel):
     """User-editable per-plugin panel layout (issue #752).
 
+    A plugin with a manifest ``size`` is in *scale mode*: ``scale`` zooms the
+    widget uniformly and the panel is sized to ``design × scale`` (no
+    contain-fit gaps). A plugin without ``size`` is in *fill mode*:
+    ``width``/``height`` enlarge the panel and the iframe fills it.
+
     Attributes:
         position: 9-anchor screen position of the panel.
-        width/height: Panel size in pixels; ``null`` = use the plugin default.
-        content_align: 9-anchor alignment of the panel content (text); ``null``
-            = inherit ``position``.
+        width/height: Panel size in pixels (fill mode); ``null`` = use the
+            default. Ignored for scale-mode plugins.
+        scale: Zoom factor for scale-mode widgets (default 1.0); ``null`` = no
+            scaling (fill mode).
         display_mode: ``persistent`` (always visible) or ``auto_hide`` (fades
             after ``idle_hide_seconds``). Per-plugin, replacing the old global.
         idle_hide_seconds: Per-plugin idle fade delay; ``null`` = inherit the
@@ -375,7 +381,7 @@ class PluginLayout(BaseModel):
     position: PluginLayoutAnchor = "top-right"
     width: int | None = None
     height: int | None = None
-    content_align: PluginLayoutAnchor | None = None
+    scale: float | None = None
     display_mode: Literal["persistent", "auto_hide"] = "auto_hide"
     idle_hide_seconds: float | None = None
     z_order: int = 0
@@ -394,7 +400,7 @@ class OverlayConfig(BaseModel):
     Issue #752 replaces the single-visible-plugin model (``visible_plugin:
     str | None`` + a global ``display_mode``) with a multi-widget model:
     ``visible_plugins: list[str]`` (simultaneous widgets) and a per-plugin
-    ``plugin_layout`` map (position/size/content_align/display_mode/idle_hide/
+    ``plugin_layout`` map (position/scale/width/height/display_mode/idle_hide/
     z_order). Legacy ``visible_plugin`` / global ``display_mode`` keys are
     ignored here (``extra='ignore'``); the read-time ``normalize_legacy_overlay``
     bridge keeps the out-of-process worker/shell fed until Phase B.
@@ -421,6 +427,7 @@ class OverlayPluginResponse(BaseModel):
     trigger: str = "icon"
     position: str = "top-right"
     has_config: bool = False
+    size: dict[str, int] | None = None
     config_schema: dict[str, dict[str, Any]] = Field(default_factory=dict)
     config: dict[str, Any] = Field(
         default_factory=dict,

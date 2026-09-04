@@ -28,10 +28,14 @@ section) is implemented and committed (`5924130`) on the feature branch.
 **Issue #752 — overlay widget system (multi-plugin model), Phase A backend + Phase B
 frontend DONE and committed on `feat/739-webkit-overlay`:** replaces the
 single-visible-plugin model with per-plugin layout
-(position/size/content_align/display_mode/idle_hide_seconds/z_order),
-simultaneous multi-plugin visibility, and z-order. All gates green (967
-pytest pass, mypy strict clean, ruff clean, frontend vue-tsc + ESLint +
-Prettier clean).
+(position/scale/width/height/display_mode/idle_hide_seconds/z_order),
+simultaneous multi-plugin visibility, and z-order. The layout uses a **hybrid
+two-mode model** driven by the manifest `size` field: plugins *with* `size`
+(clock/weather) are in **scale mode** (one Scale slider; panel = `design ×
+scale`, no aspect gaps); plugins *without* `size` (meta/Photo Info) are in
+**fill mode** (Width/Height enlarge the panel; the Leaflet map absorbs extra
+space). `content_align` was removed. All gates green (970 pytest pass, mypy
+strict clean, ruff clean, frontend vue-tsc + ESLint + Prettier clean).
 
 **Phase A backend (committed `bebbbdf`–`91d5b27`):**
 - `core/models/overlay.py` — `plugin_layout_defaults`/`validate_plugin_layout`/

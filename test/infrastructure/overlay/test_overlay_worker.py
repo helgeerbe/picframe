@@ -445,13 +445,13 @@ def test_build_shell_config_merges_plugins_and_env(tmp_path) -> None:
         "position": "top-right",
         "width": None,
         "height": None,
-        "content_align": None,
+        "scale": None,
         "display_mode": "auto_hide",
         "idle_hide_seconds": None,
         "z_order": 0,
     }
     # #752: the manifest design size is forwarded so the shell can scale the
-    # widget iframe to fit the panel (contain fit). Absent -> None (fill 100%).
+    # widget iframe (scale mode). Absent -> None (fill mode, 100% × 100%).
     assert plugin["size"] is None
 
 
@@ -495,10 +495,12 @@ def test_build_shell_config_effective_layout_merges_db_overrides(tmp_path) -> No
     # the db layout did not override them.
     assert plugin["layout"]["position"] == "bottom-left"
     assert plugin["layout"]["display_mode"] == "auto_hide"
-    assert plugin["layout"]["width"] == 320
-    assert plugin["layout"]["height"] == 180
+    # scale-mode plugin: width/height unused (None); scale defaults to 1.0.
+    assert plugin["layout"]["width"] is None
+    assert plugin["layout"]["height"] is None
+    assert plugin["layout"]["scale"] == 1.0
     # #752: the manifest design size is forwarded so the shell can scale the
-    # widget iframe to fit the panel (contain fit).
+    # widget iframe (scale mode).
     assert plugin["size"] == {"w": 320, "h": 180}
 
 

@@ -170,7 +170,7 @@ class ConfigService:
         """Persist a single plugin's layout under ``overlay.plugin_layout.<id>.*`` (#752).
 
         Reuses the same scoped ``delete_app_config_prefix`` + re-write pattern
-        as ``update_plugin_config``. ``None`` values (``content_align`` /
+        as ``update_plugin_config``. ``None`` values (``scale`` /
         ``idle_hide_seconds`` / ``width`` / ``height`` = "inherit/default") are
         not stored: an absent key reads back as the manifest default via
         ``effective_plugin_layout``.
