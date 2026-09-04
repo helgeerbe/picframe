@@ -1,21 +1,26 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-import { Cog6ToothIcon, CheckIcon } from '@heroicons/vue/24/outline'
+import { Cog6ToothIcon, CheckIcon, Square2StackIcon } from '@heroicons/vue/24/outline'
 import { useOverlayStore, type OverlayPlugin } from '../stores/overlay'
 import { useConfigStore } from '../stores/config'
 import FieldRow from './settings/FieldRow.vue'
+import NumberField from './settings/NumberField.vue'
+import SegmentedControl from './settings/SegmentedControl.vue'
 import SettingsSection from './settings/SettingsSection.vue'
 import StatusBanner from './ui/StatusBanner.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
 
-// The two Settings-tab-owned overlay fields are bound to the schema-driven
-// `localConfig.overlay` working copy (passed via v-model) and persisted by the
-// global Settings Save. Appearance-managed overlay fields (display_mode, the
-// hide timers, transparent, enabled_plugins, visible_plugin) stay auto-save in
-// Appearance and are intentionally NOT modeled here — modeling them would let a
-// once-initialized localConfig.overlay clobber Appearance's live edits on Save.
+// The Settings-tab-owned overlay working copy (passed via v-model) covers only
+// the schema-driven fields persisted by the global Settings Save: `enabled` and
+// `enabled_input_types`. The overlay layout fields moved here from Appearance
+// — the global idle fade and the per-plugin panel layout (position/size/content
+// align/display mode/z-order/per-plugin idle fade) — are NOT part of that
+// working copy: they auto-save through `savePartialConfig` (idle fade) and the
+// dedicated `PUT /overlay/plugins/{id}/layout` endpoint (per-plugin layout), so
+// they never flow through `SettingsView.initializeConfig()` and cannot clobber
+// a stale working copy on Save.
 interface OverlaySettingsModel {
   enabled: boolean
   enabled_input_types: string[]
@@ -39,12 +44,32 @@ const isSaving = ref(false)
 const statusMessage = ref('')
 const statusTone = ref<'success' | 'danger'>('success')
 const configPluginId = ref<string | null>(null)
+const layoutPluginId = ref<string | null>(null)
 // Per-plugin config form state: { pluginId: { field: value } }. The dynamic
 // config values come from arbitrary plugin schemas; `any` keeps the index
 // accesses ergonomic (matching the config-store config blob convention).
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const configDrafts = ref<Record<string, Record<string, any>>>({})
 let statusTimer: number | undefined
+
+/** Global idle fade (the per-plugin default when a layout omits it). Auto-saves
+ *  via `savePartialConfig`; not part of the schema-driven working copy. */
+const overlay = reactive({
+  idle_hide_seconds: 5
+})
+
+/** Nine anchors for the position/content_align selects. */
+const ANCHORS = [
+  'top-left',
+  'top-center',
+  'top-right',
+  'middle-left',
+  'middle-center',
+  'middle-right',
+  'bottom-left',
+  'bottom-center',
+  'bottom-right'
+] as const
 
 const INPUT_TYPES = ['touch', 'mouse', 'keyboard']
 
@@ -138,17 +163,127 @@ const fieldHelp = (pluginId: string, fieldName: string): string => {
   return (schema?.help as string | undefined) || ''
 }
 
+const asNumber = (value: unknown, fallback: number) => {
+  const n = Number(value)
+  return Number.isFinite(n) ? n : fallback
+}
+
+const syncFromConfig = () => {
+  const ov = config.value?.overlay || {}
+  overlay.idle_hide_seconds = asNumber(ov.idle_hide_seconds, 5)
+}
+
+/** Auto-save the global idle fade through `savePartialConfig` (#754). */
+const saveIdle = async () => {
+  if (isSaving.value) return
+  isSaving.value = true
+  statusMessage.value = ''
+  try {
+    await configStore.savePartialConfig({
+      overlay: { idle_hide_seconds: Number(overlay.idle_hide_seconds) }
+    })
+    showStatus('success', t('settings.touchOverlay.saved'))
+  } catch (e) {
+    console.error(e)
+    showStatus('danger', t('settings.touchOverlay.failed'))
+    syncFromConfig()
+  } finally {
+    isSaving.value = false
+  }
+}
+
+/** Effective layout for a plugin (from the discovered plugin's merged layout),
+ * or sensible defaults. Drives the per-plugin layout editor working copy. */
+const layoutOf = (plugin: OverlayPlugin): Record<string, unknown> => {
+  const l = plugin.layout ?? {}
+  return {
+    position: l.position ?? plugin.position ?? 'top-right',
+    width: l.width ?? 0,
+    height: l.height ?? 0,
+    content_align: l.content_align ?? '',
+    display_mode: l.display_mode ?? 'auto_hide',
+    idle_hide_seconds: l.idle_hide_seconds ?? 0,
+    z_order: l.z_order ?? 0
+  }
+}
+
+/** Per-plugin layout working copies, keyed by plugin id. */
+const layoutDrafts = reactive<Record<string, Record<string, unknown>>>({})
+
+const ensureDraft = (plugin: OverlayPlugin): Record<string, unknown> => {
+  if (!layoutDrafts[plugin.id]) {
+    layoutDrafts[plugin.id] = layoutOf(plugin)
+  }
+  return layoutDrafts[plugin.id]
+}
+
+/** Toggle the per-plugin layout editor. Reopening re-seeds from the effective
+ *  layout so external changes (e.g. via MQTT) are reflected. */
+const openLayout = (plugin: OverlayPlugin) => {
+  if (layoutPluginId.value === plugin.id) {
+    layoutPluginId.value = null
+    return
+  }
+  delete layoutDrafts[plugin.id]
+  ensureDraft(plugin)
+  layoutPluginId.value = plugin.id
+}
+
+/** Save a plugin's layout via the dedicated PUT endpoint (#752/#754). 0/empty
+ *  for width/height/idle_hide_seconds/content_align is sent as null
+ *  (inherit/default). */
+const saveLayout = async (plugin: OverlayPlugin) => {
+  if (isSaving.value) return
+  const draft = layoutDrafts[plugin.id]
+  if (!draft) return
+  const payload: Record<string, unknown> = {
+    position: draft.position,
+    display_mode: draft.display_mode,
+    z_order: Number(draft.z_order) || 0
+  }
+  const w = Number(draft.width)
+  payload.width = Number.isFinite(w) && w > 0 ? Math.round(w) : null
+  const h = Number(draft.height)
+  payload.height = Number.isFinite(h) && h > 0 ? Math.round(h) : null
+  const align = draft.content_align
+  payload.content_align = align && align !== '' ? align : null
+  const idle = Number(draft.idle_hide_seconds)
+  payload.idle_hide_seconds = Number.isFinite(idle) && idle > 0 ? idle : null
+  isSaving.value = true
+  statusMessage.value = ''
+  try {
+    const result = await overlayStore.updatePluginLayout(plugin.id, payload)
+    // Reflect the effective layout the backend persisted back into the draft.
+    layoutDrafts[plugin.id] = result.layout
+    showStatus('success', t('settings.touchOverlay.layout.saved'))
+  } catch (e) {
+    console.error(e)
+    showStatus('danger', t('settings.touchOverlay.layout.failed'))
+  } finally {
+    isSaving.value = false
+  }
+}
+
 onMounted(async () => {
   // Settings already fetches the full config, but guard for a direct tab visit
-  // or a config blob that only has the workflow-config allowlist. The Appearance
-  // overlay fields (enabled_plugins etc.) are read live from the shared config
-  // blob, so the full config must be present for the per-plugin list below.
+  // or a config blob that only has the workflow-config allowlist. The overlay
+  // fields (enabled_plugins, idle_hide_seconds, etc.) are read live from the
+  // shared config blob, so the full config must be present for the per-plugin
+  // list and the global idle fade below.
   const ov = config.value?.overlay
   if (!config.value || Object.keys(config.value).length === 0 || typeof ov?.enabled !== 'boolean') {
     await configStore.fetchConfig()
   }
   await overlayStore.fetchPlugins()
+  syncFromConfig()
 })
+
+watch(
+  () => [config.value?.overlay?.idle_hide_seconds],
+  () => {
+    if (!isSaving.value) syncFromConfig()
+  }
+)
 </script>
 <template>
   <div class="space-y-8">
@@ -195,6 +330,19 @@ onMounted(async () => {
             {{ inputTypeLabel(type) }}
           </label>
         </div>
+      </FieldRow>
+
+      <FieldRow
+        :label="t('settings.touchOverlay.idleHideSeconds.label')"
+        :help="t('settings.touchOverlay.idleHideSeconds.help')"
+      >
+        <NumberField
+          v-model="overlay.idle_hide_seconds"
+          :min="0"
+          :step="0.5"
+          unit="s"
+          @update:model-value="saveIdle()"
+        />
       </FieldRow>
     </SettingsSection>
 
@@ -254,19 +402,33 @@ onMounted(async () => {
                   {{ plugin.description }}
                 </p>
               </div>
-              <button
-                v-if="plugin.has_config"
-                type="button"
-                class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-500 dark:text-indigo-400"
-                @click="openConfig(plugin)"
-              >
-                <Cog6ToothIcon class="h-4 w-4" />
-                {{
-                  configPluginId === plugin.id
-                    ? t('settings.touchOverlay.pluginConfig.hideConfig')
-                    : t('settings.touchOverlay.pluginConfig.editConfig')
-                }}
-              </button>
+              <div class="flex flex-shrink-0 items-center gap-4">
+                <button
+                  v-if="plugin.has_config"
+                  type="button"
+                  class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-500 dark:text-indigo-400"
+                  @click="openConfig(plugin)"
+                >
+                  <Cog6ToothIcon class="h-4 w-4" />
+                  {{
+                    configPluginId === plugin.id
+                      ? t('settings.touchOverlay.pluginConfig.hideConfig')
+                      : t('settings.touchOverlay.pluginConfig.editConfig')
+                  }}
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex items-center gap-1.5 text-xs font-semibold text-indigo-600 transition-colors hover:text-indigo-500 dark:text-indigo-400"
+                  @click="openLayout(plugin)"
+                >
+                  <Square2StackIcon class="h-4 w-4" />
+                  {{
+                    layoutPluginId === plugin.id
+                      ? t('settings.touchOverlay.layout.hideLayout')
+                      : t('settings.touchOverlay.layout.editLayout')
+                  }}
+                </button>
+              </div>
             </div>
 
             <!-- Per-plugin config editor -->
@@ -356,6 +518,143 @@ onMounted(async () => {
                 >
                   <CheckIcon class="h-4 w-4" />
                   {{ isSaving ? t('common.saving') : t('common.save') }}
+                </button>
+              </div>
+            </div>
+
+            <!-- Per-plugin layout editor (#754): shown for every discovered
+                 plugin (active or not). Position, display mode, size, z-order,
+                 and a per-plugin idle fade (0 = inherit the global value above). -->
+            <div
+              v-if="layoutPluginId === plugin.id"
+              class="mt-4 rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-900/30"
+            >
+              <h4
+                class="mb-3 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400"
+              >
+                {{ t('settings.touchOverlay.layout.title') }}
+              </h4>
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label
+                    class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
+                    :for="`layout-${plugin.id}-position`"
+                    >{{ t('settings.touchOverlay.layout.position') }}</label
+                  >
+                  <select
+                    :id="`layout-${plugin.id}-position`"
+                    v-model="ensureDraft(plugin)['position']"
+                    class="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  >
+                    <option v-for="a in ANCHORS" :key="a" :value="a">{{ a }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
+                    :for="`layout-${plugin.id}-content-align`"
+                    >{{ t('settings.touchOverlay.layout.contentAlign') }}</label
+                  >
+                  <select
+                    :id="`layout-${plugin.id}-content-align`"
+                    v-model="ensureDraft(plugin)['content_align']"
+                    class="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                  >
+                    <option value="">
+                      {{ t('settings.touchOverlay.layout.contentAlignInherit') }}
+                    </option>
+                    <option v-for="a in ANCHORS" :key="a" :value="a">{{ a }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label
+                    class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
+                    :for="`layout-${plugin.id}-display-mode`"
+                    >{{ t('settings.touchOverlay.layout.displayMode') }}</label
+                  >
+                  <SegmentedControl
+                    :model-value="ensureDraft(plugin)['display_mode'] as string"
+                    :options="[
+                      {
+                        value: 'persistent',
+                        label: t('settings.touchOverlay.displayMode.persistent')
+                      },
+                      {
+                        value: 'auto_hide',
+                        label: t('settings.touchOverlay.displayMode.autoHide')
+                      }
+                    ]"
+                    @update:model-value="ensureDraft(plugin)['display_mode'] = $event as string"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
+                    :for="`layout-${plugin.id}-width`"
+                    >{{ t('settings.touchOverlay.layout.width') }}</label
+                  >
+                  <NumberField
+                    :model-value="(ensureDraft(plugin)['width'] as number) ?? 0"
+                    :min="0"
+                    :step="10"
+                    unit="px"
+                    @update:model-value="ensureDraft(plugin)['width'] = $event"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
+                    :for="`layout-${plugin.id}-height`"
+                    >{{ t('settings.touchOverlay.layout.height') }}</label
+                  >
+                  <NumberField
+                    :model-value="(ensureDraft(plugin)['height'] as number) ?? 0"
+                    :min="0"
+                    :step="10"
+                    unit="px"
+                    @update:model-value="ensureDraft(plugin)['height'] = $event"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
+                    :for="`layout-${plugin.id}-z-order`"
+                    >{{ t('settings.touchOverlay.layout.zOrder') }}</label
+                  >
+                  <NumberField
+                    :model-value="(ensureDraft(plugin)['z_order'] as number) ?? 0"
+                    :min="0"
+                    :step="1"
+                    @update:model-value="ensureDraft(plugin)['z_order'] = $event"
+                  />
+                </div>
+                <div>
+                  <label
+                    class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
+                    :for="`layout-${plugin.id}-idle`"
+                    >{{ t('settings.touchOverlay.layout.idleHideSeconds') }}</label
+                  >
+                  <NumberField
+                    :model-value="(ensureDraft(plugin)['idle_hide_seconds'] as number) ?? 0"
+                    :min="0"
+                    :step="0.5"
+                    unit="s"
+                    @update:model-value="ensureDraft(plugin)['idle_hide_seconds'] = $event"
+                  />
+                </div>
+              </div>
+              <p class="mt-2 text-xs text-gray-400 dark:text-gray-500">
+                {{ t('settings.touchOverlay.layout.inheritHint') }}
+              </p>
+              <div class="mt-3 flex justify-end">
+                <button
+                  type="button"
+                  :disabled="isSaving"
+                  class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                  @click="saveLayout(plugin)"
+                >
+                  <CheckIcon class="h-4 w-4" />
+                  {{ isSaving ? t('common.saving') : t('settings.touchOverlay.layout.save') }}
                 </button>
               </div>
             </div>

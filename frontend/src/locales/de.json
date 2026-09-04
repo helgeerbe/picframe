@@ -189,39 +189,12 @@
     },
     "overlay": {
       "title": "Touch-Overlay",
-      "description": "Verhalten und Darstellung des auf dem Bilderrahmen angezeigten WebKitGTK-Touch-Overlays.",
+      "description": "Aktivieren Sie, welche Overlay-Plugins der Bilderrahmen anbietet. Layout und Optionen konfigurieren Sie unter Einstellungen.",
       "disabledTitle": "Touch-Overlay ist deaktiviert",
-      "disabledMessage": "Aktivieren Sie den Touch-Overlay in den Einstellungen, um sein Aussehen und die Plugins zu konfigurieren.",
-      "displayMode": {
-        "label": "Anzeigemodus",
-        "help": "Ob das Overlay bis zum Ausschalten offen bleibt oder nach Inaktivität ausgeblendet wird.",
-        "persistent": "Bis ausgeschaltet",
-        "autoHide": "Auto-Ausblenden"
-      },
-      "idleHideSeconds": {
-        "label": "Leerlauf-Verblassen",
-        "help": "Sekunden Leerlauf bevor das Overlay ausblendt. 0 hält es stets sichtbar. Jede Eingabe weckt es."
-      },
-      "saved": "Overlay-Darstellung gespeichert.",
-      "failed": "Overlay-Darstellung konnte nicht gespeichert werden.",
-      "layout": {
-        "title": "Panel-Layout",
-        "position": "Position",
-        "contentAlign": "Textausrichtung",
-        "contentAlignInherit": "Position übernehmen",
-        "displayMode": "Anzeigemodus",
-        "width": "Breite",
-        "height": "Höhe",
-        "zOrder": "Z-Reihenfolge",
-        "idleHideSeconds": "Leerlauf-Verblassen",
-        "inheritHint": "Breite, Höhe oder Leerlauf-Verblassen auf 0 lassen, um den Plugin-Standard oder den globalen Leerlauf zu übernehmen.",
-        "save": "Layout speichern",
-        "saved": "Panel-Layout gespeichert.",
-        "failed": "Panel-Layout konnte nicht gespeichert werden."
-      },
+      "disabledMessage": "Aktivieren Sie den Touch-Overlay in den Einstellungen und aktivieren Sie Plugins hier.",
       "plugins": {
         "title": "Overlay-Plugins",
-        "description": "Aktivieren Sie, welche Overlay-Plugins der Bilderrahmen anbietet. Konfigurieren Sie aktivierte Plugins unter Einstellungen.",
+        "description": "Aktivieren Sie, welche Overlay-Plugins der Bilderrahmen anbietet. Layout und Optionen konfigurieren Sie unter Einstellungen.",
         "noPlugins": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu.",
         "enableFirstHint": "Aktivieren Sie das Touch-Overlay in den Einstellungen, um aktivierte Plugins auf dem Bilderrahmen verfügbar zu machen.",
         "activate": "Aktivieren",
@@ -437,8 +410,33 @@
       "inputTouch": "Touch",
       "inputMouse": "Maus",
       "inputKeyboard": "Tastatur",
+      "displayMode": {
+        "persistent": "Bis ausgeschaltet",
+        "autoHide": "Auto-Ausblenden"
+      },
+      "idleHideSeconds": {
+        "label": "Leerlauf-Verblassen",
+        "help": "Sekunden Leerlauf bevor das Overlay ausblendt. 0 hält es stets sichtbar. Jede Eingabe weckt es."
+      },
       "saved": "Overlay-Einstellungen gespeichert.",
       "failed": "Overlay-Einstellungen konnten nicht gespeichert werden.",
+      "layout": {
+        "title": "Panel-Layout",
+        "position": "Position",
+        "contentAlign": "Textausrichtung",
+        "contentAlignInherit": "Position übernehmen",
+        "displayMode": "Anzeigemodus",
+        "width": "Breite",
+        "height": "Höhe",
+        "zOrder": "Z-Reihenfolge",
+        "idleHideSeconds": "Leerlauf-Verblassen",
+        "inheritHint": "Breite, Höhe oder Leerlauf-Verblassen auf 0 lassen, um den Plugin-Standard oder den globalen Leerlauf zu übernehmen.",
+        "editLayout": "Layout",
+        "hideLayout": "Layout ausblenden",
+        "save": "Layout speichern",
+        "saved": "Panel-Layout gespeichert.",
+        "failed": "Panel-Layout konnte nicht gespeichert werden."
+      },
       "pluginConfig": {
         "title": "Plugin-Konfiguration",
         "description": "Passen Sie die Einstellungen für alle gefundenen Overlay-Plugins an. Aktivieren Sie ein Plugin in der Darstellung, um es im Remote-Dock anzuzeigen.",

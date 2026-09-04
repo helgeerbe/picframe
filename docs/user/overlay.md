@@ -30,12 +30,12 @@ is not, picframe logs a `webkit_unavailable` system error and continues.
 The overlay controls are spread across the three web UI views:
 
 - **Settings → Touch Overlay** — the master on/off toggle, the active input
-  device classes (`enabled_input_types`), and per-plugin configuration for the
-  plugins you have activated.
-- **Appearance → Touch Overlay** — display behavior: `display_mode`,
-  `idle_hide_seconds`, `transparent`, and the plugin
-  catalog where you activate which plugins the frame offers
-  (`enabled_plugins`).
+  device classes (`enabled_input_types`), the global idle fade
+  (`idle_hide_seconds`), per-plugin configuration, and the per-plugin panel
+  layout editor (position, size, content alignment, display mode, z-order, and
+  a per-plugin idle fade).
+- **Appearance → Touch Overlay** — the plugin catalog where you activate
+  which plugins the frame offers (`enabled_plugins`).
 - **Remote → Touch overlay** — the tile dock where you pick which activated
   plugin is expanded on the frame (`visible_plugin`), or collapse to dock only.
 
@@ -73,7 +73,7 @@ overlay works identically once a touchscreen is connected.
 Three plugins ship with picframe and are copied to
 `~/.picframe/overlay-plugins/` by `picframe init`. Activate the ones you want from
 the **Appearance** tab (Touch Overlay → Overlay plugins), configure their
-options under **Settings → Touch Overlay → Plugin configuration**, and pick the
+options and panel layout under **Settings → Touch Overlay**, and pick the
 one to show on the frame from the **Remote** tab (Touch overlay tile dock).
 
 ### Clock
@@ -122,8 +122,10 @@ expand it fullscreen.
   expanded — only the icon dock shows). Each enabled plugin exposes its config
   form, rendered from the plugin's `config_schema` (toggles, number fields,
   selects, text inputs). Saving applies the change live (no restart needed).
-- **Appearance → Overlay** controls display mode, idle/auto-hide timing,
-  enabled input types, and transparency.
+- **Appearance → Overlay** is the plugin catalog: activate which overlay
+  plugins the frame offers (`enabled_plugins`). Display behavior, idle/auto-hide
+  timing, and per-plugin panel layout are configured under **Settings → Touch
+  Overlay**.
 
 Plugin settings persist in `config.db3`; plugin code is stateless, so you can
 update a plugin's HTML without losing your config.
@@ -292,9 +294,9 @@ origin; note `requires: ["network"]` is informational only.
 After adding the plugin, trigger a reload so picframe re-scans the plugin
 directory (the web UI does this automatically when you change overlay settings;
 or run `picframe init` / restart). Activate it under **Appearance → Touch
-Overlay → Overlay plugins**, configure it under **Settings → Touch Overlay →
-Plugin configuration**, and expand it on the frame from the **Remote → Touch
-overlay** tile dock.
+Overlay → Overlay plugins**, configure it and tune its panel layout under
+**Settings → Touch Overlay**, and expand it on the frame from the **Remote →
+Touch overlay** tile dock.
 
 ## Troubleshooting
 

@@ -189,39 +189,12 @@
     },
     "overlay": {
       "title": "Touch Overlay",
-      "description": "Behavior and appearance of the WebKitGTK touch overlay shown on the frame.",
+      "description": "Activate which overlay plugins the frame offers. Configure their layout and options under Settings.",
       "disabledTitle": "Touch overlay is off",
-      "disabledMessage": "Enable the touch overlay in Settings to configure its appearance and plugins.",
-      "displayMode": {
-        "label": "Display mode",
-        "help": "Whether the overlay stays open until turned off or hides after inactivity.",
-        "persistent": "Until turned off",
-        "autoHide": "Auto-hide"
-      },
-      "idleHideSeconds": {
-        "label": "Idle fade",
-        "help": "Seconds idle before the overlay fades out. Set to 0 to keep it always visible. Any input wakes it."
-      },
-      "saved": "Overlay appearance saved.",
-      "failed": "Could not save overlay appearance.",
-      "layout": {
-        "title": "Panel layout",
-        "position": "Position",
-        "contentAlign": "Content alignment",
-        "contentAlignInherit": "Inherit position",
-        "displayMode": "Display mode",
-        "width": "Width",
-        "height": "Height",
-        "zOrder": "Z-order",
-        "idleHideSeconds": "Idle fade",
-        "inheritHint": "Leave width, height, or idle fade at 0 to inherit the plugin default or the global idle fade.",
-        "save": "Save layout",
-        "saved": "Panel layout saved.",
-        "failed": "Could not save the panel layout."
-      },
+      "disabledMessage": "Enable the touch overlay in Settings, then activate plugins here.",
       "plugins": {
         "title": "Overlay plugins",
-        "description": "Activate which overlay plugins the frame offers. Configure activated plugins under Settings.",
+        "description": "Activate which overlay plugins the frame offers. Configure their layout and options under Settings.",
         "noPlugins": "No overlay plugins discovered. Add plugin directories to the configured plugin folder.",
         "enableFirstHint": "Enable the touch overlay in Settings to make activated plugins available on the frame.",
         "activate": "Activate",
@@ -437,8 +410,33 @@
       "inputTouch": "Touch",
       "inputMouse": "Mouse",
       "inputKeyboard": "Keyboard",
+      "displayMode": {
+        "persistent": "Until turned off",
+        "autoHide": "Auto-hide"
+      },
+      "idleHideSeconds": {
+        "label": "Idle fade",
+        "help": "Seconds idle before the overlay fades out. Set to 0 to keep it always visible. Any input wakes it."
+      },
       "saved": "Overlay settings saved.",
       "failed": "Could not save overlay settings.",
+      "layout": {
+        "title": "Panel layout",
+        "position": "Position",
+        "contentAlign": "Content alignment",
+        "contentAlignInherit": "Inherit position",
+        "displayMode": "Display mode",
+        "width": "Width",
+        "height": "Height",
+        "zOrder": "Z-order",
+        "idleHideSeconds": "Idle fade",
+        "inheritHint": "Leave width, height, or idle fade at 0 to inherit the plugin default or the global idle fade.",
+        "editLayout": "Layout",
+        "hideLayout": "Hide layout",
+        "save": "Save layout",
+        "saved": "Panel layout saved.",
+        "failed": "Could not save the panel layout."
+      },
       "pluginConfig": {
         "title": "Plugin configuration",
         "description": "Adjust settings for every discovered overlay plugin. Activate a plugin in Appearance to show it in the Remote dock.",
