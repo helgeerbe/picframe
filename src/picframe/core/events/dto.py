@@ -245,8 +245,10 @@ class OverlayConfigChangedEvent(Event):
     Attributes:
         overlay_config: The full nested ``overlay`` config section (manifest
             defaults merged with persisted user values) ready to apply.
-        updated_plugin_id: When the change was a single plugin's config write,
-            the affected plugin id; ``None`` for general overlay section writes.
+        updated_plugin_id: When the change was a single plugin's config or
+            layout write, the affected plugin id; ``None`` for general overlay
+            section writes (#752: derived from a single-entry
+            ``plugin_config`` or ``plugin_layout`` map).
     """
 
     overlay_config: dict[str, Any]

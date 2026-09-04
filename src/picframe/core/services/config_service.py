@@ -18,6 +18,7 @@ from picframe.core.events.dto import (
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.models.hardware_input import normalize_hardware_inputs_config
+from picframe.core.models.overlay import normalize_legacy_overlay
 from picframe.core.repositories.interfaces import IConfigRepository
 from picframe.core.services.renderer_config import build_renderer_config
 from picframe.core.services.resource_paths import ResourcePaths
@@ -110,6 +111,12 @@ class ConfigService:
                 "overlay": self._config_repository.get_app_config("overlay", {}),
             }
 
+        # Bridge the legacy single-visible-plugin model to the multi-widget
+        # model (#752): derive ``visible_plugins`` from ``visible_plugin`` and
+        # re-derive ``visible_plugin`` for the worker/shell, without dropping
+        # legacy keys (Phase B removes the passthrough).
+        config["overlay"] = normalize_legacy_overlay(config["overlay"])
+
         return config
 
     def update_nested_config(self, nested_config: dict[str, Any]) -> None:
@@ -157,6 +164,26 @@ class ConfigService:
         prefix = f"overlay.plugin_config.{plugin_id}"
         self._config_repository.delete_app_config_prefix(prefix)
         for key, value in plugin_config.items():
+            self._config_repository.set_app_config(f"{prefix}.{key}", value)
+
+    def update_plugin_layout(self, plugin_id: str, plugin_layout: dict[str, Any]) -> None:
+        """Persist a single plugin's layout under ``overlay.plugin_layout.<id>.*`` (#752).
+
+        Reuses the same scoped ``delete_app_config_prefix`` + re-write pattern
+        as ``update_plugin_config``. ``None`` values (``content_align`` /
+        ``idle_hide_seconds`` / ``width`` / ``height`` = "inherit/default") are
+        not stored: an absent key reads back as the manifest default via
+        ``effective_plugin_layout``.
+        """
+        if not self._config_repository:
+            logger.warning("Cannot update plugin layout: no config repository is available")
+            return
+
+        prefix = f"overlay.plugin_layout.{plugin_id}"
+        self._config_repository.delete_app_config_prefix(prefix)
+        for key, value in plugin_layout.items():
+            if value is None:
+                continue
             self._config_repository.set_app_config(f"{prefix}.{key}", value)
 
     def _handle_set_config(self, payload: Any) -> None:
@@ -215,6 +242,10 @@ class ConfigService:
                 plugin_config = overlay_payload.get("plugin_config")
                 if isinstance(plugin_config, dict) and len(plugin_config) == 1:
                     updated_plugin_id = next(iter(plugin_config))
+                if updated_plugin_id is None:
+                    plugin_layout = overlay_payload.get("plugin_layout")
+                    if isinstance(plugin_layout, dict) and len(plugin_layout) == 1:
+                        updated_plugin_id = next(iter(plugin_layout))
             self._event_publisher.publish(
                 OverlayConfigChangedEvent(
                     overlay_config=dict(overlay_config),
