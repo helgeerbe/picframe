@@ -26,9 +26,9 @@ const enabledPlugins = computed<string[]>(() => {
   return Array.isArray(ov?.enabled_plugins) ? [...(ov!.enabled_plugins as string[])] : []
 })
 
-const visiblePlugin = computed<string | null>(() => {
-  const v = config.value?.overlay?.visible_plugin
-  return typeof v === 'string' ? v : null
+const visiblePlugins = computed<string[]>(() => {
+  const v = config.value?.overlay?.visible_plugins
+  return Array.isArray(v) ? [...(v as string[])] : []
 })
 
 // Only plugins the user has activated (via Appearance) appear as tiles.
@@ -43,12 +43,17 @@ const showStatus = (tone: 'success' | 'danger', message: string) => {
   }, 3000)
 }
 
-const setVisible = async (pluginId: string | null) => {
+// Toggle a plugin in/out of the visible set (#752 multi-widget). Several
+// plugins can be expanded at once; tapping an active tile collapses just it.
+const toggleVisible = async (pluginId: string) => {
   if (isSaving.value) return
+  const next = visiblePlugins.value.includes(pluginId)
+    ? visiblePlugins.value.filter(id => id !== pluginId)
+    : [...visiblePlugins.value, pluginId]
   isSaving.value = true
   statusMessage.value = ''
   try {
-    await configStore.savePartialConfig({ overlay: { visible_plugin: pluginId } })
+    await configStore.savePartialConfig({ overlay: { visible_plugins: next } })
     showStatus('success', t('remote.touchOverlay.saved'))
   } catch (e) {
     console.error(e)
@@ -58,9 +63,20 @@ const setVisible = async (pluginId: string | null) => {
   }
 }
 
-// Tap a tile to expand it on the frame; tap the active tile to collapse to dock.
-const toggleTile = (pluginId: string) => {
-  void setVisible(visiblePlugin.value === pluginId ? null : pluginId)
+// Collapse all panels back to dock-only.
+const setDockOnly = async () => {
+  if (isSaving.value) return
+  isSaving.value = true
+  statusMessage.value = ''
+  try {
+    await configStore.savePartialConfig({ overlay: { visible_plugins: [] } })
+    showStatus('success', t('remote.touchOverlay.saved'))
+  } catch (e) {
+    console.error(e)
+    showStatus('danger', t('remote.touchOverlay.failed'))
+  } finally {
+    isSaving.value = false
+  }
 }
 
 onMounted(async () => {
@@ -74,7 +90,7 @@ onMounted(async () => {
   // `overlayError` is already shown in-panel.
   if (overlayError.value) return
   // `fetchConfig()` (full) is required: the workflow-config allowlist excludes
-  // enabled_plugins/visible_plugin, which the dock reads live.
+  // enabled_plugins/visible_plugins, which the dock reads live.
   const ov = config.value?.overlay
   if (!Array.isArray(ov?.enabled_plugins)) {
     await configStore.fetchConfig()
@@ -155,26 +171,26 @@ onMounted(async () => {
           {{ t('remote.touchOverlay.description') }}
         </p>
 
-        <!-- Tile dock: one tile per activated plugin. -->
+        <!-- Tile dock: one tile per activated plugin. Several can be active at once (#752). -->
         <div class="flex flex-wrap gap-3">
           <button
             v-for="plugin in dockPlugins"
             :key="plugin.id"
             type="button"
             :disabled="isSaving"
-            :aria-pressed="visiblePlugin === plugin.id"
+            :aria-pressed="visiblePlugins.includes(plugin.id)"
             :title="
-              visiblePlugin === plugin.id
+              visiblePlugins.includes(plugin.id)
                 ? t('remote.touchOverlay.collapse')
                 : t('remote.touchOverlay.expand', { plugin: plugin.name || plugin.id })
             "
             :class="[
-              visiblePlugin === plugin.id
+              visiblePlugins.includes(plugin.id)
                 ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/40 dark:bg-violet-500/15 dark:ring-violet-400/40'
                 : 'border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700/40',
               'flex min-w-[7rem] flex-col items-center gap-1.5 rounded-xl border px-4 py-3 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60'
             ]"
-            @click="toggleTile(plugin.id)"
+            @click="toggleVisible(plugin.id)"
           >
             <span class="text-xl leading-none" aria-hidden="true">{{ plugin.icon || '🗂️' }}</span>
             <span class="text-xs font-semibold text-gray-900 dark:text-white">{{
@@ -183,12 +199,12 @@ onMounted(async () => {
           </button>
         </div>
 
-        <div v-if="visiblePlugin" class="flex items-center justify-end">
+        <div v-if="visiblePlugins.length > 0" class="flex items-center justify-end">
           <button
             type="button"
             :disabled="isSaving"
             class="text-xs font-semibold text-violet-600 transition-colors hover:text-violet-500 disabled:opacity-60 dark:text-violet-400"
-            @click="setVisible(null)"
+            @click="setDockOnly()"
           >
             {{ t('remote.touchOverlay.dockOnly') }}
           </button>

@@ -9,7 +9,7 @@ const api = axios.create({
 
 /**
  * A discovered overlay plugin with its effective (merged) config, mirroring the
- * backend `OverlayPluginResponse` Pydantic model (#739).
+ * backend `OverlayPluginResponse` Pydantic model (#739, #752).
  */
 export interface OverlayPlugin {
   id: string
@@ -25,6 +25,9 @@ export interface OverlayPlugin {
   config_schema: Record<string, Record<string, any>>
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config: Record<string, any>
+  /** Effective per-plugin layout (#752): manifest defaults <- db overrides. */
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  layout?: Record<string, any>
 }
 
 export const useOverlayStore = defineStore('overlay', () => {
@@ -66,11 +69,37 @@ export const useOverlayStore = defineStore('overlay', () => {
     }
   }
 
+  /**
+   * Validate and persist a single plugin's layout (#752): position/size/
+   * content_align/display_mode/idle_hide_seconds/z_order. Returns the
+   * effective (merged) layout the backend persisted, or throws on
+   * validation/HTTP error. `null` values mean "inherit/default" and are not
+   * stored (an absent key reads back as the manifest default).
+   */
+  async function updatePluginLayout(
+    pluginId: string,
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    layout: Record<string, any>
+  ) {
+    const response = await api.put(
+      `/overlay/plugins/${encodeURIComponent(pluginId)}/layout`,
+      layout
+    )
+    return response.data as {
+      status: string
+      message?: string
+      plugin_id: string
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      layout: Record<string, any>
+    }
+  }
+
   return {
     plugins,
     isLoading,
     error,
     fetchPlugins,
-    updatePluginConfig
+    updatePluginConfig,
+    updatePluginLayout
   }
 })

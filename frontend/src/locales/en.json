@@ -204,6 +204,19 @@
       },
       "saved": "Overlay appearance saved.",
       "failed": "Could not save overlay appearance.",
+      "layout": {
+        "title": "Panel layout",
+        "position": "Position",
+        "displayMode": "Display mode",
+        "width": "Width",
+        "height": "Height",
+        "zOrder": "Z-order",
+        "idleHideSeconds": "Idle fade",
+        "inheritHint": "Leave width, height, or idle fade at 0 to inherit the plugin default or the global idle fade.",
+        "save": "Save layout",
+        "saved": "Panel layout saved.",
+        "failed": "Could not save the panel layout."
+      },
       "plugins": {
         "title": "Overlay plugins",
         "description": "Activate which overlay plugins the frame offers. Configure activated plugins under Settings.",

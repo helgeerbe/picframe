@@ -204,6 +204,19 @@
       },
       "saved": "Overlay-Darstellung gespeichert.",
       "failed": "Overlay-Darstellung konnte nicht gespeichert werden.",
+      "layout": {
+        "title": "Panel-Layout",
+        "position": "Position",
+        "displayMode": "Anzeigemodus",
+        "width": "Breite",
+        "height": "Höhe",
+        "zOrder": "Z-Reihenfolge",
+        "idleHideSeconds": "Leerlauf-Verblassen",
+        "inheritHint": "Breite, Höhe oder Leerlauf-Verblassen auf 0 lassen, um den Plugin-Standard oder den globalen Leerlauf zu übernehmen.",
+        "save": "Layout speichern",
+        "saved": "Panel-Layout gespeichert.",
+        "failed": "Panel-Layout konnte nicht gespeichert werden."
+      },
       "plugins": {
         "title": "Overlay-Plugins",
         "description": "Aktivieren Sie, welche Overlay-Plugins der Bilderrahmen anbietet. Konfigurieren Sie aktivierte Plugins unter Einstellungen.",
