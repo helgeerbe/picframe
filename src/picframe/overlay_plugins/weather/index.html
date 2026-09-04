@@ -7,7 +7,10 @@
   <style>
     :root { --fg: #f8fafc; --bg: transparent; --muted: rgba(248,250,252,0.7); --accent: #38bdf8; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* container-type: size makes 1cqw/1cqh = 1% of the panel dimensions so the
+       widget scales to fill the panel (fit-both-axes via min()). #752 */
     html, body { height: 100%; }
+    html { container-type: size; }
     body {
       background: var(--bg); color: var(--fg);
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -16,11 +19,11 @@
     }
     .pf-weather { padding: 1.25rem 1.75rem; text-align: center; min-width: 12rem; }
     .pf-weather__main { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
-    .pf-weather__icon { font-size: clamp(2.5rem, 7vw, 4rem); line-height: 1; }
-    .pf-weather__temp { font-size: clamp(2.5rem, 8vw, 4.5rem); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-    .pf-weather__desc { margin-top: 0.4rem; font-size: clamp(0.9rem, 2.5vw, 1.1rem); text-transform: capitalize; opacity: 0.9; }
-    .pf-weather__loc { margin-top: 0.15rem; font-size: clamp(0.8rem, 2vw, 0.95rem); opacity: 0.6; }
-    .pf-weather__details { margin-top: 0.6rem; display: flex; gap: 1.25rem; justify-content: center; font-size: clamp(0.8rem, 2vw, 0.95rem); opacity: 0.8; }
+    .pf-weather__icon { font-size: max(1.5rem, min(8cqw, 18cqh)); line-height: 1; }
+    .pf-weather__temp { font-size: max(1.5rem, min(9cqw, 22cqh)); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    .pf-weather__desc { margin-top: 0.4rem; font-size: max(0.9rem, min(2.8cqw, 6cqh)); text-transform: capitalize; opacity: 0.9; }
+    .pf-weather__loc { margin-top: 0.15rem; font-size: max(0.8rem, min(2.4cqw, 5cqh)); opacity: 0.6; }
+    .pf-weather__details { margin-top: 0.6rem; display: flex; gap: 1.25rem; justify-content: center; font-size: max(0.8rem, min(2.4cqw, 5cqh)); opacity: 0.8; }
     .pf-weather__error { padding: 1.5rem; text-align: center; opacity: 0.7; font-size: 0.95rem; max-width: 16rem; }
     .pf-weather__placeholder { opacity: 0.5; font-size: 0.95rem; padding: 1rem; text-align: center; }
   </style>

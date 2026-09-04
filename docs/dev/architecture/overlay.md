@@ -322,6 +322,31 @@ The shell pushes data into the active plugin's iframe via `postMessage`
   changes without its own WebSocket client. `CurrentMedia.location` carries the
   GPS `{lat, lon}` (or `null`).
 
+### Content sizing & alignment convention
+
+A plugin iframe fills its panel (`width:100%; height:100%`), so panel-level CSS
+cannot reach into the iframe document — each plugin must size and align its own
+content. To make the **panel size** control the widget size (the "draw a box, the
+widget fills it" model), plugins follow this convention:
+
+- Declare `html { container-type: size; }` so `1cqw`/`1cqh` = 1% of the panel
+  width/height (not the browser viewport, which the iframe does not see).
+- Size content with `max(min_floor, min(Ncqw, Mcqh))`: the inner `min()` fits the
+  **tighter** of the two panel axes so the widget never overflows, and the `max()`
+  floors a tiny panel at a legible size. There is **no upper cap** — the widget
+  scales continuously to fill the box at any size; the user, not the CSS, decides
+  how big is too big by shrinking the panel.
+- Apply the per-plugin `content_align` (forwarded in the `picframe:config`
+  payload; `null` inherits the panel `position`) by mapping the 9-anchor to the
+  plugin body's `justify-content`/`align-items`. Note the axis swap: a row-flex
+  body maps the anchor's horizontal part to `justify-content` and vertical to
+  `align-items`; a column-flex body is the reverse.
+
+Using viewport units (`vw`/`vh`) or an absolute `rem` `clamp()` ceiling instead
+produces the "bigger background, same small text" effect: `vw` tracks the iframe
+width only (never height) and a `rem` cap freezes the text while the panel keeps
+growing.
+
 ## 12. Web UI controls
 
 There is **no separate overlay tab** — controls are split to match existing UX:

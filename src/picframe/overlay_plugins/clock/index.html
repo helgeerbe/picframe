@@ -7,7 +7,11 @@
   <style>
     :root { --fg: #f8fafc; --bg: transparent; --accent: #38bdf8; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* container-type: size makes 1cqw/1cqh = 1% of the panel dimensions so the
+       widget scales to fill the panel (fit-both-axes via min()) rather than
+       tracking viewport width with an absolute rem ceiling. #752 */
     html, body { height: 100%; }
+    html { container-type: size; }
     body {
       background: var(--bg); color: var(--fg);
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -15,16 +19,18 @@
       -webkit-user-select: none; user-select: none; overflow: hidden;
     }
     .pf-clock { text-align: center; padding: 1rem 1.5rem; }
+    /* max() floors legibility at small sizes; min() fits the tighter axis so the
+       widget never overflows; no upper cap — the widget fills the box. #752 */
     .pf-clock__time {
-      font-size: clamp(2.5rem, 8vw, 5rem); font-weight: 700;
+      font-size: max(0.9rem, min(9cqw, 22cqh)); font-weight: 700;
       letter-spacing: 0.02em; line-height: 1; font-variant-numeric: tabular-nums;
     }
     .pf-clock__date {
-      margin-top: 0.5rem; font-size: clamp(0.9rem, 2.5vw, 1.25rem);
+      margin-top: 0.5rem; font-size: max(0.9rem, min(2.8cqw, 6cqh));
       opacity: 0.85; font-weight: 500;
     }
     .pf-clock--hidden { display: none; }
-    svg.pf-analog { width: min(70vw, 18rem); height: min(70vw, 18rem); }
+    svg.pf-analog { width: min(85cqw, 85cqh); height: min(85cqw, 85cqh); }
     .pf-analog .pf-hand { stroke: var(--fg); stroke-linecap: round; }
     .pf-analog .pf-hand--hour { stroke-width: 6; }
     .pf-analog .pf-hand--minute { stroke-width: 4; }
