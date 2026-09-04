@@ -95,11 +95,23 @@ def _descriptor_from_manifest(directory: Path, data: Any) -> PluginDescriptor:
         raw_requires = []
     requires = [str(item) for item in raw_requires] if isinstance(raw_requires, list) else []
 
+    # Optional ``icon.svg`` alongside the manifest: single-color SVG markup
+    # inlined by the dock so the icon inherits the dock text color and renders
+    # without an emoji font. Missing file -> empty string (emoji fallback).
+    icon_svg = ""
+    icon_path = directory / "icon.svg"
+    if icon_path.is_file():
+        try:
+            icon_svg = icon_path.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.warning("Could not read icon.svg for plugin %s: %s", plugin_id, exc)
+
     return PluginDescriptor(
         id=plugin_id,
         name=str(data.get("name", plugin_id)),
         description=str(data.get("description", "")),
         icon=str(data.get("icon", "")),
+        icon_svg=icon_svg,
         trigger=str(data.get("trigger", "icon")),
         position=str(data.get("position", "top-right")),
         size=size,

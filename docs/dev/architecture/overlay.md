@@ -156,10 +156,11 @@ manifests are skipped with a warning so one bad plugin never breaks discovery.
 
 `PluginDescriptor` (`src/picframe/core/models/overlay.py`) is an immutable
 dataclass: `id` (defaults to the directory name), `name`, `description`, `icon`
-(emoji), `trigger` (`"icon"` = dock tap), `position`, `size` (`{w,h}`),
-`requires` (informational capability list), `config_schema`, `entry`,
-`directory`. `plugin_config_defaults()` and `validate_plugin_config()` turn a
-`config_schema` into defaults and validate user payloads: unknown keys are
+(emoji fallback), `icon_svg` (inline SVG markup from an optional `icon.svg`
+file — see *Dock icons* below), `trigger` (`"icon"` = dock tap), `position`,
+`size` (`{w,h}`), `requires` (informational capability list), `config_schema`,
+`entry`, `directory`. `plugin_config_defaults()` and `validate_plugin_config()`
+turn a `config_schema` into defaults and validate user payloads: unknown keys are
 rejected, `required` fields must be present, declared `type`s
 (`string`/`integer`/`number`/`boolean`) and `enum` constraints are enforced.
 
@@ -179,6 +180,23 @@ Example `plugin.json`:
   }
 }
 ```
+
+### Dock icons (`icon.svg`)
+
+The dock renders each plugin as an icon button. To stay **font-independent**
+(no emoji font required) and **theme-aware** (inherits the dock text color), a
+plugin may ship a single-color `icon.svg` alongside its `plugin.json`. The
+loader reads that file into `PluginDescriptor.icon_svg`; the worker forwards it
+to the shell as `PluginEntry.icon_svg`; `dock.ts` inlines the markup via
+`innerHTML` (guarded by an `<svg`-root check) so the SVG inherits `currentColor`.
+The SVG must use `stroke="currentColor"` (or `fill="currentColor"`) and a `24x24`
+viewBox; the shell sizes it with `.pf-dock-icon svg { width: 1.5em; height: 1.5em }`.
+
+When a plugin ships no `icon.svg`, `icon_svg` is `""` and the dock falls back to
+the manifest `icon` emoji. Emoji rendering (in the dock fallback *and inside
+plugin content*, e.g. the weather plugin's condition glyphs) requires the system
+color-emoji font `fonts-noto-color-emoji`, which the installer adds alongside
+the WebKitGTK packages — see `docs/user/overlay.md` troubleshooting.
 
 ## 7. API
 
@@ -332,9 +350,9 @@ ruff clean, ruff format 163 files, frontend lint 0 errors, both Vite builds):
 - `test/core/renderers/test_overlay_ipc.py` (10) — IPC message round-trips + parser.
 - `test/core/renderers/test_webkit_overlay_renderer.py` (15) — mocked `gi`/WebKit: spawn, opacity from render actions, config forwarding, input republish, graceful degradation.
 - `test/core/models/test_overlay.py` (11) — `PluginDescriptor`, `validate_plugin_config` defaults/required/type/enum/unknown.
-- `test/infrastructure/overlay/test_plugin_loader.py` (8) — discovery, malformed manifest skip.
+- `test/infrastructure/overlay/test_plugin_loader.py` (10) — discovery, malformed manifest skip, `icon.svg` loading.
 - `test/infrastructure/overlay/test_overlay_worker.py` (25) — headless GTK-free IPC plumbing, layer-shell wiring.
-- `test/infrastructure/overlay/test_builtin_plugins.py` (6) — built-in manifests/config_schema validation.
+- `test/infrastructure/overlay/test_builtin_plugins.py` (7) — built-in manifests/config_schema validation + `icon.svg` presence.
 - API endpoint tests in `test/api/test_app.py` (7); bootstrapper copy in
   `test/core/services/test_bootstrapper.py` (10).
 

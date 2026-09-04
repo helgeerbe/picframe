@@ -101,7 +101,16 @@ export class Dock {
     btn.className = 'pf-dock-icon'
     if (plugin.id === this.visiblePlugin) btn.classList.add('pf-dock-icon--active')
     btn.setAttribute('aria-label', plugin.name || plugin.id)
-    btn.textContent = plugin.icon || '◆'
+    // Prefer the plugin's inline SVG (crisp, theme-aware via currentColor,
+    // font-independent). Fall back to the emoji `icon` field when no SVG is
+    // shipped. Only inline markup that looks like an <svg> root so a stray
+    // string can never inject arbitrary HTML into the dock button.
+    const svg = plugin.icon_svg?.trimStart()
+    if (svg && svg.startsWith('<svg')) {
+      btn.innerHTML = svg
+    } else {
+      btn.textContent = plugin.icon || '◆'
+    }
     btn.addEventListener('click', e => {
       e.stopPropagation()
       this.togglePlugin(plugin.id)

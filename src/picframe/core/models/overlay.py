@@ -40,7 +40,12 @@ class PluginDescriptor:
         id: Stable plugin identifier (defaults to the plugin directory name).
         name: Human-readable display name.
         description: Short description shown in the web UI.
-        icon: Emoji or short label used for the dock icon.
+        icon: Emoji or short label used for the dock icon (fallback when no
+            ``icon_svg`` is present).
+        icon_svg: Inline SVG markup (single-color, ``stroke="currentColor"``)
+            read from an optional ``icon.svg`` file in the plugin directory.
+            When non-empty the dock inlines it so the icon inherits the dock
+            text color and renders crisply without an emoji font.
         trigger: How the plugin is activated (``"icon"`` = dock icon tap).
         position: Default screen position (e.g. ``"top-right"``).
         size: Optional ``{"w": int, "h": int}`` preferred size.
@@ -55,6 +60,7 @@ class PluginDescriptor:
     name: str = ""
     description: str = ""
     icon: str = ""
+    icon_svg: str = ""
     trigger: str = "icon"
     position: str = "top-right"
     size: dict[str, int] | None = None

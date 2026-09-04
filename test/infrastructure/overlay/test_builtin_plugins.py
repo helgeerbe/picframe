@@ -91,3 +91,17 @@ def test_meta_plugin_schema() -> None:
     assert result["map_zoom"] == 16
     assert result["show_map"] is False
     assert result["show_exif"] is True
+
+
+def test_each_builtin_plugin_ships_icon_svg() -> None:
+    """Built-in plugins ship a single-color icon.svg so dock icons render
+    without an emoji font (font-independent, theme-aware via currentColor)."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    for descriptor in loader.list_plugins():
+        svg_path = Path(descriptor.directory) / "icon.svg"
+        assert svg_path.is_file(), f"{descriptor.id} missing icon.svg"
+        markup = descriptor.icon_svg
+        assert markup.startswith("<svg"), f"{descriptor.id} icon_svg not an <svg> root"
+        assert "currentColor" in markup, (
+            f"{descriptor.id} icon.svg must use currentColor to inherit dock color"
+        )

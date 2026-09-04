@@ -516,7 +516,7 @@ fi
 # older OS releases (e.g. Bookworm, which lacks gir1.2-webkit-6.0) still install.
 if [ "$ENABLE_OVERLAY" = true ]; then
     echo "  -> Installing WebKitGTK touch overlay packages..."
-    if apt-get install -y gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0; then
+    if apt-get install -y gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0 fonts-noto-color-emoji; then
         echo "  -> WebKitGTK overlay packages installed."
     else
         echo "  -> Warning: overlay packages unavailable on this OS release" >&2
@@ -526,7 +526,7 @@ if [ "$ENABLE_OVERLAY" = true ]; then
     fi
 else
     echo "  -> WebKitGTK overlay packages skipped. Install later with:"
-    echo "     sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0"
+    echo "     sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0 fonts-noto-color-emoji"
 fi
 
 # 4. Configure user privileges
@@ -677,7 +677,7 @@ fi
 if [ "$ENABLE_OVERLAY" = true ]; then
     echo "Touch overlay packages installed. Enable at runtime by setting overlay.enabled = true."
 else
-    echo "Touch overlay packages skipped. To enable later: sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0"
+    echo "Touch overlay packages skipped. To enable later: sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0 fonts-noto-color-emoji"
 fi
 echo "Note: You may need to log out and log back in for group changes (i2c, video, render, input, seat) to take effect."
 echo "======================================================="

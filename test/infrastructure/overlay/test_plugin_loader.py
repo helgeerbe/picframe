@@ -95,3 +95,33 @@ def test_list_plugins_expands_user_path(tmp_path: Path, monkeypatch) -> None:
     _write_plugin(plugins, "clock", {"id": "clock"})
     loader = PluginLoader("~/overlay-plugins")
     assert [d.id for d in loader.list_plugins()] == ["clock"]
+
+
+def test_descriptor_loads_icon_svg_when_present(tmp_path: Path) -> None:
+    plugin_dir = _write_plugin(tmp_path, "clock", {"id": "clock", "icon": "🕐"})
+    (plugin_dir / "icon.svg").write_text(
+        '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/></svg>',
+        encoding="utf-8",
+    )
+    loader = PluginLoader(tmp_path)
+    descriptor = loader.list_plugins()[0]
+    assert descriptor.icon == "🕐"
+    assert descriptor.icon_svg.startswith("<svg")
+    assert "currentColor" not in descriptor.icon_svg  # file content verbatim
+
+
+def test_descriptor_icon_svg_empty_when_file_absent(tmp_path: Path) -> None:
+    _write_plugin(tmp_path, "clock", {"id": "clock", "icon": "🕐"})
+    loader = PluginLoader(tmp_path)
+    descriptor = loader.list_plugins()[0]
+    assert descriptor.icon_svg == ""
+
+
+def test_descriptor_icon_svg_uses_currentcolor_convention(tmp_path: Path) -> None:
+    """Shipped icon.svg assets should color via currentColor (theme-aware)."""
+    plugin_dir = _write_plugin(tmp_path, "clock", {"id": "clock"})
+    (plugin_dir / "icon.svg").write_text(
+        '<svg stroke="currentColor"><circle r="10"/></svg>', encoding="utf-8"
+    )
+    loader = PluginLoader(tmp_path)
+    assert "currentColor" in loader.list_plugins()[0].icon_svg

@@ -244,6 +244,7 @@ class OverlayWorker:
             "id": descriptor.id,
             "name": descriptor.name,
             "icon": descriptor.icon,
+            "icon_svg": descriptor.icon_svg,
             "position": descriptor.position,
             "entry_uri": entry.resolve().absolute().as_uri(),
         }

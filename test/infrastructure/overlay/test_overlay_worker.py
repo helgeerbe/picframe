@@ -404,6 +404,9 @@ def test_build_shell_config_merges_plugins_and_env(tmp_path) -> None:
         json.dumps({"id": "clock", "name": "Clock", "icon": "🕐", "entry": "index.html"})
     )
     (clock / "index.html").write_text("<html></html>")
+    (clock / "icon.svg").write_text(
+        '<svg viewBox="0 0 24 24" stroke="currentColor"><circle r="10"/></svg>'
+    )
     worker = OverlayWorker(
         socket_path="/tmp/x.sock",
         html_dir=str(tmp_path / "html"),
@@ -420,6 +423,8 @@ def test_build_shell_config_merges_plugins_and_env(tmp_path) -> None:
     assert plugin["id"] == "clock"
     assert plugin["name"] == "Clock"
     assert plugin["icon"] == "🕐"
+    assert plugin["icon_svg"].startswith("<svg")
+    assert "currentColor" in plugin["icon_svg"]
     assert plugin["entry_uri"].startswith("file://")
     assert plugin["entry_uri"].endswith("clock/index.html")
 

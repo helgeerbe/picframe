@@ -306,12 +306,32 @@ overlay** tile dock.
   OS release that lacks them, add them manually:
 
   ```bash
-  sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0
+  sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0 fonts-noto-color-emoji
   ```
 
   The renderer probes the GTK4 typelib (`WebKit 6.0`) first, then the GTK3
   fallback (`WebKit2 4.1`). If WebKitGTK is absent, picframe logs a
   `webkit_unavailable` system error and continues without the overlay.
+- **Dock icons render as "tofu" boxes.** The dock icons use crisp inline SVG
+  (`icon.svg` per plugin, colored with `currentColor`) so they do not need an
+  emoji font. If a plugin ships no `icon.svg`, the dock falls back to the
+  manifest `icon` emoji — install `fonts-noto-color-emoji` (pulled in by the
+  installer) so those render in color:
+
+  ```bash
+  sudo apt install fonts-noto-color-emoji
+  ```
+
+- **Emoji inside plugin content (weather conditions, the 📍 pin) show as
+  "tofu".** Plugin HTML runs inside a sandboxed WebKitGTK iframe and relies on
+  the system color-emoji font for any emoji it renders (the weather plugin
+  maps conditions to ☀️/⛅/🌧️/❄️, the meta plugin shows a 📍 pin). Install
+  `fonts-noto-color-emoji` (the installer adds it automatically) so emoji
+  render in color instead of empty boxes:
+
+  ```bash
+  sudo apt install fonts-noto-color-emoji
+  ```
 - **Clock overlay invisible, but photos/video play fine.** The `wlr-layer-shell`
   surface is created via `gtk4-layer-shell`. That project ships two packages:
   `gir1.2-gtk4layershell-1.0` (the *typelib*, which imports without the runtime

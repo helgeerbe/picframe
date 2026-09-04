@@ -105,6 +105,15 @@ body {
   transform: scale(1.08);
 }
 
+/* Inline SVG dock icons: inherit the dock text color via `currentColor` so they
+ * stay theme-aware and render crisply without an emoji font. Sized in em so
+ * they scale with the dock icon font-size. */
+.pf-dock-icon svg {
+  width: 1.5em;
+  height: 1.5em;
+  display: block;
+}
+
 /* Idle hide: fade the plugin content (auto_hide mode only). */
 #overlay-root.pf-root--idle #pf-plugin-panel {
   opacity: 0;

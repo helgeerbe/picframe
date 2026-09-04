@@ -25,7 +25,12 @@ export type InputType = 'touch' | 'mouse' | 'keyboard'
 export interface PluginEntry {
   id: string
   name: string
+  /** Emoji fallback used when no `icon_svg` is provided. */
   icon: string
+  /** Inline SVG markup (single-color, `stroke="currentColor"`) from the plugin's
+   * `icon.svg`. When present the dock inlines it so the icon inherits the dock
+   * text color and renders without an emoji font. */
+  icon_svg?: string
   position: string
   /** `file://` URI of the plugin's HTML entry (loaded in an iframe). */
   entry_uri: string
