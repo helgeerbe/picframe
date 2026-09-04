@@ -26,6 +26,8 @@ Non-negotiables (from the project rules):
 - **The overlay is always present and always the input surface.** "Hide" means
   opacity 0 (transparent), not withdrawn — the Wayland surface stays on top and
   keeps capturing input so any touch/keyboard/mouse event wakes it back up.
+  (This stacking requires a `wlr-layer-shell` compositor such as labwc; the
+  fallback on non-layer-shell compositors does not stay on top — see §10.)
 - **User config is persistent (`config.db3`); plugin code is stateless.**
   Per-plugin user values live under `overlay.plugin_config.<id>.*`, never inside
   the plugin directory, so a plugin dir is safe to update/replace without
@@ -76,7 +78,8 @@ GTK/WebKit; the in-process `WebKitOverlayRenderer` is a thin IPC client (like
   `SystemErrorEvent(code="webkit_unavailable")` instead of spawning.
 - **`src/picframe/infrastructure/overlay/overlay_worker.py`** — the worker:
   guarded `gi`/Gtk/WebKit import, GLib `MainLoop` + `WebKit.WebView`, transparent
-  `wlr-layer-shell` surface (falls back to a plain borderless `Gtk.Window`),
+  `wlr-layer-shell` surface (falls back to a plain borderless `Gtk.Window`,
+  which is unsupported on non-layer-shell compositors — see §10),
   `window.picframe` JS bridge, GTK-free IPC plumbing (`handle_command`/`_serve`)
   that is unit-tested headless. `main()` is the subprocess entry point.
 
@@ -200,7 +203,10 @@ When no controller is wired (overlay disabled), `GET /plugins` returns `[]`.
 `create_app(overlay_controller=...)`. Start/stop happen in both shutdown paths
 (signal handler + engine `finally` block). If WebKitGTK is absent the renderer
 publishes `SystemErrorEvent(code="webkit_unavailable")` and picframe runs
-unchanged.
+unchanged. This is distinct from the compositor-absent case: a running
+WebKitGTK on a non-`wlr-layer-shell` compositor silently degrades to the
+plain-window fallback documented in §10 (no system error is published, but
+the overlay renders behind video and loses input).
 
 `src/picframe/core/services/bootstrapper.py` calls `_copy_overlay_plugins()`
 during `picframe init`: built-in plugins ship as package data under
