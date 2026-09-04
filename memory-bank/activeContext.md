@@ -8,8 +8,10 @@ recorded in `decisionLog.md` (out-of-process worker mirroring `gst_worker.py`,
 opacity-based hide/wake with `idle_hide_seconds`, `OverlayConfig` Pydantic
 model, `wlr-layer-shell`, `file://` load model, `OverlayConfigChangedEvent`
 distinct from `RENDER_UPDATE_OVERLAY`, parallel Pointer+keyboard input, Vite
-multi-page). Only the hardware-blocked real-Wayland integration test (live worker
-on labwc) remains, tracked in the issue's verification criteria.
+multi-page). The clock overlay is **confirmed rendering on `picframepoc`
+(labwc)** after the bridge-signal fix (`a0d7663`) was deployed; a
+bridge-independent diagnosability probe + config-receipt logging were added
+as follow-up (see the #739 status block below).
 
 **Prerequisite done:** issue **#749** (remove dead legacy `peripherals` config
 section) is implemented and committed (`5924130`) on the feature branch.
@@ -77,6 +79,46 @@ worker tests; **pytest 883 passed**). All gates green.
 **Still open (blocked on hardware):** the Phase-1 spike
 (`file://`→`ws://localhost` cross-origin WS + `wlr-layer-shell` on labwc)
 still needs a real Wayland display + WebKitGTK typelib to validate end-to-end.
+
+**#739 clock confirmed on hardware (`picframepoc`, labwc):** the live Wayland
+integration test is no longer blocked — the clock overlay renders correctly
+on `picframepoc` after the bridge-signal fix was actually deployed. The whole
+"no clock" symptom was an **undeployed fix**: the branch had corrected the
+bridge signal from the non-existent WebView `user-message-received` to the
+`UserContentManager` `script-message-received::picframe` detail (commit
+`a0d7663`), but the inlined HTML had been copied to the Pi without
+re-`pip install`-ing the Python fix, so the signal wiring was still the broken
+`81ee834` version. Reinstalling (`pip install -e .`) made the clock appear; no
+further rendering code change was needed.
+
+**Diagnosability hardening (follow-up to the above):** because the shell's
+TypeScript emits **zero** `console` calls, the `[overlay-js]` journal forwarder
+is structurally blind to shell boot state — the clock can be missing with
+zero diagnostic lines (exactly the blind spot that hid the undeployed fix).
+Added bridge-independent diagnostics so the next failure is visible in the
+journal without relying on the (possibly broken) message-handler bridge:
+- `_on_load_changed` (FINISHED) schedules a one-shot `_probe_shell_state()`
+  via `GLib.timeout_add` (2 s after load, so the `__request_config` → Python →
+  `applyConfig` → `dock.render` round-trip has time to mount the clock iframe).
+  The probe runs a self-contained `evaluate_javascript` with its own async
+  finish callback and logs JSON: `pfBridge`, `webkitMsg`, `picframeSend`,
+  `root`, `children`, `iframes`, `bootErr`.
+- `main.ts` boot wrapped in try/catch setting `window.__pfBootErr` (then
+  re-throw) so a synchronous boot throw is visible to the probe.
+- `_handle_bridge_message` logs `__request_config received`; `_push_config_to_shell`
+  logs `Overlay push config: visible=%s enabled=%s plugins=%d` (a clock-missing
+  with a working bridge shows up here as a config/db fault, distinct from a
+  WebKit/JS fault).
+- 4 new worker tests (`test_on_load_finished_schedules_probe`,
+  `test_probe_shell_state_evaluates_probe_and_logs`,
+  `test_probe_shell_state_noop_without_surface`,
+  `test_push_config_to_shell_logs_payload`); the existing
+  `__request_config` test now also asserts the log. **pytest 918 passed**,
+  mypy strict 88 files, ruff clean, frontend `yarn lint` 0 errors +
+  `yarn build` regenerates the inlined `overlay.html` (no `type="module"`,
+  no `crossorigin`, `__pfBootErr` present).
+- Note: `picframe run` does **not** refresh regenerable HTML assets (only
+  `picframe init` does); accepted as-is (no follow-up issue).
 
 **Phase 2 DONE (frontend SPA panels, #739 items 14–16):** Remote/Appearance
 overlay controls, all frontend gates green (`yarn lint` 0 errors,

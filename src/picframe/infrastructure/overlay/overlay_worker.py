@@ -181,7 +181,8 @@ class OverlayWorker:
     def _handle_bridge_message(self, data: dict[str, Any]) -> None:
         """Handle a parsed message from the JS shell bridge (GTK-free, testable).
 
-        Called by the GTK ``user-message-received`` closure so the message
+        Called by the ``script-message-received::picframe`` closure (the
+        detailed GObject signal on the ``UserContentManager``) so the message
         dispatch stays pure and unit-testable.
         """
         action = str(data.get("action", ""))
@@ -211,6 +212,11 @@ class OverlayWorker:
         ):
             self.emit_input(action)
         elif action == "__request_config":
+            # The boot handshake: the shell asks for its initial config. Logging
+            # this is the one journal line that proves the JS bridge reached
+            # Python (independent of the console forwarder, which only fires
+            # if the shell itself logs — and the shell's TS does not) (#739).
+            logger.info("Overlay bridge: __request_config received")
             self._push_config_to_shell()
 
     def _build_shell_config(self) -> dict[str, Any]:
@@ -246,7 +252,17 @@ class OverlayWorker:
         """Push the current shell config to the WebView (no-op in headless mode)."""
         if self._web_view is None or not WEBKIT_AVAILABLE:
             return
-        payload = json.dumps(self._build_shell_config())
+        config = self._build_shell_config()
+        # Log the config the shell is about to receive. A clock missing with a
+        # working bridge shows up here: ``visible=None``/``enabled`` without the
+        # clock id is a config/db fault, distinct from a WebKit/JS fault (#739).
+        logger.info(
+            "Overlay push config: visible=%s enabled=%s plugins=%d",
+            config.get("visible_plugin"),
+            config.get("enabled_plugins"),
+            len(config.get("_plugins", [])),
+        )
+        payload = json.dumps(config)
         # Guard against the shell not having registered applyConfig yet (a race
         # between an early set_config and the page finishing boot).
         js = (
@@ -616,9 +632,17 @@ class OverlayWorker:
         injection is needed here — this handler only logs the load state so a
         blocked or failed load is visible in the journal instead of silently
         swallowed (#739).
+
+        On ``FINISHED`` it also schedules a one-shot, bridge-independent JS
+        state probe (:meth:`_schedule_probe`) so the next failure is
+        diagnosable from the journal: the shell's TypeScript emits no console
+        output, so the ``[overlay-js]`` forwarder is structurally blind to
+        whether the shell actually booted.
         """
         name = _load_event_name(load_event)
         logger.info("Overlay WebView load state: %s", name)
+        if name == "FINISHED":
+            self._schedule_probe()
 
     def _on_load_failed(self, _web_view: Any, load_event: Any, error: Any) -> None:
         """Log a failed overlay load (e.g. a missing ``file://`` resource)."""
@@ -627,6 +651,64 @@ class OverlayWorker:
         except Exception:  # noqa: BLE001 - never let logging raise
             msg = str(error)
         logger.error("Overlay WebView load FAILED (%s): %s", _load_event_name(load_event), msg)
+
+    def _schedule_probe(self) -> None:
+        """Schedule a one-shot JS state probe shortly after load finishes.
+
+        The probe runs after the ``__request_config`` → Python →
+        ``applyConfig`` → ``dock.render`` round-trip has had time to mount the
+        clock plugin iframe, so the reported ``iframes`` count reflects the
+        rendered state (at the FINISHED instant the iframe is always 0 because
+        the config has not been pushed back yet). No-op in headless mode.
+        """
+        if self._web_view is None or not WEBKIT_AVAILABLE or self._loop is None:
+            return
+        GLib.timeout_add(2000, self._probe_shell_state)
+
+    def _probe_shell_state(self) -> bool:
+        """Probe the shell's JS world via a bridge-independent ``evaluate_javascript``.
+
+        The shell's TypeScript emits no console output, so the journal's
+        ``[overlay-js]`` forwarder is structurally blind to whether the shell
+        actually booted — the clock can be missing with zero diagnostic lines,
+        which is exactly what happened when an undeployed signal fix left the
+        ``__request_config`` handshake dropping into a non-existent WebView
+        signal (#739). This probe runs a self-contained JS snippet and logs the
+        returned JSON, so the next failure is diagnosable from the journal
+        without depending on the message-handler bridge. Uses its own async
+        finish callback, not the bridge. Returns ``False`` (one-shot GLib
+        timeout source).
+        """
+        if self._web_view is None or not WEBKIT_AVAILABLE:
+            return False
+        probe_js = (
+            "(function(){try{return JSON.stringify({"
+            "pfBridge:typeof window.__pfBridge,"
+            "webkitMsg:!!(window.webkit&&window.webkit.messageHandlers"
+            "&&window.webkit.messageHandlers.picframe),"
+            "picframeSend:typeof(window.picframe&&window.picframe.send),"
+            "root:!!document.getElementById('overlay-root'),"
+            "children:document.querySelectorAll('#overlay-root > div').length,"
+            "iframes:document.querySelectorAll('iframe').length,"
+            "bootErr:window.__pfBootErr||null"
+            "});}catch(e){return JSON.stringify({probeError:String(e)});}})();"
+        )
+
+        def _on_probe_finish(web_view: Any, result: Any, _user_data: Any) -> None:
+            try:
+                jsc_value = web_view.evaluate_javascript_finish(result)
+                text = jsc_value.to_string() if jsc_value is not None else ""
+                logger.info("Overlay JS probe: %s", text)
+            except Exception as exc:  # noqa: BLE001 - never let logging raise
+                logger.warning("Overlay JS probe finish failed: %s", exc)
+
+        try:
+            self._web_view.evaluate_javascript(
+                probe_js, -1, None, None, None, _on_probe_finish, None
+            )
+        except Exception as exc:  # noqa: BLE001 - graceful degrade
+            logger.warning("Overlay JS probe could not be scheduled: %s", exc)
+        return False
 
     def _start_listener_async(self) -> None:
         """Accept the main process connection on a GLib idle callback."""

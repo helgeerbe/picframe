@@ -161,13 +161,21 @@ def test_handle_bridge_message_emits_input_actions(monkeypatch: pytest.MonkeyPat
 
 def test_handle_bridge_message_request_config_pushes_config(
     monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """The shell boot handshake asks for the initial config via the bridge."""
+    """The shell boot handshake asks for the initial config via the bridge.
+
+    It also logs ``__request_config received`` — the one journal line proving
+    the JS bridge reached Python, independent of the console forwarder (which
+    only fires if the shell itself logs, and it does not) (#739).
+    """
     worker = make_worker()
     calls: list[bool] = []
     monkeypatch.setattr(worker, "_push_config_to_shell", lambda: calls.append(True))
+    caplog.set_level(logging.INFO, logger="overlay_worker")
     worker._handle_bridge_message({"action": "__request_config"})
     assert calls == [True]
+    assert any("__request_config received" in r.message for r in caplog.records)
 
 
 def test_handle_bridge_message_ignores_unknown_action() -> None:
@@ -271,16 +279,113 @@ def test_install_js_bridge_adds_document_start_userscript(
 def test_on_load_changed_only_logs_state(monkeypatch: pytest.MonkeyPatch) -> None:
     """``_on_load_changed`` only logs; the console forwarder is now installed
     once via the document-start user script (no per-load injection at
-    COMMITTED)."""
+    COMMITTED). The FINISHED-state probe is gated on a real WebView, so in
+    headless mode (no surface) nothing is scheduled either."""
     import picframe.infrastructure.overlay.overlay_worker as mod
 
     monkeypatch.setattr(mod, "_load_event_name", lambda le: le)
-    worker = make_worker()
+    worker = make_worker()  # _web_view is None in headless mode
     pushed: list[str] = []
     monkeypatch.setattr(worker, "_push_to_shell", lambda js: pushed.append(js))
     for state in ("STARTED", "COMMITTED", "FINISHED"):
         worker._on_load_changed(None, state)  # must not raise
     assert pushed == []  # no per-load injection anymore
+
+
+def test_on_load_finished_schedules_probe(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``FINISHED`` schedules a one-shot JS state probe so the next failure is
+    diagnosable from the journal (the shell's TS emits no console output, so
+    the ``[overlay-js]`` forwarder is structurally blind to a failed boot).
+    STARTED/COMMITTED must not schedule it (#739)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_glib = MagicMock()
+    monkeypatch.setattr(mod, "GLib", fake_glib)
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "_load_event_name", lambda le: le)
+    worker = make_worker()
+    worker._web_view = MagicMock()  # a real surface -> probe eligible
+    worker._loop = MagicMock()
+
+    worker._on_load_changed(None, "FINISHED")
+    fake_glib.timeout_add.assert_called_once()
+    delay, cb = fake_glib.timeout_add.call_args.args
+    assert delay == 2000
+    assert cb == worker._probe_shell_state
+
+    fake_glib.reset_mock()
+    worker._on_load_changed(None, "STARTED")
+    worker._on_load_changed(None, "COMMITTED")
+    fake_glib.timeout_add.assert_not_called()
+
+
+def test_probe_shell_state_evaluates_probe_and_logs(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The probe runs a bridge-independent ``evaluate_javascript`` carrying the
+    diagnostic keys and logs the JSON returned by the async finish callback."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    worker = make_worker()
+    web_view = MagicMock()
+    worker._web_view = web_view
+    jsc_value = MagicMock()
+    jsc_value.to_string.return_value = (
+        '{"pfBridge":"boolean","webkitMsg":true,"picframeSend":"function",'
+        '"root":true,"children":2,"iframes":1,"bootErr":null}'
+    )
+    web_view.evaluate_javascript_finish.return_value = jsc_value
+    caplog.set_level(logging.INFO, logger="overlay_worker")
+
+    result = worker._probe_shell_state()
+    assert result is False  # one-shot GLib timeout source
+
+    call = web_view.evaluate_javascript.call_args
+    js = call.args[0]
+    assert "pfBridge" in js
+    assert "webkitMsg" in js
+    assert "picframeSend" in js
+    assert "bootErr" in js
+    assert "iframes" in js
+    callback = call.args[5]  # the async finish callback (6th positional arg)
+    callback(web_view, object(), None)
+    assert any("Overlay JS probe:" in r.message for r in caplog.records)
+    assert any('"iframes":1' in r.message for r in caplog.records)
+
+
+def test_probe_shell_state_noop_without_surface() -> None:
+    """In headless mode (no WebView) the probe is a no-op, never raises."""
+    worker = make_worker()
+    assert worker._probe_shell_state() is False
+
+
+def test_push_config_to_shell_logs_payload(
+    monkeypatch: pytest.MonkeyPatch,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """The config push logs the payload summary so a clock-missing-with-working
+    bridge (``visible=None`` / clock not in ``enabled``) shows up as a config/db
+    fault distinct from a WebKit/JS fault (#739)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    worker = make_worker()
+    worker._web_view = MagicMock()
+    monkeypatch.setattr(
+        worker,
+        "_build_shell_config",
+        lambda: {
+            "visible_plugin": "clock",
+            "enabled_plugins": ["clock", "meta"],
+            "_plugins": [{"id": "clock"}, {"id": "meta"}],
+        },
+    )
+    monkeypatch.setattr(worker, "_push_to_shell", lambda js: None)
+    caplog.set_level(logging.INFO, logger="overlay_worker")
+    worker._push_config_to_shell()
+    assert any("Overlay push config" in r.message and "clock" in r.message for r in caplog.records)
 
 
 def test_push_config_to_shell_noop_without_surface() -> None:
