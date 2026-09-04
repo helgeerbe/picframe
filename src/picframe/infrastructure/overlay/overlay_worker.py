@@ -185,6 +185,24 @@ class OverlayWorker:
         dispatch stays pure and unit-testable.
         """
         action = str(data.get("action", ""))
+        if action == "__console":
+            # Forwarded JS console / uncaught-error messages from the injected
+            # diagnostic script (#739). WebKitGTK does not surface page console
+            # output to the embedding process, so the shell installs a forwarder
+            # that posts each line here; logging it makes a silently-blocked or
+            # runtime-failing shell visible in the journal.
+            level = str(data.get("level", "log")).upper()
+            text = str(data.get("text", ""))
+            logfn = {
+                "ERROR": logger.error,
+                "WARN": logger.warning,
+                "WARNING": logger.warning,
+                "INFO": logger.info,
+                "DEBUG": logger.debug,
+                "LOG": logger.info,
+            }.get(level, logger.info)
+            logfn("[overlay-js] %s", text)
+            return
         if action in (
             INPUT_ACTION_PREV,
             INPUT_ACTION_NEXT,
@@ -332,9 +350,20 @@ class OverlayWorker:
         settings = self._web_view.get_settings()
         settings.set_allow_file_access_from_file_urls(True)
         settings.set_allow_universal_access_from_file_urls(True)
+        # Surface load diagnostics: forward WebKit load state + JS console to
+        # the worker logger so a blocked/failed shell is visible in the journal
+        # instead of silently swallowed (#739). Under ``file://`` WebKitGTK can
+        # drop an ES module script without any console error surfacing to the
+        # embedding process; connecting these *before* ``load_uri`` ensures the
+        # signals fire for this load.
+        shell_uri = self._shell_uri()
+        logger.info("Overlay shell load URI: %s", shell_uri)
+        self._log_shell_html_resolution()
+        self._web_view.connect("load-changed", self._on_load_changed)
+        self._web_view.connect("load-failed", self._on_load_failed)
         # The shell connects to the picframe state WebSocket itself; we only
         # load the local file:// entry here.
-        self._web_view.load_uri(self._shell_uri())
+        self._web_view.load_uri(shell_uri)
         self._install_js_bridge()
         self._window.set_child(self._web_view)
         self._apply_transparency()
@@ -482,6 +511,94 @@ class OverlayWorker:
             None,
         )
 
+    def _log_shell_html_resolution(self) -> None:
+        """Log which overlay shell HTML file (if any) was found on disk.
+
+        A missing HTML file is the most common packaging fault (frontend build
+        not run, wrong ``html_dir``); without this check the WebView just shows
+        WebKit's "not found" page and there is no clock. Logging the resolved
+        path (or the absence of one) makes that failure mode obvious in the
+        journal (#739).
+        """
+        candidates = (
+            Path(self.html_dir) / "overlay" / "overlay.html",
+            Path(self.html_dir) / "overlay" / "index.html",
+            Path(self.html_dir) / "overlay.html",
+        )
+        found = next((c for c in candidates if c.is_file()), None)
+        if found is None:
+            logger.error(
+                "Overlay shell HTML not found under %s; searched overlay/overlay.html, "
+                "overlay/index.html, overlay.html. The WebView will load a not-found page "
+                "(no clock).",
+                self.html_dir,
+            )
+        else:
+            logger.info("Overlay shell HTML resolved: %s", found)
+
+    def _on_load_changed(self, _web_view: Any, load_event: Any) -> None:
+        """Log WebKit load progress; inject JS console forwarding on commit.
+
+        WebKitGTK does not surface page ``console.*`` or uncaught errors to the
+        embedding process, so a shell whose ES module script is silently
+        blocked under ``file://`` leaves *no* trace in the journal (#739). At
+        ``COMMITTED`` (the document exists but deferred module scripts have not
+        yet run) we inject a classic-script override of ``console`` plus
+        ``window.onerror`` / ``unhandledrejection`` that forwards each message
+        to the registered ``picframe`` message handler, which
+        :meth:`_handle_bridge_message` logs. The injected script runs in the
+        page's main world via ``evaluate_javascript`` and so executes even when
+        the Vite ES module bundle itself is CORS-blocked.
+        """
+        name = _load_event_name(load_event)
+        logger.info("Overlay WebView load state: %s", name)
+        if name == "COMMITTED":
+            self._inject_console_forwarding()
+
+    def _on_load_failed(self, _web_view: Any, load_event: Any, error: Any) -> None:
+        """Log a failed overlay load (e.g. a missing ``file://`` resource)."""
+        try:
+            msg = error.message if hasattr(error, "message") else str(error)
+        except Exception:  # noqa: BLE001 - never let logging raise
+            msg = str(error)
+        logger.error("Overlay WebView load FAILED (%s): %s", _load_event_name(load_event), msg)
+
+    def _inject_console_forwarding(self) -> None:
+        """Inject a main-world classic script that forwards console + errors.
+
+        Reuses :meth:`_push_to_shell` (GLib main-thread ``evaluate_javascript``)
+        so it runs in the page's main world independent of the module-script
+        CORS state. Idempotent (guards with ``window.__pfConsoleFwd``) so a
+        ``reload`` does not stack handlers.
+        """
+        if self._web_view is None or not WEBKIT_AVAILABLE:
+            return
+        js = (
+            "(function(){"
+            "if(window.__pfConsoleFwd){return;}"
+            "window.__pfConsoleFwd=true;"
+            "var send=function(level,args){"
+            "try{var t=Array.prototype.map.call(args,function(a){"
+            "try{return typeof a==='object'?JSON.stringify(a):String(a);}"
+            "catch(e){return String(a);}}).join(' ');"
+            "window.webkit.messageHandlers.picframe.postMessage("
+            "JSON.stringify({action:'__console',level:level,text:t}));}"
+            "catch(e){}};"
+            "['log','info','warn','error','debug'].forEach(function(m){"
+            "var o=console[m]?console[m].bind(console):function(){};"
+            "console[m]=function(){send(m,arguments);"
+            "try{o.apply(console,arguments);}catch(e){}};});"
+            "window.addEventListener('error',function(e){"
+            "send('error',['window.onerror: '+(e.message||'')+' @ '"
+            "+(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0)"
+            "+(e.error&&e.error.stack?(' '+e.error.stack):'')]);});"
+            "window.addEventListener('unhandledrejection',function(e){"
+            "var r=e.reason;send('error',['unhandledrejection: '"
+            "+(r&&r.stack?r.stack:String(r))]);});"
+            "})();"
+        )
+        self._push_to_shell(js)
+
     def _start_listener_async(self) -> None:
         """Accept the main process connection on a GLib idle callback."""
         if os.path.exists(self.socket_path):
@@ -526,6 +643,25 @@ class OverlayWorker:
     def _shutdown(self) -> None:
         if self._loop is not None:
             self._loop.quit()
+
+
+def _load_event_name(load_event: Any) -> str:
+    """Return a human-readable name for a ``WebKit.LoadEvent`` value.
+
+    Tolerates the unavailable-WebKit case (``WebKit`` is the ``typing.Any``
+    placeholder) and mock values in unit tests by falling back to ``str()``.
+    """
+    try:
+        le = WebKit.LoadEvent
+        if load_event == le.STARTED:
+            return "STARTED"
+        if load_event == le.COMMITTED:
+            return "COMMITTED"
+        if load_event == le.FINISHED:
+            return "FINISHED"
+    except Exception:  # noqa: BLE001 - fallback below
+        pass
+    return str(load_event)
 
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:

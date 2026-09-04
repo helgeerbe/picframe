@@ -1,6 +1,7 @@
 """Tests for the out-of-process overlay worker IPC plumbing (GTK-free)."""
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 from unittest.mock import MagicMock
@@ -173,6 +174,83 @@ def test_handle_bridge_message_ignores_unknown_action() -> None:
     worker = make_worker()
     worker._conn = None  # ensure no accidental emit
     worker._handle_bridge_message({"action": "???"})  # must not raise
+
+
+def test_handle_bridge_message_console_forwarding_routes_levels(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Forwarded JS console lines are logged by level so a blocked/failing
+    overlay shell becomes visible in the journal (#739)."""
+    worker = make_worker()
+    caplog.set_level(logging.DEBUG, logger="overlay_worker")
+    worker._handle_bridge_message({"action": "__console", "level": "error", "text": "boom"})
+    worker._handle_bridge_message({"action": "__console", "level": "warn", "text": "careful"})
+    worker._handle_bridge_message({"action": "__console", "level": "info", "text": "hi"})
+    msgs = [r.message for r in caplog.records if r.name == "overlay_worker"]
+    assert "[overlay-js] boom" in msgs
+    assert "[overlay-js] careful" in msgs
+    assert "[overlay-js] hi" in msgs
+    # Levels routed to the right log methods.
+    assert any(
+        r.levelno == logging.ERROR and r.message == "[overlay-js] boom" for r in caplog.records
+    )
+    assert any(
+        r.levelno == logging.WARNING and r.message == "[overlay-js] careful" for r in caplog.records
+    )
+
+
+def test_build_surface_connects_load_diagnostics(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``_build_surface`` wires ``load-changed`` / ``load-failed`` so a blocked or
+    failed shell load is logged instead of silently swallowed (#739)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    fake_webkit = MagicMock()
+    monkeypatch.setattr(mod, "LAYER_SHELL_AVAILABLE", False)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+    monkeypatch.setattr(mod, "WebKit", fake_webkit)
+    worker = make_worker()
+    monkeypatch.setattr(worker, "_setup_layer_shell", lambda w: None)
+    worker._build_surface()
+
+    web_view = fake_webkit.WebView.return_value
+    web_view.connect.assert_any_call("load-changed", worker._on_load_changed)
+    web_view.connect.assert_any_call("load-failed", worker._on_load_failed)
+
+
+def test_inject_console_forwarding_pushes_forwarder_script(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The injected diagnostic script forwards console + uncaught errors to the
+    native bridge via the registered ``picframe`` message handler (#739)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    worker = make_worker()
+    worker._web_view = MagicMock()
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    pushed: list[str] = []
+    monkeypatch.setattr(worker, "_push_to_shell", lambda js: pushed.append(js))
+    worker._inject_console_forwarding()
+    assert len(pushed) == 1
+    js = pushed[0]
+    assert "__pfConsoleFwd" in js
+    assert "webkit.messageHandlers.picframe.postMessage" in js
+    assert "unhandledrejection" in js
+    assert "window.addEventListener('error'" in js
+
+
+def test_on_load_changed_injects_forwarder_on_commit(monkeypatch: pytest.MonkeyPatch) -> None:
+    """At COMMITTED the console forwarder is installed; other states only log."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "_load_event_name", lambda le: le)  # passthrough name
+    worker = make_worker()
+    injected: list[bool] = []
+    monkeypatch.setattr(worker, "_inject_console_forwarding", lambda: injected.append(True))
+    worker._on_load_changed(None, "STARTED")
+    worker._on_load_changed(None, "COMMITTED")
+    worker._on_load_changed(None, "FINISHED")
+    assert injected == [True]  # only on COMMITTED
 
 
 def test_push_config_to_shell_noop_without_surface() -> None:
