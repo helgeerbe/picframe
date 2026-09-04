@@ -25,11 +25,15 @@ layer-shell compositor (labwc/Sway/Hyprland). Documented in `manual.md`,
 **Prerequisite done:** issue **#749** (remove dead legacy `peripherals` config
 section) is implemented and committed (`5924130`) on the feature branch.
 
-**Issue #752 — overlay widget system (multi-plugin model), Phase A backend DONE
-(uncommitted on working tree):** replaces the single-visible-plugin model with
-per-plugin layout (position/size/content_align/display_mode/idle_hide_seconds/
-z_order), simultaneous multi-plugin visibility, and z-order. Backend wiring
-complete and fully tested (966 pytest pass, mypy strict clean, ruff clean):
+**Issue #752 — overlay widget system (multi-plugin model), Phase A backend + Phase B
+frontend DONE and committed on `feat/739-webkit-overlay`:** replaces the
+single-visible-plugin model with per-plugin layout
+(position/size/content_align/display_mode/idle_hide_seconds/z_order),
+simultaneous multi-plugin visibility, and z-order. All gates green (967
+pytest pass, mypy strict clean, ruff clean, frontend vue-tsc + ESLint +
+Prettier clean).
+
+**Phase A backend (committed `bebbbdf`–`91d5b27`):**
 - `core/models/overlay.py` — `plugin_layout_defaults`/`validate_plugin_layout`/
   `effective_plugin_layout`/`normalize_legacy_overlay` (+ `PluginLayoutError`,
   `OVERLAY_ANCHORS`/`OVERLAY_DISPLAY_MODES`, `default_display_mode` on
@@ -52,18 +56,40 @@ complete and fully tested (966 pytest pass, mypy strict clean, ruff clean):
 - Tests: 33 new (overlay model layout/normalization, config_service
   `update_plugin_layout`/normalization-on-read/single-plugin-layout event,
   app.py PUT layout success/404/422 + `OverlayPluginResponse.layout`).
-- **Compatibility shim:** `normalize_legacy_overlay` re-derives legacy
-  `visible_plugin` from `visible_plugins` so the out-of-process worker/shell
-  (`overlay_worker.py` reads `visible_plugin`) keep rendering unchanged until
-  Phase B switches them to the list. The Pydantic `OverlayConfig` (`extra=
-  'ignore'`) no longer surfaces global `display_mode`; the API exposes only the
-  new per-plugin `plugin_layout`.
-- **Phase B (not started):** frontend (`OverlayAppearanceSection.vue`/
-  `OverlayPanel.vue`/`dock.ts`/`shell.ts`/`types.ts`) + worker/shell migration to
-  `visible_plugins` + per-plugin `plugin_layout`. Note the public appearance
-  panel's global `display_mode` control is now non-functional against this
-  backend (403 on save, undefined on read) — to be replaced by per-plugin
-  layout controls in Phase B.
+
+**Phase B frontend + worker (committed `1c6dd8a`, `cea7fa3`, `0e51375`):**
+- `overlay_worker.py` — `_build_shell_config`/`_plugin_payload` compute each
+  plugin effective `layout` (manifest defaults ← db overrides, via
+  `effective_plugin_layout`) and embed it as `_plugins[i].layout` +
+  `default_display_mode`, so the shell applies a ready-to-use layout. Push log
+  reports `visible_plugins` (legacy `visible_plugin` fallback). The long-running
+  `ConfigService` already normalizes `visible_plugins`+`plugin_layout` into the
+  `SetConfigCommand` payload, so no extra worker push was needed.
+- `overlay/types.ts` — `PluginLayout`/`OverlayAnchor`; `visible_plugins` list on
+  `OverlayShellConfig` (`visible_plugin`/`display_mode` kept as legacy fallback);
+  `layout`+`default_display_mode` on `PluginEntry`.
+- `overlay/dock.ts` — one `pf-plugin-panel-<id>` per visible plugin, ordered by
+  `layout.z_order`, each positioned via a `pf-anchor-<anchor>` class + inline
+  width/height/z-index. `togglePlugin` adds/removes from the visible set;
+  `postToActivePlugin`→`postToVisiblePlugins` (broadcast).
+- `overlay/shell.ts` — per-panel idle fading (each panel arms its own timer from
+  its effective `display_mode`/`idle_hide_seconds`); dock keeps always-auto-hide.
+- `overlay/style.css` — `.pf-plugin-panel` + nine `.pf-anchor-*` classes;
+  per-panel `.pf-plugin-panel--idle` replaces the root `--idle` content rule.
+- `components/remote/OverlayPanel.vue` — multi-select tile dock (several plugins
+  visible at once; Dock-only clears the array); saves `visible_plugins`.
+- `components/OverlayAppearanceSection.vue` — global `display_mode` control
+  removed (now per-plugin); per-plugin layout editor (position/display mode/
+  width/height/z-order/idle fade) saved via PUT
+  `/api/overlay/plugins/{id}/layout`; disabling a plugin removes it from
+  `visible_plugins`.
+- `stores/overlay.ts` — `layout` on `OverlayPlugin` + `updatePluginLayout`.
+- i18n `appearance.overlay.layout.*` added (en + de, synchronized).
+
+**Compatibility shim:** `normalize_legacy_overlay` re-derives legacy
+`visible_plugin` from `visible_plugins` so any pre-#752 worker/shell config
+still renders. The shell now prefers `visible_plugins` + per-plugin `layout`,
+falling back to `visible_plugin` only for legacy config.
 
 **Phase 0 DONE + committed** (`4393ffd`, pushed to `origin`): #739 task list
 items 1–7, TDD throughout, all gates green. The config + port + API foundation
