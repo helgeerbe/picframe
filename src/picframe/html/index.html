@@ -1,54 +1,15 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
-    <meta name="viewport" content="width=device-width, inital-scale=1"/>
-</head>
-    <body onload="setStyle(); createSpans(); refreshData();">
-        <script type="text/javascript">
-            /* widths to use for spans. Other slots in the array could be used for other
-             things...
-            */
-            const TYPES = {"bool":[5,], "text":[15,], "date":[10,], "number":[5,], "action":[5,]};
-
-            /* this is used to render the ids on this page.
-             fn is a method of controller
-             underscores will be replaced by spaces but it's also possible to use
-             an alternative "desc":"..." field
-            */
-            const ids = {
-                "back": {type:"action", fn:"back={}", val:false},
-                "next": {type:"action", fn:"next={}", val:false},
-                "paused": {type:"bool", fn:"setter", val:false},
-                "display_is_on": {type:"bool", fn:"setter", val:false},
-                "shuffle": {type:"bool", fn:"setter", val:false},
-                "text_name": {type:"bool", fn:"set_show_text={\"txt_key\":\"name\",\"val\":$val}", val:false},
-                "text_date": {type:"bool", fn:"set_show_text={\"txt_key\":\"date\",\"val\":$val}", val:false},
-                "text_folder": {type:"bool", fn:"set_show_text={\"txt_key\":\"folder\",\"val\":$val}", val:false},
-                "text_location": {type:"bool", fn:"set_show_text={\"txt_key\":\"location\",\"val\":$val}", val:false},
-                "clear_text": {type:"action", fn:"set_show_text={}", val:false},
-                "refresh_show_text": {type:"action", fn:"refresh_show_text={}", val:false},
-
-                "date_from": {type:"date", fn:"setter", val:0},
-                "date_to": {type:"date", fn:"setter", val:0},
-                "fade_time": {type:"number", fn:"setter", val:0},
-                "time_delay": {type:"number", fn:"setter", val:0},
-                "brightness": {type:"number", fn:"setter", val:0},
-                "subdirectory": {type:"text", fn:"setter", val:""},
-                "location_filter": {type:"text", fn:"setter", val:""},
-                "tags_filter": {type:"text", fn:"setter", val:""},
-                "delete": {type:"action", fn:"delete={}", val:false},
-                "purge_files": {type:"action", fn:"purge_files={}", val:false},
-                "stop": {type:"action", fn:"stop={}", val:false},
-                };
-        </script>
-        <script type="text/javascript" src="pf_functions.js"></script>
-        <h1>Simple Picture Frame page</h1>
-        <div id="spans">
-        </div>
-        <button id="upload_button" onclick="uploadValues()">UPDATE</button>
-        <a href="/current_image">See the current image</a>
-        or <a href="/current_image_original">its unmodified original</a>
-        (use browser BACK to return to this page)
-    </body>
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>frontend</title>
+    <script type="module" crossorigin src="/assets/index-DsKj-rTz.js"></script>
+    <link rel="modulepreload" crossorigin href="/assets/chunk-CilyBKbf.js">
+    <link rel="stylesheet" crossorigin href="/assets/index-CiqTxOec.css">
+  </head>
+  <body>
+    <div id="app"></div>
+  </body>
 </html>

@@ -9,7 +9,7 @@
         {
             "title": "## 🚀 Features",
             "labels": [
-                "feature"
+                "feat"
             ]
         },
         {
@@ -21,30 +21,43 @@
         {
             "title": "## 📚 Documentation",
             "labels": [
-                "doc"
+                "docs"
+            ]
+        },
+        {
+            "title": "## ♻️ Refactoring",
+            "labels": [
+                "refactor"
+            ]
+        },
+        {
+            "title": "## ⚡ Performance",
+            "labels": [
+                "perf"
             ]
         },
         {
             "title": "## 🛠 Under the hood",
-            "labels": []
+            "labels": [
+                "test",
+                "build",
+                "ci",
+                "chore",
+                "revert"
+            ]
         }
     ],
     "template": "${{CHANGELOG}}",
-    "pr_template": "- [${{TITLE}}](https://github.com/helgeerbe/picframe/commit/${{MERGE_SHA}})",
-    "empty_template": "- no changes",
+    "pr_template": "- ${{TITLE}} (#${{NUMBER}})",
+    "empty_template": "- No changes",
     "label_extractor": [
         {
-            "pattern": "(.): (.+)",
-            "target": "$1",
-            "on_property": "title"
-        },
-        {
-            "pattern": "(.) (.+)",
+            "pattern": "^(feat|fix|docs|refactor|perf|test|build|ci|chore|revert)(\\(.+\\))?!:.+",
             "target": "$1",
             "on_property": "title"
         }
     ],
     "tag_resolver": {
-        "method": "semver"
+        "method": "sort"
     }
 }

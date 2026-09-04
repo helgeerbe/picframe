@@ -1,0 +1,46 @@
+{
+  "name": "frontend",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vue-tsc -b && vite build && vite build --config vite.overlay.config.ts",
+    "preview": "vite preview",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "format": "prettier --write \"src/**/*.{ts,tsx,vue,json,css,js}\"",
+    "format:check": "prettier --check \"src/**/*.{ts,tsx,vue,json,css,js}\""
+  },
+  "dependencies": {
+    "@heroicons/vue": "^2.2.0",
+    "@types/leaflet": "^1.9.21",
+    "@vue-leaflet/vue-leaflet": "^0.10.1",
+    "@vueuse/core": "^14.2.1",
+    "autoprefixer": "^10.5.0",
+    "axios": "^1.15.2",
+    "leaflet": "^1.9.4",
+    "pinia": "2",
+    "postcss": "^8.5.12",
+    "tailwindcss": "^4.2.4",
+    "vue": "^3.5.32",
+    "vue-i18n": "10",
+    "vue-router": "4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/node": "^24.12.2",
+    "@vitejs/plugin-vue": "^6.0.6",
+    "@vue/tsconfig": "^0.9.1",
+    "eslint": "^10.9.1",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-vue": "^10.10.0",
+    "prettier": "^3.9.6",
+    "typescript": "~6.0.2",
+    "typescript-eslint": "^8.69.0",
+    "vite": "^8.0.10",
+    "vue-eslint-parser": "^10.4.1",
+    "vue-tsc": "^3.2.7"
+  }
+}

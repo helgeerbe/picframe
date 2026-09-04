@@ -1,5 +1,5 @@
 [build-system]
-requires = ["setuptools", "versioneer[toml]", "tomli; python_version < '3.11'"]
+requires = ["setuptools>=61.0", "setuptools_scm[toml]>=8.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -22,7 +22,7 @@ maintainers = [
 ]
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.7"
+requires-python = ">=3.11"
 classifiers=[
     "Development Status :: 4 - Beta",
     "License :: OSI Approved :: MIT License",
@@ -41,18 +41,33 @@ dependencies = [
     "PyYAML",
     "paho-mqtt>=2.1.0",
     "IPTCInfo3",
+    "ExifRead>=3.5.1",
     "numpy",
     "ninepatch>=0.2.0",
     "pi_heif>=0.8.0",
-    "python-vlc",
-    "rubicon-objc; sys_platform == 'darwin'"
+    "gpiozero>=2.0.0",
+    "fastapi>=0.100.0",
+    "uvicorn>=0.23.0",
+    "websockets>=11.0.0",
+    "watchdog>=6.0.0",
+    "python-multipart>=0.0.9"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "mypy>=1.0",
+    "ruff>=0.3.0",
+    "httpx>=0.28.1",
+    "requests>=2.31.0",
+    "types-PyYAML>=6.0",
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/helgeerbe/picframe"
 
 [project.scripts]
-picframe = "picframe.start:main"
+picframe = "picframe.main:main"
 
 [tool.setuptools]
 include-package-data = true
@@ -61,20 +76,33 @@ include-package-data = true
 namespaces = true
 where = ["src"]
 
-
 [tool.setuptools.package-data]
 "picframe.data" = ["**"]
 "picframe.config" = ["**"]
 "picframe.html" = ["**"]
+"picframe.overlay_plugins" = ["**"]
 
-[tool.setuptools.dynamic]
-version = {attr = "picframe.__version__"}
-readme = {file = ["README.rst", "USAGE.rst"]}
+[tool.setuptools_scm]
+write_to = "src/picframe/_version.py"
 
-[tool.versioneer]
-VCS = "git"
-style = "pep440"
-versionfile_source = "src/picframe/_version.py"
-versionfile_build = "picframe/_version.py"
-tag_prefix = ""
-parentdir_prefix = "picframe-"
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["test_integration", "build", "dist", "docs", "src/picframe/_version.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
+ignore = []
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "paho.*"
+follow_imports = "skip"
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+python_files = "test_*.py"

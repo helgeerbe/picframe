@@ -1,0 +1,49 @@
+{
+  "id": "weather",
+  "name": "Weather",
+  "description": "Current weather from OpenWeatherMap One Call (requires API key).",
+  "icon": "☀️",
+  "trigger": "icon",
+  "position": "top-right",
+  "size": { "w": 360, "h": 240 },
+  "requires": ["network"],
+  "config_schema": {
+    "api_key": {
+      "type": "string",
+      "required": true,
+      "label": "OpenWeatherMap API key",
+      "help": "A One Call API 3.0 key from openweathermap.org."
+    },
+    "lat": {
+      "type": "number",
+      "required": true,
+      "label": "Latitude",
+      "help": "Decimal degrees, e.g. 52.52."
+    },
+    "lon": {
+      "type": "number",
+      "required": true,
+      "label": "Longitude",
+      "help": "Decimal degrees, e.g. 13.405."
+    },
+    "units": {
+      "type": "string",
+      "default": "metric",
+      "enum": ["metric", "imperial"],
+      "label": "Units",
+      "help": "metric = °C / m/s, imperial = °F / mph."
+    },
+    "language": {
+      "type": "string",
+      "default": "en",
+      "label": "Language code",
+      "help": "OpenWeatherMap language code, e.g. en, de."
+    },
+    "refresh_seconds": {
+      "type": "integer",
+      "default": 600,
+      "label": "Refresh interval (s)",
+      "help": "How often to re-fetch weather data."
+    }
+  }
+}

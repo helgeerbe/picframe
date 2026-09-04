@@ -1,0 +1,3 @@
+"""
+Filesystem infrastructure adapters.
+"""

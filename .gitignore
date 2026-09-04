@@ -1,3 +1,4 @@
+*.frame
 configuration.yaml
 oldcode/
 docs/diagrams/out/
@@ -136,4 +137,15 @@ dmypy.json
 .pyre/
 
 #mac os
+.DS_Store*.db3
+*.db3-shm
+*.db3-wal
+*.db3
+*.db3-shm
+*.db3-wal
 .DS_Store
+
+
+.Codexrules
+.cline
+.clinerules

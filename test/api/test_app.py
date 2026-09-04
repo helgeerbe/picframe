@@ -1,0 +1,2284 @@
+import asyncio
+import base64
+from pathlib import Path
+from typing import Any
+from unittest.mock import AsyncMock, MagicMock
+
+import httpx
+import pytest
+from fastapi import FastAPI
+from PIL import Image
+
+from picframe.api.app import _send_websocket_text, create_app, media_event_to_response_dto
+from picframe.core.events.dto import Command
+from picframe.core.services.basic_auth import AUTH_COOKIE_NAME, BasicAuthStore
+from picframe.core.services.resource_paths import ResourcePaths
+from picframe.core.utils.video_frame_extractor import (
+    VideoFrameExtractor,
+    VideoTransitionFrameMetadata,
+)
+
+
+@pytest.fixture
+def client() -> "ASGITestClient":
+    app = create_app(cors_allowed_origins=["*"])
+    return ASGITestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def isolate_default_resource_paths(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "default-home"
+    home.mkdir()
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+
+class ASGITestClient:
+    """Small sync wrapper around httpx ASGITransport for local API tests.
+
+    Starlette's TestClient currently hangs in this environment when running on
+    Python 3.14, while httpx's ASGITransport exercises the same ASGI app without
+    the thread-portal deadlock.
+    """
+
+    def __init__(self, app: FastAPI) -> None:
+        self._app = app
+
+    def request(self, method: str, url: str, **kwargs: Any) -> httpx.Response:
+        async def _request() -> httpx.Response:
+            transport = httpx.ASGITransport(app=self._app)
+            async with httpx.AsyncClient(
+                transport=transport,
+                base_url="http://testserver",
+            ) as async_client:
+                return await async_client.request(method, url, **kwargs)
+
+        return asyncio.run(_request())
+
+    def get(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request("GET", url, **kwargs)
+
+    def post(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request("POST", url, **kwargs)
+
+    def put(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request("PUT", url, **kwargs)
+
+    def options(self, url: str, **kwargs: Any) -> httpx.Response:
+        return self.request("OPTIONS", url, **kwargs)
+
+
+class FakeSystemManager:
+    def __init__(self, status: str = "active", restart_result: bool = True) -> None:
+        self.status = status
+        self.restart_result = restart_result
+        self.restart_calls = 0
+
+    def reboot(self) -> None:
+        pass
+
+    def shutdown(self) -> None:
+        pass
+
+    def picframe_service_status(self) -> str:
+        return self.status
+
+    def restart_picframe_service(self) -> bool:
+        self.restart_calls += 1
+        return self.restart_result
+
+
+def basic_auth(username: str = "admin", password: str = "secret") -> dict[str, str]:
+    token = base64.b64encode(f"{username}:{password}".encode()).decode()
+    return {"Authorization": f"Basic {token}"}
+
+
+def media_config_repo(media_root: Path) -> MagicMock:
+    values: dict[str, Any] = {
+        "model.pic_dir": str(media_root),
+        "model.image_extensions": [".jpg", ".jpeg", ".png", ".gif", ".heic", ".heif"],
+        "model.video_extensions": [".mp4", ".mov", ".mkv", ".avi", ".webm", ".flv", ".hevc"],
+        "viewer.display_w": 0,
+        "viewer.display_h": 0,
+        "viewer.video_fit_display": False,
+        "viewer.background": None,
+        "viewer.blur_edges": False,
+        "viewer.blur_amount": 12,
+        "viewer.blur_zoom": 1.0,
+        "viewer.edge_alpha": 0.5,
+        "viewer.mat_images": 0.01,
+        "viewer.mat_type": None,
+        "viewer.outer_mat_color": None,
+        "viewer.inner_mat_color": None,
+        "viewer.outer_mat_border": 75,
+        "viewer.inner_mat_border": 40,
+        "viewer.outer_mat_use_texture": True,
+        "viewer.inner_mat_use_texture": False,
+        "viewer.mat_resource_folder": "${PICFRAME_DATA}/mat",
+    }
+    repo = MagicMock()
+    repo.get_app_config.side_effect = lambda key, default=None: values.get(key, default)
+    repo.get_app_config_bool.side_effect = lambda key, default=False: bool(values.get(key, default))
+    repo.get_all_directories.return_value = []
+    return repo
+
+
+class FakeImageProcessingService:
+    def __init__(self, cache_dir: Path) -> None:
+        self._cache_dir = cache_dir
+
+
+def test_health_check(client: ASGITestClient) -> None:
+    response = client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "ok"}
+
+
+def test_openapi_documents_rest_response_models(client: ASGITestClient) -> None:
+    response = client.get("/openapi.json")
+
+    assert response.status_code == 200
+    schema = response.json()
+    paths = schema["paths"]
+
+    expected_refs = {
+        ("/health", "get"): "HealthResponse",
+        ("/api/system/reboot", "post"): "StatusResponse",
+        ("/api/system/restart-service", "post"): "StatusMessageResponse",
+        ("/api/system/service-status", "get"): "SystemServiceStatusResponse",
+        ("/api/system/shutdown", "post"): "StatusResponse",
+        ("/api/system/locales", "get"): "LocaleOptionsResponse",
+        ("/api/maintenance/purge-db", "post"): "StatusResponse",
+        ("/api/maintenance/clear-cache", "post"): "StatusMessageResponse",
+        ("/api/filesystem/browse", "get"): "FilesystemBrowseResponse",
+        ("/api/filesystem/validate", "post"): "FilesystemValidateResponse",
+        ("/api/media/filter-options", "get"): "MediaFilterOptionsResponse",
+        ("/api/media/location-options", "get"): "MediaLocationOptionsResponse",
+        ("/api/media/selection-count", "post"): "MediaSelectionCountResponse",
+        ("/api/hardware-inputs", "get"): "HardwareInputsConfig",
+        ("/api/hardware-inputs", "put"): "HardwareInputsUpdateResponse",
+        ("/api/auth/config", "get"): "BasicAuthConfigResponse",
+        ("/api/auth/config", "put"): "BasicAuthConfigResponse",
+        ("/api/overlay/plugins/{plugin_id}/config", "get"): "OverlayPluginConfigResponse",
+        ("/api/overlay/plugins/{plugin_id}/config", "put"): "OverlayPluginConfigUpdateResponse",
+        ("/api/overlay/plugins/{plugin_id}/layout", "put"): "OverlayPluginLayoutUpdateResponse",
+        ("/api/config/import-yaml", "post"): "StatusMessageResponse",
+        ("/api/config", "put"): "StatusMessageResponse",
+    }
+    for (path, method), model_name in expected_refs.items():
+        operation = paths[path][method]
+        assert operation["summary"]
+        response_schema = operation["responses"]["200"]["content"]["application/json"]["schema"]
+        assert response_schema["$ref"] == f"#/components/schemas/{model_name}"
+
+    config_response_schema = paths["/api/config"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert {"$ref": "#/components/schemas/AppConfig"} in config_response_schema["anyOf"]
+    assert {"$ref": "#/components/schemas/EmptyConfigResponse"} in config_response_schema["anyOf"]
+
+    plugins_list_schema = paths["/api/overlay/plugins"]["get"]["responses"]["200"]["content"][
+        "application/json"
+    ]["schema"]
+    assert plugins_list_schema["type"] == "array"
+    assert plugins_list_schema["items"]["$ref"] == "#/components/schemas/OverlayPluginResponse"
+
+
+def test_openapi_documents_expected_error_responses(client: ASGITestClient) -> None:
+    schema = client.get("/openapi.json").json()
+    paths = schema["paths"]
+
+    browse_responses = paths["/api/filesystem/browse"]["get"]["responses"]
+    for status_code in ("400", "403", "404", "422"):
+        assert (
+            browse_responses[status_code]["content"]["application/json"]["schema"]["$ref"]
+            == "#/components/schemas/APIErrorResponse"
+        )
+
+    media_responses = paths["/media"]["get"]["responses"]
+    assert (
+        media_responses["403"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/APIErrorResponse"
+    )
+    assert (
+        media_responses["404"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/APIErrorResponse"
+    )
+
+    import_responses = paths["/api/config/import-yaml"]["post"]["responses"]
+    assert "500" in import_responses
+    assert (
+        import_responses["500"]["content"]["application/json"]["schema"]["$ref"]
+        == "#/components/schemas/APIErrorResponse"
+    )
+
+
+def test_openapi_documents_websocket_contract(client: ASGITestClient) -> None:
+    schema = client.get("/openapi.json").json()
+
+    assert "/ws/state" not in schema["paths"]
+    assert "/ws/logs" not in schema["paths"]
+    assert "/ws/state" in schema["info"]["description"]
+    websocket_contract = schema["x-websocket-contracts"]["/ws/state"]
+    assert websocket_contract["incoming"] == [
+        {"$ref": "#/components/schemas/WebSocketCommandMessage"}
+    ]
+    assert websocket_contract["outgoing"] == [
+        {"$ref": "#/components/schemas/MediaChangedWebSocketMessage"},
+        {"$ref": "#/components/schemas/StateWebSocketMessage"},
+        {"$ref": "#/components/schemas/SystemErrorWebSocketMessage"},
+    ]
+
+    components = schema["components"]["schemas"]
+    assert "WebSocketCommandMessage" in components
+    assert "MediaChangedWebSocketMessage" in components
+    assert "StateWebSocketMessage" in components
+    assert "SystemErrorWebSocketMessage" in components
+    assert "LogEventMessage" in components
+    assert "LogSnapshotMessage" in components
+    assert schema["x-websocket-contracts"]["/ws/logs"]["outgoing"] == [
+        {"$ref": "#/components/schemas/LogSnapshotMessage"},
+        {"$ref": "#/components/schemas/LogEventMessage"},
+    ]
+
+
+def test_websocket_send_helper_treats_closed_socket_as_disconnect() -> None:
+    websocket = MagicMock()
+    websocket.send_text = AsyncMock(
+        side_effect=RuntimeError(
+            "Unexpected ASGI message 'websocket.send', after sending 'websocket.close'"
+        )
+    )
+
+    assert asyncio.run(_send_websocket_text(websocket, '{"type":"StateEvent"}')) is False
+
+
+def test_cors_headers(client: ASGITestClient) -> None:
+    response = client.options(
+        "/health",
+        headers={
+            "Origin": "http://localhost:8080",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+    assert response.status_code == 200
+    # FastAPI's CORSMiddleware echoes back the Origin if allow_origins=["*"]
+    # and allow_credentials=True are used together, or it just echoes it back
+    # when a specific origin is requested.
+    assert response.headers["access-control-allow-origin"] == "http://localhost:8080"
+
+
+def test_spa_routing_with_html_dir(tmp_path: Path) -> None:
+    # Create a mock html directory structure
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    (html_dir / "index.html").write_text("<h1>Index</h1>")
+
+    assets_dir = html_dir / "assets"
+    assets_dir.mkdir()
+    (assets_dir / "app.js").write_text("console.log('app');")
+
+    app = create_app(cors_allowed_origins=["*"], html_dir=str(html_dir))
+    client = ASGITestClient(app)
+
+    # Test root route returns index.html
+    response = client.get("/")
+    assert response.status_code == 200
+    assert response.text == "<h1>Index</h1>"
+
+    # Test non-existent route falls back to index.html
+    response = client.get("/some/vue/route")
+    assert response.status_code == 200
+    assert response.text == "<h1>Index</h1>"
+
+    # Test assets route
+    response = client.get("/assets/app.js")
+    assert response.status_code == 200
+    assert response.text == "console.log('app');"
+
+
+def test_basic_auth_protects_settings_logs_and_admin_routes(tmp_path: Path) -> None:
+    base_dir = tmp_path / "picframe"
+    html_dir = base_dir / "html"
+    html_dir.mkdir(parents=True)
+    (html_dir / "index.html").write_text("<h1>Index</h1>")
+    resource_paths = ResourcePaths.from_base_dir(base_dir)
+    auth_store = BasicAuthStore(resource_paths)
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        html_dir=str(html_dir),
+        resource_paths=resource_paths,
+        auth_store=auth_store,
+    )
+    client = ASGITestClient(app)
+
+    assert client.get("/settings").status_code == 200
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "settings", "username": "admin", "password": "secret"},
+    )
+    assert response.status_code == 200
+    assert response.json()["enabled"] is True
+    assert response.json()["scope"] == "settings"
+    assert response.json()["password_set"] is True
+    assert response.json()["password"] == "secret"
+
+    assert client.get("/settings").status_code == 401
+    assert client.get("/logs").status_code == 401
+    assert client.get("/api/config").status_code == 401
+    assert client.post("/api/system/reboot").status_code == 401
+    assert client.get("/api/system/service-status").status_code == 401
+    assert client.post("/api/system/restart-service").status_code == 401
+
+    assert client.get("/").status_code == 200
+    assert client.get("/api/workflow-config").status_code == 200
+    assert client.get("/api/media/filter-options").status_code == 200
+
+    assert client.get("/settings", headers=basic_auth()).status_code == 200
+    assert client.get("/logs", headers=basic_auth()).status_code == 200
+    assert client.get("/api/config", headers=basic_auth()).status_code == 200
+    response = client.get("/api/auth/config", headers=basic_auth())
+    assert response.status_code == 200
+    assert response.json()["password"] == "secret"
+
+    response = client.put(
+        "/api/auth/config",
+        headers=basic_auth(),
+        json={"scope": "none", "username": "admin", "password": ""},
+    )
+    assert response.status_code == 200
+    assert response.json()["enabled"] is False
+    assert response.json()["scope"] == "none"
+    assert "password" not in response.json()
+    assert client.get("/settings").status_code == 200
+    response = client.get("/api/auth/config")
+    assert response.status_code == 200
+    assert "password" not in response.json()
+
+
+def test_basic_auth_sets_cookie_for_protected_routes(tmp_path: Path) -> None:
+    base_dir = tmp_path / "picframe"
+    html_dir = base_dir / "html"
+    html_dir.mkdir(parents=True)
+    (html_dir / "index.html").write_text("<h1>Index</h1>")
+    resource_paths = ResourcePaths.from_base_dir(base_dir)
+    auth_store = BasicAuthStore(resource_paths)
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        html_dir=str(html_dir),
+        resource_paths=resource_paths,
+        auth_store=auth_store,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "settings", "username": "admin", "password": "secret"},
+    )
+    assert response.status_code == 200
+
+    response = client.get("/logs", headers=basic_auth())
+    assert response.status_code == 200
+    token = response.cookies.get(AUTH_COOKIE_NAME)
+    assert token
+
+    cookie_header = {"Cookie": f"{AUTH_COOKIE_NAME}={token}"}
+    assert client.get("/logs", headers=cookie_header).status_code == 200
+    assert client.get("/api/config", headers=cookie_header).status_code == 200
+    assert client.get("/logs", headers={"Cookie": f"{AUTH_COOKIE_NAME}=bad"}).status_code == 401
+
+
+def test_basic_auth_can_protect_complete_site(tmp_path: Path) -> None:
+    base_dir = tmp_path / "picframe"
+    html_dir = base_dir / "html"
+    assets_dir = html_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (html_dir / "index.html").write_text("<h1>Index</h1>")
+    (assets_dir / "app.js").write_text("console.log('app');")
+    resource_paths = ResourcePaths.from_base_dir(base_dir)
+    auth_store = BasicAuthStore(resource_paths)
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        html_dir=str(html_dir),
+        resource_paths=resource_paths,
+        auth_store=auth_store,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "site", "username": "admin", "password": "secret"},
+    )
+    assert response.status_code == 200
+    assert response.json()["enabled"] is True
+    assert response.json()["scope"] == "site"
+
+    assert client.get("/").status_code == 401
+    assert client.get("/assets/app.js").status_code == 401
+    assert client.get("/api/workflow-config").status_code == 401
+    assert client.get("/api/media/filter-options").status_code == 401
+    assert client.get("/api/auth/config").status_code == 401
+
+    assert client.get("/", headers=basic_auth()).status_code == 200
+    assert client.get("/assets/app.js", headers=basic_auth()).status_code == 200
+    assert client.get("/api/workflow-config", headers=basic_auth()).status_code == 200
+    assert client.get("/api/media/filter-options", headers=basic_auth()).status_code == 200
+    assert client.get("/api/auth/config", headers=basic_auth()).status_code == 200
+
+
+def test_basic_auth_scope_matrix_for_http_routes(tmp_path: Path) -> None:
+    base_dir = tmp_path / "picframe"
+    html_dir = base_dir / "html"
+    assets_dir = html_dir / "assets"
+    assets_dir.mkdir(parents=True)
+    (html_dir / "index.html").write_text("<h1>Index</h1>")
+    (assets_dir / "app.js").write_text("console.log('app');")
+    media_path = tmp_path / "photo.jpg"
+    media_path.write_text("jpg")
+    resource_paths = ResourcePaths.from_base_dir(base_dir)
+    auth_store = BasicAuthStore(resource_paths)
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        html_dir=str(html_dir),
+        resource_paths=resource_paths,
+        auth_store=auth_store,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "settings", "username": "admin", "password": "secret"},
+    )
+    assert response.status_code == 200
+
+    settings_protected = [
+        ("GET", "/api/auth/config", {}),
+        ("GET", "/api/config", {}),
+        ("PUT", "/api/config", {"json": {}}),
+        ("POST", "/api/config/import-yaml", {}),
+        ("GET", "/api/filesystem/browse", {}),
+        ("POST", "/api/filesystem/validate", {"json": {}}),
+        ("GET", "/api/hardware-inputs", {}),
+        ("PUT", "/api/hardware-inputs", {"json": {}}),
+        ("POST", "/api/maintenance/purge-db", {}),
+        ("POST", "/api/maintenance/clear-cache", {}),
+        ("POST", "/api/system/reboot", {}),
+        ("POST", "/api/system/restart-service", {}),
+        ("GET", "/api/system/service-status", {}),
+        ("POST", "/api/system/shutdown", {}),
+        ("GET", "/logs", {}),
+        ("GET", "/settings", {}),
+    ]
+    for method, url, kwargs in settings_protected:
+        assert client.request(method, url, **kwargs).status_code == 401, url
+
+    settings_public = [
+        ("GET", "/", {}),
+        ("GET", "/assets/app.js", {}),
+        ("GET", "/health", {}),
+        ("GET", "/openapi.json", {}),
+        ("GET", "/api/system/locales", {}),
+        ("GET", "/api/workflow-config", {}),
+        ("PUT", "/api/workflow-config", {"json": {}}),
+        ("GET", "/api/media/filter-options", {}),
+        ("GET", "/api/media/location-options?q=ber", {}),
+        ("POST", "/api/media/selection-count", {"json": {}}),
+        ("GET", f"/media?path={media_path}", {}),
+    ]
+    for method, url, kwargs in settings_public:
+        assert client.request(method, url, **kwargs).status_code != 401, url
+
+    response = client.put(
+        "/api/auth/config",
+        headers=basic_auth(),
+        json={"scope": "site", "username": "admin", "password": ""},
+    )
+    assert response.status_code == 200
+
+    site_protected = [
+        *settings_protected,
+        *settings_public,
+        ("GET", "/docs", {}),
+    ]
+    for method, url, kwargs in site_protected:
+        assert client.request(method, url, **kwargs).status_code == 401, url
+
+    assert client.options("/api/config").status_code != 401
+
+
+def test_basic_auth_legacy_enabled_request_maps_to_settings_scope(tmp_path: Path) -> None:
+    resource_paths = ResourcePaths.from_base_dir(tmp_path / "picframe")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        resource_paths=resource_paths,
+        auth_store=BasicAuthStore(resource_paths),
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"enabled": True, "username": "admin", "password": "secret"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["scope"] == "settings"
+
+
+def test_basic_auth_requires_password_when_enabled(tmp_path: Path) -> None:
+    resource_paths = ResourcePaths.from_base_dir(tmp_path / "picframe")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        resource_paths=resource_paths,
+        auth_store=BasicAuthStore(resource_paths),
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/auth/config",
+        json={"scope": "settings", "username": "admin", "password": ""},
+    )
+
+    assert response.status_code == 400
+    assert "Password is required" in response.json()["detail"]
+
+
+def test_api_filesystem_browse_lists_home_entries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "Pictures").mkdir()
+    (home / "notes.txt").write_text("hello")
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/filesystem/browse")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["root"] == "~"
+    assert data["path"] == "~"
+    assert data["parent"] is None
+    assert [entry["name"] for entry in data["entries"]] == ["Pictures", "notes.txt"]
+
+
+def test_api_filesystem_browse_filters_files_by_extension(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    (home / "nested").mkdir()
+    (home / "photo.jpg").write_text("jpg")
+    (home / "movie.mov").write_text("mov")
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/filesystem/browse?kind=file&extensions=.jpg")
+
+    assert response.status_code == 200
+    assert [entry["name"] for entry in response.json()["entries"]] == ["nested", "photo.jpg"]
+
+
+def test_api_filesystem_browse_rejects_traversal(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/filesystem/browse?path=../")
+
+    assert response.status_code == 403
+
+
+def test_api_filesystem_validate_rejects_symlink_escape(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    outside = tmp_path / "outside"
+    home.mkdir()
+    outside.mkdir()
+    (home / "escape").symlink_to(outside)
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/filesystem/validate",
+        json={"path": "~/escape", "kind": "directory"},
+    )
+
+    assert response.status_code == 403
+
+
+def test_api_filesystem_validate_allows_missing_mount_with_warning(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    home.mkdir()
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/filesystem/validate",
+        json={
+            "path": "~/PicturesOnNas",
+            "kind": "directory",
+            "allow_missing": True,
+            "field": "model.pic_dir",
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["valid"] is True
+    assert data["exists"] is False
+    assert data["warnings"] == ["Path does not exist yet"]
+
+
+def test_api_filesystem_validate_resolves_picframe_data_token(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    home = tmp_path / "home"
+    base_dir = home / ".picframe-dev"
+    shader_dir = base_dir / "data" / "shaders"
+    shader_dir.mkdir(parents=True)
+    (shader_dir / "blend_new.fs").write_text("fragment")
+    monkeypatch.setattr("picframe.api.app._path_picker_root", lambda: home.resolve())
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        resource_paths=ResourcePaths.from_base_dir(base_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/filesystem/validate",
+        json={
+            "path": "${PICFRAME_DATA}/shaders/blend_new.fs",
+            "kind": "file",
+            "extensions": [".fs"],
+        },
+    )
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["valid"] is True
+    assert data["path"] == "${PICFRAME_DATA}/shaders/blend_new.fs"
+
+
+def test_media_event_dto_uses_payload_location_name_before_repository() -> None:
+    mock_media_repo = MagicMock()
+
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "location": "Berlin",
+        },
+        media_repository=mock_media_repo,
+    )
+
+    assert dto.exif["location_name"] == "Berlin"
+    mock_media_repo.get_location.assert_not_called()
+
+
+def test_media_event_dto_uses_exif_location_before_repository() -> None:
+    mock_media_repo = MagicMock()
+
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "exif": {"location": "Hamburg"},
+        },
+        media_repository=mock_media_repo,
+    )
+
+    assert dto.exif["location_name"] == "Hamburg"
+    mock_media_repo.get_location.assert_not_called()
+
+
+def test_media_event_dto_uses_injected_repository_for_location_fallback() -> None:
+    mock_media_repo = MagicMock()
+    mock_media_repo.get_location.return_value = "Repository Berlin"
+
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "exif": {"title": "A"},
+        },
+        media_repository=mock_media_repo,
+    )
+
+    assert dto.location == {"lat": 52.5, "lon": 13.4}
+    assert dto.exif["location_name"] == "Repository Berlin"
+    mock_media_repo.get_location.assert_called_once_with(52.5, 13.4, language=None)
+
+
+def test_media_event_dto_uses_location_language_for_repository_fallback() -> None:
+    mock_media_repo = MagicMock()
+    mock_media_repo.get_location.return_value = "Repository Berlin"
+
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "exif": {"title": "A"},
+        },
+        media_repository=mock_media_repo,
+        location_language="de",
+    )
+
+    assert dto.exif["location_name"] == "Repository Berlin"
+    mock_media_repo.get_location.assert_called_once_with(52.5, 13.4, language="de")
+
+
+def test_media_event_dto_without_repository_does_not_guess_location_path() -> None:
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/a.jpg",
+            "latitude": 52.5,
+            "longitude": 13.4,
+            "exif": {"title": "A"},
+        },
+        media_repository=None,
+    )
+
+    assert dto.location == {"lat": 52.5, "lon": 13.4}
+    assert "location_name" not in dto.exif
+
+
+def test_media_event_dto_includes_media_type_for_video() -> None:
+    dto = media_event_to_response_dto(
+        {
+            "filepath": "/photos/clip.mp4",
+            "media_type": "video",
+            "duration": 12.5,
+        }
+    )
+
+    assert dto.media_type == "video"
+    assert dto.exif["duration"] == 12.5
+
+
+def test_media_event_dto_includes_media_type_for_display_items() -> None:
+    dto = media_event_to_response_dto(
+        {
+            "layout": "single",
+            "primary_index": 0,
+            "items": [
+                {
+                    "filepath": "/photos/clip.mp4",
+                    "media_type": "video",
+                }
+            ],
+        }
+    )
+
+    assert dto.media_type == "video"
+    assert dto.items[0].media_type == "video"
+
+
+def test_api_get_config(client: ASGITestClient) -> None:
+    # Test without config repository
+    response = client.get("/api/config")
+    assert response.status_code == 200
+    assert response.json() == {}
+
+
+def test_api_get_config_with_repo() -> None:
+    mock_repo = MagicMock()
+    mock_repo.get_all_app_config.return_value = {
+        "viewer.fps": 60,
+        "model.pic_dir": "/tmp",
+        "model.date_from": "2024-01-01",
+        "model.date_to": "2024-02-01",
+        "mqtt.use_mqtt": False,
+    }
+
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
+    client = ASGITestClient(app)
+
+    response = client.get("/api/config")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["viewer"]["fps"] == 60
+    assert data["model"]["pic_dir"] == "/tmp"
+    assert data["model"]["date_from"] == "2024-01-01"
+    assert data["model"]["date_to"] == "2024-02-01"
+    assert data["mqtt"]["use_mqtt"] is False
+
+
+def test_api_put_config() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    # Setup mock to return existing config
+    mock_repo.get_app_config.return_value = {"fps": 30, "blur_amount": 12}
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    payload = {"viewer": {"fps": 60}, "model": {"pic_dir": "/new/path", "date_from": "2024-01-01"}}
+
+    response = client.put("/api/config", json=payload)
+    assert response.status_code == 200
+    assert response.json() == {"status": "success"}
+
+    # Verify repository was updated
+    assert mock_repo.set_app_config.call_count == 3
+    mock_repo.set_app_config.assert_any_call("model.date_from", "2024-01-01")
+
+    # Verify event was published
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command.name == "SET_CONFIG"
+    assert event.payload == payload
+
+
+def test_workflow_config_is_public_and_allowlisted() -> None:
+    mock_repo = MagicMock()
+    mock_repo.get_all_app_config.return_value = {
+        "model.shuffle": True,
+        "model.shuffle_mode": "random",
+        "model.subdirectory": "holiday",
+        "model.date_from": "",
+        "model.date_to": "",
+        "model.location_filter": "",
+        "model.tags_filter": "",
+        "model.time_delay": 20.0,
+        "model.fade_time": 2.0,
+        "model.portrait_pairs": True,
+        "viewer.show_clock": False,
+        "viewer.show_text_enabled": True,
+        "viewer.text_overlay_format": "title location",
+        "overlay.enabled": True,
+        "overlay.display_mode": "persistent",
+        "overlay.idle_hide_seconds": 0.0,
+        "overlay.enabled_input_types": ["touch", "mouse"],
+    }
+    mock_publisher = MagicMock()
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    response = client.get("/api/workflow-config")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["model"]["subdirectory"] == "holiday"
+    assert data["model"]["portrait_pairs"] is True
+    assert "log_level" not in data["model"]
+    assert data["viewer"]["text_overlay_format"] == "title location"
+    assert data["overlay"]["enabled"] is True
+    assert "display_mode" not in data["overlay"]
+    assert data["overlay"]["enabled_input_types"] == ["touch", "mouse"]
+    # Advanced/plugin-specific keys stay on PUT /api/config, not workflow-config.
+    assert "backend" not in data["overlay"]
+    assert "plugin_dir" not in data["overlay"]
+    assert "enabled_plugins" not in data["overlay"]
+    assert "visible_plugins" not in data["overlay"]
+    assert "plugin_config" not in data["overlay"]
+    assert "plugin_layout" not in data["overlay"]
+
+    update = {
+        "model": {"shuffle": False, "portrait_pairs": False},
+        "viewer": {"show_clock": True},
+        "overlay": {"enabled": False},
+    }
+    response = client.put("/api/workflow-config", json=update)
+
+    assert response.status_code == 200
+    mock_repo.set_app_config.assert_any_call("model.shuffle", False)
+    mock_repo.set_app_config.assert_any_call("model.portrait_pairs", False)
+    mock_repo.set_app_config.assert_any_call("viewer.show_clock", True)
+    mock_repo.set_app_config.assert_any_call("overlay.enabled", False)
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command is Command.SET_CONFIG
+    assert event.payload == update
+
+
+def test_workflow_config_rejects_non_workflow_keys() -> None:
+    mock_repo = MagicMock()
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
+    client = ASGITestClient(app)
+
+    response = client.put("/api/workflow-config", json={"model": {"log_level": "DEBUG"}})
+
+    assert response.status_code == 403
+    mock_repo.set_app_config.assert_not_called()
+
+
+def test_media_endpoint_serves_full_allowed_file(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    media_file = media_root / "clip.mp4"
+    media_file.write_bytes(b"0123456789")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media?path={media_file}")
+
+    assert response.status_code == 200
+    assert response.content == b"0123456789"
+    assert response.headers["accept-ranges"] == "bytes"
+
+
+def test_media_endpoint_serves_bounded_range(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    media_file = media_root / "clip.mp4"
+    media_file.write_bytes(b"0123456789")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media?path={media_file}", headers={"Range": "bytes=2-5"})
+
+    assert response.status_code == 206
+    assert response.content == b"2345"
+    assert response.headers["accept-ranges"] == "bytes"
+    assert response.headers["content-range"] == "bytes 2-5/10"
+    assert response.headers["content-length"] == "4"
+
+
+def test_media_endpoint_serves_open_ended_and_suffix_ranges(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    media_file = media_root / "clip.mp4"
+    media_file.write_bytes(b"0123456789")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+    )
+    client = ASGITestClient(app)
+
+    open_ended = client.get(f"/media?path={media_file}", headers={"Range": "bytes=7-"})
+    suffix = client.get(f"/media?path={media_file}", headers={"Range": "bytes=-3"})
+
+    assert open_ended.status_code == 206
+    assert open_ended.content == b"789"
+    assert open_ended.headers["content-range"] == "bytes 7-9/10"
+    assert suffix.status_code == 206
+    assert suffix.content == b"789"
+    assert suffix.headers["content-range"] == "bytes 7-9/10"
+
+
+def test_media_endpoint_rejects_invalid_ranges(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    media_file = media_root / "clip.mp4"
+    media_file.write_bytes(b"0123456789")
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+    )
+    client = ASGITestClient(app)
+
+    invalid = client.get(f"/media?path={media_file}", headers={"Range": "bytes=20-30"})
+    multipart = client.get(
+        f"/media?path={media_file}",
+        headers={"Range": "bytes=0-1,3-4"},
+    )
+
+    assert invalid.status_code == 416
+    assert invalid.headers["content-range"] == "bytes */10"
+    assert multipart.status_code == 416
+    assert multipart.headers["content-range"] == "bytes */10"
+
+
+def write_cached_video_transition_frames(
+    video_file: Path,
+    cache_dir: Path,
+    display_size: tuple[int, int] = (4, 4),
+) -> None:
+    cache_config = {
+        "mat_images": 0.01,
+        "mat_type": None,
+        "outer_mat_color": None,
+        "inner_mat_color": None,
+        "outer_mat_border": 75,
+        "inner_mat_border": 40,
+        "outer_mat_use_texture": True,
+        "inner_mat_use_texture": False,
+        "mat_resource_folder": "${PICFRAME_DATA}/mat",
+    }
+    edge_config = {
+        "blur_edges": False,
+        "blur_amount": 12,
+        "blur_zoom": 1.0,
+        "edge_alpha": 0.5,
+    }
+    width, height = display_size
+    extractor = VideoFrameExtractor(
+        str(video_file),
+        width,
+        height,
+        cache_dir=str(cache_dir),
+        matting_config=cache_config,
+        edge_config=edge_config,
+    )
+    first_path = Path(extractor.get_frame_path("first"))
+    last_path = Path(extractor.get_frame_path("last"))
+    first_path.parent.mkdir(parents=True, exist_ok=True)
+    Image.new("RGB", display_size, "red").save(first_path, format="JPEG")
+    Image.new("RGB", display_size, "blue").save(last_path, format="JPEG")
+    extractor._write_transition_metadata(
+        VideoTransitionFrameMetadata(
+            frame_size=display_size,
+            content_rect=(0, 0, width, height),
+        )
+    )
+
+
+def test_media_poster_serves_cached_video_first_frame(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    media_root.mkdir()
+    video_file = media_root / "clip.mp4"
+    video_file.write_bytes(b"video")
+    config_repo = media_config_repo(media_root)
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.return_value = {
+        "filepath": str(video_file),
+        "media_type": "video",
+        "width": 4,
+        "height": 4,
+    }
+    write_cached_video_transition_frames(video_file, cache_dir)
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=config_repo,
+        media_repository=media_repo,
+        image_processing_service=FakeImageProcessingService(cache_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media/poster?path={video_file}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.content
+
+
+def test_media_poster_uses_requested_path_for_cache_key_after_authorization(
+    tmp_path: Path,
+) -> None:
+    media_root = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    media_root.mkdir()
+    real_video = media_root / "real-clip.mp4"
+    linked_video = media_root / "clip.mp4"
+    real_video.write_bytes(b"video")
+    try:
+        linked_video.symlink_to(real_video)
+    except OSError as exc:
+        pytest.skip(f"Symlinks are unavailable in this environment: {exc}")
+
+    config_repo = media_config_repo(media_root)
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.side_effect = lambda filepath: (
+        {
+            "filepath": str(linked_video),
+            "media_type": "video",
+            "width": 4,
+            "height": 4,
+        }
+        if filepath == str(linked_video)
+        else None
+    )
+    write_cached_video_transition_frames(linked_video, cache_dir)
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=config_repo,
+        media_repository=media_repo,
+        image_processing_service=FakeImageProcessingService(cache_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media/poster?path={linked_video}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+
+
+def test_media_poster_falls_back_to_existing_managed_cache_frame(
+    tmp_path: Path,
+) -> None:
+    media_root = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    media_root.mkdir()
+    video_file = media_root / "clip.mp4"
+    video_file.write_bytes(b"video")
+    config_repo = media_config_repo(media_root)
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.return_value = {
+        "filepath": str(video_file),
+        "media_type": "video",
+        "width": 4,
+        "height": 4,
+    }
+    write_cached_video_transition_frames(video_file, cache_dir, display_size=(8, 8))
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=config_repo,
+        media_repository=media_repo,
+        image_processing_service=FakeImageProcessingService(cache_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media/poster?path={video_file}")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("image/jpeg")
+    assert response.content
+
+
+def test_media_poster_rejects_non_video_and_outside_paths(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    media_root.mkdir()
+    image_file = media_root / "photo.jpg"
+    outside_file = tmp_path / "outside.mp4"
+    image_file.write_bytes(b"image")
+    outside_file.write_bytes(b"video")
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.return_value = {
+        "filepath": str(image_file),
+        "media_type": "image",
+    }
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+        media_repository=media_repo,
+    )
+    client = ASGITestClient(app)
+
+    non_video = client.get(f"/media/poster?path={image_file}")
+    outside = client.get(f"/media/poster?path={outside_file}")
+
+    assert non_video.status_code == 400
+    assert outside.status_code == 403
+
+
+def test_media_poster_returns_404_when_cached_frame_missing(tmp_path: Path) -> None:
+    media_root = tmp_path / "media"
+    cache_dir = tmp_path / "cache"
+    media_root.mkdir()
+    video_file = media_root / "clip.mp4"
+    video_file.write_bytes(b"video")
+    media_repo = MagicMock()
+    media_repo.get_media_by_path.return_value = {
+        "filepath": str(video_file),
+        "media_type": "video",
+        "width": 4,
+        "height": 4,
+    }
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=media_config_repo(media_root),
+        media_repository=media_repo,
+        image_processing_service=FakeImageProcessingService(cache_dir),
+    )
+    client = ASGITestClient(app)
+
+    response = client.get(f"/media/poster?path={video_file}")
+
+    assert response.status_code == 404
+
+
+def test_api_media_filter_options() -> None:
+    mock_config_repo = MagicMock()
+    mock_config_repo.get_app_config.return_value = "/pictures"
+    mock_media_repo = MagicMock()
+    mock_media_repo.get_filter_options.return_value = {
+        "subdirectories": ["holiday"],
+        "locations": ["Berlin"],
+        "tags": ["family"],
+        "sort_columns": [{"key": "fname", "label": "File name"}],
+    }
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_config_repo,
+        media_repository=mock_media_repo,
+    )
+    client = ASGITestClient(app)
+
+    response = client.get("/api/media/filter-options")
+
+    assert response.status_code == 200
+    assert response.json()["subdirectories"] == ["holiday"]
+    mock_media_repo.get_filter_options.assert_called_once_with("/pictures")
+
+
+def test_api_system_locales_lists_installed_locales(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    completed = MagicMock()
+    completed.stdout = "C\nPOSIX\nen_US.utf8\n"
+    run = MagicMock(return_value=completed)
+    monkeypatch.setattr("picframe.api.app.subprocess.run", run)
+
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/system/locales")
+
+    assert response.status_code == 200
+    assert response.json() == {"locales": ["C", "en_US.utf8", "POSIX"]}
+    run.assert_called_once()
+
+
+def test_api_system_service_status_reports_active_service() -> None:
+    system_manager = FakeSystemManager(status="active")
+    app = create_app(cors_allowed_origins=["*"], system_manager=system_manager)
+    client = ASGITestClient(app)
+
+    response = client.get("/api/system/service-status")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "active",
+        "active": True,
+        "restart_available": True,
+        "message": None,
+    }
+
+
+def test_api_system_service_status_reports_unavailable_without_manager() -> None:
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.get("/api/system/service-status")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "unavailable"
+    assert response.json()["restart_available"] is False
+
+
+def test_api_restart_service_restarts_when_active() -> None:
+    system_manager = FakeSystemManager(status="active", restart_result=True)
+    app = create_app(cors_allowed_origins=["*"], system_manager=system_manager)
+    client = ASGITestClient(app)
+
+    response = client.post("/api/system/restart-service")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "restarting"}
+    assert system_manager.restart_calls == 1
+
+
+def test_api_restart_service_returns_manual_required_when_inactive() -> None:
+    system_manager = FakeSystemManager(status="inactive", restart_result=True)
+    app = create_app(cors_allowed_origins=["*"], system_manager=system_manager)
+    client = ASGITestClient(app)
+
+    response = client.post("/api/system/restart-service")
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "manual_required"
+    assert system_manager.restart_calls == 0
+
+
+def test_api_media_location_options_searches_repository() -> None:
+    mock_media_repo = MagicMock()
+    mock_media_repo.search_location_options.return_value = [
+        {"value": "Berlin", "count": 4},
+        {"value": "Bern", "count": 1},
+    ]
+
+    app = create_app(cors_allowed_origins=["*"], media_repository=mock_media_repo)
+    client = ASGITestClient(app)
+
+    response = client.get("/api/media/location-options?q=ber&limit=10")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "locations": [
+            {"value": "Berlin", "count": 4},
+            {"value": "Bern", "count": 1},
+        ]
+    }
+    mock_media_repo.search_location_options.assert_called_once_with(
+        "ber",
+        10,
+        location_language="en",
+    )
+
+
+def test_api_media_selection_count_uses_config_pic_dir() -> None:
+    mock_config_repo = MagicMock()
+    mock_config_repo.get_app_config.return_value = "/pictures"
+    mock_media_repo = MagicMock()
+    mock_media_repo.count_media.return_value = {
+        "selected_count": 8,
+        "total_count": 10000,
+        "scope": "subdirectory",
+        "scope_label": "holiday",
+    }
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_config_repo,
+        media_repository=mock_media_repo,
+    )
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/media/selection-count",
+        json={
+            "subdirectory": "holiday",
+            "date_from": "2024-01-01",
+            "date_to": "2024-02-01",
+            "location_filter": "Berlin OR Hamburg",
+            "tags_filter": "family AND beach",
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "selected_count": 8,
+        "total_count": 10000,
+        "scope": "subdirectory",
+        "scope_label": "holiday",
+    }
+    criteria = mock_media_repo.count_media.call_args.args[0]
+    assert criteria.pic_dir == "/pictures"
+    assert criteria.subdirectory == "holiday"
+    assert criteria.date_from == "2024-01-01"
+    assert criteria.date_to == "2024-02-01"
+    assert criteria.location_filter == "Berlin OR Hamburg"
+    assert criteria.tags_filter == "family AND beach"
+    assert criteria.shuffle is False
+    assert criteria.recent_n == 0
+
+
+def test_api_media_selection_count_without_media_repo() -> None:
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+
+    response = client.post(
+        "/api/media/selection-count",
+        json={"subdirectory": "holiday"},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "selected_count": 0,
+        "total_count": 0,
+        "scope": "subdirectory",
+        "scope_label": "holiday",
+    }
+
+
+def test_api_get_hardware_inputs_returns_validated_config() -> None:
+    mock_repo = MagicMock()
+    mock_repo.get_all_app_config.return_value = {
+        "hardware_inputs.enabled": True,
+        "hardware_inputs.inputs.next_button.type": "button",
+        "hardware_inputs.inputs.next_button.pin": 17,
+        "hardware_inputs.inputs.next_button.actions.pressed": "NEXT",
+    }
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
+    client = ASGITestClient(app)
+
+    response = client.get("/api/hardware-inputs")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "enabled": True,
+        "inputs": {
+            "next_button": {
+                "label": "next_button",
+                "type": "button",
+                "pin": 17,
+                "bounce_time": 0.1,
+                "actions": {"pressed": "NEXT"},
+            }
+        },
+    }
+
+
+def test_api_get_hardware_inputs_returns_pir_no_motion_delay() -> None:
+    mock_repo = MagicMock()
+    mock_repo.get_all_app_config.return_value = {
+        "hardware_inputs.enabled": True,
+        "hardware_inputs.inputs.motion.type": "pir",
+        "hardware_inputs.inputs.motion.pin": 27,
+        "hardware_inputs.inputs.motion.no_motion_delay_seconds": 900,
+        "hardware_inputs.inputs.motion.actions.motion_detected": "DISPLAY_ON",
+        "hardware_inputs.inputs.motion.actions.no_motion": "DISPLAY_OFF",
+    }
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
+    client = ASGITestClient(app)
+
+    response = client.get("/api/hardware-inputs")
+
+    assert response.status_code == 200
+    assert response.json()["inputs"]["motion"] == {
+        "label": "motion",
+        "type": "pir",
+        "pin": 27,
+        "no_motion_delay_seconds": 900.0,
+        "actions": {"motion_detected": "DISPLAY_ON", "no_motion": "DISPLAY_OFF"},
+    }
+
+
+def test_api_put_hardware_inputs_persists_and_publishes_config() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/hardware-inputs",
+        json={
+            "enabled": True,
+            "inputs": {
+                "next_button": {
+                    "type": "button",
+                    "pin": 17,
+                    "actions": {"pressed": "NEXT"},
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "success"
+    mock_repo.set_app_config.assert_any_call("hardware_inputs.enabled", True)
+    mock_repo.set_app_config.assert_any_call(
+        "hardware_inputs.inputs.next_button.actions.pressed", "NEXT"
+    )
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command.name == "SET_CONFIG"
+    assert event.payload["hardware_inputs"]["inputs"]["next_button"]["pin"] == 17
+
+
+def test_api_put_hardware_inputs_persists_pir_no_motion_delay() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/hardware-inputs",
+        json={
+            "enabled": True,
+            "inputs": {
+                "motion": {
+                    "type": "pir",
+                    "pin": 27,
+                    "no_motion_delay_seconds": 900,
+                    "actions": {
+                        "motion_detected": "DISPLAY_ON",
+                        "no_motion": "DISPLAY_OFF",
+                    },
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    mock_repo.set_app_config.assert_any_call(
+        "hardware_inputs.inputs.motion.no_motion_delay_seconds", 900.0
+    )
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["hardware_inputs"]["inputs"]["motion"]["no_motion_delay_seconds"] == 900.0
+
+
+def test_api_put_hardware_inputs_rejects_duplicate_pins() -> None:
+    app = create_app(cors_allowed_origins=["*"], config_repository=MagicMock())
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/hardware-inputs",
+        json={
+            "enabled": True,
+            "inputs": {
+                "a": {"type": "button", "pin": 17, "actions": {"pressed": "NEXT"}},
+                "b": {"type": "pir", "pin": 17, "actions": {"motion_detected": "DISPLAY_ON"}},
+            },
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_api_put_hardware_inputs_rejects_invalid_no_motion_delay() -> None:
+    app = create_app(cors_allowed_origins=["*"], config_repository=MagicMock())
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/hardware-inputs",
+        json={
+            "enabled": True,
+            "inputs": {
+                "motion": {
+                    "type": "pir",
+                    "pin": 27,
+                    "no_motion_delay_seconds": -1,
+                    "actions": {"no_motion": "DISPLAY_OFF"},
+                }
+            },
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_api_put_config_rejects_invalid_hardware_inputs() -> None:
+    app = create_app(cors_allowed_origins=["*"], config_repository=MagicMock())
+    client = ASGITestClient(app)
+
+    response = client.put(
+        "/api/config",
+        json={
+            "hardware_inputs": {
+                "enabled": True,
+                "inputs": {
+                    "bad": {
+                        "type": "button",
+                        "pin": 17,
+                        "actions": {"pressed": "SET_BRIGHTNESS"},
+                    }
+                },
+            }
+        },
+    )
+
+    assert response.status_code == 422
+
+
+def test_api_clear_cache_calls_image_processing_service() -> None:
+    mock_image_processing_service = MagicMock()
+    app = create_app(
+        cors_allowed_origins=["*"],
+        image_processing_service=mock_image_processing_service,
+    )
+    client = ASGITestClient(app)
+
+    response = client.post("/api/maintenance/clear-cache")
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "cache cleared"}
+    mock_image_processing_service.clear_cache.assert_called_once_with()
+
+
+def test_api_import_yaml() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  fps: 45
+  blur_amount: 15
+  unknown_field: "should be ignored"
+model:
+  pic_dir: "/new/yaml/path"
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "message": "Legacy YAML configuration imported successfully",
+    }
+
+    # Verify repository was updated
+    assert mock_repo.set_app_config.call_count > 0
+
+    # Verify event was published
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command.name == "SET_CONFIG"
+    assert event.payload["viewer"]["fps"] == 45
+    assert event.payload["viewer"]["blur_amount"] == 15
+    assert event.payload["model"]["pic_dir"] == "/new/yaml/path"
+    assert "unknown_field" not in event.payload["viewer"]
+
+
+def test_api_import_yaml_maps_legacy_show_text() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_text: "name location"
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["text_overlay_format"] == "name location"
+    assert event.payload["viewer"]["show_text_enabled"] is True
+    assert "show_text" not in event.payload["viewer"]
+
+
+def test_api_import_yaml_maps_empty_legacy_show_text_to_disabled() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_text: "  "
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["text_overlay_format"] == ""
+    assert event.payload["viewer"]["show_text_enabled"] is False
+
+
+def test_api_import_yaml_preserves_explicit_next_gen_text_keys() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_text: "name location"
+  text_overlay_format: "title caption"
+  show_text_enabled: false
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["text_overlay_format"] == "title caption"
+    assert event.payload["viewer"]["show_text_enabled"] is False
+    assert "show_text" not in event.payload["viewer"]
+
+
+def test_api_import_yaml_maps_legacy_show_clock_to_clock_extra_source() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_clock: true
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["clock_extra_source"] == "clock_txt"
+
+
+def test_api_import_yaml_preserves_explicit_clock_extra_source() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_clock: true
+  clock_extra_source: "off"
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["viewer"]["clock_extra_source"] == "off"
+
+
+def test_api_import_yaml_no_clock_extra_source_when_clock_disabled() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  show_clock: false
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    # clock_extra_source should NOT be injected when clock is off
+    assert "clock_extra_source" not in event.payload["viewer"]
+
+
+def test_api_import_yaml_imports_mqtt_port_and_ignores_startup_only_http_keys() -> None:
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+mqtt:
+  port: 8883
+http:
+  use_http: true
+  path: "/tmp/picframe-html"
+  port: 9001
+  password: null
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.payload["mqtt"]["port"] == 8883
+    assert event.payload["http"]["password"] == ""
+    assert "use_http" not in event.payload["http"]
+    assert "path" not in event.payload["http"]
+    assert "port" not in event.payload["http"]
+
+
+def test_api_import_yaml_example_file() -> None:
+    # Inlined legacy-format YAML fixture (mirrors the former
+    # src/picframe/config/configuration_example.yaml). The on-disk file was
+    # obsolete in next-gen (default_config.yaml is the seed) and is no longer
+    # shipped; this fixture exercises the legacy import path with a compact,
+    # representative subset of legacy keys.
+    mock_repo = MagicMock()
+    mock_publisher = MagicMock()
+
+    app = create_app(
+        cors_allowed_origins=["*"],
+        config_repository=mock_repo,
+        event_publisher=mock_publisher,
+    )
+    client = ASGITestClient(app)
+
+    yaml_content = """
+viewer:
+  blur_amount: 12
+  display_w: null
+  display_h: null
+model:
+  pic_dir: "~/Pictures"
+http:
+  password: null
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("configuration_example.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "success",
+        "message": "Legacy YAML configuration imported successfully",
+    }
+
+    # Verify repository was updated
+    assert mock_repo.set_app_config.call_count > 0
+
+    # Verify event was published
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert event.command.name == "SET_CONFIG"
+
+    # Verify some specific fields from the example fixture
+    assert event.payload["viewer"]["blur_amount"] == 12
+    assert event.payload["viewer"]["display_w"] is None
+    assert event.payload["viewer"]["display_h"] is None
+    assert event.payload["model"]["pic_dir"] == "~/Pictures"
+    assert event.payload["http"]["password"] == ""
+
+
+def test_api_import_yaml_invalid_format() -> None:
+    mock_repo = MagicMock()
+    app = create_app(cors_allowed_origins=["*"], config_repository=mock_repo)
+    client = ASGITestClient(app)
+
+    yaml_content = """
+- just a list
+- not a dict
+"""
+
+    response = client.post(
+        "/api/config/import-yaml",
+        files={"file": ("config.yaml", yaml_content, "application/x-yaml")},
+    )
+
+    assert response.status_code == 500
+    assert "Error importing configuration" in response.json()["detail"]
+
+
+def test_spa_routing_without_html_dir(tmp_path: Path) -> None:
+    app = create_app(cors_allowed_origins=["*"], html_dir=str(tmp_path / "nonexistent"))
+    client = ASGITestClient(app)
+
+    # Test root route returns 404 since SPA is not mounted
+    response = client.get("/")
+    assert response.status_code == 404
+
+
+class FakeOverlayController:
+    """Minimal IOverlayController fake backed by an in-memory descriptor list."""
+
+    def __init__(self, descriptors: list) -> None:
+        self._descriptors = descriptors
+
+    def list_plugins(self) -> list:
+        return list(self._descriptors)
+
+    def is_available(self) -> bool:
+        return True
+
+    def start(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+    def set_opacity(self, opacity: float) -> None:
+        pass
+
+    def reload(self) -> None:
+        pass
+
+
+def _overlay_descriptor(**kwargs):
+    from picframe.core.models.overlay import PluginDescriptor
+
+    return PluginDescriptor(**kwargs)
+
+
+def test_get_overlay_plugins_empty_without_controller() -> None:
+    app = create_app(cors_allowed_origins=["*"])
+    client = ASGITestClient(app)
+    assert client.get("/api/overlay/plugins").json() == []
+
+
+def test_get_overlay_plugins_lists_descriptors_with_merged_config() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    weather = _overlay_descriptor(
+        id="weather",
+        name="Weather",
+        description="Forecast.",
+        icon="sun",
+        config_schema={
+            "api_key": {"type": "string", "required": True},
+            "units": {"type": "string", "default": "metric", "enum": ["metric", "imperial"]},
+        },
+    )
+    clock = _overlay_descriptor(id="clock", name="Clock")
+
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        repo.set_app_config("overlay.plugin_config.weather.units", "imperial")
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            overlay_controller=FakeOverlayController([weather, clock]),
+        )
+        client = ASGITestClient(app)
+
+        plugins = client.get("/api/overlay/plugins").json()
+        assert [p["id"] for p in plugins] == ["clock", "weather"]
+
+        weather_plugin = next(p for p in plugins if p["id"] == "weather")
+        assert weather_plugin["has_config"] is True
+        assert weather_plugin["config_schema"]["api_key"]["required"] is True
+        # manifest default <- db override
+        assert weather_plugin["config"] == {"units": "imperial"}
+
+        clock_plugin = next(p for p in plugins if p["id"] == "clock")
+        assert clock_plugin["has_config"] is False
+        assert clock_plugin["config"] == {}
+    finally:
+        repo.close()
+
+
+def test_get_overlay_plugin_config_404_when_unknown() -> None:
+    app = create_app(
+        cors_allowed_origins=["*"],
+        overlay_controller=FakeOverlayController([_overlay_descriptor(id="clock", name="Clock")]),
+    )
+    client = ASGITestClient(app)
+    response = client.get("/api/overlay/plugins/bogus/config")
+    assert response.status_code == 404
+
+
+def test_get_overlay_plugin_config_returns_effective_config() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    weather = _overlay_descriptor(
+        id="weather",
+        name="Weather",
+        config_schema={
+            "api_key": {"type": "string", "required": True},
+            "units": {"type": "string", "default": "metric", "enum": ["metric", "imperial"]},
+        },
+    )
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        repo.set_app_config("overlay.plugin_config.weather.api_key", "secret")
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            overlay_controller=FakeOverlayController([weather]),
+        )
+        client = ASGITestClient(app)
+
+        response = client.get("/api/overlay/plugins/weather/config")
+        assert response.status_code == 200
+        body = response.json()
+        assert body["plugin_id"] == "weather"
+        assert body["config"] == {"api_key": "secret", "units": "metric"}
+    finally:
+        repo.close()
+
+
+def test_put_overlay_plugin_config_validates_and_persists() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    weather = _overlay_descriptor(
+        id="weather",
+        name="Weather",
+        config_schema={
+            "api_key": {"type": "string", "required": True},
+            "units": {"type": "string", "default": "metric", "enum": ["metric", "imperial"]},
+        },
+    )
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        publisher = MagicMock()
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            event_publisher=publisher,
+            overlay_controller=FakeOverlayController([weather]),
+        )
+        client = ASGITestClient(app)
+
+        response = client.put(
+            "/api/overlay/plugins/weather/config",
+            json={"api_key": "secret", "units": "imperial"},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "success"
+        assert body["plugin_id"] == "weather"
+        assert body["config"] == {"api_key": "secret", "units": "imperial"}
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.plugin_config.weather.api_key"] == "secret"
+        assert all_config["overlay.plugin_config.weather.units"] == "imperial"
+
+        # a SET_CONFIG event is published so the long-running ConfigService
+        # re-persists + publishes OverlayConfigChangedEvent
+        from picframe.core.events.dto import Command, CommandEvent
+
+        published = [call.args[0] for call in publisher.publish.call_args_list]
+        assert any(
+            isinstance(e, CommandEvent)
+            and e.command == Command.SET_CONFIG
+            and e.payload == {"overlay": {"plugin_config": {"weather": body["config"]}}}
+            for e in published
+        )
+    finally:
+        repo.close()
+
+
+def test_put_overlay_plugin_config_422_on_invalid_payload() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    weather = _overlay_descriptor(
+        id="weather",
+        name="Weather",
+        config_schema={"api_key": {"type": "string", "required": True}},
+    )
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            overlay_controller=FakeOverlayController([weather]),
+        )
+        client = ASGITestClient(app)
+
+        response = client.put("/api/overlay/plugins/weather/config", json={"bogus": 1})
+        assert response.status_code == 422
+    finally:
+        repo.close()
+
+
+def test_put_overlay_plugin_config_404_when_unknown() -> None:
+    app = create_app(
+        cors_allowed_origins=["*"],
+        overlay_controller=FakeOverlayController([_overlay_descriptor(id="clock", name="Clock")]),
+    )
+    client = ASGITestClient(app)
+    response = client.put("/api/overlay/plugins/bogus/config", json={})
+    assert response.status_code == 404
+
+
+def test_get_overlay_plugins_includes_effective_layout() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    weather = _overlay_descriptor(
+        id="weather",
+        name="Weather",
+        position="bottom-left",
+        size={"w": 300, "h": 150},
+        default_display_mode="persistent",
+    )
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        repo.set_app_config("overlay.plugin_layout.weather.position", "top-right")
+        repo.set_app_config("overlay.plugin_layout.weather.idle_hide_seconds", 12.0)
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            overlay_controller=FakeOverlayController([weather]),
+        )
+        client = ASGITestClient(app)
+
+        plugins = client.get("/api/overlay/plugins").json()
+        weather_plugin = next(p for p in plugins if p["id"] == "weather")
+        assert weather_plugin["layout"] == {
+            "position": "top-right",
+            "width": None,
+            "height": None,
+            "scale": 1.0,
+            "display_mode": "persistent",
+            "idle_hide_seconds": 12.0,
+            "z_order": 0,
+        }
+    finally:
+        repo.close()
+
+
+def test_get_overlay_plugins_layout_absent_when_no_repo() -> None:
+    app = create_app(
+        cors_allowed_origins=["*"],
+        overlay_controller=FakeOverlayController([_overlay_descriptor(id="clock", name="Clock")]),
+    )
+    client = ASGITestClient(app)
+    plugins = client.get("/api/overlay/plugins").json()
+    clock = next(p for p in plugins if p["id"] == "clock")
+    # no config repository -> manifest-default layout is computed
+    assert clock["layout"]["position"] == "top-right"
+    assert clock["layout"]["display_mode"] == "auto_hide"
+
+
+def test_put_overlay_plugin_layout_validates_and_persists() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    weather = _overlay_descriptor(
+        id="weather",
+        name="Weather",
+        position="bottom-left",
+        size={"w": 300, "h": 150},
+    )
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        publisher = MagicMock()
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            event_publisher=publisher,
+            overlay_controller=FakeOverlayController([weather]),
+        )
+        client = ASGITestClient(app)
+
+        response = client.put(
+            "/api/overlay/plugins/weather/layout",
+            json={"position": "middle-center", "display_mode": "persistent", "z_order": 3},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "success"
+        assert body["plugin_id"] == "weather"
+        assert body["layout"]["position"] == "middle-center"
+        assert body["layout"]["display_mode"] == "persistent"
+        assert body["layout"]["z_order"] == 3
+        # scale-mode plugin: width/height unused (None), scale defaults to 1.0
+        assert body["layout"]["width"] is None
+        assert body["layout"]["height"] is None
+        assert body["layout"]["scale"] == 1.0
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.plugin_layout.weather.position"] == "middle-center"
+        assert all_config["overlay.plugin_layout.weather.display_mode"] == "persistent"
+        assert all_config["overlay.plugin_layout.weather.z_order"] == 3
+
+        from picframe.core.events.dto import Command, CommandEvent
+
+        published = [call.args[0] for call in publisher.publish.call_args_list]
+        # The published SET_CONFIG payload carries the validated (None-dropped)
+        # layout, not the effective layout returned in the response body.
+        expected_publishable = {
+            "position": "middle-center",
+            "display_mode": "persistent",
+            "z_order": 3,
+        }
+        assert any(
+            isinstance(e, CommandEvent)
+            and e.command == Command.SET_CONFIG
+            and e.payload == {"overlay": {"plugin_layout": {"weather": expected_publishable}}}
+            for e in published
+        )
+    finally:
+        repo.close()
+
+
+def test_put_overlay_plugin_layout_422_on_invalid_payload() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            overlay_controller=FakeOverlayController(
+                [_overlay_descriptor(id="weather", name="Weather")]
+            ),
+        )
+        client = ASGITestClient(app)
+
+        response = client.put(
+            "/api/overlay/plugins/weather/layout",
+            json={"position": "nowhere"},
+        )
+        assert response.status_code == 422
+    finally:
+        repo.close()
+
+
+def test_put_overlay_plugin_layout_404_when_unknown() -> None:
+    app = create_app(
+        cors_allowed_origins=["*"],
+        overlay_controller=FakeOverlayController([_overlay_descriptor(id="clock", name="Clock")]),
+    )
+    client = ASGITestClient(app)
+    response = client.put("/api/overlay/plugins/bogus/layout", json={})
+    assert response.status_code == 404

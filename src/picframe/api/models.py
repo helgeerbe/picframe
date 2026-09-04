@@ -1,0 +1,548 @@
+"""Pydantic models for API payload validation."""
+
+from typing import Any, Literal
+
+from pydantic import BaseModel, Field, model_validator
+
+from picframe.core.models.hardware_input import normalize_hardware_inputs_config
+
+AuthScope = Literal["none", "settings", "site"]
+
+
+class APIErrorResponse(BaseModel):
+    """Error response returned by HTTPException and validation handlers."""
+
+    detail: Any = Field(description="Human-readable error detail or validation error payload.")
+
+
+class HealthResponse(BaseModel):
+    """Liveness response for the web control plane."""
+
+    status: str = Field(description="Current health state.", examples=["ok"])
+
+
+class StatusResponse(BaseModel):
+    """Generic status response for command endpoints."""
+
+    status: str = Field(description="Result or queued command state.")
+
+
+class StatusMessageResponse(StatusResponse):
+    """Status response with an optional explanatory message."""
+
+    message: str | None = Field(default=None, description="Optional status detail.")
+
+
+class SystemServiceStatusResponse(BaseModel):
+    """Runtime status for the managed Picframe systemd service."""
+
+    status: Literal["active", "inactive", "unavailable"] = "unavailable"
+    active: bool = False
+    restart_available: bool = False
+    message: str | None = None
+
+
+class BasicAuthConfigResponse(BaseModel):
+    """Public shape of the plaintext Basic Auth settings."""
+
+    enabled: bool = False
+    username: str = "admin"
+    scope: AuthScope = "none"
+    password_set: bool = False
+    password: str | None = None
+
+
+class BasicAuthConfigRequest(BaseModel):
+    """Request to update Basic Auth settings."""
+
+    scope: AuthScope | None = None
+    enabled: bool | None = None
+    username: str = "admin"
+    password: str | None = None
+
+
+class LogEventMessage(BaseModel):
+    """Log event sent over /ws/logs."""
+
+    type: Literal["LogEvent"] = "LogEvent"
+    timestamp: float
+    level: str
+    logger: str
+    message: str
+    formatted: str
+
+
+class LogSnapshotMessage(BaseModel):
+    """Initial log snapshot sent when a Logs websocket connects."""
+
+    type: Literal["LogSnapshot"] = "LogSnapshot"
+    events: list[LogEventMessage] = Field(default_factory=list)
+
+
+class MediaResponseDTO(BaseModel):
+    """Data Transfer Object for media items sent to the frontend."""
+
+    file_path: str
+    media_type: Literal["image", "video"] = "image"
+    exif: dict[str, Any] = Field(default_factory=dict)
+    location: dict[str, float] | None = None
+    id: int | None = None
+    role: str | None = None
+    index: int | None = None
+    layout: str = "single"
+    primary_index: int = 0
+    items: list["MediaResponseDTO"] = Field(default_factory=list)
+
+
+class MediaSelectionCountRequest(BaseModel):
+    """Remote media-selection filters used for count previews."""
+
+    subdirectory: str = ""
+    date_from: str = ""
+    date_to: str = ""
+    location_filter: str = ""
+    tags_filter: str = ""
+
+
+class MediaSelectionCountResponse(BaseModel):
+    """Count preview for Remote media-selection filters."""
+
+    selected_count: int = 0
+    total_count: int = 0
+    scope: str = "pic_dir"
+    scope_label: str = ""
+
+
+class MediaFilterOptionsResponse(BaseModel):
+    """Distinct values used to populate Remote media filter controls."""
+
+    subdirectories: list[str] = Field(default_factory=list)
+    locations: list[str] = Field(default_factory=list)
+    tags: list[str] = Field(default_factory=list)
+    sort_columns: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MediaLocationOptionDTO(BaseModel):
+    """A searchable media location option with usage count."""
+
+    value: str
+    count: int = 0
+
+
+class MediaLocationOptionsResponse(BaseModel):
+    """Search results for the Remote location picker."""
+
+    locations: list[MediaLocationOptionDTO] = Field(default_factory=list)
+
+
+class LocaleOptionsResponse(BaseModel):
+    """Installed host locales visible to Settings."""
+
+    locales: list[str] = Field(default_factory=list)
+
+
+class FilesystemEntryDTO(BaseModel):
+    """Filesystem entry visible to the Settings path picker."""
+
+    name: str
+    path: str
+    is_dir: bool = False
+    is_file: bool = False
+    extension: str = ""
+
+
+class FilesystemBrowseResponse(BaseModel):
+    """Safe filesystem browse response rooted at the Picframe user's home."""
+
+    root: str
+    path: str
+    parent: str | None = None
+    entries: list[FilesystemEntryDTO] = Field(default_factory=list)
+    shortcuts: list[FilesystemEntryDTO] = Field(default_factory=list)
+
+
+class FilesystemValidateRequest(BaseModel):
+    """Path validation request for Settings path controls."""
+
+    path: str = ""
+    kind: str = "any"
+    field: str = ""
+    allow_missing: bool = False
+    extensions: list[str] = Field(default_factory=list)
+
+
+class FilesystemValidateResponse(BaseModel):
+    """Path validation result for Settings path controls."""
+
+    valid: bool = False
+    path: str = ""
+    exists: bool = False
+    is_dir: bool = False
+    is_file: bool = False
+    warnings: list[str] = Field(default_factory=list)
+    error: str = ""
+
+
+class ViewerConfig(BaseModel):
+    blur_amount: int = 12
+    blur_zoom: float = 1.0
+    blur_edges: bool = False
+    edge_alpha: float = 0.5
+    fps: float = 20.0
+    background: list[Any] = Field(default_factory=lambda: [0.2, 0.2, 0.3, 1.0])
+    blend_type: str = "blend"
+    font_file: str = "${PICFRAME_DATA}/fonts/NotoSans-Regular.ttf"
+    shader: str = "${PICFRAME_DATA}/shaders/blend_new"
+    show_text_fm: str = "%b %d, %Y"
+    show_text_tm: float = 20.0
+    show_text_sz: int = 40
+    show_text_enabled: bool = True
+    text_overlay_format: str = "title caption name date folder location"
+    text_justify: str = "L"
+    text_bkg_hgt: float = 0.25
+    text_opacity: float = 1.0
+    text_x_margin: int = 100
+    text_y_margin: int = 0
+    fit: bool = False
+    video_fit_display: bool = False
+    show_text_on_video: bool = False
+    max_software_decode_resolution: str = "1280x720"
+    kenburns: bool = False
+    display_x: int = 0
+    display_y: int = 0
+    display_w: str | None = None
+    display_h: str | None = None
+    display_power: str = "0"
+    display_hdmi: str = "HDMI-A-1"
+    use_glx: bool = False
+    use_sdl2: bool = True
+    mat_images: bool | float | str = 0.01
+    mat_type: str | None = None
+    outer_mat_color: str | None = None
+    inner_mat_color: str | None = None
+    outer_mat_border: int = 75
+    inner_mat_border: int = 40
+    outer_mat_use_texture: bool = True
+    inner_mat_use_texture: bool = False
+    mat_resource_folder: str = "${PICFRAME_DATA}/mat"
+    show_clock: bool = False
+    clock_justify: str = "R"
+    clock_text_sz: int = 120
+    clock_format: str = "%-I:%M"
+    clock_opacity: float = 1.0
+    clock_top_bottom: str = "T"
+    clock_wdt_offset_pct: float = 3.0
+    clock_hgt_offset_pct: float = 3.0
+    clock_extra_source: str = "off"
+    clock_extra_text: str = ""
+    menu_text_sz: int = 40
+    menu_autohide_tm: float = 10.0
+    geo_suppress_list: list[Any] = Field(default_factory=list)
+
+
+class ModelConfig(BaseModel):
+    pic_dir: str = "~/Pictures"
+    image_extensions: list[str] = Field(
+        default_factory=lambda: [".jpg", ".jpeg", ".png", ".heic", ".heif"]
+    )
+    video_extensions: list[str] = Field(
+        default_factory=lambda: [".mp4", ".mkv", ".flv", ".mov", ".avi", ".webm", ".hevc"]
+    )
+    deleted_pictures: str = "~/DeletedPictures"
+    follow_links: bool = False
+    no_files_img: str = "${PICFRAME_DATA}/no_pictures.jpg"
+    subdirectory: str = ""
+    date_from: str = ""
+    date_to: str = ""
+    recent_n: int = 7
+    reshuffle_num: int = 1
+    time_delay: float = 200.0
+    fade_time: float = 10.0
+    update_interval: float = 2.0
+    shuffle: bool = True
+    shuffle_mode: str = "random"
+    # Age-weighted shuffle tuning (only used when shuffle_mode == "age_weighted").
+    recency_half_life_days: float = 365.0
+    sample_limit: int | None = None
+    sort_cols: str = "fname ASC"
+    image_attr: list[Any] = Field(
+        default_factory=lambda: [
+            "PICFRAME GPS",
+            "PICFRAME LOCATION",
+            "EXIF FNumber",
+            "EXIF ExposureTime",
+            "EXIF ISOSpeedRatings",
+            "EXIF FocalLength",
+            "EXIF DateTimeOriginal",
+            "Image Model",
+            "Image Make",
+            "IPTC Caption/Abstract",
+            "IPTC Object Name",
+            "IPTC Keywords",
+        ]
+    )
+    load_geoloc: bool = False
+    geo_key: str = "this_needs_to@be_changed"
+    locale: str = "en_US.utf8"
+    key_list: list[list[str]] = Field(
+        default_factory=lambda: [
+            ["tourism", "amenity", "isolated_dwelling"],
+            ["suburb", "village"],
+            ["city", "county"],
+            ["region", "state", "province"],
+            ["country"],
+        ]
+    )
+    portrait_pairs: bool = False
+    location_filter: str = ""
+    tags_filter: str = ""
+    log_level: str = "WARNING"
+    log_file: str = ""
+
+
+class MqttConfig(BaseModel):
+    use_mqtt: bool = False
+    server: str = "your_mqtt_broker"
+    port: int = 1883
+    login: str = "name"
+    password: str = "your_password"
+    tls: str = ""
+    device_id: str = "picframe"
+    device_url: str = ""
+
+
+class HttpConfig(BaseModel):
+    auth: bool = False
+    username: str = "admin"
+    password: str = ""
+    use_ssl: bool = False
+    keyfile: str = "path/to/key.pem"
+    certfile: str = "path/to/cert.pem"
+    websocket_broadcast_rate_limit: float = 10.0
+    websocket_broadcast_capacity: int = 20
+    command_debounce_ms: int = 200
+    cors_allowed_origins: list[str] = Field(default_factory=lambda: ["*"])
+
+
+class HardwareInputsConfig(BaseModel):
+    enabled: bool = False
+    inputs: dict[str, dict[str, Any]] = Field(default_factory=dict)
+
+    @model_validator(mode="before")
+    @classmethod
+    def validate_hardware_inputs(cls, data: Any) -> dict[str, Any]:
+        return normalize_hardware_inputs_config(data)
+
+
+class HardwareInputsUpdateResponse(StatusMessageResponse):
+    """Result returned after updating hardware input configuration."""
+
+    hardware_inputs: dict[str, Any] | None = Field(
+        default=None,
+        description="Validated hardware input configuration that was persisted.",
+    )
+
+
+# Nine-anchor screen positions for panel placement and content alignment (#752).
+PluginLayoutAnchor = Literal[
+    "top-left",
+    "top-center",
+    "top-right",
+    "middle-left",
+    "middle-center",
+    "middle-right",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
+]
+
+
+class PluginLayout(BaseModel):
+    """User-editable per-plugin panel layout (issue #752).
+
+    A plugin with a manifest ``size`` is in *scale mode*: ``scale`` zooms the
+    widget uniformly and the panel is sized to ``design × scale`` (no
+    contain-fit gaps). A plugin without ``size`` is in *fill mode*:
+    ``width``/``height`` enlarge the panel and the iframe fills it.
+
+    Attributes:
+        position: 9-anchor screen position of the panel.
+        width/height: Panel size in pixels (fill mode); ``null`` = use the
+            default. Ignored for scale-mode plugins.
+        scale: Zoom factor for scale-mode widgets (default 1.0); ``null`` = no
+            scaling (fill mode).
+        display_mode: ``persistent`` (always visible) or ``auto_hide`` (fades
+            after ``idle_hide_seconds``). Per-plugin, replacing the old global.
+        idle_hide_seconds: Per-plugin idle fade delay; ``null`` = inherit the
+            global ``overlay.idle_hide_seconds``.
+        z_order: Stacking order for free overlap (higher = on top).
+    """
+
+    position: PluginLayoutAnchor = "top-right"
+    width: int | None = None
+    height: int | None = None
+    scale: float | None = None
+    display_mode: Literal["persistent", "auto_hide"] = "auto_hide"
+    idle_hide_seconds: float | None = None
+    z_order: int = 0
+
+
+class ContentOffset(BaseModel):
+    """Per-edge content offset (px) inside each plugin panel, shared by all
+    plugins. Each anchor picks up the relevant edges: ``top-left`` uses
+    ``top``+``left``, ``middle-right`` uses ``right``, ``middle-center`` uses
+    none. Values are design-space pixels (pre-``transform: scale()``), so the
+    offset scales with the widget. ``0`` = flush to the panel edge.
+    """
+
+    top: int = 8
+    bottom: int = 8
+    left: int = 8
+    right: int = 8
+
+
+class OverlayConfig(BaseModel):
+    """Pydantic model for the ``overlay`` config section (#739, #752).
+
+    This is the single blocking prerequisite for the feature: Pydantic v2
+    ``extra='ignore'`` silently drops unknown YAML keys, so an ``overlay``
+    section absent from the Pydantic schema would be dropped entirely during
+    ``picframe init`` seeding. Note this is unrelated to the existing
+    ``picframe.core.events.dto.OverlayConfig`` dataclass (the pi3d text/clock
+    overlay config).
+
+    Issue #752 replaces the single-visible-plugin model (``visible_plugin:
+    str | None`` + a global ``display_mode``) with a multi-widget model:
+    ``visible_plugins: list[str]`` (simultaneous widgets) and a per-plugin
+    ``plugin_layout`` map (position/scale/width/height/display_mode/idle_hide/
+    z_order). Legacy ``visible_plugin`` / global ``display_mode`` keys are
+    ignored here (``extra='ignore'``); the read-time ``normalize_legacy_overlay``
+    bridge keeps the out-of-process worker/shell fed until Phase B.
+    """
+
+    enabled: bool = False
+    backend: Literal["webkit"] = "webkit"
+    plugin_dir: str = "~/.picframe/overlay-plugins"
+    enabled_plugins: list[str] = Field(default_factory=lambda: ["clock", "meta"])
+    visible_plugins: list[str] = Field(default_factory=lambda: ["clock"])
+    enabled_input_types: list[str] = Field(default_factory=lambda: ["touch", "mouse", "keyboard"])
+    idle_hide_seconds: float = 5.0
+    plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    plugin_layout: dict[str, PluginLayout] = Field(default_factory=dict)
+    content_offset: ContentOffset = Field(default_factory=ContentOffset)
+
+
+class OverlayPluginResponse(BaseModel):
+    """A discovered overlay plugin with its effective (merged) config and layout."""
+
+    id: str
+    name: str
+    description: str = ""
+    icon: str = ""
+    trigger: str = "icon"
+    position: str = "top-right"
+    has_config: bool = False
+    size: dict[str, int] | None = None
+    config_schema: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Effective config: manifest defaults merged with persisted user values.",
+    )
+    layout: dict[str, Any] | None = Field(
+        default=None,
+        description="Effective per-plugin layout (manifest defaults <- db overrides).",
+    )
+
+
+class OverlayPluginConfigResponse(BaseModel):
+    """Effective per-plugin config (manifest defaults <- db overrides)."""
+
+    plugin_id: str
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class OverlayPluginConfigUpdateResponse(StatusMessageResponse):
+    """Result returned after updating a single plugin's config."""
+
+    plugin_id: str
+    config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validated per-plugin config that was persisted.",
+    )
+
+
+class OverlayPluginLayoutUpdateResponse(StatusMessageResponse):
+    """Result returned after updating a single plugin's layout (#752)."""
+
+    plugin_id: str
+    layout: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validated per-plugin layout that was persisted.",
+    )
+
+
+class AppConfig(BaseModel):
+    viewer: ViewerConfig = Field(default_factory=ViewerConfig)
+    model: ModelConfig = Field(default_factory=ModelConfig)
+    mqtt: MqttConfig = Field(default_factory=MqttConfig)
+    http: HttpConfig = Field(default_factory=HttpConfig)
+    hardware_inputs: HardwareInputsConfig = Field(default_factory=HardwareInputsConfig)
+    overlay: OverlayConfig = Field(default_factory=OverlayConfig)
+
+
+class EmptyConfigResponse(BaseModel):
+    """Empty configuration response used when no repository is injected."""
+
+
+class WebSocketCommandMessage(BaseModel):
+    """Inbound command message accepted by the /ws/state WebSocket."""
+
+    command: Literal[
+        "NEXT",
+        "PREV",
+        "PAUSE",
+        "PLAY",
+        "SET_BRIGHTNESS",
+        "DISPLAY_ON",
+        "DISPLAY_OFF",
+        "DELETE",
+        "PURGE_FILES",
+        "STOP",
+        "REBOOT_HOST",
+        "SHUTDOWN_HOST",
+        "REQUEST_STATE",
+        "SET_CONFIG",
+    ] = Field(description="Command name to publish to the Picframe event bus.")
+    value: float | None = Field(
+        default=None,
+        description="Brightness value for SET_BRIGHTNESS commands.",
+    )
+    payload: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional command payload, primarily used by SET_CONFIG.",
+    )
+
+
+class MediaChangedWebSocketMessage(BaseModel):
+    """Outbound WebSocket message sent when the current media item changes."""
+
+    type: Literal["MediaChangedEvent"] = "MediaChangedEvent"
+    media: MediaResponseDTO
+
+
+class StateWebSocketMessage(BaseModel):
+    """Outbound WebSocket message sent for playback and system state updates."""
+
+    type: Literal["StateEvent"] = "StateEvent"
+    state: str = Field(description="State enum name, such as PLAYING or PAUSED.")
+    payload: Any = Field(default=None, description="Optional state-specific payload.")
+
+
+class SystemErrorWebSocketMessage(BaseModel):
+    """Outbound WebSocket message sent for user-visible system errors."""
+
+    type: Literal["SystemErrorEvent"] = "SystemErrorEvent"
+    message: str
+    component: str
+    sticky: bool = False
+    code: str | None = None

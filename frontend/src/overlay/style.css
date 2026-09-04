@@ -1,0 +1,198 @@
+/*
+ * Overlay shell styles (#739). The surface is transparent so pi3d/GStreamer
+ * video shows through; only the dock + visible-plugin panel are drawn.
+ */
+
+:root {
+  --pf-dock-bg: rgba(0, 0, 0, 0.45);
+  --pf-dock-fg: rgba(255, 255, 255, 0.92);
+  --pf-content-opacity: 1;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent;
+  overflow: hidden;
+  font-family: 'Noto Sans', 'Segoe UI', system-ui, sans-serif;
+  /* The GTK surface captures input; the page itself must not select/scroll. */
+  user-select: none;
+  touch-action: none;
+  /* Cursor is hidden by default and only revealed on mouse movement (see
+   * `.pf-root--cursor` below). Touch/keyboard users never need a pointer, and
+   * hiding it at startup avoids a static arrow over the photo. The GTK worker
+   * also hides the platform cursor from the first frame (#739). */
+  cursor: none;
+}
+
+#overlay-root {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+}
+
+/* Reveal the cursor while the mouse is active. The shell adds this class on
+ * `pointermove` (mouse only) and removes it when the dock idle timer fires, so
+ * the cursor tracks the dock auto-hide (#739). `cursor` is inherited, so
+ * descendants pick up `default` unless they set their own (e.g. the dock icons
+ * keep `cursor: pointer`). */
+#overlay-root.pf-root--cursor {
+  cursor: default;
+}
+
+#pf-content {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+/* Per-plugin panels (#752): one per visible plugin, positioned by a 9-anchor
+ * class (pf-anchor-<anchor>) with edge margin. Size + z-index are applied
+ * inline by the dock from the effective layout. */
+.pf-plugin-panel {
+  position: absolute;
+  border-radius: 12px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.35);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+  transition: opacity 0.4s ease;
+}
+
+/* Scale-mode panels (#752): a plugin with a manifest `size` paints its own
+ * readability background on its content container (which scales with the
+ * widget), so the shell panel is transparent and the photo shows through
+ * everywhere except behind the content — as small a background as possible.
+ * Fill-mode panels (no `size`, e.g. the future meta plugin) keep the panel
+ * background above. */
+.pf-plugin-panel--scale {
+  background: transparent;
+  box-shadow: none;
+}
+
+/* Nine-anchor placement. Center/middle anchors use transforms; combined with
+ * the inline width/height these keep the panel flush to the chosen edge. */
+.pf-anchor-top-left {
+  top: 12px;
+  left: 12px;
+}
+.pf-anchor-top-center {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.pf-anchor-top-right {
+  top: 12px;
+  right: 12px;
+}
+.pf-anchor-middle-left {
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+}
+.pf-anchor-middle-center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.pf-anchor-middle-right {
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+}
+.pf-anchor-bottom-left {
+  bottom: 12px;
+  left: 12px;
+}
+.pf-anchor-bottom-center {
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.pf-anchor-bottom-right {
+  bottom: 12px;
+  right: 12px;
+}
+
+.pf-plugin-frame {
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+#pf-veil {
+  position: absolute;
+  inset: 0;
+  /* Transparent but input-capturing: the wake tap always lands here. */
+  background: transparent;
+  z-index: 10;
+}
+
+#pf-dock {
+  position: absolute;
+  bottom: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--pf-dock-bg);
+  backdrop-filter: blur(6px);
+  z-index: 20;
+  pointer-events: auto;
+  transition: opacity 0.4s ease;
+}
+
+.pf-dock-icon {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--pf-dock-fg);
+  font-size: 24px;
+  line-height: 1;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    transform 0.15s ease;
+}
+
+.pf-dock-icon:hover,
+.pf-dock-icon:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+.pf-dock-icon--active {
+  background: rgba(255, 255, 255, 0.28);
+  transform: scale(1.08);
+}
+
+/* Inline SVG dock icons: inherit the dock text color via `currentColor` so they
+ * stay theme-aware and render crisply without an emoji font. Sized in em so
+ * they scale with the dock icon font-size. */
+.pf-dock-icon svg {
+  width: 1.5em;
+  height: 1.5em;
+  display: block;
+}
+
+/* Per-panel idle hide: each auto_hide panel fades on its own idle timer
+ * (#752). The shell adds `pf-plugin-panel--idle` to a panel after its
+ * `idle_hide_seconds`; persistent panels never receive it. */
+.pf-plugin-panel.pf-plugin-panel--idle {
+  opacity: 0;
+}
+
+/* Dock auto-hide: the dock is navigation chrome, not content. It always
+ * fades after the idle interval regardless of display_mode, and frees its hit
+ * area (pointer-events: none) so a wake tap lands on the veil underneath. */
+#overlay-root.pf-root--dock-idle #pf-dock {
+  opacity: 0;
+  pointer-events: none;
+}
