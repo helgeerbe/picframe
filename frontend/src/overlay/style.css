@@ -20,12 +20,26 @@ body {
   /* The GTK surface captures input; the page itself must not select/scroll. */
   user-select: none;
   touch-action: none;
+  /* Cursor is hidden by default and only revealed on mouse movement (see
+   * `.pf-root--cursor` below). Touch/keyboard users never need a pointer, and
+   * hiding it at startup avoids a static arrow over the photo. The GTK worker
+   * also hides the platform cursor from the first frame (#739). */
+  cursor: none;
 }
 
 #overlay-root {
   position: fixed;
   inset: 0;
   background: transparent;
+}
+
+/* Reveal the cursor while the mouse is active. The shell adds this class on
+ * `pointermove` (mouse only) and removes it when the dock idle timer fires, so
+ * the cursor tracks the dock auto-hide (#739). `cursor` is inherited, so
+ * descendants pick up `default` unless they set their own (e.g. the dock icons
+ * keep `cursor: pointer`). */
+#overlay-root.pf-root--cursor {
+  cursor: default;
 }
 
 #pf-content {

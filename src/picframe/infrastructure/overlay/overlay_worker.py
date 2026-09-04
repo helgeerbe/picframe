@@ -402,6 +402,12 @@ class OverlayWorker:
         self._window.set_child(self._web_view)
         self._apply_transparency()
         self._window.present()
+        # Hide the cursor *after* present() realizes/maps the window: the
+        # GdkSurface (which ``set_cursor_from_name`` attaches to) does not exist
+        # until the window is mapped, so a pre-present call is a no-op on Wayland
+        # and labwc shows its default arrow. Mirrors the post-present ordering of
+        # ``gtk_video_presenter._hide_gtk_cursor`` (#739).
+        self._hide_gtk_cursor()
 
     def _setup_layer_shell(self, window: Any) -> None:
         """Configure ``window`` as a fullscreen overlay layer surface.
@@ -488,6 +494,32 @@ class OverlayWorker:
         bg.blue = 0.0
         bg.alpha = 0.0
         self._web_view.set_background_color(bg)
+
+    def _hide_gtk_cursor(self) -> None:
+        """Set the platform cursor to ``none`` over the overlay surface.
+
+        Must run **after** the window is realized/mapped (``present()``): on
+        Wayland ``set_cursor_from_name`` attaches the cursor to the
+        ``GdkSurface``, which does not exist until the window is mapped, so a
+        pre-``present()`` call is a no-op and labwc shows its default arrow.
+        Re-asserted after the WebView finishes loading (see ``_on_load_changed``)
+        because WebKitGTK re-evaluates cursor state when content loads and may
+        reset it. Mirrors the post-``present`` ordering of
+        ``gtk_video_presenter._hide_gtk_cursor`` (#739).
+
+        Defensive: some mocked/older GTK builds lack ``set_cursor_from_name``;
+        missing it is non-fatal (the CSS layer still hides the cursor once the
+        shell loads). No-op when the surface is absent (headless/unit tests).
+        """
+        if self._window is None or self._web_view is None or not WEBKIT_AVAILABLE:
+            return
+        for widget in (self._window, self._web_view):
+            set_cursor = getattr(widget, "set_cursor_from_name", None)
+            if set_cursor is not None:
+                try:
+                    set_cursor("none")
+                except Exception as exc:  # pragma: no cover - defensive, GTK runtime
+                    logger.debug("set_cursor_from_name('none') failed on %r: %s", widget, exc)
 
     def _on_realize_transparent(self, window: Any) -> None:
         """Mark the realized Wayland surface as non-opaque for alpha blending."""
@@ -645,6 +677,10 @@ class OverlayWorker:
         name = _load_event_name(load_event)
         logger.info("Overlay WebView load state: %s", name)
         if name == "FINISHED":
+            # Re-assert the hidden cursor after load: WebKitGTK re-evaluates
+            # cursor state when content finishes loading and may reset it to
+            # the default arrow over the WebView (#739).
+            self._hide_gtk_cursor()
             self._schedule_probe()
 
     def _on_load_failed(self, _web_view: Any, load_event: Any, error: Any) -> None:

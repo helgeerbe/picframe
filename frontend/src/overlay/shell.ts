@@ -38,6 +38,9 @@ export class OverlayShell {
   private dockIdleTimer: number | null = null
   private displayMode: DisplayMode = 'auto_hide'
   private idleHideSeconds = DEFAULT_IDLE_HIDE_SECONDS
+  /** Currently enabled input classes; the mouse-move cursor reveal only fires
+   * when `mouse` is among them (#739). */
+  private enabledTypes: InputType[] = ['touch', 'mouse', 'keyboard']
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -69,6 +72,11 @@ export class OverlayShell {
 
   boot(): void {
     this.router.attach()
+    // Reveal the cursor on mouse movement and reset the idle timers in lockstep
+    // with the dock, so the cursor shows only while the mouse is active and
+    // hides again after the idle interval — mirroring dock auto-hide. Touch and
+    // keyboard activity never reveal the cursor (#739).
+    this.veil.addEventListener('pointermove', this.onMouseMove)
     registerApplyConfig(config => this.applyConfig(config))
 
     const env = readEnv()
@@ -86,6 +94,7 @@ export class OverlayShell {
   }
 
   destroy(): void {
+    this.veil.removeEventListener('pointermove', this.onMouseMove)
     this.router.detach()
     this.state?.stop()
     this.clearIdle()
@@ -100,6 +109,7 @@ export class OverlayShell {
       'mouse',
       'keyboard'
     ]) as InputType[]
+    this.enabledTypes = enabledTypes
     this.router.setEnabledTypes(enabledTypes)
     this.dock.applyConfig(config)
     this.wake()
@@ -123,11 +133,29 @@ export class OverlayShell {
       )
     }
     // Dock: always auto-hides. Reuse idle_hide_seconds, or the fallback when 0.
+    // The cursor hides together with the dock so the two stay in sync: removing
+    // `pf-root--cursor` reverts the root to the inherited `cursor: none` (#739).
     const dockSeconds = this.idleHideSeconds > 0 ? this.idleHideSeconds : DOCK_IDLE_FALLBACK_SECONDS
     this.dockIdleTimer = window.setTimeout(
-      () => this.root.classList.add('pf-root--dock-idle'),
+      () => {
+        this.root.classList.add('pf-root--dock-idle')
+        this.root.classList.remove('pf-root--cursor')
+      },
       Math.max(0, dockSeconds) * 1000
     )
+  }
+
+  /**
+   * Bound pointer-move handler: reveal the cursor and reset the idle timers.
+   * Only fires for real mouse input (not touch/pen) and only when `mouse` is an
+   * enabled input class, so touch-only users never see a cursor (#739). Bound as
+   * an arrow-function property so `removeEventListener` in {@link destroy} can
+   * detach the exact same reference.
+   */
+  private readonly onMouseMove = (e: PointerEvent): void => {
+    if (e.pointerType !== 'mouse' || !this.enabledTypes.includes('mouse')) return
+    this.root.classList.add('pf-root--cursor')
+    this.wake()
   }
 
   private clearIdle(): void {

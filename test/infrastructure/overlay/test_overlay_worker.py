@@ -296,7 +296,11 @@ def test_on_load_finished_schedules_probe(monkeypatch: pytest.MonkeyPatch) -> No
     """``FINISHED`` schedules a one-shot JS state probe so the next failure is
     diagnosable from the journal (the shell's TS emits no console output, so
     the ``[overlay-js]`` forwarder is structurally blind to a failed boot).
-    STARTED/COMMITTED must not schedule it (#739)."""
+    STARTED/COMMITTED must not schedule it (#739).
+
+    ``FINISHED`` also re-asserts the hidden cursor: WebKitGTK re-evaluates
+    cursor state when content finishes loading and may reset it to the default
+    arrow over the WebView (#739)."""
     import picframe.infrastructure.overlay.overlay_worker as mod
 
     fake_glib = MagicMock()
@@ -305,18 +309,25 @@ def test_on_load_finished_schedules_probe(monkeypatch: pytest.MonkeyPatch) -> No
     monkeypatch.setattr(mod, "_load_event_name", lambda le: le)
     worker = make_worker()
     worker._web_view = MagicMock()  # a real surface -> probe eligible
+    worker._window = MagicMock()  # realized surface -> cursor hide eligible
     worker._loop = MagicMock()
+    hide_calls: list[int] = []
+    monkeypatch.setattr(worker, "_hide_gtk_cursor", lambda: hide_calls.append(len(hide_calls)))
 
     worker._on_load_changed(None, "FINISHED")
     fake_glib.timeout_add.assert_called_once()
     delay, cb = fake_glib.timeout_add.call_args.args
     assert delay == 2000
     assert cb == worker._probe_shell_state
+    # Cursor re-asserted exactly once on FINISHED.
+    assert hide_calls == [0]
 
+    hide_calls.clear()
     fake_glib.reset_mock()
     worker._on_load_changed(None, "STARTED")
     worker._on_load_changed(None, "COMMITTED")
     fake_glib.timeout_add.assert_not_called()
+    assert hide_calls == []
 
 
 def test_probe_shell_state_evaluates_probe_and_logs(
@@ -661,6 +672,11 @@ def test_apply_transparency_makes_surface_transparent(
     # Gdk.RGBA constructed without deprecated positional args; channels set.
     web_view.set_background_color.assert_called_once()
     assert web_view.set_background_color.call_args[0][0] is fake_gdk.RGBA.return_value
+    # The cursor is hidden from ``_build_surface`` after ``present()`` (not here
+    # — ``_apply_transparency`` runs pre-realize where ``set_cursor_from_name``
+    # is a no-op on Wayland), so no cursor calls are expected here (#739).
+    window.set_cursor_from_name.assert_not_called()
+    web_view.set_cursor_from_name.assert_not_called()
 
 
 def test_apply_transparency_noop_in_headless_mode(
@@ -723,3 +739,15 @@ def test_build_surface_applies_transparency(
 
     assert transparency_calls == [True]
     fake_webkit.WebView.return_value.load_uri.assert_called_once()
+    # The cursor is hidden *after* present() realizes/maps the window — the
+    # GdkSurface ``set_cursor_from_name`` attaches to does not exist until then,
+    # so a pre-present call would be a no-op on Wayland (#739).
+    window = fake_gtk.Window.return_value
+    web_view = fake_webkit.WebView.return_value
+    window.set_cursor_from_name.assert_called_once_with("none")
+    web_view.set_cursor_from_name.assert_called_once_with("none")
+    # Ordering: present() precedes set_cursor_from_name("none") on the window.
+    calls = window.method_calls
+    present_idx = next(i for i, c in enumerate(calls) if c[0] == "present")
+    cursor_idx = next(i for i, c in enumerate(calls) if c[0] == "set_cursor_from_name")
+    assert present_idx < cursor_idx
