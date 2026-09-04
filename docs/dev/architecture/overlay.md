@@ -130,7 +130,6 @@ overlay:
   enabled_plugins: [clock, meta]
   visible_plugin: clock          # null = dock only
   display_mode: auto_hide        # persistent | auto_hide
-  auto_hide_seconds: 5.0
   enabled_input_types: [touch, mouse, keyboard]
   idle_hide_seconds: 5.0
   transparent: true

@@ -885,7 +885,6 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
         "viewer.text_overlay_format": "title location",
         "overlay.enabled": True,
         "overlay.display_mode": "persistent",
-        "overlay.auto_hide_seconds": 8.0,
         "overlay.idle_hide_seconds": 0.0,
         "overlay.enabled_input_types": ["touch", "mouse"],
         "overlay.transparent": False,
@@ -908,7 +907,7 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     assert data["viewer"]["text_overlay_format"] == "title location"
     assert data["overlay"]["enabled"] is True
     assert data["overlay"]["display_mode"] == "persistent"
-    assert data["overlay"]["auto_hide_seconds"] == 8.0
+    assert "auto_hide_seconds" not in data["overlay"]
     assert data["overlay"]["enabled_input_types"] == ["touch", "mouse"]
     assert data["overlay"]["transparent"] is False
     # Advanced/plugin-specific keys stay on PUT /api/config, not workflow-config.

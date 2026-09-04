@@ -198,10 +198,6 @@
         "persistent": "Until turned off",
         "autoHide": "Auto-hide"
       },
-      "autoHideSeconds": {
-        "label": "Auto-hide after",
-        "help": "Seconds of inactivity before the overlay hides (auto-hide mode only)."
-      },
       "idleHideSeconds": {
         "label": "Idle fade",
         "help": "Seconds idle before the overlay fades out. Set to 0 to keep it always visible. Any input wakes it."

@@ -196,7 +196,6 @@ PUBLIC_WORKFLOW_KEYS = {
     "overlay": {
         "enabled",
         "display_mode",
-        "auto_hide_seconds",
         "idle_hide_seconds",
         "enabled_input_types",
         "transparent",

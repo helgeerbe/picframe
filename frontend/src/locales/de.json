@@ -198,10 +198,6 @@
         "persistent": "Bis ausgeschaltet",
         "autoHide": "Auto-Ausblenden"
       },
-      "autoHideSeconds": {
-        "label": "Ausblenden nach",
-        "help": "Sekunden Inaktivität bevor das Overlay ausgeblendet wird (nur Auto-Ausblenden-Modus)."
-      },
       "idleHideSeconds": {
         "label": "Leerlauf-Verblassen",
         "help": "Sekunden Leerlauf bevor das Overlay ausblendt. 0 hält es stets sichtbar. Jede Eingabe weckt es."

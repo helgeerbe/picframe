@@ -25,7 +25,6 @@ let statusTimer: number | undefined
 
 const overlay = reactive({
   display_mode: 'auto_hide' as 'persistent' | 'auto_hide',
-  auto_hide_seconds: 5,
   idle_hide_seconds: 5,
   transparent: true
 })
@@ -59,7 +58,6 @@ const asNumber = (value: unknown, fallback: number) => {
 const syncFromConfig = () => {
   const ov = config.value?.overlay || {}
   overlay.display_mode = ov.display_mode === 'persistent' ? 'persistent' : 'auto_hide'
-  overlay.auto_hide_seconds = asNumber(ov.auto_hide_seconds, 5)
   overlay.idle_hide_seconds = asNumber(ov.idle_hide_seconds, 5)
   overlay.transparent = ov.transparent !== false
 }
@@ -72,7 +70,6 @@ const save = async () => {
     await configStore.savePartialConfig({
       overlay: {
         display_mode: overlay.display_mode,
-        auto_hide_seconds: Number(overlay.auto_hide_seconds),
         idle_hide_seconds: Number(overlay.idle_hide_seconds),
         transparent: Boolean(overlay.transparent)
       }
@@ -126,7 +123,7 @@ onMounted(async () => {
 })
 
 watch(
-  () => [config.value?.overlay?.display_mode, config.value?.overlay?.auto_hide_seconds],
+  () => [config.value?.overlay?.display_mode, config.value?.overlay?.idle_hide_seconds],
   () => {
     if (!isSaving.value) syncFromConfig()
   }
@@ -176,19 +173,6 @@ watch(
 
         <FieldRow
           v-if="overlay.display_mode === 'auto_hide'"
-          :label="t('appearance.overlay.autoHideSeconds.label')"
-          :help="t('appearance.overlay.autoHideSeconds.help')"
-        >
-          <NumberField
-            v-model="overlay.auto_hide_seconds"
-            :min="1"
-            :step="1"
-            unit="s"
-            @update:model-value="save()"
-          />
-        </FieldRow>
-
-        <FieldRow
           :label="t('appearance.overlay.idleHideSeconds.label')"
           :help="t('appearance.overlay.idleHideSeconds.help')"
         >

@@ -360,7 +360,6 @@ class OverlayConfig(BaseModel):
     enabled_plugins: list[str] = Field(default_factory=lambda: ["clock", "meta"])
     visible_plugin: str | None = "clock"
     display_mode: Literal["persistent", "auto_hide"] = "auto_hide"
-    auto_hide_seconds: float = 5.0
     enabled_input_types: list[str] = Field(default_factory=lambda: ["touch", "mouse", "keyboard"])
     idle_hide_seconds: float = 5.0
     transparent: bool = True

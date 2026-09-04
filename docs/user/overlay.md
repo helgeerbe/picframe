@@ -33,7 +33,7 @@ The overlay controls are spread across the three web UI views:
   device classes (`enabled_input_types`), and per-plugin configuration for the
   plugins you have activated.
 - **Appearance → Touch Overlay** — display behavior: `display_mode`,
-  `auto_hide_seconds`, `idle_hide_seconds`, `transparent`, and the plugin
+  `idle_hide_seconds`, `transparent`, and the plugin
   catalog where you activate which plugins the frame offers
   (`enabled_plugins`).
 - **Remote → Touch overlay** — the tile dock where you pick which activated
@@ -45,8 +45,7 @@ The full `overlay` config section (all keys below) is also writable directly:
 |---|---|---|
 | `overlay.enabled` | `true` / `false` | Master on/off. |
 | `overlay.display_mode` | `auto_hide` / `persistent` | `auto_hide` fades the overlay to transparent after inactivity; `persistent` keeps it visible until you turn it off. |
-| `overlay.auto_hide_seconds` | seconds | Inactivity before auto-hide (auto_hide mode only). |
-| `overlay.idle_hide_seconds` | seconds | Seconds idle before the overlay fades to transparent (same for photos and videos). |
+| `overlay.idle_hide_seconds` | seconds | Seconds of inactivity before the overlay fades to transparent (auto_hide mode only; `0` keeps it always visible). Any input wakes it. |
 | `overlay.enabled_input_types` | `touch`, `mouse`, `keyboard` | Which device classes are active. Uncheck one to disable it (e.g. touch on a kiosk). |
 | `overlay.transparent` | `true` / `false` | Whether the surface is transparent (recommended). |
 | `overlay.visible_plugin` | plugin id or `null` | Which plugin is currently expanded; `null` = dock only. |

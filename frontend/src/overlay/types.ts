@@ -41,7 +41,6 @@ export interface OverlayShellConfig {
   enabled_plugins?: string[]
   visible_plugin?: string | null
   display_mode?: DisplayMode
-  auto_hide_seconds?: number
   enabled_input_types?: InputType[]
   idle_hide_seconds?: number
   transparent?: boolean

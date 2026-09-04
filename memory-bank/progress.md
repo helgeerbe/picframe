@@ -180,7 +180,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 
 ## Phase 0 Done (#739 items 1–7)
 - `overlay` section added to `default_config.yaml` (enabled/backend/plugin_dir/
-  enabled_plugins/visible_plugin/display_mode/auto_hide_seconds/
+  enabled_plugins/visible_plugin/display_mode/
   enabled_input_types/idle_hide_seconds/transparent/plugin_config).
 - Pydantic `OverlayConfig` model + `overlay` field on `AppConfig`
   (`src/picframe/api/models.py`). Also `OverlayPluginResponse`,
