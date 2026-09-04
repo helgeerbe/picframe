@@ -25,6 +25,46 @@ layer-shell compositor (labwc/Sway/Hyprland). Documented in `manual.md`,
 **Prerequisite done:** issue **#749** (remove dead legacy `peripherals` config
 section) is implemented and committed (`5924130`) on the feature branch.
 
+**Issue #752 — overlay widget system (multi-plugin model), Phase A backend DONE
+(uncommitted on working tree):** replaces the single-visible-plugin model with
+per-plugin layout (position/size/content_align/display_mode/idle_hide_seconds/
+z_order), simultaneous multi-plugin visibility, and z-order. Backend wiring
+complete and fully tested (966 pytest pass, mypy strict clean, ruff clean):
+- `core/models/overlay.py` — `plugin_layout_defaults`/`validate_plugin_layout`/
+  `effective_plugin_layout`/`normalize_legacy_overlay` (+ `PluginLayoutError`,
+  `OVERLAY_ANCHORS`/`OVERLAY_DISPLAY_MODES`, `default_display_mode` on
+  `PluginDescriptor`). `effective_plugin_layout` skips `None` db values
+  (inherit/default) so manifest defaults win.
+- `config/default_config.yaml` — `visible_plugin`→`visible_plugins`, global
+  `display_mode` removed, `plugin_layout` map added.
+- `core/services/config_service.py` — `normalize_legacy_overlay` called in
+  `get_nested_config`; `update_plugin_layout` (scoped delete+write, skips
+  `None`); `_publish_overlay_config_changed` detects single-plugin
+  `plugin_layout` writes → `updated_plugin_id`.
+- `api/app.py` — `display_mode` removed from workflow whitelist; PUT
+  `/api/overlay/plugins/{id}/layout` endpoint; `_effective_plugin_layout` helper;
+  `layout` field in plugin list response; module-level `_NoopEventPublisher`/
+  `_NoopEventSubscriber`/`_scoped_config_service` replace the two new inline
+  dummy-class blocks (9 pre-existing sites left as-is — out of scope).
+- `infrastructure/overlay/plugin_loader.py` — reads `default_display_mode`.
+- `core/events/dto.py` — `OverlayConfigChangedEvent.updated_plugin_id` docstring
+  updated to cover layout writes.
+- Tests: 33 new (overlay model layout/normalization, config_service
+  `update_plugin_layout`/normalization-on-read/single-plugin-layout event,
+  app.py PUT layout success/404/422 + `OverlayPluginResponse.layout`).
+- **Compatibility shim:** `normalize_legacy_overlay` re-derives legacy
+  `visible_plugin` from `visible_plugins` so the out-of-process worker/shell
+  (`overlay_worker.py` reads `visible_plugin`) keep rendering unchanged until
+  Phase B switches them to the list. The Pydantic `OverlayConfig` (`extra=
+  'ignore'`) no longer surfaces global `display_mode`; the API exposes only the
+  new per-plugin `plugin_layout`.
+- **Phase B (not started):** frontend (`OverlayAppearanceSection.vue`/
+  `OverlayPanel.vue`/`dock.ts`/`shell.ts`/`types.ts`) + worker/shell migration to
+  `visible_plugins` + per-plugin `plugin_layout`. Note the public appearance
+  panel's global `display_mode` control is now non-functional against this
+  backend (403 on save, undefined on read) — to be replaced by per-plugin
+  layout controls in Phase B.
+
 **Phase 0 DONE + committed** (`4393ffd`, pushed to `origin`): #739 task list
 items 1–7, TDD throughout, all gates green. The config + port + API foundation
 is in place: `overlay` section in `default_config.yaml`, Pydantic `OverlayConfig`
