@@ -23,6 +23,7 @@ import json
 import logging
 import os
 import sys
+import time
 import urllib.parse
 from multiprocessing.connection import Connection, Listener
 from pathlib import Path
@@ -125,6 +126,35 @@ if WEBKIT_AVAILABLE:
         logger.info("gtk4-layer-shell not available; using a plain borderless window.")
 
 
+# Worker-owned platform cursor re-assertion (#739). WebKitGTK re-evaluates and
+# re-sets the WebView's per-widget cursor *after* the one-shot
+# ``set_cursor_from_name("none")`` from ``_build_surface`` / ``_on_load_changed``,
+# clobbering it back to the default arrow on labwc. CSS ``cursor: none`` on the
+# idle path is also unreliable on this build. The fix moves cursor control to the
+# overlay worker: an ``EventControllerMotion`` on the WebView reveals the cursor
+# on motion and stamps the motion time; a periodic GLib tick re-asserts
+# ``set_cursor_from_name("none")`` while idle. This continuously wins the cursor
+# race (the motion controller runs in the bubble phase, after WebKitGTK's own
+# cursor evaluation). Trade-off: dock icons show the plain arrow instead of the
+# CSS ``cursor: pointer`` hand (touch-first appliance; clicks unaffected).
+_CURSOR_TICK_MS = 250
+_CURSOR_IDLE_FALLBACK_SECONDS = 5.0
+
+
+def _coerce_idle_seconds(value: Any) -> float:
+    """Coerce a config ``idle_hide_seconds`` value to a positive float.
+
+    Falls back to :data:`_CURSOR_IDLE_FALLBACK_SECONDS` when the value is
+    absent, non-numeric, or non-positive, so a malformed config never disables
+    the idle-hide (which would leave the arrow cursor stuck on screen).
+    """
+    try:
+        seconds = float(value)
+    except (TypeError, ValueError):
+        return _CURSOR_IDLE_FALLBACK_SECONDS
+    return seconds if seconds > 0 else _CURSOR_IDLE_FALLBACK_SECONDS
+
+
 class OverlayWorker:
     """IPC server for the WebKitGTK overlay subprocess.
 
@@ -145,6 +175,15 @@ class OverlayWorker:
         self._loop: Any = None
         self._web_view: Any = None
         self._window: Any = None
+        # Worker-owned cursor state (#739). ``_last_motion_time`` is a
+        # ``time.monotonic()`` stamp; initialised to ``-inf`` so the pointer is
+        # always considered idle until the first real motion, keeping the cursor
+        # invisible at startup (the one-shot ``_hide_gtk_cursor`` hides once, the
+        # tick keeps it hidden). ``_cursor_tick_id`` holds the GLib timeout
+        # source id so ``_shutdown`` can cancel it.
+        self._cursor_idle_seconds: float = _CURSOR_IDLE_FALLBACK_SECONDS
+        self._last_motion_time: float = float("-inf")
+        self._cursor_tick_id: int | None = None
 
     # --- IPC plumbing (GTK-free, unit-tested) ---
 
@@ -176,7 +215,13 @@ class OverlayWorker:
             logger.debug("Opacity set to %.3f (no surface in headless mode).", self._opacity)
 
     def _apply_config(self) -> None:
-        """Apply the current config to the shell (the JS shell reads /ws/state)."""
+        """Apply the current config to the shell (the JS shell reads /ws/state).
+
+        Also refreshes the worker-owned cursor idle threshold from
+        ``idle_hide_seconds`` so a live config change (Settings UI) takes effect
+        without a worker restart (#739).
+        """
+        self._cursor_idle_seconds = _coerce_idle_seconds(self._config.get("idle_hide_seconds"))
         if self._web_view is not None and WEBKIT_AVAILABLE:
             self._push_config_to_shell()
         else:
@@ -408,6 +453,13 @@ class OverlayWorker:
         # and labwc shows its default arrow. Mirrors the post-present ordering of
         # ``gtk_video_presenter._hide_gtk_cursor`` (#739).
         self._hide_gtk_cursor()
+        # Worker-owned cursor controller: WebKitGTK re-evaluates the WebView
+        # cursor after the one-shot hide above and clobbers it back to arrow on
+        # labwc. The motion controller + periodic tick below continuously win
+        # that race (see ``_install_cursor_controller``). Installed only when a
+        # GLib loop exists (production); skipped in headless/unit-test mode where
+        # ``_loop`` is None (#739).
+        self._install_cursor_controller()
 
     def _setup_layer_shell(self, window: Any) -> None:
         """Configure ``window`` as a fullscreen overlay layer surface.
@@ -520,6 +572,72 @@ class OverlayWorker:
                     set_cursor("none")
                 except Exception as exc:  # pragma: no cover - defensive, GTK runtime
                     logger.debug("set_cursor_from_name('none') failed on %r: %s", widget, exc)
+
+    def _install_cursor_controller(self) -> None:
+        """Attach the worker-owned cursor controller to the WebView (#739).
+
+        WebKitGTK re-evaluates and re-sets the WebView's per-widget cursor
+        *after* the one-shot ``set_cursor_from_name("none")`` from
+        :meth:`_build_surface` / :meth:`_on_load_changed`, clobbering it back to
+        the default arrow on labwc. To continuously win that race this wires:
+
+        * a ``Gtk.EventControllerMotion`` on the WebView (default bubble phase,
+          so it runs *after* WebKitGTK's own cursor evaluation) whose ``motion``
+          handler reveals the platform cursor (``"default"``) and stamps
+          ``_last_motion_time``; and
+        * a periodic :data:`_CURSOR_TICK_MS` GLib timeout that re-asserts
+          ``set_cursor_from_name("none")`` while the pointer has been idle longer
+          than :attr:`_cursor_idle_seconds`.
+
+        No-op when WebKitGTK is absent, the surface is absent, or there is no
+        GLib main loop (headless/unit-test mode) — keeps the GTK-free IPC
+        plumbing unit-testable. Trade-off: dock icons show the plain arrow
+        instead of the CSS ``cursor: pointer`` hand (touch-first appliance;
+        clicks unaffected).
+        """
+        if not WEBKIT_AVAILABLE or self._loop is None or self._web_view is None:
+            return
+        motion = Gtk.EventControllerMotion()
+        motion.connect("motion", self._on_cursor_motion)
+        self._web_view.add_controller(motion)
+        self._cursor_tick_id = GLib.timeout_add(_CURSOR_TICK_MS, self._cursor_tick)
+
+    def _on_cursor_motion(self, _controller: Any, _x: float, _y: float) -> None:
+        """Reveal the platform cursor on pointer motion and stamp the time.
+
+        Runs in the bubble phase (after WebKitGTK's cursor evaluation) so the
+        ``"default"`` cursor set here wins over any arrow WebKitGTK re-asserted
+        for the content under the pointer. Stamps ``_last_motion_time`` so the
+        periodic tick keeps the cursor visible for ``_cursor_idle_seconds``
+        after the last motion. No-op in headless mode (no surface).
+        """
+        self._last_motion_time = time.monotonic()
+        if self._window is None or self._web_view is None or not WEBKIT_AVAILABLE:
+            return
+        for widget in (self._window, self._web_view):
+            set_cursor = getattr(widget, "set_cursor_from_name", None)
+            if set_cursor is not None:
+                try:
+                    set_cursor("default")
+                except Exception as exc:  # pragma: no cover - defensive, GTK runtime
+                    logger.debug("set_cursor_from_name('default') failed on %r: %s", widget, exc)
+
+    def _cursor_tick(self) -> bool:
+        """Periodically re-assert the hidden cursor while the pointer is idle.
+
+        Returns ``True`` so the GLib timeout source repeats. When the pointer has
+        been idle longer than :attr:`_cursor_idle_seconds` it re-hides the
+        platform cursor via :meth:`_hide_gtk_cursor` (which re-asserts
+        ``set_cursor_from_name("none")`` on both the window and the WebView,
+        beating WebKitGTK's clobber). While the pointer is active (within the
+        idle window of the last motion) it is a no-op so the ``"default"`` cursor
+        set by :meth:`_on_cursor_motion` stays visible. No-op in headless mode.
+        """
+        if self._window is None or not WEBKIT_AVAILABLE:
+            return True
+        if time.monotonic() - self._last_motion_time >= self._cursor_idle_seconds:
+            self._hide_gtk_cursor()
+        return True
 
     def _on_realize_transparent(self, window: Any) -> None:
         """Mark the realized Wayland surface as non-opaque for alpha blending."""
@@ -791,6 +909,14 @@ class OverlayWorker:
             logger.error("Could not report overlay init error: %s", exc)
 
     def _shutdown(self) -> None:
+        # Cancel the worker-owned cursor tick so the GLib source does not fire
+        # after the loop quits / the WebView is torn down (#739).
+        if self._cursor_tick_id is not None and WEBKIT_AVAILABLE:
+            try:
+                GLib.source_remove(self._cursor_tick_id)
+            except Exception as exc:  # pragma: no cover - defensive, GTK runtime
+                logger.debug("GLib.source_remove(cursor tick) failed: %s", exc)
+            self._cursor_tick_id = None
         if self._loop is not None:
             self._loop.quit()
 

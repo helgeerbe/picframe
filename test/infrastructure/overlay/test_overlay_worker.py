@@ -751,3 +751,242 @@ def test_build_surface_applies_transparency(
     present_idx = next(i for i, c in enumerate(calls) if c[0] == "present")
     cursor_idx = next(i for i, c in enumerate(calls) if c[0] == "set_cursor_from_name")
     assert present_idx < cursor_idx
+
+
+# --- Worker-owned platform cursor controller (#739) ---
+
+
+def test_install_cursor_controller_attaches_motion_and_tick(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_install_cursor_controller`` wires an EventControllerMotion on the
+    WebView (``motion`` -> ``_on_cursor_motion``) and starts the periodic GLib
+    tick, recording the source id for shutdown cancellation."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    fake_glib = MagicMock()
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+    monkeypatch.setattr(mod, "GLib", fake_glib)
+
+    worker = make_worker()
+    worker._loop = MagicMock()  # production path: a real loop is running
+    web_view = MagicMock()
+    worker._web_view = web_view
+    assert worker._cursor_tick_id is None
+
+    worker._install_cursor_controller()
+
+    motion = fake_gtk.EventControllerMotion.return_value
+    motion.connect.assert_called_once_with("motion", worker._on_cursor_motion)
+    web_view.add_controller.assert_called_once_with(motion)
+    fake_glib.timeout_add.assert_called_once()
+    delay, cb = fake_glib.timeout_add.call_args.args
+    assert delay == mod._CURSOR_TICK_MS
+    assert cb == worker._cursor_tick
+    assert worker._cursor_tick_id is fake_glib.timeout_add.return_value
+
+
+def test_install_cursor_controller_noop_in_headless(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Without a GLib loop (headless/unit tests) nothing is attached."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+
+    worker = make_worker()
+    worker._loop = None  # headless
+    worker._web_view = MagicMock()
+    worker._install_cursor_controller()
+
+    fake_gtk.EventControllerMotion.assert_not_called()
+    assert worker._cursor_tick_id is None
+
+
+def test_on_cursor_motion_reveals_and_stamps(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Motion sets the platform cursor to ``default`` and stamps the motion
+    time so the tick keeps it visible for the idle window."""
+    import time
+
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    worker = make_worker()
+    window = MagicMock()
+    web_view = MagicMock()
+    worker._window = window
+    worker._web_view = web_view
+    worker._last_motion_time = float("-inf")
+
+    before = time.monotonic()
+    worker._on_cursor_motion(MagicMock(), 1.0, 2.0)
+
+    assert worker._last_motion_time >= before
+    window.set_cursor_from_name.assert_called_once_with("default")
+    web_view.set_cursor_from_name.assert_called_once_with("default")
+
+
+def test_on_cursor_motion_noop_in_headless(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Without a surface the motion handler only stamps the time (no GTK)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    worker = make_worker()
+    worker._window = None
+    worker._web_view = None
+    before = worker._last_motion_time
+    # Must not raise.
+    worker._on_cursor_motion(MagicMock(), 0.0, 0.0)
+    assert worker._last_motion_time > before
+
+
+def test_cursor_tick_hides_when_idle(monkeypatch: pytest.MonkeyPatch) -> None:
+    """After the idle threshold the tick re-asserts the hidden cursor."""
+    import time
+
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    worker = make_worker()
+    worker._window = MagicMock()
+    worker._web_view = MagicMock()
+    worker._cursor_idle_seconds = 5.0
+    worker._last_motion_time = time.monotonic() - 10.0  # idle
+    hide_calls: list[int] = []
+    monkeypatch.setattr(worker, "_hide_gtk_cursor", lambda: hide_calls.append(1))
+
+    assert worker._cursor_tick() is True  # repeats
+    assert hide_calls == [1]
+
+
+def test_cursor_tick_noop_when_active(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Within the idle window of the last motion the tick leaves the visible
+    ``default`` cursor alone (no re-hide)."""
+    import time
+
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    worker = make_worker()
+    worker._window = MagicMock()
+    worker._web_view = MagicMock()
+    worker._cursor_idle_seconds = 5.0
+    worker._last_motion_time = time.monotonic()  # just moved
+    hide_calls: list[int] = []
+    monkeypatch.setattr(worker, "_hide_gtk_cursor", lambda: hide_calls.append(1))
+
+    assert worker._cursor_tick() is True
+    assert hide_calls == []
+
+
+def test_cursor_tick_noop_in_headless(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No surface / WebKitGTK absent -> the tick just keeps repeating."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", False)
+    worker = make_worker()
+    worker._window = None
+    assert worker._cursor_tick() is True
+
+
+def test_set_config_updates_cursor_idle_seconds() -> None:
+    """A live ``set_config`` refreshes the cursor idle threshold from
+    ``idle_hide_seconds`` without a worker restart."""
+    worker = make_worker()
+    assert worker._cursor_idle_seconds == 5.0  # fallback default
+    worker.handle_command(SetConfigCommand(config={"idle_hide_seconds": 12.0}))
+    assert worker._cursor_idle_seconds == 12.0
+
+
+def test_set_config_coerces_invalid_idle_seconds() -> None:
+    """A missing/invalid ``idle_hide_seconds`` falls back to the default instead
+    of disabling the idle-hide (which would strand the arrow cursor)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    worker = make_worker()
+    worker.handle_command(SetConfigCommand(config={"idle_hide_seconds": "not a number"}))
+    assert worker._cursor_idle_seconds == mod._CURSOR_IDLE_FALLBACK_SECONDS
+    worker.handle_command(SetConfigCommand(config={"idle_hide_seconds": -3}))
+    assert worker._cursor_idle_seconds == mod._CURSOR_IDLE_FALLBACK_SECONDS
+    worker.handle_command(SetConfigCommand(config={}))
+    assert worker._cursor_idle_seconds == mod._CURSOR_IDLE_FALLBACK_SECONDS
+
+
+def test_shutdown_cancels_cursor_tick(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``_shutdown`` removes the GLib cursor-tick source before quitting the
+    loop so the timeout does not fire after teardown."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_glib = MagicMock()
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "GLib", fake_glib)
+
+    worker = make_worker()
+    worker._cursor_tick_id = 12345
+    loop = MagicMock()
+    worker._loop = loop
+
+    worker._shutdown()
+
+    fake_glib.source_remove.assert_called_once_with(12345)
+    assert worker._cursor_tick_id is None
+    loop.quit.assert_called_once()
+
+
+def test_shutdown_without_tick_just_quits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """No tick registered (headless / never installed) -> only the loop quits."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_glib = MagicMock()
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "GLib", fake_glib)
+
+    worker = make_worker()
+    worker._cursor_tick_id = None
+    loop = MagicMock()
+    worker._loop = loop
+
+    worker._shutdown()
+
+    fake_glib.source_remove.assert_not_called()
+    loop.quit.assert_called_once()
+
+
+def test_build_surface_installs_cursor_controller_when_loop_present(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """``_build_surface`` attaches the motion controller + tick when a GLib loop
+    is running (production), in addition to the one-shot post-present hide."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    fake_gtk = MagicMock()
+    fake_webkit = MagicMock()
+    fake_gdk = MagicMock()
+    fake_glib = MagicMock()
+    monkeypatch.setattr(mod, "LAYER_SHELL_AVAILABLE", True)
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "Gtk", fake_gtk)
+    monkeypatch.setattr(mod, "WebKit", fake_webkit)
+    monkeypatch.setattr(mod, "Gdk", fake_gdk)
+    monkeypatch.setattr(mod, "GLib", fake_glib)
+    worker = make_worker()
+    worker._loop = MagicMock()  # production: loop exists when _build_surface runs
+    monkeypatch.setattr(worker, "_setup_layer_shell", lambda w: None)
+    monkeypatch.setattr(worker, "_apply_transparency", lambda: None)
+
+    worker._build_surface()
+
+    web_view = fake_webkit.WebView.return_value
+    # Motion controller attached to the WebView.
+    motion = fake_gtk.EventControllerMotion.return_value
+    motion.connect.assert_called_once_with("motion", worker._on_cursor_motion)
+    web_view.add_controller.assert_called_once_with(motion)
+    # Periodic tick started.
+    fake_glib.timeout_add.assert_called_once()
+    delay, cb = fake_glib.timeout_add.call_args.args
+    assert delay == mod._CURSOR_TICK_MS
+    assert cb == worker._cursor_tick
