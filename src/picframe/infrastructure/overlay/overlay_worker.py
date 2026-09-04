@@ -515,17 +515,34 @@ class OverlayWorker:
         """
         manager = self._web_view.get_user_content_manager()
 
-        def _bridge_call(_web_view: Any, result: Any) -> None:
+        def _bridge_call(_manager: Any, jsc_value: Any) -> None:
+            """Receive a ``window.webkit.messageHandlers.picframe.postMessage``.
+
+            In WebKit 6.0 the ``script-message-received`` signal (a *detailed*
+            GObject signal owned by ``WebKitUserContentManager``) passes the
+            JS value straight to the handler — there is no wrapping
+            ``JavascriptResult`` in this API generation, so ``to_string()``
+            is called on the ``JSC.Value`` itself.
+            """
             try:
-                args = result.get_js_value().to_string()
+                args = jsc_value.to_string()
                 data = json.loads(args) if args else {}
             except (json.JSONDecodeError, ValueError):
                 return
             if isinstance(data, dict):
                 self._handle_bridge_message(data)
 
+        # Register the native message handler so JS can call
+        # ``window.webkit.messageHandlers.picframe.postMessage(...)``. The
+        # matching receive signal is ``script-message-received`` on the
+        # *UserContentManager* (with the ``::picframe`` detail selecting this
+        # handler), NOT ``user-message-received`` on the WebView — that is a
+        # separate round-trip API (``send_message_to_page``/``WebKitUserMessage``)
+        # and was wired up here by mistake, silently dropping every bridge
+        # message so the shell's ``__request_config`` and input actions were
+        # no-ops (#739).
         manager.register_script_message_handler("picframe")
-        self._web_view.connect("user-message-received", _bridge_call)
+        manager.connect("script-message-received::picframe", _bridge_call)
 
         js = (
             "(function(){"

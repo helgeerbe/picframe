@@ -238,6 +238,21 @@ def test_install_js_bridge_adds_document_start_userscript(
     worker._install_js_bridge()
 
     manager.register_script_message_handler.assert_called_once_with("picframe")
+    # The receive channel is the *detailed* ``script-message-received`` signal
+    # on the UserContentManager (with the ``::picframe`` detail), NOT the
+    # ``user-message-received`` signal on the WebView (that is a separate
+    # send_message_to_page/WebKitUserMessage round-trip API). Wiring the wrong
+    # signal silently dropped every bridge message — ``__request_config`` and
+    # all input actions became no-ops (#739). Regression guard.
+    ucm_connect_signals = [c.args[0] for c in manager.connect.call_args_list if c.args]
+    assert "script-message-received::picframe" in ucm_connect_signals
+    # Must NOT connect the WebView round-trip signal as the bridge channel.
+    web_view_connect_calls = [
+        c
+        for c in worker._web_view.connect.call_args_list
+        if c.args and c.args[0] == "user-message-received"
+    ]
+    assert web_view_connect_calls == []
     # One document-start user script (bridge + console forwarder).
     manager.add_script.assert_called_once()
     fake_webkit.UserScript.assert_called_once()
