@@ -12,7 +12,7 @@ PICFRAME_LOCALE="${PICFRAME_LOCALE:-}"
 NON_INTERACTIVE=false
 ENABLE_SERVICE="${PICFRAME_ENABLE_SERVICE:-ask}"
 ENABLE_OVERLAY="${PICFRAME_ENABLE_OVERLAY:-ask}"
-DISPLAY_MODE="${PICFRAME_DISPLAY_MODE:-wayland-kiosk}"
+DISPLAY_MODE="${PICFRAME_DISPLAY_MODE:-labwc-kiosk}"
 
 usage() {
     cat <<'EOF'
@@ -28,9 +28,9 @@ Options:
   --disable-service            Do not create a systemd service
   --enable-overlay             Install WebKitGTK touch overlay packages (default)
   --disable-overlay            Skip WebKitGTK touch overlay packages (low-perf platforms)
-  --display-mode MODE          Service display mode: wayland-kiosk, labwc-kiosk,
-                                or existing-wayland
-                                (default: wayland-kiosk)
+  --display-mode MODE          Service display mode: labwc-kiosk or
+                                existing-wayland
+                                (default: labwc-kiosk)
   -y, --yes                    Use defaults without interactive prompts
   -h, --help                   Show this help
 
@@ -116,18 +116,10 @@ configure_systemd_service() {
     local service_file="/etc/systemd/system/picframe.service"
     local service_tmp
     local exec_start
-    local cage_path=""
     local labwc_path=""
     local labwc_config_dir=""
 
     case "$DISPLAY_MODE" in
-        wayland-kiosk)
-            cage_path=$(command -v cage || true)
-            if [ -z "$cage_path" ]; then
-                die "cage is required for --display-mode wayland-kiosk"
-            fi
-            exec_start="$cage_path -s -- $VENV_DIR/bin/picframe run"
-            ;;
         labwc-kiosk)
             labwc_path=$(command -v labwc || true)
             if [ -z "$labwc_path" ]; then
@@ -175,7 +167,7 @@ EOF
     systemctl daemon-reload
     systemctl enable picframe.service
 
-    if [ "$DISPLAY_MODE" = "wayland-kiosk" ] || [ "$DISPLAY_MODE" = "labwc-kiosk" ]; then
+    if [ "$DISPLAY_MODE" = "labwc-kiosk" ]; then
         systemctl enable --now seatd.service >/dev/null 2>&1 || true
     fi
 }
@@ -299,8 +291,8 @@ case "$ENABLE_OVERLAY" in
 esac
 
 case "$DISPLAY_MODE" in
-    wayland-kiosk|labwc-kiosk|existing-wayland) ;;
-    *) die "--display-mode must be one of: wayland-kiosk, labwc-kiosk, existing-wayland" ;;
+    labwc-kiosk|existing-wayland) ;;
+    *) die "--display-mode must be one of: labwc-kiosk, existing-wayland" ;;
 esac
 
 # Ensure script is run as root
@@ -398,7 +390,6 @@ apt-get update
 apt-get install -y \
     build-essential \
     ca-certificates \
-    cage \
     labwc \
     dbus-user-session \
     libsdl2-dev \

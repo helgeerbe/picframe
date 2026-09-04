@@ -266,6 +266,16 @@ on-demand keyboard, so it floats above pi3d/video while transparent and still
 receiving input. It degrades to a plain borderless `Gtk.Window` when the
 typelib is absent.
 
+**Compositor requirement:** `wlr-layer-shell` is a hard requirement for the
+documented stacking. `labwc` (the installer's default kiosk compositor), Sway,
+and Hyprland implement the protocol; `cage`, Mutter, and Weston do not. On a
+non-layer-shell compositor the plain-window fallback renders behind the GTK4
+video host during playback (the overlay is hidden and loses input), so the
+installer no longer ships `cage` and the `wayland-kiosk` display mode has been
+removed. The fallback code path is retained only as a graceful degrade for a
+half-installed `gtk4-layer-shell` on a `labwc` system, not as a supported
+compositor path.
+
 ## 11. Built-in plugins & postMessage protocol
 
 Built-in plugins are self-contained static HTML (no build step) loaded via

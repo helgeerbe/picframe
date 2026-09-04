@@ -21,6 +21,12 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Serve the compiled Vue SPA directly through FastAPI; Vite outputs production assets into `src/picframe/html`.
 - Keep server port and DB path overrides as startup CLI/env concerns, not mutable runtime settings.
 - Use Wayland as the display protocol target; X11 is not supported.
+- Require a `wlr-layer-shell`-capable compositor for the touch overlay; the
+  installer ships `labwc-kiosk` (default) and `existing-wayland`, and no longer
+  ships `cage` (its `wayland-kiosk` mode was removed). `cage` does not implement
+  `wlr-layer-shell`, so the overlay's plain-window fallback renders behind the
+  GTK4 video host during playback (clock hidden, input lost). Validated in the
+  #739 labwc probe; rationale in `docs/dev/architecture/overlay.md` §10.
 - Run pi3d rendering on the main thread and keep it presentation-focused.
 - Use a local renderer state machine and local render queue for high-frequency render concerns.
 - Isolate GStreamer into `gst_worker.py` subprocess IPC.

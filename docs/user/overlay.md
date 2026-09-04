@@ -331,6 +331,15 @@ overlay** tile dock.
   Picframe detects this mismatch at startup and logs a WARNING naming the
   missing package; the installer's verification step also probes the runtime
   `.so` directly (via `ctypes`) so it catches "typelib present, `.so` absent".
+- **Compositor does not support `wlr-layer-shell`.** The touch overlay keeps
+  its transparent surface above the GTK4 video host using the Wayland
+  `wlr-layer-shell` protocol. `labwc` (the installer's default kiosk
+  compositor), Sway, and Hyprland implement it; `cage`, Mutter, and Weston do
+  not. On a compositor without `wlr-layer-shell` the overlay degrades to a
+  plain `Gtk.Window` that renders behind the GTK4 video host during playback,
+  so the clock disappears and touch input over video is lost. Use
+  `--display-mode labwc-kiosk` (or an `existing-wayland` session running a
+  layer-shell compositor). The installer no longer ships `cage`.
 - **Built-in plugins missing.** Run `picframe init` to copy them to
   `~/.picframe/overlay-plugins/`.
 - **Plugin not listed.** Check that the directory contains a valid

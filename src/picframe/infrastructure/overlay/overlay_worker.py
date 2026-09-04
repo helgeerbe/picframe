@@ -106,8 +106,12 @@ except (ImportError, ValueError, RuntimeError) as exc:
 
 # Optional wlr-layer-shell binding (``gtk4-layer-shell``). When the typelib is
 # absent the worker falls back to a plain borderless ``Gtk.Window`` (#739 task
-# 8), so this is a graceful degrade rather than a hard requirement. Probed only
-# when WebKitGTK itself imported, since both need a running GTK/Wayland session.
+# 8). The overlay's documented z-order above the GTK4 video host depends on a
+# ``wlr-layer-shell`` compositor (labwc/Sway/Hyprland); cage/Mutter/Weston lack
+# the protocol, so the fallback renders behind video and is unsupported. The
+# fallback exists only for a half-installed ``gtk4-layer-shell`` on a labwc
+# system, not as a supported cage path. Probed only when WebKitGTK itself
+# imported, since both need a running GTK/Wayland session.
 LAYER_SHELL_AVAILABLE = False
 Gtk4LayerShell: Any = Any
 if WEBKIT_AVAILABLE:
@@ -344,8 +348,11 @@ class OverlayWorker:
         Uses the ``wlr-layer-shell`` protocol (via ``gtk4-layer-shell``) when the
         typelib is available so the overlay sits above pi3d/video, covers the
         whole output, and stays input-capturing at every opacity (#739 task 8).
-        Falls back to a plain borderless ``Gtk.Window`` on compositors without
-        layer-shell; the rest of the surface setup is identical.
+        Falls back to a plain borderless ``Gtk.Window`` when the typelib is
+        absent; the fallback is only a graceful degrade on a ``wlr-layer-shell``
+        compositor (labwc/Sway/Hyprland). Compositors without
+        ``wlr-layer-shell`` (cage/Mutter/Weston) are unsupported — the fallback
+        renders behind the GTK4 video host during playback.
         """
         self._window = Gtk.Window()
         self._window.set_decorated(False)

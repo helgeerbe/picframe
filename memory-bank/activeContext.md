@@ -13,6 +13,15 @@ multi-page). The clock overlay is **confirmed rendering on `picframepoc`
 bridge-independent diagnosability probe + config-receipt logging were added
 as follow-up (see the #739 status block below).
 
+**Compositor requirement decision (#739):** `wlr-layer-shell` is now a hard
+requirement for the overlay. `cage` does not implement it (confirmed via the
+cage wiki protocol list), so the overlay's plain-window fallback renders behind
+the GTK4 video host during playback (clock hidden + input lost). The installer
+no longer ships `cage`; `labwc-kiosk` is the default and only supported kiosk
+mode, `wayland-kiosk` was removed, and `existing-wayland` requires a
+layer-shell compositor (labwc/Sway/Hyprland). Documented in `manual.md`,
+`docs/dev/architecture/overlay.md` §10, and `decisionLog.md`.
+
 **Prerequisite done:** issue **#749** (remove dead legacy `peripherals` config
 section) is implemented and committed (`5924130`) on the feature branch.
 

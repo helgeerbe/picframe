@@ -289,6 +289,16 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   now complete; only the hardware-blocked real-Wayland integration test remains
   (tracked in the issue's verification criteria, not a numbered task).
 
+## Compositor Requirement (#739)
+- `wlr-layer-shell` is now a hard requirement for the touch overlay. `cage`
+  does not implement the protocol (confirmed via cage wiki), so the overlay
+  degrades behind the GTK4 video host during playback. The installer no longer
+  ships `cage`; `labwc-kiosk` is the default kiosk mode, `wayland-kiosk` was
+  removed, and `existing-wayland` requires a layer-shell compositor. Installer
+  (`install_picframe.sh`), user docs (`manual.md`, `overlay.md`), architecture
+  doc (`overlay.md` §10), `overlay_worker.py` comments, and the memory bank
+  were updated.
+
 ## Next
 - **#739 final close-out:** flip task 21 to `[x]` and post the final progress
   comment on the issue (GitHub Issues/board is the authoritative tracker).

@@ -98,16 +98,30 @@ enable Picframe on boot:
 sudo ./install_picframe.sh --enable-service
 ```
 
-On Raspberry Pi OS Lite the default service display mode is `wayland-kiosk`,
-which starts Picframe inside the lightweight `cage` Wayland compositor instead
-of requiring a full desktop environment. The installer also installs `labwc`;
-if it behaves better on the target Pi, use `--display-mode labwc-kiosk`
-instead. The installer enables `seatd` for kiosk compositor modes. Cage is
-fullscreen-kiosk oriented; use `labwc-kiosk` for custom non-fullscreen
+On Raspberry Pi OS Lite the default service display mode is `labwc-kiosk`,
+which starts Picframe inside the `labwc` Wayland compositor instead of
+requiring a full desktop environment. The installer enables `seatd` for the
+kiosk compositor mode. In `labwc-kiosk` mode Picframe writes its own labwc
+rules so the pi3d window and the GTK video window use the same configured
 `viewer.display_x`, `viewer.display_y`, `viewer.display_w`, and
-`viewer.display_h` layouts. In `labwc-kiosk` mode Picframe writes its own
-labwc rules so the pi3d window and the GTK video window use the same configured
-display rectangle.
+`viewer.display_h` display rectangle.
+
+> **Compositor requirement:** `labwc-kiosk` (the default) is the supported
+> kiosk compositor. The touch overlay uses the Wayland `wlr-layer-shell`
+> protocol to keep its transparent surface above the GTK4 video host and stay
+> input-capturing while invisible; `labwc` implements this protocol. `cage`
+> does **not** implement `wlr-layer-shell`, so the overlay would fall back to
+> a plain window that renders behind the video host during playback (the clock
+> becomes invisible and touch input is lost). For this reason the installer no
+> longer ships or supports `cage`, and the `wayland-kiosk` display mode has
+> been removed. If you already run a `wayland-kiosk` service unit written by
+> an older installer, re-run the installer (or switch to `--display-mode
+> labwc-kiosk`) to regenerate the service file.
+
+`existing-wayland` runs Picframe directly under an already-started Wayland
+session compositor. It is only supported when that compositor implements
+`wlr-layer-shell` (e.g. `labwc`, Sway, or Hyprland); compositors that lack it
+(cage, Mutter, Weston) leave the touch overlay unable to stack above video.
 
 ```bash
 sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
@@ -306,24 +320,20 @@ inside the same lightweight Wayland kiosk environment used by the optional
 systemd service:
 
 ```bash
-dbus-run-session -- cage -s -- bash -lc 'exec /home/pi/picframe_env/bin/picframe run --dir /home/pi/.picframe --port 9000'
-```
-
-If `cage` logs EGL messages such as `eglQueryDeviceStringEXT` with
-`EGL_BAD_PARAMETER` but Picframe renders normally, the message is compositor
-startup noise rather than a Picframe playback failure. On Raspberry Pi systems
-where `labwc` is available, this equivalent launch is quieter:
-
-```bash
 dbus-run-session -- labwc --session 'bash -lc "exec /home/pi/picframe_env/bin/picframe run --dir /home/pi/.picframe --port 9000"'
 ```
+
+If the compositor logs EGL messages such as `eglQueryDeviceStringEXT` with
+`EGL_BAD_PARAMETER` but Picframe renders normally, the message is compositor
+startup noise rather than a Picframe playback failure. Use the `labwc`
+compositor (`labwc-kiosk` is the supported default); `cage` is not supported
+because it lacks the `wlr-layer-shell` protocol the touch overlay needs.
 
 For a development checkout using the repository virtual environment and a
 separate development base directory:
 
 ```bash
-dbus-run-session -- cage -s -- bash -lc 'cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000'
-dbus-run-session -- labwc --session 'bash -lc "cd /home/pi/Development/picframe && exec /home/pi/picframe_env/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000"'
+dbus-run-session -- labwc --session 'bash -lc "cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000"'
 ```
 
 `--html-dir` can usually be omitted because it defaults to `<dir>/html`, which
@@ -331,7 +341,7 @@ is populated by `picframe init`. If a development base directory has not been
 initialized with frontend assets yet, point it at the checkout copy:
 
 ```bash
-dbus-run-session -- cage -s -- bash -lc 'cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000 --html-dir /home/pi/Development/picframe/src/picframe/html'
+dbus-run-session -- labwc --session 'bash -lc "cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000 --html-dir /home/pi/Development/picframe/src/picframe/html"'
 ```
 
 Picframe enables `GST_V4L2_ENABLE_PROBE=1` for its GStreamer worker on
@@ -698,8 +708,8 @@ inside mats, solid bars, edge fill, or blurred backdrops. If GTK4 or
 system error instead of using a legacy sink fallback.
 
 When the display rectangle is effectively fullscreen, Picframe makes the GTK
-video window fullscreen as well; this is the preferred path for both Cage and
-labwc. For custom non-fullscreen geometry, the installer-provisioned
+video window fullscreen as well; this is the preferred path under labwc.
+For custom non-fullscreen geometry, the installer-provisioned
 `labwc-kiosk` mode uses a Picframe-owned labwc configuration under
 `~/.picframe/labwc` to suppress server-side decorations and to place the pi3d
 window with the configured `viewer.display_x`, `viewer.display_y`,
@@ -838,7 +848,7 @@ sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb gstr
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-  build-essential ca-certificates cage labwc dbus-user-session git locales \
+  build-essential ca-certificates labwc dbus-user-session git locales \
   python3 python3-dev python3-gi python3-gst-1.0 python3-pip python3-venv sudo \
   libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev \
   gir1.2-gst-plugins-base-1.0 gir1.2-gstreamer-1.0 gir1.2-gtk-4.0 mesa-utils \
