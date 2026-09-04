@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Picframe Weather</title>
   <style>
-    :root { --fg: #f8fafc; --bg: transparent; --muted: rgba(248,250,252,0.7); --accent: #38bdf8; --w: 360px; }
+    :root { --fg: #f8fafc; --bg: transparent; --muted: rgba(248,250,252,0.7); --accent: #38bdf8; --w: 360px; --h: 240px; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     /* The shell lays this iframe out at the fixed design size (--w × --h, from
        the plugin manifest `size`) and applies `transform: scale(layout.scale)`
@@ -24,11 +24,11 @@
     }
     .pf-weather { padding: 0.5rem; text-align: center; }
     .pf-weather__main { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
-    .pf-weather__icon { font-size: max(1.5rem, calc(var(--w) * 0.08)); line-height: 1; }
-    .pf-weather__temp { font-size: max(1.5rem, calc(var(--w) * 0.09)); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-    .pf-weather__desc { margin-top: 0.4rem; font-size: max(0.9rem, calc(var(--w) * 0.028)); text-transform: capitalize; opacity: 0.9; }
-    .pf-weather__loc { margin-top: 0.15rem; font-size: max(0.8rem, calc(var(--w) * 0.024)); opacity: 0.6; }
-    .pf-weather__details { margin-top: 0.6rem; display: flex; gap: 1.25rem; justify-content: center; font-size: max(0.8rem, calc(var(--w) * 0.024)); opacity: 0.8; }
+    .pf-weather__icon { font-size: max(1.5rem, calc(var(--w) * 0.11)); line-height: 1; }
+    .pf-weather__temp { font-size: max(1.5rem, calc(var(--w) * 0.13)); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    .pf-weather__desc { margin-top: 0.4rem; font-size: max(0.9rem, calc(var(--w) * 0.042)); text-transform: capitalize; opacity: 0.9; }
+    .pf-weather__loc { margin-top: 0.15rem; font-size: max(0.8rem, calc(var(--w) * 0.035)); opacity: 0.6; }
+    .pf-weather__details { margin-top: 0.6rem; display: flex; gap: 1.25rem; justify-content: center; font-size: max(0.8rem, calc(var(--w) * 0.035)); opacity: 0.8; }
     .pf-weather__error { padding: 1.5rem; text-align: center; opacity: 0.7; font-size: 0.95rem; max-width: 16rem; }
     .pf-weather__placeholder { opacity: 0.5; font-size: 0.95rem; padding: 1rem; text-align: center; }
   </style>

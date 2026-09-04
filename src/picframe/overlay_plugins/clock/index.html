@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Picframe Clock</title>
   <style>
-    :root { --fg: #f8fafc; --bg: transparent; --accent: #38bdf8; --w: 320px; }
+    :root { --fg: #f8fafc; --bg: transparent; --accent: #38bdf8; --w: 320px; --h: 240px; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     /* The shell lays this iframe out at the fixed design size (--w × --h, from
        the plugin manifest `size`) and applies `transform: scale(layout.scale)`
@@ -27,15 +27,15 @@
        the whole widget, so when the user shrinks the panel the widget shrinks
        with it. #752 */
     .pf-clock__time {
-      font-size: max(0.9rem, calc(var(--w) * 0.09)); font-weight: 700;
+      font-size: max(1.2rem, calc(var(--w) * 0.15)); font-weight: 700;
       letter-spacing: 0.02em; line-height: 1; font-variant-numeric: tabular-nums;
     }
     .pf-clock__date {
-      margin-top: 0.5rem; font-size: max(0.9rem, calc(var(--w) * 0.028));
+      margin-top: 0.5rem; font-size: max(0.9rem, calc(var(--w) * 0.045));
       opacity: 0.85; font-weight: 500;
     }
     .pf-clock--hidden { display: none; }
-    svg.pf-analog { width: calc(var(--w) * 0.85); height: calc(var(--w) * 0.85); }
+    svg.pf-analog { width: min(calc(var(--w) * 0.9), calc(var(--h) * 0.9)); height: min(calc(var(--w) * 0.9), calc(var(--h) * 0.9)); }
     .pf-analog .pf-hand { stroke: var(--fg); stroke-linecap: round; }
     .pf-analog .pf-hand--hour { stroke-width: 6; }
     .pf-analog .pf-hand--minute { stroke-width: 4; }
