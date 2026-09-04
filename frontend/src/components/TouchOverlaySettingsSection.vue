@@ -392,38 +392,58 @@ watch(
         :help="t('settings.touchOverlay.contentOffset.help')"
       >
         <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <NumberField
-            v-model="contentOffset.top"
-            :min="0"
-            :step="1"
-            :unit="t('settings.touchOverlay.contentOffset.px')"
-            :aria-label="t('settings.touchOverlay.contentOffset.top')"
-            @update:model-value="saveContentOffset()"
-          />
-          <NumberField
-            v-model="contentOffset.bottom"
-            :min="0"
-            :step="1"
-            :unit="t('settings.touchOverlay.contentOffset.px')"
-            :aria-label="t('settings.touchOverlay.contentOffset.bottom')"
-            @update:model-value="saveContentOffset()"
-          />
-          <NumberField
-            v-model="contentOffset.left"
-            :min="0"
-            :step="1"
-            :unit="t('settings.touchOverlay.contentOffset.px')"
-            :aria-label="t('settings.touchOverlay.contentOffset.left')"
-            @update:model-value="saveContentOffset()"
-          />
-          <NumberField
-            v-model="contentOffset.right"
-            :min="0"
-            :step="1"
-            :unit="t('settings.touchOverlay.contentOffset.px')"
-            :aria-label="t('settings.touchOverlay.contentOffset.right')"
-            @update:model-value="saveContentOffset()"
-          />
+          <div>
+            <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              {{ t('settings.touchOverlay.contentOffset.top') }}
+            </span>
+            <NumberField
+              v-model="contentOffset.top"
+              :min="0"
+              :step="1"
+              :unit="t('settings.touchOverlay.contentOffset.px')"
+              :aria-label="t('settings.touchOverlay.contentOffset.top')"
+              @update:model-value="saveContentOffset()"
+            />
+          </div>
+          <div>
+            <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              {{ t('settings.touchOverlay.contentOffset.bottom') }}
+            </span>
+            <NumberField
+              v-model="contentOffset.bottom"
+              :min="0"
+              :step="1"
+              :unit="t('settings.touchOverlay.contentOffset.px')"
+              :aria-label="t('settings.touchOverlay.contentOffset.bottom')"
+              @update:model-value="saveContentOffset()"
+            />
+          </div>
+          <div>
+            <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              {{ t('settings.touchOverlay.contentOffset.left') }}
+            </span>
+            <NumberField
+              v-model="contentOffset.left"
+              :min="0"
+              :step="1"
+              :unit="t('settings.touchOverlay.contentOffset.px')"
+              :aria-label="t('settings.touchOverlay.contentOffset.left')"
+              @update:model-value="saveContentOffset()"
+            />
+          </div>
+          <div>
+            <span class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400">
+              {{ t('settings.touchOverlay.contentOffset.right') }}
+            </span>
+            <NumberField
+              v-model="contentOffset.right"
+              :min="0"
+              :step="1"
+              :unit="t('settings.touchOverlay.contentOffset.px')"
+              :aria-label="t('settings.touchOverlay.contentOffset.right')"
+              @update:model-value="saveContentOffset()"
+            />
+          </div>
         </div>
       </FieldRow>
     </SettingsSection>
