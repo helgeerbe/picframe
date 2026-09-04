@@ -43,7 +43,21 @@
       function applyConfig(config) {
         if (!config) return;
         Object.keys(cfg).forEach(function (k) { if (config[k] !== undefined) cfg[k] = config[k]; });
+        applyContentAlign(config.content_align);
         scheduleRefresh(true);
+      }
+      // Apply a 9-anchor content_align to the body's flex container. The
+      // weather body is row-flex, so justify-content is horizontal and
+      // align-items is vertical. Omitted/unknown anchors keep the CSS default
+      // (centered). #752.
+      function applyContentAlign(align) {
+        if (!align || align.indexOf("-") < 0) return;
+        var parts = align.split("-");
+        var vMap = { top: "flex-start", middle: "center", bottom: "flex-end" };
+        var hMap = { left: "flex-start", center: "center", right: "flex-end" };
+        var v = vMap[parts[0]], h = hMap[parts[1]];
+        if (h) document.body.style.justifyContent = h;
+        if (v) document.body.style.alignItems = v;
       }
       function unitSymbol() { return cfg.units === "imperial" ? "°F" : "°C"; }
       function windUnit() { return cfg.units === "imperial" ? "mph" : "m/s"; }

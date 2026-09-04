@@ -189,7 +189,12 @@ export class Dock {
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin')
     // Forward the effective per-plugin config into the iframe via postMessage
     // once it loads; plugins opt in by listening for { type: 'picframe:config' }.
-    const cfg = this.pluginConfig[plugin.id] ?? {}
+    // The resolved `content_align` (null = inherit the panel `position`) is
+    // merged in so plugins can align their body content to the chosen anchor;
+    // plugins that don't read it simply ignore the extra key (#752).
+    const layout = this.layoutOf(plugin)
+    const cfg = { ...(this.pluginConfig[plugin.id] ?? {}) }
+    cfg.content_align = layout.content_align ?? layout.position
     frame.addEventListener('load', () => {
       try {
         frame.contentWindow?.postMessage(

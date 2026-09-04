@@ -56,7 +56,21 @@
       function applyConfig(config) {
         if (!config) return;
         Object.keys(cfg).forEach(function (k) { if (config[k] !== undefined) cfg[k] = config[k]; });
+        applyContentAlign(config.content_align);
         render();
+      }
+      // Apply a 9-anchor content_align to the body's flex container. The meta
+      // body is column-flex, so justify-content is the vertical main axis and
+      // align-items is the horizontal cross axis (swapped vs. row-flex plugins).
+      // Omitted/unknown anchors keep the CSS default. #752.
+      function applyContentAlign(align) {
+        if (!align || align.indexOf("-") < 0) return;
+        var parts = align.split("-");
+        var vMap = { top: "flex-start", middle: "center", bottom: "flex-end" };
+        var hMap = { left: "flex-start", center: "center", right: "flex-end" };
+        var v = vMap[parts[0]], h = hMap[parts[1]];
+        if (v) document.body.style.justifyContent = v;
+        if (h) document.body.style.alignItems = h;
       }
       function applyMedia(media) {
         currentMedia = media || null;
