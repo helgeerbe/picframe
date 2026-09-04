@@ -8,23 +8,28 @@
   <style>
     :root { --fg: #f8fafc; --bg: rgba(15,23,42,0.78); --muted: rgba(248,250,252,0.65); --accent: #38bdf8; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    /* container-type: size makes 1cqw/1cqh = 1% of the panel dimensions so the
-       text scales to fill the panel (fit-both-axes via min()). The Leaflet map
-       already fills the remaining flex space, so only text uses these units. #752 */
+    /* container-type: inline-size makes 1cqw = 1% of the panel width. Width is
+       always definite for a block <html> (= iframe width, no percentage needed),
+       so this never collapses the way size-containment on <html> does when
+       height: 100% fails to resolve against an indefinite iframe initial
+       containing block in WebKitGTK — which zeroes cqw/cqh and floors the text
+       at the max() minimum (the "no scaling" bug). The Leaflet map already
+       fills the remaining flex space, so only text uses these units. Width-only
+       fit; tall-narrow panels clip via overflow: hidden. #752 */
     html, body { height: 100%; }
-    html { container-type: size; }
+    html { container-type: inline-size; }
     body {
       background: var(--bg); color: var(--fg); backdrop-filter: blur(6px);
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       display: flex; flex-direction: column; overflow: hidden; padding: 0.75rem;
       -webkit-user-select: none; user-select: none;
     }
-    .pf-meta__title { font-weight: 700; font-size: max(0.95rem, min(2.8cqw, 7cqh)); margin-bottom: 0.4rem; word-break: break-word; }
-    .pf-meta__date { color: var(--muted); font-size: max(0.8rem, min(2.4cqw, 5.5cqh)); margin-bottom: 0.5rem; }
-    .pf-meta__grid { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; font-size: max(0.8rem, min(2.4cqw, 5.5cqh)); }
-    .pf-meta__grid dt { color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-size: max(0.65rem, min(2cqw, 4.5cqh)); align-self: center; }
+    .pf-meta__title { font-weight: 700; font-size: max(0.95rem, 2.8cqw); margin-bottom: 0.4rem; word-break: break-word; }
+    .pf-meta__date { color: var(--muted); font-size: max(0.8rem, 2.4cqw); margin-bottom: 0.5rem; }
+    .pf-meta__grid { display: grid; grid-template-columns: auto 1fr; gap: 0.25rem 0.75rem; font-size: max(0.8rem, 2.4cqw); }
+    .pf-meta__grid dt { color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; font-size: max(0.65rem, 2cqw); align-self: center; }
     .pf-meta__grid dd { font-variant-numeric: tabular-nums; }
-    .pf-meta__loc { color: var(--accent); font-size: max(0.8rem, min(2.4cqw, 5.5cqh)); margin-top: 0.35rem; }
+    .pf-meta__loc { color: var(--accent); font-size: max(0.8rem, 2.4cqw); margin-top: 0.35rem; }
     .pf-meta__map { flex: 1; min-height: 7rem; margin-top: 0.5rem; border-radius: 0.5rem; overflow: hidden; transition: position 0.2s; }
     .pf-meta__map--expanded { position: fixed; inset: 0; z-index: 10; min-height: 100%; border-radius: 0; margin: 0; }
     .pf-meta__placeholder { color: var(--muted); font-size: 0.9rem; text-align: center; padding: 1.5rem 0.5rem; }

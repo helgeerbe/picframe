@@ -329,13 +329,22 @@ cannot reach into the iframe document — each plugin must size and align its ow
 content. To make the **panel size** control the widget size (the "draw a box, the
 widget fills it" model), plugins follow this convention:
 
-- Declare `html { container-type: size; }` so `1cqw`/`1cqh` = 1% of the panel
-  width/height (not the browser viewport, which the iframe does not see).
-- Size content with `max(min_floor, min(Ncqw, Mcqh))`: the inner `min()` fits the
-  **tighter** of the two panel axes so the widget never overflows, and the `max()`
-  floors a tiny panel at a legible size. There is **no upper cap** — the widget
-  scales continuously to fill the box at any size; the user, not the CSS, decides
-  how big is too big by shrinking the panel.
+- Declare `html { container-type: inline-size; }` so `1cqw` = 1% of the panel
+  width (not the browser viewport, which the iframe does not see). Use
+  **`inline-size`, not `size`**: size-containment requires a definite height on
+  `<html>`, but `height: 100%` only resolves if the iframe's initial containing
+  block has a definite height — and in a WebKitGTK overlay iframe that resolution
+  can fail, collapsing the size-contained `<html>` to 0 height, zeroing `cqw`/
+  `cqh`, and flooring the text at the `max()` minimum (the "no scaling" bug).
+  Width is *always* definite for a block element (= iframe width, no percentage
+  needed), so `inline-size` never collapses.
+- Size content with `max(min_floor, Ncqw)`: the `max()` floors a tiny panel at a
+  legible size. There is **no upper cap** — the widget scales continuously to
+  fill the panel width; the user, not the CSS, decides how big is too big by
+  shrinking the panel. This is **width-only fit**: a tall-narrow panel can
+  overflow vertically, clipped by `body { overflow: hidden }`. A plugin that
+  genuinely needs both-axis fit should compute its limiting dimension in JS
+  from the panel size the shell forwards (or request shell-level scaling).
 - Apply the per-plugin `content_align` (forwarded in the `picframe:config`
   payload; `null` inherits the panel `position`) by mapping the 9-anchor to the
   plugin body's `justify-content`/`align-items`. Note the axis swap: a row-flex
@@ -345,7 +354,8 @@ widget fills it" model), plugins follow this convention:
 Using viewport units (`vw`/`vh`) or an absolute `rem` `clamp()` ceiling instead
 produces the "bigger background, same small text" effect: `vw` tracks the iframe
 width only (never height) and a `rem` cap freezes the text while the panel keeps
-growing.
+growing. `container-type: size` on `<html>` produces the same effect when the
+iframe's percentage height doesn't resolve as definite (see above).
 
 ## 12. Web UI controls
 
