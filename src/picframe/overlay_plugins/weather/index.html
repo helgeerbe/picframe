@@ -22,7 +22,20 @@
       display: flex; align-items: center; justify-content: center;
       -webkit-user-select: none; user-select: none; overflow: hidden;
     }
-    /* The shell scale-mode panel is transparent; the readability background is
+    /* Anchor-driven content alignment (#752). The shell hands the panel anchor
+       (e.g. "top-left") to the plugin via the picframe:config postMessage; the
+       handler below stamps it on <body data-anchor>. The eight rules below push
+       the flex content to the matching corner; the ninth (middle-center) is the
+       default above. This makes e.g. weather at top-left hug the panel's top-left
+       instead of sitting centered in the 360×240 design rectangle. */
+    body[data-anchor="top-left"]      { align-items: flex-start; justify-content: flex-start; }
+    body[data-anchor="top-center"]    { align-items: flex-start; justify-content: center; }
+    body[data-anchor="top-right"]     { align-items: flex-start; justify-content: flex-end; }
+    body[data-anchor="middle-left"]   { align-items: center;     justify-content: flex-start; }
+    body[data-anchor="middle-right"]  { align-items: center;     justify-content: flex-end; }
+    body[data-anchor="bottom-left"]   { align-items: flex-end;   justify-content: flex-start; }
+    body[data-anchor="bottom-center"] { align-items: flex-end;   justify-content: center; }
+    body[data-anchor="bottom-right"]  { align-items: flex-end;   justify-content: flex-end; }
        painted here on the content container so the dark area hugs the content
        as tightly as possible and the photo shows through everywhere else.
        The background scales with `transform: scale()`. #752 */
@@ -116,6 +129,7 @@
       window.addEventListener("message", function (event) {
         var data = event.data || {};
         if (data.type === "picframe:config" && data.config) applyConfig(data.config);
+        if (data.anchor) document.body.dataset.anchor = data.anchor;
       });
     })();
   </script>

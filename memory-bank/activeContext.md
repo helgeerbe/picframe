@@ -49,6 +49,16 @@ scales with `transform: scale()`: digital clock + weather get a tight rounded da
 box, analog clock gets a filled disc (r=95) matching the face. Fill-mode panels
 keep the shell background. Rebuilt `overlay.html`; all gates green (970 pytest,
 mypy, ruff, vue-tsc, ESLint, Prettier). On-device visual re-test pending.
+**Anchor-driven content alignment DONE (uncommitted):** scale-mode plugin content
+was always centered in the design rectangle (320×240 / 360×240) regardless of the
+panel anchor, because the iframe is a separate `file://` document the shell CSS
+can't reach into, and the plugin body used `align/justify-content: center`. Fix:
+the shell now passes `anchor: layout.position` in the existing `picframe:config`
+postMessage (`dock.ts`); each plugin stamps it on `<body data-anchor>` and 8 CSS
+rules push the flex content to the matching corner (middle-center stays default).
+No backend/worker change (anchor rides the existing config channel → no test break).
+Rebuilt `overlay.html`; all gates green. On-device needs `picframe init` re-run
+(plugins copy from package to `~/.picframe/overlay-plugins/`).
 
 **Phase A backend (committed `bebbbdf`–`91d5b27`):**
 - `core/models/overlay.py` — `plugin_layout_defaults`/`validate_plugin_layout`/

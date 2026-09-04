@@ -213,7 +213,10 @@ export class Dock {
     frame.addEventListener('load', () => {
       try {
         frame.contentWindow?.postMessage(
-          { type: 'picframe:config', pluginId: plugin.id, config: cfg },
+          // #752: pass the panel anchor so the plugin can align its content to
+          // the same corner (the iframe is a separate document; shell CSS can't
+          // reach inside it). Plugins without a handler keep centering.
+          { type: 'picframe:config', pluginId: plugin.id, config: cfg, anchor: layout.position },
           '*'
         )
       } catch {
