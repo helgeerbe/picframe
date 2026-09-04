@@ -343,8 +343,46 @@ class HardwareInputsUpdateResponse(StatusMessageResponse):
     )
 
 
+# Nine-anchor screen positions for panel placement and content alignment (#752).
+PluginLayoutAnchor = Literal[
+    "top-left",
+    "top-center",
+    "top-right",
+    "middle-left",
+    "middle-center",
+    "middle-right",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
+]
+
+
+class PluginLayout(BaseModel):
+    """User-editable per-plugin panel layout (issue #752).
+
+    Attributes:
+        position: 9-anchor screen position of the panel.
+        width/height: Panel size in pixels; ``null`` = use the plugin default.
+        content_align: 9-anchor alignment of the panel content (text); ``null``
+            = inherit ``position``.
+        display_mode: ``persistent`` (always visible) or ``auto_hide`` (fades
+            after ``idle_hide_seconds``). Per-plugin, replacing the old global.
+        idle_hide_seconds: Per-plugin idle fade delay; ``null`` = inherit the
+            global ``overlay.idle_hide_seconds``.
+        z_order: Stacking order for free overlap (higher = on top).
+    """
+
+    position: PluginLayoutAnchor = "top-right"
+    width: int | None = None
+    height: int | None = None
+    content_align: PluginLayoutAnchor | None = None
+    display_mode: Literal["persistent", "auto_hide"] = "auto_hide"
+    idle_hide_seconds: float | None = None
+    z_order: int = 0
+
+
 class OverlayConfig(BaseModel):
-    """Pydantic model for the ``overlay`` config section (#739).
+    """Pydantic model for the ``overlay`` config section (#739, #752).
 
     This is the single blocking prerequisite for the feature: Pydantic v2
     ``extra='ignore'`` silently drops unknown YAML keys, so an ``overlay``
@@ -352,21 +390,29 @@ class OverlayConfig(BaseModel):
     ``picframe init`` seeding. Note this is unrelated to the existing
     ``picframe.core.events.dto.OverlayConfig`` dataclass (the pi3d text/clock
     overlay config).
+
+    Issue #752 replaces the single-visible-plugin model (``visible_plugin:
+    str | None`` + a global ``display_mode``) with a multi-widget model:
+    ``visible_plugins: list[str]`` (simultaneous widgets) and a per-plugin
+    ``plugin_layout`` map (position/size/content_align/display_mode/idle_hide/
+    z_order). Legacy ``visible_plugin`` / global ``display_mode`` keys are
+    ignored here (``extra='ignore'``); the read-time ``normalize_legacy_overlay``
+    bridge keeps the out-of-process worker/shell fed until Phase B.
     """
 
     enabled: bool = False
     backend: Literal["webkit"] = "webkit"
     plugin_dir: str = "~/.picframe/overlay-plugins"
     enabled_plugins: list[str] = Field(default_factory=lambda: ["clock", "meta"])
-    visible_plugin: str | None = "clock"
-    display_mode: Literal["persistent", "auto_hide"] = "auto_hide"
+    visible_plugins: list[str] = Field(default_factory=lambda: ["clock"])
     enabled_input_types: list[str] = Field(default_factory=lambda: ["touch", "mouse", "keyboard"])
     idle_hide_seconds: float = 5.0
     plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    plugin_layout: dict[str, PluginLayout] = Field(default_factory=dict)
 
 
 class OverlayPluginResponse(BaseModel):
-    """A discovered overlay plugin with its effective (merged) config."""
+    """A discovered overlay plugin with its effective (merged) config and layout."""
 
     id: str
     name: str
@@ -379,6 +425,10 @@ class OverlayPluginResponse(BaseModel):
     config: dict[str, Any] = Field(
         default_factory=dict,
         description="Effective config: manifest defaults merged with persisted user values.",
+    )
+    layout: dict[str, Any] | None = Field(
+        default=None,
+        description="Effective per-plugin layout (manifest defaults <- db overrides).",
     )
 
 
@@ -396,6 +446,16 @@ class OverlayPluginConfigUpdateResponse(StatusMessageResponse):
     config: dict[str, Any] = Field(
         default_factory=dict,
         description="Validated per-plugin config that was persisted.",
+    )
+
+
+class OverlayPluginLayoutUpdateResponse(StatusMessageResponse):
+    """Result returned after updating a single plugin's layout (#752)."""
+
+    plugin_id: str
+    layout: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validated per-plugin layout that was persisted.",
     )
 
 

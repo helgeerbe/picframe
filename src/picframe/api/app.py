@@ -56,6 +56,7 @@ from picframe.api.models import (
     MediaSelectionCountResponse,
     OverlayPluginConfigResponse,
     OverlayPluginConfigUpdateResponse,
+    OverlayPluginLayoutUpdateResponse,
     OverlayPluginResponse,
     StateWebSocketMessage,
     StatusMessageResponse,
@@ -68,8 +69,10 @@ from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedE
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.models.overlay import (
     PluginDescriptor,
+    effective_plugin_layout,
     plugin_config_defaults,
     validate_plugin_config,
+    validate_plugin_layout,
 )
 from picframe.core.models.playlist import PlaylistCriteria
 from picframe.core.ports import IOverlayController, ISystemManager
@@ -195,11 +198,39 @@ PUBLIC_WORKFLOW_KEYS = {
     },
     "overlay": {
         "enabled",
-        "display_mode",
         "idle_hide_seconds",
         "enabled_input_types",
     },
 }
+
+
+class _NoopEventPublisher(IEventPublisher):
+    """No-op publisher for scoped, side-effect-free :class:`ConfigService`
+    instances built inside request handlers (read-only config access, #752)."""
+
+    def publish(self, event: Any) -> None:
+        pass
+
+
+class _NoopEventSubscriber(IEventSubscriber):
+    """No-op subscriber paired with :class:`_NoopEventPublisher`."""
+
+    def subscribe(self, event_type: type, callback: Any) -> None:
+        pass
+
+    def unsubscribe(self, event_type: type, callback: Any) -> None:
+        pass
+
+
+def _scoped_config_service(config_repository: Any) -> Any:
+    """Build a throwaway :class:`ConfigService` over ``config_repository`` with
+    no-op pub/sub, for read-only nested-config access inside request handlers.
+    The long-running :class:`ConfigService` (with real pub/sub) remains the
+    single source of truth for live updates; these scoped instances only read.
+    """
+    from picframe.core.services.config_service import ConfigService
+
+    return ConfigService(config_repository, _NoopEventSubscriber(), _NoopEventPublisher())
 
 
 def _requires_basic_auth(path: str, method: str, scope: str) -> bool:
@@ -1953,6 +1984,19 @@ def create_app(
         merged.update(db_values)
         return merged
 
+    def _effective_plugin_layout(descriptor: PluginDescriptor) -> dict[str, Any]:
+        """Effective per-plugin layout = manifest defaults <- persisted db overrides (#752)."""
+        if not config_repository:
+            return effective_plugin_layout(descriptor, None)
+
+        temp_service = _scoped_config_service(config_repository)
+        nested = temp_service.get_nested_config()
+        plugin_layout_section = nested.get("overlay", {}).get("plugin_layout", {})
+        db_layout = plugin_layout_section.get(descriptor.id, {})
+        if not isinstance(db_layout, dict):
+            db_layout = {}
+        return effective_plugin_layout(descriptor, db_layout)
+
     @app.get(
         "/api/overlay/plugins",
         response_model=list[OverlayPluginResponse],
@@ -1979,6 +2023,7 @@ def create_app(
                 "has_config": bool(descriptor.config_schema),
                 "config_schema": descriptor.config_schema,
                 "config": _merged_plugin_config(descriptor),
+                "layout": _effective_plugin_layout(descriptor),
             }
             for descriptor in sorted(descriptors.values(), key=lambda d: d.id)
         ]
@@ -2057,6 +2102,58 @@ def create_app(
             )
 
         return {"status": "success", "plugin_id": plugin_id, "config": validated_config}
+
+    @app.put(
+        "/api/overlay/plugins/{plugin_id}/layout",
+        response_model=OverlayPluginLayoutUpdateResponse,
+        response_model_exclude_none=True,
+        tags=["Overlay"],
+        summary="Update a plugin's panel layout",
+        description=(
+            "Validate a plugin's per-plugin layout (position/size/content_align/"
+            "display_mode/idle_hide_seconds/z_order) against the fixed overlay "
+            "schema, persist it under `overlay.plugin_layout.<id>.*`, and "
+            "broadcast an `OverlayConfigChangedEvent` so the overlay applies it "
+            "live (#752)."
+        ),
+        responses={**NOT_FOUND_RESPONSE, **VALIDATION_RESPONSE, **BAD_REQUEST_RESPONSE},
+    )
+    async def api_put_overlay_plugin_layout(
+        plugin_id: str,
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, Any]:
+        """Validate and persist a single plugin's panel layout."""
+        descriptors = _overlay_descriptor_map()
+        descriptor = descriptors.get(plugin_id)
+        if descriptor is None:
+            raise HTTPException(status_code=404, detail=f"Overlay plugin '{plugin_id}' not found")
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+
+        try:
+            validated_layout = validate_plugin_layout(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        temp_service = _scoped_config_service(config_repository)
+        temp_service.update_plugin_layout(plugin_id, validated_layout)
+
+        if event_publisher:
+            # ``None`` (inherit/default) keys are dropped so the long-running
+            # ConfigService re-persist via ``update_nested_config`` matches the
+            # scoped write (which skips ``None``).
+            publishable = {k: v for k, v in validated_layout.items() if v is not None}
+            event_publisher.publish(
+                CommandEvent(
+                    command=Command.SET_CONFIG,
+                    payload={"overlay": {"plugin_layout": {plugin_id: publishable}}},
+                )
+            )
+
+        # Return the effective layout (manifest defaults <- persisted overrides),
+        # mirroring how the config endpoint returns merged config.
+        effective = effective_plugin_layout(descriptor, validated_layout)
+        return {"status": "success", "plugin_id": plugin_id, "layout": effective}
 
     @app.post(
         "/api/config/import-yaml",
