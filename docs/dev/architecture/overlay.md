@@ -329,15 +329,21 @@ cannot reach into the iframe document — each plugin must size and align its ow
 content. To make the **panel size** control the widget size (the "draw a box, the
 widget fills it" model), plugins follow this convention:
 
-- Declare `html { container-type: inline-size; }` so `1cqw` = 1% of the panel
-  width (not the browser viewport, which the iframe does not see). Use
-  **`inline-size`, not `size`**: size-containment requires a definite height on
-  `<html>`, but `height: 100%` only resolves if the iframe's initial containing
-  block has a definite height — and in a WebKitGTK overlay iframe that resolution
-  can fail, collapsing the size-contained `<html>` to 0 height, zeroing `cqw`/
-  `cqh`, and flooring the text at the `max()` minimum (the "no scaling" bug).
-  Width is *always* definite for a block element (= iframe width, no percentage
-  needed), so `inline-size` never collapses.
+- Declare `body { container-type: inline-size; }` (on **`<body>`, not `<html>`**)
+  so `1cqw` = 1% of the panel width (not the browser viewport, which the iframe
+  does not see). **Why `<body>` and not `<html>`:** the root `<html>` element's
+  containing block is the Initial Containing Block (the iframe viewport). WebKitGTK
+  does not establish container-query resolution on the root element — `cqw`
+  resolves to **0** there, flooring text at the `max()` minimum (the "no scaling"
+  bug, confirmed on-device against WebKitGTK 2.52). `<body>` is a normal block
+  element whose width is always definite (inherited from `<html>` which fills
+  the iframe width), so container queries resolve correctly on it. Use
+  **`inline-size`, not `size`**: size-containment also requires a definite
+  height, and `height: 100%` on `<body>` only resolves if the iframe's initial
+  containing block has a definite height — which can fail in a WebKitGTK overlay
+  iframe, collapsing the size-contained `<body>` to 0 height. `inline-size`
+  only contains the width axis, which is always definite for a block element,
+  so it never collapses.
 - Size content with `max(min_floor, Ncqw)`: the `max()` floors a tiny panel at a
   legible size. There is **no upper cap** — the widget scales continuously to
   fill the panel width; the user, not the CSS, decides how big is too big by
@@ -354,8 +360,9 @@ widget fills it" model), plugins follow this convention:
 Using viewport units (`vw`/`vh`) or an absolute `rem` `clamp()` ceiling instead
 produces the "bigger background, same small text" effect: `vw` tracks the iframe
 width only (never height) and a `rem` cap freezes the text while the panel keeps
-growing. `container-type: size` on `<html>` produces the same effect when the
-iframe's percentage height doesn't resolve as definite (see above).
+growing. `container-type` on `<html>` (either `size` or `inline-size`) produces
+the same effect because WebKitGTK does not establish container-query resolution
+on the root element — `cqw` resolves to 0 there (see above).
 
 ## 12. Web UI controls
 

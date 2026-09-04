@@ -7,16 +7,17 @@
   <style>
     :root { --fg: #f8fafc; --bg: transparent; --muted: rgba(248,250,252,0.7); --accent: #38bdf8; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    /* container-type: inline-size makes 1cqw = 1% of the panel width. Width is
-       always definite for a block <html> (= iframe width, no percentage needed),
-       so this never collapses the way size-containment on <html> does when
-       height: 100% fails to resolve against an indefinite iframe initial
-       containing block in WebKitGTK — which zeroes cqw/cqh and floors the text
-       at the max() minimum (the "no scaling" bug). Width-only fit; tall-narrow
-       panels clip via overflow: hidden. #752 */
+    /* container-type: inline-size on <body> (NOT <html>) makes 1cqw = 1% of the
+       panel width. WebKitGTK does not establish container-query resolution on
+       the root <html> element — its containing block is the Initial Containing
+       Block (the iframe viewport) and cqw resolves to 0 there, flooring the
+       text at the max() minimum (the "no scaling" bug). <body> is a normal
+       block element whose width is always definite (= <html> width = iframe
+       width), so container queries resolve correctly. Width-only fit (no cqh);
+       tall-narrow panels clip via overflow: hidden. #752 */
     html, body { height: 100%; }
-    html { container-type: inline-size; }
     body {
+      container-type: inline-size;
       background: var(--bg); color: var(--fg);
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       display: flex; align-items: center; justify-content: center;
