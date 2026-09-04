@@ -218,39 +218,54 @@ def test_build_surface_connects_load_diagnostics(monkeypatch: pytest.MonkeyPatch
     web_view.connect.assert_any_call("load-failed", worker._on_load_failed)
 
 
-def test_inject_console_forwarding_pushes_forwarder_script(
+def test_install_js_bridge_adds_document_start_userscript(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The injected diagnostic script forwards console + uncaught errors to the
-    native bridge via the registered ``picframe`` message handler (#739)."""
+    """The bridge + console/error forwarder are injected as a *document-start*
+    ``WebKit.UserScript`` (added to the UserContentManager before ``load_uri``)
+    so they run ahead of the shell's own script on every navigation. This
+    fixes the racy post-load ``evaluate_javascript`` that ran on about:blank
+    and was discarded when the real page loaded (making every input action a
+    silent no-op) (#739)."""
     import picframe.infrastructure.overlay.overlay_worker as mod
 
+    fake_webkit = MagicMock()
+    monkeypatch.setattr(mod, "WebKit", fake_webkit)
     worker = make_worker()
     worker._web_view = MagicMock()
-    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
-    pushed: list[str] = []
-    monkeypatch.setattr(worker, "_push_to_shell", lambda js: pushed.append(js))
-    worker._inject_console_forwarding()
-    assert len(pushed) == 1
-    js = pushed[0]
-    assert "__pfConsoleFwd" in js
+    manager = worker._web_view.get_user_content_manager.return_value
+
+    worker._install_js_bridge()
+
+    manager.register_script_message_handler.assert_called_once_with("picframe")
+    # One document-start user script (bridge + console forwarder).
+    manager.add_script.assert_called_once()
+    fake_webkit.UserScript.assert_called_once()
+    ctor = fake_webkit.UserScript.call_args
+    js, frames, when = ctor.args[0], ctor.args[1], ctor.args[2]
+    assert frames == fake_webkit.UserContentInjectedFrames.ALL_FRAMES
+    assert when == fake_webkit.UserScriptInjectionTime.START
+    assert "window.__pfBridge" in js  # idempotent guard
+    assert "window.picframe" in js
+    assert "P.send=function" in js  # bridge defined
     assert "webkit.messageHandlers.picframe.postMessage" in js
     assert "unhandledrejection" in js
     assert "window.addEventListener('error'" in js
 
 
-def test_on_load_changed_injects_forwarder_on_commit(monkeypatch: pytest.MonkeyPatch) -> None:
-    """At COMMITTED the console forwarder is installed; other states only log."""
+def test_on_load_changed_only_logs_state(monkeypatch: pytest.MonkeyPatch) -> None:
+    """``_on_load_changed`` only logs; the console forwarder is now installed
+    once via the document-start user script (no per-load injection at
+    COMMITTED)."""
     import picframe.infrastructure.overlay.overlay_worker as mod
 
-    monkeypatch.setattr(mod, "_load_event_name", lambda le: le)  # passthrough name
+    monkeypatch.setattr(mod, "_load_event_name", lambda le: le)
     worker = make_worker()
-    injected: list[bool] = []
-    monkeypatch.setattr(worker, "_inject_console_forwarding", lambda: injected.append(True))
-    worker._on_load_changed(None, "STARTED")
-    worker._on_load_changed(None, "COMMITTED")
-    worker._on_load_changed(None, "FINISHED")
-    assert injected == [True]  # only on COMMITTED
+    pushed: list[str] = []
+    monkeypatch.setattr(worker, "_push_to_shell", lambda js: pushed.append(js))
+    for state in ("STARTED", "COMMITTED", "FINISHED"):
+        worker._on_load_changed(None, state)  # must not raise
+    assert pushed == []  # no per-load injection anymore
 
 
 def test_push_config_to_shell_noop_without_surface() -> None:
@@ -436,11 +451,12 @@ def test_build_surface_skips_layer_shell_when_unavailable(
 def test_build_surface_lifts_file_access_for_file_origin_shell(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """The overlay shell loads from ``file://``; WebKitGTK blocks ES module
-    scripts (``<script type="module">``) and the cross-origin ``ws://localhost``
-    state WebSocket under ``file://`` unless file-access is lifted. Without
-    this the worker reports ``ready`` but the JS never executes -> no clock
-    (#739). Both settings must be enabled on the WebView before ``load_uri``.
+    """The overlay shell loads from ``file://``; WebKitGTK blocks the
+    cross-origin ``ws://localhost`` state WebSocket under ``file://`` unless
+    file-access is lifted. Without this the worker reports ``ready`` but the
+    state client never connects -> no clock (#739). Both settings must be
+    enabled on the WebView before ``load_uri``. The JS bridge user script must
+    also be added before ``load_uri`` so WebKit injects it for this load.
     """
     import picframe.infrastructure.overlay.overlay_worker as mod
 
@@ -460,6 +476,9 @@ def test_build_surface_lifts_file_access_for_file_origin_shell(
         "universal"
     )
     fake_webkit.WebView.return_value.get_settings.return_value = settings
+    manager = MagicMock()
+    fake_webkit.WebView.return_value.get_user_content_manager.return_value = manager
+    manager.add_script.side_effect = lambda *_: order.append("add_script")
     fake_webkit.WebView.return_value.load_uri.side_effect = lambda *_: order.append("load_uri")
 
     worker = make_worker()
@@ -468,9 +487,10 @@ def test_build_surface_lifts_file_access_for_file_origin_shell(
 
     settings.set_allow_file_access_from_file_urls.assert_called_once_with(True)
     settings.set_allow_universal_access_from_file_urls.assert_called_once_with(True)
-    # Both file-access flags are set before the shell URI loads so they are
-    # in effect when the ES module script is first evaluated.
-    assert order == ["file_access", "universal", "load_uri"]
+    manager.add_script.assert_called_once()
+    # File-access flags, then the bridge user script, then load_uri — all set
+    # before the page loads so they are in effect when the shell boots.
+    assert order == ["file_access", "universal", "add_script", "load_uri"]
 
 
 def test_display_env_log_precedes_gtk_init_block() -> None:

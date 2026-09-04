@@ -340,13 +340,14 @@ class OverlayWorker:
             self._setup_layer_shell(self._window)
 
         self._web_view = WebKit.WebView()
-        # The overlay shell loads from a ``file://`` URI. WebKitGTK treats ES
-        # module scripts (``<script type="module">``, which Vite emits) as
-        # CORS-requiring and silently blocks them under ``file://``; it also
-        # blocks the cross-origin ``ws://localhost`` state WebSocket the shell
-        # opens for live media/state. Lift both file-access restrictions so
-        # the Vite-built shell boots and connects (#739). Without this the
-        # worker reports ``ready`` but the JS never executes -> no clock.
+        # The overlay shell loads from a ``file://`` URI. Even though the shell
+        # is now a single self-contained HTML file (no external module fetch,
+        # #739), WebKitGTK still needs these flags lifted: the shell opens a
+        # cross-origin ``ws://127.0.0.1:<port>`` state WebSocket (requires
+        # universal access from file origins) and loads plugin ``<iframe>``s
+        # from ``file://`` (requires file access from file origins). Without
+        # these the worker reports ``ready`` but the state client never
+        # connects and no plugin panels render -> no clock.
         settings = self._web_view.get_settings()
         settings.set_allow_file_access_from_file_urls(True)
         settings.set_allow_universal_access_from_file_urls(True)
@@ -361,10 +362,19 @@ class OverlayWorker:
         self._log_shell_html_resolution()
         self._web_view.connect("load-changed", self._on_load_changed)
         self._web_view.connect("load-failed", self._on_load_failed)
+        # Install the JS bridge + console/error forwarder as a *document-start*
+        # user script BEFORE load_uri. WebKit injects a user script added
+        # before the navigation begins at the start of every page load, ahead
+        # of any page script; one added after load_uri begins may not apply to
+        # the current load. This is what makes ``window.picframe.send`` and the
+        # ``__request_config`` handshake reliable (the prior post-load
+        # ``evaluate_javascript`` injection ran on about:blank and was
+        # discarded when the real page loaded, so all input actions were
+        # silently no-ops) (#739).
+        self._install_js_bridge()
         # The shell connects to the picframe state WebSocket itself; we only
         # load the local file:// entry here.
         self._web_view.load_uri(shell_uri)
-        self._install_js_bridge()
         self._window.set_child(self._web_view)
         self._apply_transparency()
         self._window.present()
@@ -488,7 +498,21 @@ class OverlayWorker:
         return f"{base}?{params}"
 
     def _install_js_bridge(self) -> None:
-        """Inject ``window.picframe`` for shell<->worker bidirectional calls."""
+        """Install the shell<->worker JS bridge + diagnostics as a user script.
+
+        The bridge (``window.picframe.send``) and the console/error forwarder
+        must be present *before* the shell's own script runs and on every
+        navigation. Injecting them via ``evaluate_javascript`` after ``load_uri``
+        is racy — that call lands on the previous (about:blank) context and is
+        discarded when the real page loads, so the shell's ``__request_config``
+        handshake and all input actions became silent no-ops. A document-start
+        ``WebKit.UserScript`` added to the ``UserContentManager`` *before*
+        ``load_uri`` is injected by WebKit at the start of every page load,
+        ahead of any page script, fixing the race. The message handler is
+        registered first so the bridge's ``postMessage`` works immediately. The
+        script is idempotent (guards with ``window.__pfBridge``) so a ``reload``
+        does not stack handlers (#739).
+        """
         manager = self._web_view.get_user_content_manager()
 
         def _bridge_call(_web_view: Any, result: Any) -> None:
@@ -502,13 +526,43 @@ class OverlayWorker:
 
         manager.register_script_message_handler("picframe")
         self._web_view.connect("user-message-received", _bridge_call)
-        self._web_view.evaluate_javascript(
-            "window.picframe = { send: (a) => "
-            "webkit.messageHandlers.picframe.postMessage(JSON.stringify(a)) };",
-            -1,
-            None,
-            None,
-            None,
+
+        js = (
+            "(function(){"
+            "if(window.__pfBridge){return;}window.__pfBridge=true;"
+            # Bridge: window.picframe.send -> postMessage to the native handler.
+            "var P=window.picframe=window.picframe||{};"
+            "P.send=function(a){try{window.webkit.messageHandlers.picframe"
+            ".postMessage(JSON.stringify(a));}catch(e){"
+            "console.error('picframe bridge postMessage failed',e);}};"
+            # Console/error forwarding so a blocked/failing shell is visible in
+            # the journal (WebKitGTK does not surface page console to the embedder).
+            "var send=function(level,args){try{var t=Array.prototype.map.call(args,"
+            "function(a){try{return typeof a==='object'?JSON.stringify(a):String(a);}"
+            "catch(e){return String(a);}}).join(' ');"
+            "window.webkit.messageHandlers.picframe.postMessage("
+            "JSON.stringify({action:'__console',level:level,text:t}));}catch(e){}};"
+            "['log','info','warn','error','debug'].forEach(function(m){"
+            "var o=console[m]?console[m].bind(console):function(){};"
+            "console[m]=function(){send(m,arguments);"
+            "try{o.apply(console,arguments);}catch(e){}};});"
+            "window.addEventListener('error',function(e){"
+            "send('error',['window.onerror: '+(e.message||'')+' @ '"
+            "+(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0)"
+            "+(e.error&&e.error.stack?(' '+e.error.stack):'')]);});"
+            "window.addEventListener('unhandledrejection',function(e){"
+            "var r=e.reason;send('error',['unhandledrejection: '"
+            "+(r&&r.stack?r.stack:String(r))]);});"
+            "})();"
+        )
+        manager.add_script(
+            WebKit.UserScript(
+                js,
+                WebKit.UserContentInjectedFrames.ALL_FRAMES,
+                WebKit.UserScriptInjectionTime.START,
+                None,
+                None,
+            )
         )
 
     def _log_shell_html_resolution(self) -> None:
@@ -537,23 +591,17 @@ class OverlayWorker:
             logger.info("Overlay shell HTML resolved: %s", found)
 
     def _on_load_changed(self, _web_view: Any, load_event: Any) -> None:
-        """Log WebKit load progress; inject JS console forwarding on commit.
+        """Log WebKit load progress for the overlay shell.
 
-        WebKitGTK does not surface page ``console.*`` or uncaught errors to the
-        embedding process, so a shell whose ES module script is silently
-        blocked under ``file://`` leaves *no* trace in the journal (#739). At
-        ``COMMITTED`` (the document exists but deferred module scripts have not
-        yet run) we inject a classic-script override of ``console`` plus
-        ``window.onerror`` / ``unhandledrejection`` that forwards each message
-        to the registered ``picframe`` message handler, which
-        :meth:`_handle_bridge_message` logs. The injected script runs in the
-        page's main world via ``evaluate_javascript`` and so executes even when
-        the Vite ES module bundle itself is CORS-blocked.
+        The console/error forwarder and the ``window.picframe`` bridge are
+        installed once as a document-start user script in
+        :meth:`_install_js_bridge` (before ``load_uri``), so no per-load
+        injection is needed here — this handler only logs the load state so a
+        blocked or failed load is visible in the journal instead of silently
+        swallowed (#739).
         """
         name = _load_event_name(load_event)
         logger.info("Overlay WebView load state: %s", name)
-        if name == "COMMITTED":
-            self._inject_console_forwarding()
 
     def _on_load_failed(self, _web_view: Any, load_event: Any, error: Any) -> None:
         """Log a failed overlay load (e.g. a missing ``file://`` resource)."""
@@ -562,42 +610,6 @@ class OverlayWorker:
         except Exception:  # noqa: BLE001 - never let logging raise
             msg = str(error)
         logger.error("Overlay WebView load FAILED (%s): %s", _load_event_name(load_event), msg)
-
-    def _inject_console_forwarding(self) -> None:
-        """Inject a main-world classic script that forwards console + errors.
-
-        Reuses :meth:`_push_to_shell` (GLib main-thread ``evaluate_javascript``)
-        so it runs in the page's main world independent of the module-script
-        CORS state. Idempotent (guards with ``window.__pfConsoleFwd``) so a
-        ``reload`` does not stack handlers.
-        """
-        if self._web_view is None or not WEBKIT_AVAILABLE:
-            return
-        js = (
-            "(function(){"
-            "if(window.__pfConsoleFwd){return;}"
-            "window.__pfConsoleFwd=true;"
-            "var send=function(level,args){"
-            "try{var t=Array.prototype.map.call(args,function(a){"
-            "try{return typeof a==='object'?JSON.stringify(a):String(a);}"
-            "catch(e){return String(a);}}).join(' ');"
-            "window.webkit.messageHandlers.picframe.postMessage("
-            "JSON.stringify({action:'__console',level:level,text:t}));}"
-            "catch(e){}};"
-            "['log','info','warn','error','debug'].forEach(function(m){"
-            "var o=console[m]?console[m].bind(console):function(){};"
-            "console[m]=function(){send(m,arguments);"
-            "try{o.apply(console,arguments);}catch(e){}};});"
-            "window.addEventListener('error',function(e){"
-            "send('error',['window.onerror: '+(e.message||'')+' @ '"
-            "+(e.filename||'')+':'+(e.lineno||0)+':'+(e.colno||0)"
-            "+(e.error&&e.error.stack?(' '+e.error.stack):'')]);});"
-            "window.addEventListener('unhandledrejection',function(e){"
-            "var r=e.reason;send('error',['unhandledrejection: '"
-            "+(r&&r.stack?r.stack:String(r))]);});"
-            "})();"
-        )
-        self._push_to_shell(js)
 
     def _start_listener_async(self) -> None:
         """Accept the main process connection on a GLib idle callback."""
