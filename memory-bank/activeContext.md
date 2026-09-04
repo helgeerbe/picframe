@@ -40,6 +40,15 @@ strict clean, ruff clean, frontend vue-tsc + ESLint + Prettier clean).
 padding 0.5→0.25rem and flex gaps/margins so the scale-mode panel background hugs
 the content (no visible empty band at scale 1); documented the minimal-padding
 guidance in `overlay.md`. On-device re-test still pending.
+**Panel-hugs-content fix DONE (committed `43b9950`):** the prior padding tweak was
+invisible because the *real* issue was shell-side — the scale-mode panel covered
+the whole design rectangle (320x240 / 360x240) with `rgba(0,0,0,0.35)`. Fix: add a
+`.pf-plugin-panel--scale` class (transparent, no shadow) in `dock.ts` + `style.css`;
+each plugin paints its own readability background on its content container, which
+scales with `transform: scale()`: digital clock + weather get a tight rounded dark
+box, analog clock gets a filled disc (r=95) matching the face. Fill-mode panels
+keep the shell background. Rebuilt `overlay.html`; all gates green (970 pytest,
+mypy, ruff, vue-tsc, ESLint, Prettier). On-device visual re-test pending.
 
 **Phase A backend (committed `bebbbdf`–`91d5b27`):**
 - `core/models/overlay.py` — `plugin_layout_defaults`/`validate_plugin_layout`/
