@@ -48,18 +48,61 @@ body {
   pointer-events: none;
 }
 
-#pf-plugin-panel {
+/* Per-plugin panels (#752): one per visible plugin, positioned by a 9-anchor
+ * class (pf-anchor-<anchor>) with edge margin. Size + z-index are applied
+ * inline by the dock from the effective layout. */
+.pf-plugin-panel {
   position: absolute;
-  top: 12px;
-  right: 12px;
-  width: min(38vw, 480px);
-  height: min(46vh, 360px);
   border-radius: 12px;
   overflow: hidden;
   background: rgba(0, 0, 0, 0.35);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
   pointer-events: none;
   transition: opacity 0.4s ease;
+}
+
+/* Nine-anchor placement. Center/middle anchors use transforms; combined with
+ * the inline width/height these keep the panel flush to the chosen edge. */
+.pf-anchor-top-left {
+  top: 12px;
+  left: 12px;
+}
+.pf-anchor-top-center {
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.pf-anchor-top-right {
+  top: 12px;
+  right: 12px;
+}
+.pf-anchor-middle-left {
+  top: 50%;
+  left: 12px;
+  transform: translateY(-50%);
+}
+.pf-anchor-middle-center {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+.pf-anchor-middle-right {
+  top: 50%;
+  right: 12px;
+  transform: translateY(-50%);
+}
+.pf-anchor-bottom-left {
+  bottom: 12px;
+  left: 12px;
+}
+.pf-anchor-bottom-center {
+  bottom: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.pf-anchor-bottom-right {
+  bottom: 12px;
+  right: 12px;
 }
 
 .pf-plugin-frame {
@@ -128,8 +171,10 @@ body {
   display: block;
 }
 
-/* Idle hide: fade the plugin content (auto_hide mode only). */
-#overlay-root.pf-root--idle #pf-plugin-panel {
+/* Per-panel idle hide: each auto_hide panel fades on its own idle timer
+ * (#752). The shell adds `pf-plugin-panel--idle` to a panel after its
+ * `idle_hide_seconds`; persistent panels never receive it. */
+.pf-plugin-panel.pf-plugin-panel--idle {
   opacity: 0;
 }
 

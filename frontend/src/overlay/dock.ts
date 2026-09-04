@@ -1,26 +1,35 @@
 /**
- * Dock + visible-plugin rendering for the overlay shell (#739, item 10).
+ * Dock + visible-plugin rendering for the overlay shell (#739, item 10; #752
+ * multi-widget).
  *
- * The dock is a row of plugin icons; tapping an icon expands that plugin into
- * a panel (an iframe loading the plugin's `entry_uri`), tapping the active icon
- * again collapses it. The visible plugin and per-plugin config are sourced from
- * the shell config the worker pushes via `window.picframe.applyConfig`.
+ * The dock is a row of plugin icons; tapping an icon toggles that plugin's
+ * panel (an iframe loading the plugin's `entry_uri`) on screen — several
+ * panels can be visible at once (#752). The visible plugins and per-plugin
+ * config are sourced from the shell config the worker pushes via
+ * `window.picframe.applyConfig`; each plugin carries an effective `layout`
+ * (position/size/z-order) the shell applies per panel.
  */
 
-import type { OverlayShellConfig, PluginEntry } from './types'
+import type { OverlayAnchor, OverlayShellConfig, PluginEntry, PluginLayout } from './types'
 
 export interface DockCallbacks {
-  /** Fired when the user changes which plugin is expanded (or collapses). */
-  onVisiblePluginChange: (pluginId: string | null) => void
+  /** Fired when the user changes which plugins are expanded (or collapses all). */
+  onVisiblePluginsChange: (pluginIds: string[]) => void
 }
 
-const PANEL_ID = 'pf-plugin-panel'
 const DOCK_ID = 'pf-dock'
+/** Prefix for per-plugin panel element ids: `pf-plugin-panel-<id>`. */
+const PANEL_ID_PREFIX = 'pf-plugin-panel-'
+
+/** Default panel size when a layout omits width/height (matches the legacy
+ * `#pf-plugin-panel` rule: min(38vw,480px) × min(46vh,360px)). */
+const DEFAULT_PANEL_WIDTH = 'min(38vw, 480px)'
+const DEFAULT_PANEL_HEIGHT = 'min(46vh, 360px)'
 
 export class Dock {
   private plugins: PluginEntry[] = []
   private enabledPlugins: string[] = []
-  private visiblePlugin: string | null = null
+  private visiblePlugins: string[] = []
   private pluginConfig: Record<string, Record<string, unknown>> = {}
   private readonly root: HTMLElement
   private readonly callbacks: DockCallbacks
@@ -35,34 +44,48 @@ export class Dock {
     this.plugins = config._plugins ?? []
     this.enabledPlugins = config.enabled_plugins ?? []
     this.pluginConfig = config.plugin_config ?? {}
-    const requested = config.visible_plugin ?? null
-    this.visiblePlugin = this.isPluginEnabled(requested) ? requested : null
+    this.visiblePlugins = this.resolveVisiblePlugins(config)
     this.render()
   }
 
-  /** Expand/collapse a plugin by id (dock tap). */
+  /** Toggle a plugin in/out of the visible set (dock tap). */
   togglePlugin(pluginId: string): void {
-    const next = this.visiblePlugin === pluginId ? null : pluginId
-    this.visiblePlugin = next
+    const next = this.visiblePlugins.includes(pluginId)
+      ? this.visiblePlugins.filter(id => id !== pluginId)
+      : [...this.visiblePlugins, pluginId]
+    this.visiblePlugins = next
     this.render()
-    this.callbacks.onVisiblePluginChange(next)
+    this.callbacks.onVisiblePluginsChange(next)
   }
 
   /**
-   * Forward a `postMessage` to the currently expanded plugin's iframe. Used to
-   * push live media/state (e.g. `{ type: 'picframe:media', media }`) from the
-   * shell's `/ws/state` client into the active plugin without the plugin having
-   * to connect to the WebSocket itself.
+   * Forward a `postMessage` to every currently expanded plugin's iframe. Used
+   * to push live media/state (e.g. `{ type: 'picframe:media', media }`) from
+   * the shell's `/ws/state` client into all visible plugins without each
+   * plugin having to connect to the WebSocket itself.
    */
-  postToActivePlugin(message: unknown): void {
-    const panel = this.root.querySelector<HTMLElement>(`#${PANEL_ID}`)
-    const frame = panel?.querySelector<HTMLIFrameElement>('iframe')
-    if (!frame?.contentWindow) return
-    try {
-      frame.contentWindow.postMessage(message, '*')
-    } catch {
-      /* cross-origin frames may reject postMessage; ignore */
+  postToVisiblePlugins(message: unknown): void {
+    for (const id of this.visiblePlugins) {
+      const panel = this.root.querySelector<HTMLElement>(`#${CSS.escape(PANEL_ID_PREFIX + id)}`)
+      const frame = panel?.querySelector<HTMLIFrameElement>('iframe')
+      if (!frame?.contentWindow) continue
+      try {
+        frame.contentWindow.postMessage(message, '*')
+      } catch {
+        /* cross-origin frames may reject postMessage; ignore */
+      }
     }
+  }
+
+  private resolveVisiblePlugins(config: OverlayShellConfig): string[] {
+    const requested = config.visible_plugins
+    if (Array.isArray(requested)) {
+      return requested.filter(id => this.isPluginEnabled(id))
+    }
+    // Legacy single-visible-plugin model (pre-#752 config): the worker
+    // normalizer re-derived `visible_plugin` from `visible_plugins[0]`.
+    const legacy = config.visible_plugin ?? null
+    return legacy && this.isPluginEnabled(legacy) ? [legacy] : []
   }
 
   private isPluginEnabled(id: string | null | undefined): id is string {
@@ -80,26 +103,66 @@ export class Dock {
     }
     dock.replaceChildren(...enabled.map(p => this.buildIcon(p)))
 
-    let panel = this.root.querySelector<HTMLElement>(`#${PANEL_ID}`)
-    const current = this.visiblePlugin ? enabled.find(p => p.id === this.visiblePlugin) : undefined
-    if (!current) {
-      panel?.remove()
-      return
+    // Render one panel per visible plugin, ordered by layout z_order (stable
+    // for equal z so manifest/dock order wins), each positioned by its anchor.
+    const visible = enabled
+      .filter(p => this.visiblePlugins.includes(p.id))
+      .sort((a, b) => this.layoutOf(a).z_order - this.layoutOf(b).z_order)
+    const seen = new Set<string>()
+    for (const plugin of visible) {
+      seen.add(plugin.id)
+      this.renderPanel(plugin)
     }
+    // Remove panels for plugins no longer visible.
+    this.root
+      .querySelectorAll<HTMLElement>(`[id^="${CSS.escape(PANEL_ID_PREFIX)}"]`)
+      .forEach(panel => {
+        const id = panel.id.slice(PANEL_ID_PREFIX.length)
+        if (!seen.has(id)) panel.remove()
+      })
+  }
+
+  private renderPanel(plugin: PluginEntry): void {
+    const layout = this.layoutOf(plugin)
+    const panelId = PANEL_ID_PREFIX + plugin.id
+    let panel = this.root.querySelector<HTMLElement>(`#${CSS.escape(panelId)}`)
     if (!panel) {
       panel = document.createElement('div')
-      panel.id = PANEL_ID
+      panel.id = panelId
       panel.className = 'pf-plugin-panel'
       this.root.appendChild(panel)
     }
-    panel.replaceChildren(this.buildFrame(current))
+    this.applyPanelLayout(panel, layout)
+    panel.replaceChildren(this.buildFrame(plugin))
+  }
+
+  /** Apply the effective layout to a panel element (anchor class + size/z). */
+  private applyPanelLayout(panel: HTMLElement, layout: PluginLayout): void {
+    panel.className = `pf-plugin-panel pf-anchor-${layout.position}`
+    panel.style.zIndex = String(layout.z_order)
+    panel.style.width = layout.width != null ? `${layout.width}px` : DEFAULT_PANEL_WIDTH
+    panel.style.height = layout.height != null ? `${layout.height}px` : DEFAULT_PANEL_HEIGHT
+  }
+
+  private layoutOf(plugin: PluginEntry): PluginLayout {
+    return (
+      plugin.layout ?? {
+        position: (plugin.position as OverlayAnchor) ?? 'top-right',
+        width: null,
+        height: null,
+        content_align: null,
+        display_mode: plugin.default_display_mode ?? 'auto_hide',
+        idle_hide_seconds: null,
+        z_order: 0
+      }
+    )
   }
 
   private buildIcon(plugin: PluginEntry): HTMLElement {
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = 'pf-dock-icon'
-    if (plugin.id === this.visiblePlugin) btn.classList.add('pf-dock-icon--active')
+    if (this.visiblePlugins.includes(plugin.id)) btn.classList.add('pf-dock-icon--active')
     btn.setAttribute('aria-label', plugin.name || plugin.id)
     // Prefer the plugin's inline SVG (crisp, theme-aware via currentColor,
     // font-independent). Fall back to the emoji `icon` field when no SVG is
