@@ -202,10 +202,10 @@ overlay:
   enabled_plugins:
   - clock
   - meta
-  # Which plugin is currently expanded (null = dock only).
-  visible_plugin: clock
-  # Duration policy: "persistent" (visible until manual turn-off) | "auto_hide".
-  display_mode: auto_hide
+  # Which plugins are currently expanded on screen (multi-widget, #752). A list
+  # so several widgets can show at once; an empty list = dock only.
+  visible_plugins:
+  - clock
   # Which input device classes are active. Remove one to disable, e.g.
   # ["mouse","keyboard"] on a kiosk. Activity tracking counts any enabled event.
   enabled_input_types:
@@ -213,7 +213,13 @@ overlay:
   - mouse
   - keyboard
   # Seconds idle before fading to opacity 0 (wake on any input); photos too.
+  # Per-plugin idle_hide_seconds may override this (null = inherit this value).
   idle_hide_seconds: 5.0
   # Per-plugin user config map: { "<plugin_id>": { ... } }. Persisted here, not
   # in the plugin directory; effective config = manifest defaults <- db overrides.
   plugin_config: {}
+  # Per-plugin panel layout map (#752): { "<plugin_id>": { position, width,
+  # height, content_align, display_mode, idle_hide_seconds, z_order } }. Empty
+  # = each plugin uses its manifest defaults. display_mode is per-plugin here
+  # (persistent | auto_hide), replacing the old global display_mode.
+  plugin_layout: {}

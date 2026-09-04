@@ -115,6 +115,7 @@ def _descriptor_from_manifest(directory: Path, data: Any) -> PluginDescriptor:
         trigger=str(data.get("trigger", "icon")),
         position=str(data.get("position", "top-right")),
         size=size,
+        default_display_mode=str(data.get("default_display_mode", "auto_hide")),
         requires=requires,
         config_schema=config_schema,
         entry=str(data.get("entry", "index.html")),
