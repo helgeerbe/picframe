@@ -207,6 +207,8 @@
       "layout": {
         "title": "Panel-Layout",
         "position": "Position",
+        "contentAlign": "Textausrichtung",
+        "contentAlignInherit": "Position übernehmen",
         "displayMode": "Anzeigemodus",
         "width": "Breite",
         "height": "Höhe",

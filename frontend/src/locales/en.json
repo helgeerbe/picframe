@@ -207,6 +207,8 @@
       "layout": {
         "title": "Panel layout",
         "position": "Position",
+        "contentAlign": "Content alignment",
+        "contentAlignInherit": "Inherit position",
         "displayMode": "Display mode",
         "width": "Width",
         "height": "Height",

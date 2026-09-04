@@ -326,6 +326,23 @@ watch(
                   <div>
                     <label
                       class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
+                      :for="`layout-${plugin.id}-content-align`"
+                      >{{ t('appearance.overlay.layout.contentAlign') }}</label
+                    >
+                    <select
+                      :id="`layout-${plugin.id}-content-align`"
+                      v-model="ensureDraft(plugin)['content_align']"
+                      class="w-full rounded-md border border-gray-300 bg-white px-2 py-1.5 text-sm dark:border-gray-600 dark:bg-gray-800 dark:text-white"
+                    >
+                      <option value="">
+                        {{ t('appearance.overlay.layout.contentAlignInherit') }}
+                      </option>
+                      <option v-for="a in ANCHORS" :key="a" :value="a">{{ a }}</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-300"
                       :for="`layout-${plugin.id}-display-mode`"
                       >{{ t('appearance.overlay.layout.displayMode') }}</label
                     >
