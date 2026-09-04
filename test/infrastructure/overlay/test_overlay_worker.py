@@ -438,6 +438,62 @@ def test_build_shell_config_merges_plugins_and_env(tmp_path) -> None:
     assert "currentColor" in plugin["icon_svg"]
     assert plugin["entry_uri"].startswith("file://")
     assert plugin["entry_uri"].endswith("clock/index.html")
+    # #752: each plugin payload carries its effective (merged) layout +
+    # manifest default display mode so the shell applies a ready layout.
+    assert plugin["default_display_mode"] == "auto_hide"
+    assert plugin["layout"] == {
+        "position": "top-right",
+        "width": None,
+        "height": None,
+        "content_align": None,
+        "display_mode": "auto_hide",
+        "idle_hide_seconds": None,
+        "z_order": 0,
+    }
+
+
+def test_build_shell_config_effective_layout_merges_db_overrides(tmp_path) -> None:
+    """The per-plugin layout is the manifest defaults merged with persisted
+    user overrides from ``overlay.plugin_layout.<id>.*`` (#752), computed
+    server-side so the shell receives a ready-to-apply layout."""
+    plugin_dir = tmp_path / "plugins"
+    clock = plugin_dir / "clock"
+    clock.mkdir(parents=True)
+    (clock / "plugin.json").write_text(
+        json.dumps(
+            {
+                "id": "clock",
+                "name": "Clock",
+                "icon": "🕐",
+                "entry": "index.html",
+                "position": "top-right",
+                "size": {"w": 320, "h": 180},
+                "default_display_mode": "persistent",
+            }
+        )
+    )
+    (clock / "index.html").write_text("<html></html>")
+    worker = OverlayWorker(
+        socket_path="/tmp/x.sock",
+        html_dir=str(tmp_path / "html"),
+        plugin_dir=str(plugin_dir),
+        ws_port=9000,
+    )
+    worker._config = {
+        "enabled_plugins": ["clock"],
+        "visible_plugins": ["clock"],
+        "plugin_layout": {"clock": {"position": "bottom-left", "display_mode": "auto_hide"}},
+    }
+    cfg = worker._build_shell_config()
+    plugin = cfg["_plugins"][0]
+    assert plugin["default_display_mode"] == "persistent"
+    # Manifest defaults (size w/h, default_display_mode) <- db overrides
+    # (position, display_mode). width/height come from the manifest size since
+    # the db layout did not override them.
+    assert plugin["layout"]["position"] == "bottom-left"
+    assert plugin["layout"]["display_mode"] == "auto_hide"
+    assert plugin["layout"]["width"] == 320
+    assert plugin["layout"]["height"] == 180
 
 
 def test_build_shell_config_empty_plugin_dir(tmp_path) -> None:

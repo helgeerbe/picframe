@@ -29,7 +29,7 @@ from multiprocessing.connection import Connection, Listener
 from pathlib import Path
 from typing import Any
 
-from picframe.core.models.overlay import PluginDescriptor
+from picframe.core.models.overlay import PluginDescriptor, effective_plugin_layout
 from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_HIDE,
     INPUT_ACTION_NEXT,
@@ -275,15 +275,34 @@ class OverlayWorker:
         discovered plugin list (slim descriptors carrying the plugin ``entry``
         as a ``file://`` URI) plus the connection info the shell cannot derive
         from its ``file://`` origin: the picframe WS port and the plugin dir URI.
+
+        Each plugin payload carries an effective ``layout`` (#752): manifest
+        defaults merged with the persisted user overrides from
+        ``overlay.plugin_layout.<id>.*`` (computed server-side via
+        :func:`effective_plugin_layout`, the same merge the API
+        ``OverlayPluginResponse.layout`` uses) so the shell applies a
+        ready-to-use layout without re-implementing the merge.
         """
         config: dict[str, Any] = dict(self._config)
-        config["_plugins"] = [self._plugin_payload(p) for p in self._plugin_loader.list_plugins()]
+        db_layouts = config.get("plugin_layout")
+        if not isinstance(db_layouts, dict):
+            db_layouts = {}
+        config["_plugins"] = [
+            self._plugin_payload(p, db_layouts.get(p.id, {}))
+            for p in self._plugin_loader.list_plugins()
+        ]
         config["_ws_port"] = self.ws_port
         config["_plugin_uri"] = self._plugin_dir_uri()
         return config
 
-    def _plugin_payload(self, descriptor: PluginDescriptor) -> dict[str, Any]:
-        """Slim a ``PluginDescriptor`` to the fields the shell dock needs."""
+    def _plugin_payload(self, descriptor: PluginDescriptor, db_layout: Any) -> dict[str, Any]:
+        """Slim a ``PluginDescriptor`` to the fields the shell dock needs.
+
+        ``db_layout`` is the per-plugin persisted layout override (already
+        validated on write); :func:`effective_plugin_layout` merges it with the
+        manifest defaults so the payload carries a complete, ready-to-apply
+        ``layout`` (#752).
+        """
         entry = Path(descriptor.directory) / descriptor.entry
         return {
             "id": descriptor.id,
@@ -291,6 +310,8 @@ class OverlayWorker:
             "icon": descriptor.icon,
             "icon_svg": descriptor.icon_svg,
             "position": descriptor.position,
+            "default_display_mode": descriptor.default_display_mode,
+            "layout": effective_plugin_layout(descriptor, db_layout),
             "entry_uri": entry.resolve().absolute().as_uri(),
         }
 
@@ -304,11 +325,18 @@ class OverlayWorker:
             return
         config = self._build_shell_config()
         # Log the config the shell is about to receive. A clock missing with a
-        # working bridge shows up here: ``visible=None``/``enabled`` without the
-        # clock id is a config/db fault, distinct from a WebKit/JS fault (#739).
+        # working bridge shows up here: an empty ``visible_plugins`` (or legacy
+        # ``visible_plugin``) without the clock id is a config/db fault, distinct
+        # from a WebKit/JS fault (#739, #752).
+        visible_plugins = config.get("visible_plugins")
+        if not isinstance(visible_plugins, list):
+            # Legacy single-visible-plugin model (pre-#752 config): fall back to
+            # the bridged ``visible_plugin`` string the normalizer re-derived.
+            legacy = config.get("visible_plugin")
+            visible_plugins = [legacy] if isinstance(legacy, str) and legacy else []
         logger.info(
-            "Overlay push config: visible=%s enabled=%s plugins=%d",
-            config.get("visible_plugin"),
+            "Overlay push config: visible_plugins=%s enabled=%s plugins=%d",
+            visible_plugins,
             config.get("enabled_plugins"),
             len(config.get("_plugins", [])),
         )
