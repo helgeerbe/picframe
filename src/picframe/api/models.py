@@ -387,6 +387,20 @@ class PluginLayout(BaseModel):
     z_order: int = 0
 
 
+class ContentOffset(BaseModel):
+    """Per-edge content offset (px) inside each plugin panel, shared by all
+    plugins. Each anchor picks up the relevant edges: ``top-left`` uses
+    ``top``+``left``, ``middle-right`` uses ``right``, ``middle-center`` uses
+    none. Values are design-space pixels (pre-``transform: scale()``), so the
+    offset scales with the widget. ``0`` = flush to the panel edge.
+    """
+
+    top: int = 8
+    bottom: int = 8
+    left: int = 8
+    right: int = 8
+
+
 class OverlayConfig(BaseModel):
     """Pydantic model for the ``overlay`` config section (#739, #752).
 
@@ -415,6 +429,7 @@ class OverlayConfig(BaseModel):
     idle_hide_seconds: float = 5.0
     plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
     plugin_layout: dict[str, PluginLayout] = Field(default_factory=dict)
+    content_offset: ContentOffset = Field(default_factory=ContentOffset)
 
 
 class OverlayPluginResponse(BaseModel):

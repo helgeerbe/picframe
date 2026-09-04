@@ -418,6 +418,15 @@
         "label": "Leerlauf-Verblassen",
         "help": "Sekunden Leerlauf bevor das Overlay ausblendt. 0 hält es stets sichtbar. Jede Eingabe weckt es."
       },
+      "contentOffset": {
+        "label": "Inhalt-Versatz",
+        "help": "Randabstand (px) pro Seite innerhalb jedes Plugin-Panels, gemeinsam für alle Plugins. Jede Ankerposition nutzt die entsprechenden Kanten (oben-links nutzt oben+links, Mitte-rechts nutzt rechts, Mitte-Mitte keine). 0 = bündig zur Panelkante.",
+        "top": "Oben",
+        "bottom": "Unten",
+        "left": "Links",
+        "right": "Rechts",
+        "px": "px"
+      },
       "saved": "Overlay-Einstellungen gespeichert.",
       "failed": "Overlay-Einstellungen konnten nicht gespeichert werden.",
       "layout": {

@@ -10,7 +10,13 @@
  * (position/size/z-order) the shell applies per panel.
  */
 
-import type { OverlayAnchor, OverlayShellConfig, PluginEntry, PluginLayout } from './types'
+import type {
+  ContentOffset,
+  OverlayAnchor,
+  OverlayShellConfig,
+  PluginEntry,
+  PluginLayout
+} from './types'
 
 export interface DockCallbacks {
   /** Fired when the user changes which plugins are expanded (or collapses all). */
@@ -31,6 +37,9 @@ export class Dock {
   private enabledPlugins: string[] = []
   private visiblePlugins: string[] = []
   private pluginConfig: Record<string, Record<string, unknown>> = {}
+  /** Per-edge content offset (px), shared by all plugins; forwarded to each
+   * plugin iframe so it can pad its content from the matching panel edge. */
+  private contentOffset: ContentOffset = { top: 0, bottom: 0, left: 0, right: 0 }
   private readonly root: HTMLElement
   private readonly callbacks: DockCallbacks
 
@@ -44,6 +53,7 @@ export class Dock {
     this.plugins = config._plugins ?? []
     this.enabledPlugins = config.enabled_plugins ?? []
     this.pluginConfig = config.plugin_config ?? {}
+    this.contentOffset = config.content_offset ?? { top: 0, bottom: 0, left: 0, right: 0 }
     this.visiblePlugins = this.resolveVisiblePlugins(config)
     this.render()
   }
@@ -215,8 +225,16 @@ export class Dock {
         frame.contentWindow?.postMessage(
           // #752: pass the panel anchor so the plugin can align its content to
           // the same corner (the iframe is a separate document; shell CSS can't
-          // reach inside it). Plugins without a handler keep centering.
-          { type: 'picframe:config', pluginId: plugin.id, config: cfg, anchor: layout.position },
+          // reach inside it). Plugins without a handler keep centering. The
+          // per-edge content_offset lets the plugin pad its content from the
+          // matching panel edge; defaults to 0 (flush) when absent.
+          {
+            type: 'picframe:config',
+            pluginId: plugin.id,
+            config: cfg,
+            anchor: layout.position,
+            content_offset: this.contentOffset
+          },
           '*'
         )
       } catch {

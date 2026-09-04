@@ -181,3 +181,8 @@ def test_default_config_yaml_validates_through_app_config() -> None:
     assert config.overlay.idle_hide_seconds == 5.0
     assert config.overlay.plugin_config == {}
     assert config.overlay.plugin_layout == {}
+    # #752: per-edge content offset defaults (8 px on all edges).
+    assert config.overlay.content_offset.top == 8
+    assert config.overlay.content_offset.bottom == 8
+    assert config.overlay.content_offset.left == 8
+    assert config.overlay.content_offset.right == 8

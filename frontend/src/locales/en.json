@@ -418,6 +418,15 @@
         "label": "Idle fade",
         "help": "Seconds idle before the overlay fades out. Set to 0 to keep it always visible. Any input wakes it."
       },
+      "contentOffset": {
+        "label": "Content offset",
+        "help": "Per-edge padding (px) inside each plugin panel, shared by all plugins. Each anchor picks up the relevant edges (top-left uses top+left, middle-right uses right, middle-center uses none). 0 = flush to the panel edge.",
+        "top": "Top",
+        "bottom": "Bottom",
+        "left": "Left",
+        "right": "Right",
+        "px": "px"
+      },
       "saved": "Overlay settings saved.",
       "failed": "Could not save overlay settings.",
       "layout": {

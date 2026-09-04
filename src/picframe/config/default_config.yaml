@@ -223,3 +223,11 @@ overlay:
   # = each plugin uses its manifest defaults. display_mode is per-plugin here
   # (persistent | auto_hide), replacing the old global display_mode.
   plugin_layout: {}
+  # Per-edge content offset (px) inside each plugin panel, shared by all
+  # plugins. Each anchor picks up the relevant edges (top-left -> top+left,
+  # middle-right -> right, middle-center -> none). 0 = flush to the panel edge.
+  content_offset:
+    top: 8
+    bottom: 8
+    left: 8
+    right: 8

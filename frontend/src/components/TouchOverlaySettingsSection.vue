@@ -58,6 +58,17 @@ const overlay = reactive({
   idle_hide_seconds: 5
 })
 
+/** Per-edge content offset (px), shared by all plugins. Auto-saves via
+ *  `savePartialConfig`; not part of the schema-driven working copy. Each anchor
+ *  picks up the relevant edges (top-left -> top+left, middle-right -> right,
+ *  middle-center -> none). */
+const contentOffset = reactive({
+  top: 8,
+  bottom: 8,
+  left: 8,
+  right: 8
+})
+
 /** Nine anchors for the position select. */
 const ANCHORS = [
   'top-left',
@@ -171,6 +182,11 @@ const asNumber = (value: unknown, fallback: number) => {
 const syncFromConfig = () => {
   const ov = config.value?.overlay || {}
   overlay.idle_hide_seconds = asNumber(ov.idle_hide_seconds, 5)
+  const co = ov.content_offset
+  contentOffset.top = co ? asNumber(co.top, 8) : 8
+  contentOffset.bottom = co ? asNumber(co.bottom, 8) : 8
+  contentOffset.left = co ? asNumber(co.left, 8) : 8
+  contentOffset.right = co ? asNumber(co.right, 8) : 8
 }
 
 /** Auto-save the global idle fade through `savePartialConfig` (#754). */
@@ -181,6 +197,32 @@ const saveIdle = async () => {
   try {
     await configStore.savePartialConfig({
       overlay: { idle_hide_seconds: Number(overlay.idle_hide_seconds) }
+    })
+    showStatus('success', t('settings.touchOverlay.saved'))
+  } catch (e) {
+    console.error(e)
+    showStatus('danger', t('settings.touchOverlay.failed'))
+    syncFromConfig()
+  } finally {
+    isSaving.value = false
+  }
+}
+
+/** Auto-save the per-edge content offset through `savePartialConfig` (#752). */
+const saveContentOffset = async () => {
+  if (isSaving.value) return
+  isSaving.value = true
+  statusMessage.value = ''
+  try {
+    await configStore.savePartialConfig({
+      overlay: {
+        content_offset: {
+          top: Math.max(0, Math.round(Number(contentOffset.top) || 0)),
+          bottom: Math.max(0, Math.round(Number(contentOffset.bottom) || 0)),
+          left: Math.max(0, Math.round(Number(contentOffset.left) || 0)),
+          right: Math.max(0, Math.round(Number(contentOffset.right) || 0))
+        }
+      }
     })
     showStatus('success', t('settings.touchOverlay.saved'))
   } catch (e) {
@@ -279,7 +321,7 @@ onMounted(async () => {
 })
 
 watch(
-  () => [config.value?.overlay?.idle_hide_seconds],
+  () => [config.value?.overlay?.idle_hide_seconds, config.value?.overlay?.content_offset],
   () => {
     if (!isSaving.value) syncFromConfig()
   }
@@ -343,6 +385,46 @@ watch(
           unit="s"
           @update:model-value="saveIdle()"
         />
+      </FieldRow>
+
+      <FieldRow
+        :label="t('settings.touchOverlay.contentOffset.label')"
+        :help="t('settings.touchOverlay.contentOffset.help')"
+      >
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <NumberField
+            v-model="contentOffset.top"
+            :min="0"
+            :step="1"
+            :unit="t('settings.touchOverlay.contentOffset.px')"
+            :aria-label="t('settings.touchOverlay.contentOffset.top')"
+            @update:model-value="saveContentOffset()"
+          />
+          <NumberField
+            v-model="contentOffset.bottom"
+            :min="0"
+            :step="1"
+            :unit="t('settings.touchOverlay.contentOffset.px')"
+            :aria-label="t('settings.touchOverlay.contentOffset.bottom')"
+            @update:model-value="saveContentOffset()"
+          />
+          <NumberField
+            v-model="contentOffset.left"
+            :min="0"
+            :step="1"
+            :unit="t('settings.touchOverlay.contentOffset.px')"
+            :aria-label="t('settings.touchOverlay.contentOffset.left')"
+            @update:model-value="saveContentOffset()"
+          />
+          <NumberField
+            v-model="contentOffset.right"
+            :min="0"
+            :step="1"
+            :unit="t('settings.touchOverlay.contentOffset.px')"
+            :aria-label="t('settings.touchOverlay.contentOffset.right')"
+            @update:model-value="saveContentOffset()"
+          />
+        </div>
       </FieldRow>
     </SettingsSection>
 

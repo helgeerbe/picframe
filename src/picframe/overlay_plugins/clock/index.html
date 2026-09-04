@@ -21,6 +21,15 @@
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       display: flex; align-items: center; justify-content: center;
       -webkit-user-select: none; user-select: none; overflow: hidden;
+      /* Per-edge content offset (px), set from the picframe:config postMessage
+         content_offset. Each anchor picks up the relevant edges automatically
+         (top-left -> top+left, middle-right -> right, middle-center -> none):
+         the flex alignment rules above position content inside this padding
+         box. Design-space px, so it scales with `transform: scale()`. #752 */
+      padding-top: var(--pf-offset-top, 0px);
+      padding-bottom: var(--pf-offset-bottom, 0px);
+      padding-left: var(--pf-offset-left, 0px);
+      padding-right: var(--pf-offset-right, 0px);
     }
     /* Anchor-driven content alignment (#752). The shell hands the panel anchor
        (e.g. "top-left") to the plugin via the picframe:config postMessage; the
@@ -149,6 +158,15 @@
         var data = event.data || {};
         if (data.type === "picframe:config" && data.config) applyConfig(data.config);
         if (data.anchor) document.body.dataset.anchor = data.anchor;
+        // Per-edge content offset (px): each anchor picks up the relevant edges
+        // via body padding (see CSS above). Defaults to 0 (flush) when absent.
+        if (data.content_offset) {
+          var o = data.content_offset;
+          document.body.style.setProperty("--pf-offset-top", (o.top || 0) + "px");
+          document.body.style.setProperty("--pf-offset-bottom", (o.bottom || 0) + "px");
+          document.body.style.setProperty("--pf-offset-left", (o.left || 0) + "px");
+          document.body.style.setProperty("--pf-offset-right", (o.right || 0) + "px");
+        }
       });
     })();
   </script>

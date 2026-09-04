@@ -102,10 +102,24 @@ export interface OverlayShellConfig {
   enabled_input_types?: InputType[]
   idle_hide_seconds?: number
   transparent?: boolean
+  /** Per-edge content offset (px), shared by all plugins; forwarded to each
+   * plugin's iframe via the `picframe:config` postMessage so the plugin can
+   * pad its content from the matching panel edge. */
+  content_offset?: ContentOffset
   plugin_config?: Record<string, Record<string, unknown>>
   _plugins?: PluginEntry[]
   _ws_port?: number
   _plugin_uri?: string
+}
+
+/** Per-edge content offset (px) inside each plugin panel, shared by all
+ * plugins. Each anchor picks up the relevant edges (top-left -> top+left,
+ * middle-right -> right, middle-center -> none). */
+export interface ContentOffset {
+  top: number
+  bottom: number
+  left: number
+  right: number
 }
 
 /** Minimal slice of the current media item the shell forwards to plugins. */

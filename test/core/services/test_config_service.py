@@ -280,6 +280,44 @@ def test_handle_set_config_overlay_publishes_overlay_config_changed_event(
     assert overlay_event.updated_plugin_id is None
 
 
+def test_handle_set_config_content_offset_persists_and_publishes(
+    config_service, mock_repo, mock_publisher
+):
+    """A partial content_offset save flattens to per-edge overlay.content_offset.*
+    keys and the OverlayConfigChangedEvent carries the merged content_offset
+    (#752)."""
+    # The DB holds the merged post-write state (top/left just changed, the
+    # other edges keep their seed defaults).
+    mock_repo.get_all_app_config.return_value = {
+        "overlay.enabled": True,
+        "overlay.content_offset.top": 16,
+        "overlay.content_offset.bottom": 8,
+        "overlay.content_offset.left": 4,
+        "overlay.content_offset.right": 8,
+    }
+    event = CommandEvent(
+        command=Command.SET_CONFIG,
+        payload={"overlay": {"content_offset": {"top": 16, "left": 4}}},
+    )
+
+    config_service._handle_command_event(event)
+
+    # Only the supplied edges are written; the others stay (partial update).
+    mock_repo.set_app_config.assert_any_call("overlay.content_offset.top", 16)
+    mock_repo.set_app_config.assert_any_call("overlay.content_offset.left", 4)
+
+    from picframe.core.events.dto import OverlayConfigChangedEvent
+
+    published = [call.args[0] for call in mock_publisher.publish.call_args_list]
+    overlay_events = [e for e in published if isinstance(e, OverlayConfigChangedEvent)]
+    assert len(overlay_events) == 1
+    co = overlay_events[0].overlay_config["content_offset"]
+    assert co["top"] == 16
+    assert co["left"] == 4
+    assert co["bottom"] == 8
+    assert co["right"] == 8
+
+
 def test_handle_set_config_plugin_config_reports_updated_plugin_id(
     config_service, mock_repo, mock_publisher
 ):

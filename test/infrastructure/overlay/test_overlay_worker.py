@@ -504,6 +504,32 @@ def test_build_shell_config_effective_layout_merges_db_overrides(tmp_path) -> No
     assert plugin["size"] == {"w": 320, "h": 180}
 
 
+def test_build_shell_config_forwards_content_offset(tmp_path) -> None:
+    """The per-edge content_offset (shared by all plugins) is forwarded
+    verbatim into the shell config so the dock can hand it to each plugin
+    via the picframe:config postMessage (#752)."""
+    plugin_dir = tmp_path / "plugins"
+    clock = plugin_dir / "clock"
+    clock.mkdir(parents=True)
+    (clock / "plugin.json").write_text(
+        json.dumps({"id": "clock", "name": "Clock", "entry": "index.html"})
+    )
+    (clock / "index.html").write_text("<html></html>")
+    worker = OverlayWorker(
+        socket_path="/tmp/x.sock",
+        html_dir=str(tmp_path / "html"),
+        plugin_dir=str(plugin_dir),
+        ws_port=9000,
+    )
+    worker._config = {
+        "enabled_plugins": ["clock"],
+        "visible_plugins": ["clock"],
+        "content_offset": {"top": 8, "bottom": 8, "left": 8, "right": 8},
+    }
+    cfg = worker._build_shell_config()
+    assert cfg["content_offset"] == {"top": 8, "bottom": 8, "left": 8, "right": 8}
+
+
 def test_build_shell_config_empty_plugin_dir(tmp_path) -> None:
     """A missing/empty plugin dir yields an empty plugin list, not an error."""
     worker = OverlayWorker(
