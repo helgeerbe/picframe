@@ -6,6 +6,14 @@
  * dock, idle-hide content fading, the `/ws/state` client, and the worker JS
  * bridge. The worker pushes the live config via `window.picframe.applyConfig`;
  * the shell boots by asking for it via `__request_config`.
+ *
+ * Visibility model: the dock and the plugin content fade on **separate**
+ * timers. The dock is navigation chrome — it *always* auto-hides after the
+ * idle interval (defaulting to {@link DOCK_IDLE_FALLBACK_SECONDS} when
+ * `idle_hide_seconds` is 0), so a `persistent`-mode clock still shows but the
+ * icon bar does not linger. The plugin content follows `display_mode`
+ * (`persistent` = always visible; `auto_hide` = fades after
+ * `idle_hide_seconds`). Both timers reset on any enabled input event.
  */
 
 import { registerApplyConfig, sendAction } from './bridge'
@@ -16,6 +24,8 @@ import { StateClient } from './state-client'
 import type { DisplayMode, InputAction, InputType, OverlayShellConfig } from './types'
 
 const DEFAULT_IDLE_HIDE_SECONDS = 5
+/** Dock fallback when `idle_hide_seconds` is 0 (content stays, dock still hides). */
+const DOCK_IDLE_FALLBACK_SECONDS = 5
 
 export class OverlayShell {
   private readonly root: HTMLElement
@@ -25,6 +35,7 @@ export class OverlayShell {
   private router: InputRouter
   private state: StateClient | null = null
   private idleTimer: number | null = null
+  private dockIdleTimer: number | null = null
   private displayMode: DisplayMode = 'auto_hide'
   private idleHideSeconds = DEFAULT_IDLE_HIDE_SECONDS
 
@@ -78,6 +89,7 @@ export class OverlayShell {
     this.router.detach()
     this.state?.stop()
     this.clearIdle()
+    this.clearDockIdle()
   }
 
   private applyConfig(config: OverlayShellConfig): void {
@@ -93,22 +105,42 @@ export class OverlayShell {
     this.wake()
   }
 
-  /** Reset the idle timer and reveal the content (dock + visible plugin). */
+  /**
+   * Reset both idle timers and reveal the dock + plugin content. The content
+   * timer only runs in `auto_hide` mode; the dock timer always runs (the dock
+   * is chrome and always auto-hides), using `idle_hide_seconds` or the dock
+   * fallback when `idle_hide_seconds` is 0.
+   */
   private wake(): void {
-    this.root.classList.remove('pf-root--idle')
+    this.root.classList.remove('pf-root--idle', 'pf-root--dock-idle')
     this.clearIdle()
+    this.clearDockIdle()
+    // Plugin content: fades only in auto_hide mode (persistent = always visible).
     if (this.displayMode === 'auto_hide' && this.idleHideSeconds > 0) {
       this.idleTimer = window.setTimeout(
         () => this.root.classList.add('pf-root--idle'),
         Math.max(0, this.idleHideSeconds) * 1000
       )
     }
+    // Dock: always auto-hides. Reuse idle_hide_seconds, or the fallback when 0.
+    const dockSeconds = this.idleHideSeconds > 0 ? this.idleHideSeconds : DOCK_IDLE_FALLBACK_SECONDS
+    this.dockIdleTimer = window.setTimeout(
+      () => this.root.classList.add('pf-root--dock-idle'),
+      Math.max(0, dockSeconds) * 1000
+    )
   }
 
   private clearIdle(): void {
     if (this.idleTimer !== null) {
       window.clearTimeout(this.idleTimer)
       this.idleTimer = null
+    }
+  }
+
+  private clearDockIdle(): void {
+    if (this.dockIdleTimer !== null) {
+      window.clearTimeout(this.dockIdleTimer)
+      this.dockIdleTimer = null
     }
   }
 }

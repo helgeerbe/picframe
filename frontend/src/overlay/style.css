@@ -105,8 +105,15 @@ body {
   transform: scale(1.08);
 }
 
-/* Idle hide: fade the dock + visible plugin, keep the veil active. */
-#overlay-root.pf-root--idle #pf-dock,
+/* Idle hide: fade the plugin content (auto_hide mode only). */
 #overlay-root.pf-root--idle #pf-plugin-panel {
   opacity: 0;
+}
+
+/* Dock auto-hide: the dock is navigation chrome, not content. It always
+ * fades after the idle interval regardless of display_mode, and frees its hit
+ * area (pointer-events: none) so a wake tap lands on the veil underneath. */
+#overlay-root.pf-root--dock-idle #pf-dock {
+  opacity: 0;
+  pointer-events: none;
 }
