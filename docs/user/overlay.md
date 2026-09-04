@@ -47,7 +47,6 @@ The full `overlay` config section (all keys below) is also writable directly:
 | `overlay.display_mode` | `auto_hide` / `persistent` | `auto_hide` fades the overlay to transparent after inactivity; `persistent` keeps it visible until you turn it off. |
 | `overlay.idle_hide_seconds` | seconds | Seconds of inactivity before the overlay fades to transparent (auto_hide mode only; `0` keeps it always visible). Any input wakes it. |
 | `overlay.enabled_input_types` | `touch`, `mouse`, `keyboard` | Which device classes are active. Uncheck one to disable it (e.g. touch on a kiosk). |
-| `overlay.transparent` | `true` / `false` | Whether the surface is transparent (recommended). |
 | `overlay.visible_plugin` | plugin id or `null` | Which plugin is currently expanded; `null` = dock only. |
 | `overlay.enabled_plugins` | list of ids | Which plugins are loaded/active. |
 | `overlay.plugin_dir` | path | Directory scanned for plugin sub-directories. |

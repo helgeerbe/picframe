@@ -362,7 +362,6 @@ class OverlayConfig(BaseModel):
     display_mode: Literal["persistent", "auto_hide"] = "auto_hide"
     enabled_input_types: list[str] = Field(default_factory=lambda: ["touch", "mouse", "keyboard"])
     idle_hide_seconds: float = 5.0
-    transparent: bool = True
     plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
 
 

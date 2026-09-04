@@ -887,7 +887,6 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
         "overlay.display_mode": "persistent",
         "overlay.idle_hide_seconds": 0.0,
         "overlay.enabled_input_types": ["touch", "mouse"],
-        "overlay.transparent": False,
     }
     mock_publisher = MagicMock()
     app = create_app(
@@ -909,7 +908,6 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     assert data["overlay"]["display_mode"] == "persistent"
     assert "auto_hide_seconds" not in data["overlay"]
     assert data["overlay"]["enabled_input_types"] == ["touch", "mouse"]
-    assert data["overlay"]["transparent"] is False
     # Advanced/plugin-specific keys stay on PUT /api/config, not workflow-config.
     assert "backend" not in data["overlay"]
     assert "plugin_dir" not in data["overlay"]

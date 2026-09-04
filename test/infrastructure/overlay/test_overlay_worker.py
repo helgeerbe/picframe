@@ -647,7 +647,6 @@ def test_apply_transparency_makes_surface_transparent(
     monkeypatch.setattr(mod, "Gtk", fake_gtk)
     monkeypatch.setattr(mod, "Gdk", fake_gdk)
     worker = make_worker()
-    worker._config = {"transparent": True}
     window = MagicMock()
     web_view = MagicMock()
     worker._window = window
@@ -664,31 +663,6 @@ def test_apply_transparency_makes_surface_transparent(
     assert web_view.set_background_color.call_args[0][0] is fake_gdk.RGBA.return_value
 
 
-def test_apply_transparency_skipped_when_disabled(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """``transparent: false`` leaves the (opaque) surface untouched."""
-    import picframe.infrastructure.overlay.overlay_worker as mod
-
-    fake_gtk = MagicMock()
-    fake_gdk = MagicMock()
-    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
-    monkeypatch.setattr(mod, "Gtk", fake_gtk)
-    monkeypatch.setattr(mod, "Gdk", fake_gdk)
-    worker = make_worker()
-    worker._config = {"transparent": False}
-    window = MagicMock()
-    web_view = MagicMock()
-    worker._window = window
-    worker._web_view = web_view
-
-    worker._apply_transparency()
-
-    fake_gtk.CssProvider.assert_not_called()
-    web_view.set_background_color.assert_not_called()
-    window.connect.assert_not_called()
-
-
 def test_apply_transparency_noop_in_headless_mode(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -697,7 +671,6 @@ def test_apply_transparency_noop_in_headless_mode(
 
     monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", False)
     worker = make_worker()
-    worker._config = {"transparent": True}
     worker._window = MagicMock()
     worker._web_view = MagicMock()
 

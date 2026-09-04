@@ -25,8 +25,7 @@ let statusTimer: number | undefined
 
 const overlay = reactive({
   display_mode: 'auto_hide' as 'persistent' | 'auto_hide',
-  idle_hide_seconds: 5,
-  transparent: true
+  idle_hide_seconds: 5
 })
 
 const overlayEnabled = computed(() => config.value?.overlay?.enabled === true)
@@ -59,7 +58,6 @@ const syncFromConfig = () => {
   const ov = config.value?.overlay || {}
   overlay.display_mode = ov.display_mode === 'persistent' ? 'persistent' : 'auto_hide'
   overlay.idle_hide_seconds = asNumber(ov.idle_hide_seconds, 5)
-  overlay.transparent = ov.transparent !== false
 }
 
 const save = async () => {
@@ -70,8 +68,7 @@ const save = async () => {
     await configStore.savePartialConfig({
       overlay: {
         display_mode: overlay.display_mode,
-        idle_hide_seconds: Number(overlay.idle_hide_seconds),
-        transparent: Boolean(overlay.transparent)
+        idle_hide_seconds: Number(overlay.idle_hide_seconds)
       }
     })
     showStatus('success', t('appearance.overlay.saved'))
@@ -183,13 +180,6 @@ watch(
             unit="s"
             @update:model-value="save()"
           />
-        </FieldRow>
-
-        <FieldRow
-          :label="t('appearance.overlay.transparent.label')"
-          :help="t('appearance.overlay.transparent.help')"
-        >
-          <ToggleSwitch v-model="overlay.transparent" @update:model-value="save()" />
         </FieldRow>
       </div>
 

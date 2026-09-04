@@ -450,20 +450,15 @@ class OverlayWorker:
 
         WebKitGTK defaults to an opaque white surface, so without this the clock
         (white text) renders invisible and the overlay hides the photo beneath
-        (see ``docs/dev/architecture/overlay.md`` §1 and the
-        ``overlay.transparent`` config). The window background, the WebKit
-        background, and the Wayland surface opacity hint are all set
-        transparent. Gated by ``overlay.transparent`` (default ``true``).
+        (see ``docs/dev/architecture/overlay.md`` §1). The window background, the
+        WebKit background, and the Wayland surface opacity hint are all set
+        transparent. The overlay's whole purpose is to float above pi3d/video,
+        so this is unconditional — there is no config knob to make it opaque.
 
-        Applied once at surface build time (before the first ``set_config`` IPC
-        arrives) using the config default, so a ``transparent: false`` override
-        takes effect on the next service restart. No-op in headless mode (no
-        surface / WebKitGTK absent) so the GTK-free IPC plumbing stays
-        unit-testable.
+        Applied once at surface build time. No-op in headless mode (no surface /
+        WebKitGTK absent) so the GTK-free IPC plumbing stays unit-testable.
         """
         if self._window is None or self._web_view is None or not WEBKIT_AVAILABLE:
-            return
-        if not bool(self._config.get("transparent", True)):
             return
         # Transparent window background via a CSS provider. Use the GTK4
         # non-deprecated ``add_provider_for_display`` (the per-widget

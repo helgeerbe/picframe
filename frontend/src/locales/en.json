@@ -202,10 +202,6 @@
         "label": "Idle fade",
         "help": "Seconds idle before the overlay fades out. Set to 0 to keep it always visible. Any input wakes it."
       },
-      "transparent": {
-        "label": "Transparent surface",
-        "help": "Keep the overlay surface transparent so photos and video show through."
-      },
       "saved": "Overlay appearance saved.",
       "failed": "Could not save overlay appearance.",
       "plugins": {

@@ -202,10 +202,6 @@
         "label": "Leerlauf-Verblassen",
         "help": "Sekunden Leerlauf bevor das Overlay ausblendt. 0 hält es stets sichtbar. Jede Eingabe weckt es."
       },
-      "transparent": {
-        "label": "Transparente Oberfläche",
-        "help": "Overlay-Oberfläche transparent halten, sodass Fotos und Video durchscheinen."
-      },
       "saved": "Overlay-Darstellung gespeichert.",
       "failed": "Overlay-Darstellung konnte nicht gespeichert werden.",
       "plugins": {

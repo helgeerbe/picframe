@@ -198,7 +198,6 @@ PUBLIC_WORKFLOW_KEYS = {
         "display_mode",
         "idle_hide_seconds",
         "enabled_input_types",
-        "transparent",
     },
 }
 

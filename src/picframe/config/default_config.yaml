@@ -214,8 +214,6 @@ overlay:
   - keyboard
   # Seconds idle before fading to opacity 0 (wake on any input); photos too.
   idle_hide_seconds: 5.0
-  # Keep the overlay surface transparent so pi3d/video shows through.
-  transparent: true
   # Per-plugin user config map: { "<plugin_id>": { ... } }. Persisted here, not
   # in the plugin directory; effective config = manifest defaults <- db overrides.
   plugin_config: {}
