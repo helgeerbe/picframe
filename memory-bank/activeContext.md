@@ -36,6 +36,10 @@ scale`, no aspect gaps); plugins *without* `size` (meta/Photo Info) are in
 **fill mode** (Width/Height enlarge the panel; the Leaflet map absorbs extra
 space). `content_align` was removed. All gates green (970 pytest pass, mypy
 strict clean, ruff clean, frontend vue-tsc + ESLint + Prettier clean).
+**CSS spacing fix DONE (committed `958b1d1`):** tightened clock/weather container
+padding 0.5→0.25rem and flex gaps/margins so the scale-mode panel background hugs
+the content (no visible empty band at scale 1); documented the minimal-padding
+guidance in `overlay.md`. On-device re-test still pending.
 
 **Phase A backend (committed `bebbbdf`–`91d5b27`):**
 - `core/models/overlay.py` — `plugin_layout_defaults`/`validate_plugin_layout`/
