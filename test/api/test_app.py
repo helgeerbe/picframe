@@ -163,6 +163,7 @@ def test_openapi_documents_rest_response_models(client: ASGITestClient) -> None:
         ("/api/auth/config", "put"): "BasicAuthConfigResponse",
         ("/api/overlay/plugins/{plugin_id}/config", "get"): "OverlayPluginConfigResponse",
         ("/api/overlay/plugins/{plugin_id}/config", "put"): "OverlayPluginConfigUpdateResponse",
+        ("/api/overlay/plugins/{plugin_id}/layout", "put"): "OverlayPluginLayoutUpdateResponse",
         ("/api/config/import-yaml", "post"): "StatusMessageResponse",
         ("/api/config", "put"): "StatusMessageResponse",
     }
@@ -905,20 +906,20 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     assert "log_level" not in data["model"]
     assert data["viewer"]["text_overlay_format"] == "title location"
     assert data["overlay"]["enabled"] is True
-    assert data["overlay"]["display_mode"] == "persistent"
-    assert "auto_hide_seconds" not in data["overlay"]
+    assert "display_mode" not in data["overlay"]
     assert data["overlay"]["enabled_input_types"] == ["touch", "mouse"]
     # Advanced/plugin-specific keys stay on PUT /api/config, not workflow-config.
     assert "backend" not in data["overlay"]
     assert "plugin_dir" not in data["overlay"]
     assert "enabled_plugins" not in data["overlay"]
-    assert "visible_plugin" not in data["overlay"]
+    assert "visible_plugins" not in data["overlay"]
     assert "plugin_config" not in data["overlay"]
+    assert "plugin_layout" not in data["overlay"]
 
     update = {
         "model": {"shuffle": False, "portrait_pairs": False},
         "viewer": {"show_clock": True},
-        "overlay": {"enabled": False, "display_mode": "auto_hide"},
+        "overlay": {"enabled": False},
     }
     response = client.put("/api/workflow-config", json=update)
 
@@ -927,7 +928,6 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     mock_repo.set_app_config.assert_any_call("model.portrait_pairs", False)
     mock_repo.set_app_config.assert_any_call("viewer.show_clock", True)
     mock_repo.set_app_config.assert_any_call("overlay.enabled", False)
-    mock_repo.set_app_config.assert_any_call("overlay.display_mode", "auto_hide")
     event = mock_publisher.publish.call_args[0][0]
     assert event.command is Command.SET_CONFIG
     assert event.payload == update
@@ -2138,4 +2138,146 @@ def test_put_overlay_plugin_config_404_when_unknown() -> None:
     )
     client = ASGITestClient(app)
     response = client.put("/api/overlay/plugins/bogus/config", json={})
+    assert response.status_code == 404
+
+
+def test_get_overlay_plugins_includes_effective_layout() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    weather = _overlay_descriptor(
+        id="weather",
+        name="Weather",
+        position="bottom-left",
+        size={"w": 300, "h": 150},
+        default_display_mode="persistent",
+    )
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        repo.set_app_config("overlay.plugin_layout.weather.position", "top-right")
+        repo.set_app_config("overlay.plugin_layout.weather.idle_hide_seconds", 12.0)
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            overlay_controller=FakeOverlayController([weather]),
+        )
+        client = ASGITestClient(app)
+
+        plugins = client.get("/api/overlay/plugins").json()
+        weather_plugin = next(p for p in plugins if p["id"] == "weather")
+        assert weather_plugin["layout"] == {
+            "position": "top-right",
+            "width": 300,
+            "height": 150,
+            "content_align": None,
+            "display_mode": "persistent",
+            "idle_hide_seconds": 12.0,
+            "z_order": 0,
+        }
+    finally:
+        repo.close()
+
+
+def test_get_overlay_plugins_layout_absent_when_no_repo() -> None:
+    app = create_app(
+        cors_allowed_origins=["*"],
+        overlay_controller=FakeOverlayController([_overlay_descriptor(id="clock", name="Clock")]),
+    )
+    client = ASGITestClient(app)
+    plugins = client.get("/api/overlay/plugins").json()
+    clock = next(p for p in plugins if p["id"] == "clock")
+    # no config repository -> manifest-default layout is computed
+    assert clock["layout"]["position"] == "top-right"
+    assert clock["layout"]["display_mode"] == "auto_hide"
+
+
+def test_put_overlay_plugin_layout_validates_and_persists() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    weather = _overlay_descriptor(
+        id="weather",
+        name="Weather",
+        position="bottom-left",
+        size={"w": 300, "h": 150},
+    )
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        publisher = MagicMock()
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            event_publisher=publisher,
+            overlay_controller=FakeOverlayController([weather]),
+        )
+        client = ASGITestClient(app)
+
+        response = client.put(
+            "/api/overlay/plugins/weather/layout",
+            json={"position": "middle-center", "display_mode": "persistent", "z_order": 3},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "success"
+        assert body["plugin_id"] == "weather"
+        assert body["layout"]["position"] == "middle-center"
+        assert body["layout"]["display_mode"] == "persistent"
+        assert body["layout"]["z_order"] == 3
+        # manifest-default size carried through
+        assert body["layout"]["width"] == 300
+        assert body["layout"]["height"] == 150
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.plugin_layout.weather.position"] == "middle-center"
+        assert all_config["overlay.plugin_layout.weather.display_mode"] == "persistent"
+        assert all_config["overlay.plugin_layout.weather.z_order"] == 3
+
+        from picframe.core.events.dto import Command, CommandEvent
+
+        published = [call.args[0] for call in publisher.publish.call_args_list]
+        # The published SET_CONFIG payload carries the validated (None-dropped)
+        # layout, not the effective layout returned in the response body.
+        expected_publishable = {
+            "position": "middle-center",
+            "display_mode": "persistent",
+            "z_order": 3,
+        }
+        assert any(
+            isinstance(e, CommandEvent)
+            and e.command == Command.SET_CONFIG
+            and e.payload == {"overlay": {"plugin_layout": {"weather": expected_publishable}}}
+            for e in published
+        )
+    finally:
+        repo.close()
+
+
+def test_put_overlay_plugin_layout_422_on_invalid_payload() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            overlay_controller=FakeOverlayController(
+                [_overlay_descriptor(id="weather", name="Weather")]
+            ),
+        )
+        client = ASGITestClient(app)
+
+        response = client.put(
+            "/api/overlay/plugins/weather/layout",
+            json={"position": "nowhere"},
+        )
+        assert response.status_code == 422
+    finally:
+        repo.close()
+
+
+def test_put_overlay_plugin_layout_404_when_unknown() -> None:
+    app = create_app(
+        cors_allowed_origins=["*"],
+        overlay_controller=FakeOverlayController([_overlay_descriptor(id="clock", name="Clock")]),
+    )
+    client = ASGITestClient(app)
+    response = client.put("/api/overlay/plugins/bogus/layout", json={})
     assert response.status_code == 404

@@ -175,9 +175,9 @@ def test_default_config_yaml_validates_through_app_config() -> None:
     config = AppConfig(**raw)
     assert config.overlay.enabled is False
     assert config.overlay.backend == "webkit"
-    assert config.overlay.display_mode == "auto_hide"
     assert config.overlay.enabled_plugins == ["clock", "meta"]
-    assert config.overlay.visible_plugin == "clock"
+    assert config.overlay.visible_plugins == ["clock"]
     assert config.overlay.enabled_input_types == ["touch", "mouse", "keyboard"]
     assert config.overlay.idle_hide_seconds == 5.0
     assert config.overlay.plugin_config == {}
+    assert config.overlay.plugin_layout == {}

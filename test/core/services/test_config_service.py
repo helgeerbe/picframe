@@ -296,3 +296,86 @@ def test_handle_set_config_plugin_config_reports_updated_plugin_id(
     published = [call.args[0] for call in mock_publisher.publish.call_args_list]
     overlay_event = next(e for e in published if isinstance(e, OverlayConfigChangedEvent))
     assert overlay_event.updated_plugin_id == "weather"
+
+
+def test_get_nested_config_normalizes_legacy_overlay(config_service, mock_repo):
+    """get_nested_config bridges legacy visible_plugin <-> visible_plugins (#752)."""
+    mock_repo.get_all_app_config.return_value = {
+        "overlay.visible_plugin": "clock",
+        "overlay.display_mode": "auto_hide",
+    }
+
+    config = config_service.get_nested_config()
+
+    overlay = config["overlay"]
+    assert overlay["visible_plugins"] == ["clock"]
+    # legacy key re-derived for worker/shell compatibility
+    assert overlay["visible_plugin"] == "clock"
+    assert overlay["display_mode"] == "auto_hide"
+
+
+def test_get_nested_config_normalizes_null_visible_plugin(config_service, mock_repo):
+    mock_repo.get_all_app_config.return_value = {"overlay.visible_plugin": None}
+
+    config = config_service.get_nested_config()
+    assert config["overlay"]["visible_plugins"] == []
+    assert config["overlay"]["visible_plugin"] is None
+
+
+def test_update_plugin_layout_scoped_delete_and_write():
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        repo.set_app_config("overlay.enabled", True)
+        repo.set_app_config("overlay.plugin_layout.weather.position", "top-left")
+        repo.set_app_config("overlay.plugin_layout.weather.z_order", 2)
+        repo.set_app_config("overlay.plugin_layout.clock.position", "bottom-right")
+
+        service = ConfigService(repo, MagicMock(), MagicMock())
+        service.update_plugin_layout("weather", {"position": "top-right", "z_order": 5})
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.plugin_layout.weather.position"] == "top-right"
+        assert all_config["overlay.plugin_layout.weather.z_order"] == 5
+        # other plugins untouched
+        assert all_config["overlay.plugin_layout.clock.position"] == "bottom-right"
+        # rest of overlay untouched
+        assert all_config["overlay.enabled"] is True
+    finally:
+        repo.close()
+
+
+def test_update_plugin_layout_skips_none_values():
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        service = ConfigService(repo, MagicMock(), MagicMock())
+        service.update_plugin_layout(
+            "weather",
+            {"position": "top-right", "width": None, "idle_hide_seconds": 10.0},
+        )
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.plugin_layout.weather.position"] == "top-right"
+        assert all_config["overlay.plugin_layout.weather.idle_hide_seconds"] == 10.0
+        # None (inherit/default) keys are not stored
+        assert "overlay.plugin_layout.weather.width" not in all_config
+    finally:
+        repo.close()
+
+
+def test_handle_set_config_plugin_layout_reports_updated_plugin_id(
+    config_service, mock_repo, mock_publisher
+):
+    """A single-plugin plugin_layout write reports updated_plugin_id (#752)."""
+    mock_repo.get_all_app_config.return_value = {}
+    event = CommandEvent(
+        command=Command.SET_CONFIG,
+        payload={"overlay": {"plugin_layout": {"weather": {"position": "top-right"}}}},
+    )
+
+    config_service._handle_command_event(event)
+
+    from picframe.core.events.dto import OverlayConfigChangedEvent
+
+    published = [call.args[0] for call in mock_publisher.publish.call_args_list]
+    overlay_event = next(e for e in published if isinstance(e, OverlayConfigChangedEvent))
+    assert overlay_event.updated_plugin_id == "weather"
