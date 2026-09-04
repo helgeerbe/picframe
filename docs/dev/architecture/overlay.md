@@ -324,45 +324,61 @@ The shell pushes data into the active plugin's iframe via `postMessage`
 
 ### Content sizing & alignment convention
 
-A plugin iframe fills its panel (`width:100%; height:100%`), so panel-level CSS
-cannot reach into the iframe document — each plugin must size and align its own
-content. To make the **panel size** control the widget size (the "draw a box, the
-widget fills it" model), plugins follow this convention:
+Plugins are **embedded widgets with a fixed design size**: the plugin lays out
+its content once at the dimensions declared in its manifest `size` (`{ w, h }`
+in CSS px), and the **shell scales the whole widget** to fit the panel. This is
+the "draw a box, the widget fills it" model, implemented with a shell-level
+`transform: scale()` rather than container queries — container queries turned
+out to be unreliable in the WebKitGTK overlay iframe (see *Why not container
+queries* below).
 
-- Declare `body { container-type: inline-size; }` (on **`<body>`, not `<html>`**)
-  so `1cqw` = 1% of the panel width (not the browser viewport, which the iframe
-  does not see). **Why `<body>` and not `<html>`:** the root `<html>` element's
-  containing block is the Initial Containing Block (the iframe viewport). WebKitGTK
-  does not establish container-query resolution on the root element — `cqw`
-  resolves to **0** there, flooring text at the `max()` minimum (the "no scaling"
-  bug, confirmed on-device against WebKitGTK 2.52). `<body>` is a normal block
-  element whose width is always definite (inherited from `<html>` which fills
-  the iframe width), so container queries resolve correctly on it. Use
-  **`inline-size`, not `size`**: size-containment also requires a definite
-  height, and `height: 100%` on `<body>` only resolves if the iframe's initial
-  containing block has a definite height — which can fail in a WebKitGTK overlay
-  iframe, collapsing the size-contained `<body>` to 0 height. `inline-size`
-  only contains the width axis, which is always definite for a block element,
-  so it never collapses.
-- Size content with `max(min_floor, Ncqw)`: the `max()` floors a tiny panel at a
-  legible size. There is **no upper cap** — the widget scales continuously to
-  fill the panel width; the user, not the CSS, decides how big is too big by
-  shrinking the panel. This is **width-only fit**: a tall-narrow panel can
-  overflow vertically, clipped by `body { overflow: hidden }`. A plugin that
-  genuinely needs both-axis fit should compute its limiting dimension in JS
-  from the panel size the shell forwards (or request shell-level scaling).
-- Apply the per-plugin `content_align` (forwarded in the `picframe:config`
-  payload; `null` inherits the panel `position`) by mapping the 9-anchor to the
-  plugin body's `justify-content`/`align-items`. Note the axis swap: a row-flex
-  body maps the anchor's horizontal part to `justify-content` and vertical to
-  `align-items`; a column-flex body is the reverse.
+- **Design size** — declare `"size": { "w": 320, "h": 240 }` in `plugin.json`.
+  The worker forwards it as `_plugins[i].size` in the shell config; the shell
+  uses it as the scale basis. A plugin **without** a manifest `size` keeps the
+  legacy fill (`width:100%; height:100%`, no scaling) — useful for plugins that
+  are pure background panels.
+- **Shell contain-fit scaling** (`dock.ts`) — for each panel the shell measures
+  the resolved panel box (`panel.clientWidth/clientHeight`, which forces a
+  synchronous reflow so `min(vw,vh)` defaults resolve to px), then lays the
+  iframe out at the design size and applies
+  `transform: scale(min(panelW/designW, panelH/designH))` with
+  `transform-origin: top left`. The whole widget — text, SVG, card, Leaflet map
+  — scales **uniformly**, preserving aspect ratio like an embedded web widget.
+  No container queries, no `cqw`, no WebKitGTK quirk dependency.
+- **Plugin content units** — size content at the design size with
+  `max(min_floor, calc(var(--w) * N/100))`, where `--w` is the design width
+  declared once on `:root` (e.g. `:root { --w: 320px; }`). `N/100` is the old
+  `Ncqw` value expressed as a fraction of the design width; `calc(var(--w) *
+  N/100)` reproduces it exactly at the design size and the shell's `scale()`
+  handles all resizing. The `max()` floors a shrunk panel at a legible size;
+  there is **no upper cap** — the user decides how big is too big by shrinking
+  the panel. The meta plugin's Leaflet map keeps `flex: 1` and fills the
+  remaining space at the design size, then scales with the rest.
+- **Anchor = widget placement, not text alignment** — `content_align` (null →
+  inherit the panel `position`) places the **scaled widget box** inside the
+  panel, computed by the shell (`dock.ts anchorOffset`): a 9-anchor maps to an
+  `(x, y)` offset of the scaled box within the panel. The panel keeps its
+  rounded background, so where the panel's aspect ratio differs from the
+  widget's the background shows around the widget — the panel is the anchor
+  box. The shell **does not forward `content_align` to plugins**; a plugin's
+  internal layout stays as designed (e.g. a clock centers itself in its own
+  design box), and only the box's position within the panel changes. This is
+  the inverse of the previous convention, which aligned content *within* the
+  widget.
 
-Using viewport units (`vw`/`vh`) or an absolute `rem` `clamp()` ceiling instead
-produces the "bigger background, same small text" effect: `vw` tracks the iframe
-width only (never height) and a `rem` cap freezes the text while the panel keeps
-growing. `container-type` on `<html>` (either `size` or `inline-size`) produces
-the same effect because WebKitGTK does not establish container-query resolution
-on the root element — `cqw` resolves to 0 there (see above).
+**Why not container queries:** two on-device attempts failed against WebKitGTK
+2.52 — `container-type` on `<html>` (`cqw` → 0 on the root element, whose
+containing block is the iframe's Initial Containing Block) and on `<body>`
+(content still did not scale, despite `cqw` resolving). Even if a future
+WebKitGTK build fixed `<body>`, container queries only scale *content* and
+leave the panel background fixed — the opposite of the desired widget-scaling
+model. `transform: scale()` scales the entire iframe (content *and* its own
+background) uniformly and works regardless of the WebKitGTK container-query
+quirk, so it is the long-term approach.
+
+A plugin that needs both-axis fit beyond contain (e.g. a different aspect crop)
+can still compute its own layout in JS, but contain-fit `scale()` covers the
+common case.
 
 ## 12. Web UI controls
 

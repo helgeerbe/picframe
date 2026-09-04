@@ -310,6 +310,7 @@ class OverlayWorker:
             "icon": descriptor.icon,
             "icon_svg": descriptor.icon_svg,
             "position": descriptor.position,
+            "size": descriptor.size,
             "default_display_mode": descriptor.default_display_mode,
             "layout": effective_plugin_layout(descriptor, db_layout),
             "entry_uri": entry.resolve().absolute().as_uri(),

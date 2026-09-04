@@ -133,7 +133,12 @@ export class Dock {
       this.root.appendChild(panel)
     }
     this.applyPanelLayout(panel, layout)
-    panel.replaceChildren(this.buildFrame(plugin))
+    // Measure the resolved panel box (reading clientWidth forces a synchronous
+    // reflow, so `min(vw,vh)` defaults resolve to px) so the iframe can be laid
+    // out at the plugin's design size and scaled to fit the panel (#752).
+    const panelW = panel.clientWidth
+    const panelH = panel.clientHeight
+    panel.replaceChildren(this.buildFrame(plugin, layout, panelW, panelH))
   }
 
   /** Apply the effective layout to a panel element (anchor class + size/z). */
@@ -181,7 +186,12 @@ export class Dock {
     return btn
   }
 
-  private buildFrame(plugin: PluginEntry): HTMLIFrameElement {
+  private buildFrame(
+    plugin: PluginEntry,
+    layout: PluginLayout,
+    panelW: number,
+    panelH: number
+  ): HTMLIFrameElement {
     const frame = document.createElement('iframe')
     frame.title = plugin.name || plugin.id
     frame.src = plugin.entry_uri
@@ -189,12 +199,7 @@ export class Dock {
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin')
     // Forward the effective per-plugin config into the iframe via postMessage
     // once it loads; plugins opt in by listening for { type: 'picframe:config' }.
-    // The resolved `content_align` (null = inherit the panel `position`) is
-    // merged in so plugins can align their body content to the chosen anchor;
-    // plugins that don't read it simply ignore the extra key (#752).
-    const layout = this.layoutOf(plugin)
     const cfg = { ...(this.pluginConfig[plugin.id] ?? {}) }
-    cfg.content_align = layout.content_align ?? layout.position
     frame.addEventListener('load', () => {
       try {
         frame.contentWindow?.postMessage(
@@ -205,6 +210,50 @@ export class Dock {
         /* cross-origin frames may reject postMessage; ignore */
       }
     })
+    // Contain-fit scaling (#752): a plugin with a manifest `size` is laid out
+    // once at that fixed design size (px), then the whole iframe is scaled with
+    // `transform: scale(min(panelW/w, panelH/h))` so the widget — text, SVG,
+    // card, map — scales uniformly to fit the panel, preserving aspect ratio
+    // like an embedded web widget. This replaces container queries, which
+    // WebKitGTK does not resolve reliably inside the overlay iframe (cqw → 0).
+    // The `content_align` (null → inherit the panel `position`) places the
+    // scaled widget box inside the panel; the panel keeps its rounded
+    // background, so where the panel's aspect ratio differs from the widget's
+    // the background shows around the widget (the panel is the anchor box).
+    // A plugin without a manifest `size` keeps the legacy fill (100% × 100%).
+    const design = plugin.size
+    if (design && panelW > 0 && panelH > 0) {
+      const scale = Math.min(panelW / design.w, panelH / design.h)
+      const scaledW = design.w * scale
+      const scaledH = design.h * scale
+      const align = layout.content_align ?? layout.position
+      const { ox, oy } = this.anchorOffset(align, panelW, panelH, scaledW, scaledH)
+      frame.style.position = 'absolute'
+      frame.style.left = `${ox}px`
+      frame.style.top = `${oy}px`
+      frame.style.width = `${design.w}px`
+      frame.style.height = `${design.h}px`
+      frame.style.transform = `scale(${scale})`
+      frame.style.transformOrigin = 'top left'
+    }
     return frame
+  }
+
+  /** Map a 9-anchor (`v-h`, e.g. `top-right`) to the (x, y) offset of a
+   * `scaledW × scaledH` box inside a `panelW × panelH` box. Unknown anchors
+   * center on both axes. #752. */
+  private anchorOffset(
+    align: string | null | undefined,
+    panelW: number,
+    panelH: number,
+    scaledW: number,
+    scaledH: number
+  ): { ox: number; oy: number } {
+    const parts = align && align.includes('-') ? align.split('-') : ['middle', 'center']
+    const v = parts[0] ?? 'middle'
+    const h = parts[1] ?? 'center'
+    const ox = h === 'left' ? 0 : h === 'right' ? panelW - scaledW : (panelW - scaledW) / 2
+    const oy = v === 'top' ? 0 : v === 'bottom' ? panelH - scaledH : (panelH - scaledH) / 2
+    return { ox, oy }
   }
 }

@@ -5,19 +5,16 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Picframe Weather</title>
   <style>
-    :root { --fg: #f8fafc; --bg: transparent; --muted: rgba(248,250,252,0.7); --accent: #38bdf8; }
+    :root { --fg: #f8fafc; --bg: transparent; --muted: rgba(248,250,252,0.7); --accent: #38bdf8; --w: 360px; }
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    /* container-type: inline-size on <body> (NOT <html>) makes 1cqw = 1% of the
-       panel width. WebKitGTK does not establish container-query resolution on
-       the root <html> element — its containing block is the Initial Containing
-       Block (the iframe viewport) and cqw resolves to 0 there, flooring the
-       text at the max() minimum (the "no scaling" bug). <body> is a normal
-       block element whose width is always definite (= <html> width = iframe
-       width), so container queries resolve correctly. Width-only fit (no cqh);
-       tall-narrow panels clip via overflow: hidden. #752 */
+    /* The shell lays this iframe out at a fixed design size (--w × --h, from the
+       plugin manifest `size`) and applies `transform: scale()` to fit the panel
+       (contain fit), so the whole widget scales uniformly. Content is sized once
+       at the design size using `calc(var(--w) * N/100)` (N = the old `Ncqw`
+       value). This replaces container queries, which WebKitGTK does not resolve
+       reliably in the overlay iframe (cqw → 0 on <html> and <body>). #752 */
     html, body { height: 100%; }
     body {
-      container-type: inline-size;
       background: var(--bg); color: var(--fg);
       font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
       display: flex; align-items: center; justify-content: center;
@@ -25,11 +22,11 @@
     }
     .pf-weather { padding: 1.25rem 1.75rem; text-align: center; min-width: 12rem; }
     .pf-weather__main { display: flex; align-items: center; justify-content: center; gap: 0.75rem; }
-    .pf-weather__icon { font-size: max(1.5rem, 8cqw); line-height: 1; }
-    .pf-weather__temp { font-size: max(1.5rem, 9cqw); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
-    .pf-weather__desc { margin-top: 0.4rem; font-size: max(0.9rem, 2.8cqw); text-transform: capitalize; opacity: 0.9; }
-    .pf-weather__loc { margin-top: 0.15rem; font-size: max(0.8rem, 2.4cqw); opacity: 0.6; }
-    .pf-weather__details { margin-top: 0.6rem; display: flex; gap: 1.25rem; justify-content: center; font-size: max(0.8rem, 2.4cqw); opacity: 0.8; }
+    .pf-weather__icon { font-size: max(1.5rem, calc(var(--w) * 0.08)); line-height: 1; }
+    .pf-weather__temp { font-size: max(1.5rem, calc(var(--w) * 0.09)); font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+    .pf-weather__desc { margin-top: 0.4rem; font-size: max(0.9rem, calc(var(--w) * 0.028)); text-transform: capitalize; opacity: 0.9; }
+    .pf-weather__loc { margin-top: 0.15rem; font-size: max(0.8rem, calc(var(--w) * 0.024)); opacity: 0.6; }
+    .pf-weather__details { margin-top: 0.6rem; display: flex; gap: 1.25rem; justify-content: center; font-size: max(0.8rem, calc(var(--w) * 0.024)); opacity: 0.8; }
     .pf-weather__error { padding: 1.5rem; text-align: center; opacity: 0.7; font-size: 0.95rem; max-width: 16rem; }
     .pf-weather__placeholder { opacity: 0.5; font-size: 0.95rem; padding: 1rem; text-align: center; }
   </style>
@@ -52,21 +49,7 @@
       function applyConfig(config) {
         if (!config) return;
         Object.keys(cfg).forEach(function (k) { if (config[k] !== undefined) cfg[k] = config[k]; });
-        applyContentAlign(config.content_align);
         scheduleRefresh(true);
-      }
-      // Apply a 9-anchor content_align to the body's flex container. The
-      // weather body is row-flex, so justify-content is horizontal and
-      // align-items is vertical. Omitted/unknown anchors keep the CSS default
-      // (centered). #752.
-      function applyContentAlign(align) {
-        if (!align || align.indexOf("-") < 0) return;
-        var parts = align.split("-");
-        var vMap = { top: "flex-start", middle: "center", bottom: "flex-end" };
-        var hMap = { left: "flex-start", center: "center", right: "flex-end" };
-        var v = vMap[parts[0]], h = hMap[parts[1]];
-        if (h) document.body.style.justifyContent = h;
-        if (v) document.body.style.alignItems = v;
       }
       function unitSymbol() { return cfg.units === "imperial" ? "°F" : "°C"; }
       function windUnit() { return cfg.units === "imperial" ? "mph" : "m/s"; }

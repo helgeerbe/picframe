@@ -32,6 +32,12 @@ export interface PluginEntry {
    * text color and renders without an emoji font. */
   icon_svg?: string
   position: string
+  /** Manifest design size `{ w, h }` in CSS px. The shell uses this as the
+   * scale basis: it lays the iframe out at this fixed size and applies
+   * `transform: scale(min(panelW/w, panelH/h))` so the whole widget scales
+   * uniformly to fit the panel (contain fit), like an embedded web widget.
+   * `null` (plugin without a manifest `size`) → scale 1 (iframe fills panel). */
+  size?: { w: number; h: number } | null
   /** Manifest default duration policy; superseded by `layout.display_mode`. */
   default_display_mode?: DisplayMode
   /** Effective per-plugin layout (#752): manifest defaults merged with the
