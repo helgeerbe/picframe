@@ -22,7 +22,10 @@
       display: flex; align-items: center; justify-content: center;
       -webkit-user-select: none; user-select: none; overflow: hidden;
     }
-    .pf-clock { text-align: center; padding: 0.5rem; }
+    /* Minimal padding so the panel background hugs the content — the shell
+       scales the whole widget, so inner padding scales too and larger padding
+       becomes visible empty background at scale 1. #752 */
+    .pf-clock { text-align: center; padding: 0.25rem; }
     /* max() floors legibility at small scales; no upper cap — the shell scales
        the whole widget, so when the user shrinks the panel the widget shrinks
        with it. #752 */
@@ -31,7 +34,7 @@
       letter-spacing: 0.02em; line-height: 1; font-variant-numeric: tabular-nums;
     }
     .pf-clock__date {
-      margin-top: 0.5rem; font-size: max(0.9rem, calc(var(--w) * 0.045));
+      margin-top: 0.25rem; font-size: max(0.9rem, calc(var(--w) * 0.045));
       opacity: 0.85; font-weight: 500;
     }
     .pf-clock--hidden { display: none; }

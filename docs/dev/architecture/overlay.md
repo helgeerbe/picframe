@@ -359,7 +359,10 @@ WebKitGTK overlay iframe (see *Why not container queries* below).
   N/100)` reproduces it exactly at the design size and the shell's `scale()`
   handles all resizing. The `max()` floors a shrunk widget at a legible size;
   there is **no upper cap** — the user decides how big is too big via the Scale
-  slider.
+  slider. Keep container padding **minimal** (≤ 0.25rem) and tighten flex
+  gaps/margins: the shell scales the whole widget uniformly, so inner padding
+  scales too — larger padding becomes a visible empty semi-transparent band
+  between the content and the panel border at scale 1.
 - **Plugin content units (fill mode)** — set `--w`/`--h` in px from
   `window.innerWidth/innerHeight` (and update them on `resize`) so
   `calc(var(--w) * N/100)` text sizing tracks the user-chosen panel dimensions.
