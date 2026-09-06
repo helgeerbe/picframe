@@ -311,18 +311,42 @@ invisible until picframe is restarted. (pi3d's fullscreen surface survives the
 cycle because it re-commits continuously on the main render loop; the one-shot
 layer-shell surface in the separate worker process does not.)
 
-Fix: `DisplayPowerManager` publishes a `DisplayPowerEvent(power_on=...)` on the
-event bus after a **real** display state change (not on the idempotent
-"already in that state" skip branches). `WebKitOverlayRenderer` subscribes to
-it; on `power_on=True` (with the worker running) it respawns the worker
-subprocess (`stop()` → `start()`) on a daemon thread, re-running the proven
+The same orphaning happens for an **external** power-cycle — the monitor's
+physical power button or a compositor-initiated DPMS sleep — because the HPD
+drop removes the DRM connector and the compositor destroys the output. The
+in-process manager cannot see this: `WaylandDisplayPower.is_on()` only reflects
+picframe-initiated commands (it caches `self._is_on`), so no `DisplayPowerEvent`
+is published for external cycles.
+
+Fix (internal cycles): `DisplayPowerManager` publishes a
+`DisplayPowerEvent(power_on=...)` on the event bus after a **real** display
+state change (not on the idempotent "already in that state" skip branches).
+
+Fix (external cycles, #755): `DisplayOutputWatcher`
+(`infrastructure/os/display_output_watcher.py`) is constructed in `main.py`
+only when the overlay is enabled and available. It polls the configured
+output's presence/enabled state via `wlr-randr` (~2 s, daemon thread) and
+publishes `DisplayPowerEvent` on observed off->on / on->off transitions —
+edge-triggered, with no publish for the startup baseline so it never emits a
+spurious power-on. It is a no-op when `wlr-randr` is absent or the compositor
+lacks `wlr-output-management` (the probe returns `None` and nothing is
+published), so headless/VM/dev environments are unaffected. It deliberately
+polls rather than subscribing to `Gdk.Display::monitor-added`: that would drag
+a live GLib/GTK main loop into the main process (violating the
+keep-WebKit-out-of-process non-negotiable) and would miss DPMS-only blanks.
+
+`WebKitOverlayRenderer` subscribes to `DisplayPowerEvent`; on `power_on=True`
+(with the worker running) it respawns the worker subprocess
+(`stop()` → `start()`) on a daemon thread, re-running the proven
 `_build_surface()` / `_setup_layer_shell()` path against the now-live output.
 `start()` re-pushes the cached overlay config so the shell boots with the right
 plugins. The respawn is guarded so a burst of power events cannot stack
 restarts or race shutdown, and it is a no-op when the overlay is disabled
-(display power-on never auto-enables the overlay). This mirrors the
-worker-isolation non-negotiable: WebKitGTK can crash or leak, so respawn rather
-than fix the live process.
+(display power-on never auto-enables the overlay). Because both the internal
+command path and the external watcher publish the same `DisplayPowerEvent`,
+their events collapse to a single respawn via the renderer's restart guard.
+This mirrors the worker-isolation non-negotiable: WebKitGTK can crash or leak,
+so respawn rather than fix the live process.
 
 
 ## 11. Built-in plugins & postMessage protocol

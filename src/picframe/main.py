@@ -178,6 +178,7 @@ def run_picframe(
     # and the WebKitGTK backend is available; degrades gracefully otherwise.
     overlay_config_section = nested_config.get("overlay", {})
     overlay_enabled = bool(overlay_config_section.get("enabled", False))
+    display_output_watcher = None
     from picframe.core.renderers.webkit_overlay_renderer import WebKitOverlayRenderer
     from picframe.infrastructure.overlay.plugin_loader import PluginLoader
 
@@ -197,6 +198,23 @@ def run_picframe(
     if overlay_enabled and overlay_controller.is_available():
         logger.info("Starting overlay controller (WebKitGTK).")
         overlay_controller.start()
+        # 5c. Watch the configured output for external power-cycles (#755).
+        # The overlay's layer-shell surface is bound to one Wayland output; a
+        # monitor-button / DPMS power-cycle destroys and recreates that output
+        # and the orphaned surface never re-attaches. WaylandDisplayPower only
+        # tracks picframe-initiated commands, so this watcher polls the real
+        # compositor state and publishes DisplayPowerEvent on observed off->on
+        # transitions, driving the same respawn path the command path uses.
+        # It is a no-op without wlr-randr / wlr-output-management.
+        from picframe.infrastructure.os.display_output_watcher import (
+            DisplayOutputWatcher,
+        )
+
+        display_output_watcher = DisplayOutputWatcher(
+            display_output,
+            event_bus,
+        )
+        display_output_watcher.start()
     elif overlay_enabled and not overlay_controller.is_available():
         logger.warning(
             "overlay.enabled is true but WebKitGTK is not installed; "
@@ -263,6 +281,8 @@ def run_picframe(
         engine.stop()
         media_indexer_service.stop()
         overlay_controller.stop()
+        if display_output_watcher is not None:
+            display_output_watcher.stop()
         event_bus.stop()
         # Keep a reference to display_power_manager to prevent garbage collection
         # and allow it to handle events until the bus stops.
@@ -316,6 +336,8 @@ def run_picframe(
         web_server.stop()
         engine.stop()
         overlay_controller.stop()
+        if display_output_watcher is not None:
+            display_output_watcher.stop()
         event_bus.stop()
         logger.info("Picframe stopped.")
 
