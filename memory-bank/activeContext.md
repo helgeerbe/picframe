@@ -1,6 +1,28 @@
 # Active Context
 
 ## Current Focus
+**Issues #755 and #756 committed on `feat/739-webkit-overlay`** (tree clean,
+976 pytest pass):
+- `92971f8` **#755** — `fix(overlay): respawn worker on display power-cycle to
+  re-attach layer surface (#755)`. `DisplayPowerManager` publishes a new
+  `DisplayPowerEvent` after a *real* state change; `WebKitOverlayRenderer`
+  respawns the worker subprocess on power-on so the orphaned `wlr-layer-shell`
+  surface re-attaches to the recreated Wayland output (guarded against stacked
+  restarts/shutdown). Files: `core/events/dto.py`, `core/services/display_power.py`,
+  `core/renderers/webkit_overlay_renderer.py`, the two matching tests, and a new
+  "Display power-cycle" section in `docs/dev/architecture/overlay.md`.
+- `1cc82f9` **#756** — `fix(api): keep overlay display controls public, protect
+  only plugin config/layout (#756)`. Remote/Appearance display controls (dock,
+  catalog, plugin list, activation/visibility toggles) are now public; only
+  per-plugin *config* (redacted from the public list — may carry secrets like
+  the weather `api_key`) and *layout* stay Settings-protected, fetched on demand
+  via `store.fetchPluginConfig`. `OverlayPluginResponse.config` is now
+  `dict | None` with `response_model_exclude_none` on the list endpoint.
+
+**Commit-message convention codified** in `decisionLog.md`: use the `(#NNN)`
+trailer form (e.g. `fix(overlay): ... (#755)`); bare ` #NNN` tolerated, not
+preferred; `Refs #NNN` not used.
+
 **Issue #739 — WebKitGTK touch overlay + plugin system** is feature-complete on
 branch `feat/739-webkit-overlay`: all 21 numbered tasks done (Phases 0–3 pushed
 through `cacf113`; Phase 4 docs committed). The six locked design decisions are

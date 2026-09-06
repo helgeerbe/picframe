@@ -5,7 +5,7 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 ## Durable Decisions
 - Use the existing repository for the Picframe 2.0 modernization (originally on a long-lived modernization branch, since merged to `dev` via PR #737 and deleted).
 - Use GitHub Issues and the GitHub Project board as the authoritative task and progress source.
-- Every code change must have a GitHub ticket; every commit message for code changes must include the ticket number; closing a code-change ticket must reference the implementing commit hash.
+- Every code change must have a GitHub ticket; every commit message for code changes must reference the ticket in the **`(#NNN)` trailer form** (e.g. `fix(overlay): ... (#755)`) — the dominant repo convention (79/200 recent commits); the bare ` #NNN` form is tolerated but not preferred and `Refs #NNN` is not used; closing a code-change ticket must reference the implementing commit hash.
 - Build Picframe 2.0 around Clean Architecture / Hexagonal boundaries.
 - Use a strict Event-Driven Architecture with immutable DTOs and a thread-safe PriorityQueue event bus.
 - Keep event publishing and subscription as separate interfaces.
