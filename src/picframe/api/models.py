@@ -444,9 +444,14 @@ class OverlayPluginResponse(BaseModel):
     has_config: bool = False
     size: dict[str, int] | None = None
     config_schema: dict[str, dict[str, Any]] = Field(default_factory=dict)
-    config: dict[str, Any] = Field(
-        default_factory=dict,
-        description="Effective config: manifest defaults merged with persisted user values.",
+    config: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Effective config: manifest defaults merged with persisted user values. "
+            "Redacted from the public plugin *list* (may carry secrets such as the "
+            "weather api_key); fetched on demand from the Settings-protected "
+            "per-plugin endpoint when editing (#756)."
+        ),
     )
     layout: dict[str, Any] | None = Field(
         default=None,

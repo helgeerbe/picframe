@@ -45,6 +45,11 @@ const statusMessage = ref('')
 const statusTone = ref<'success' | 'danger'>('success')
 const configPluginId = ref<string | null>(null)
 const layoutPluginId = ref<string | null>(null)
+/** Plugin id whose per-plugin config is currently being fetched from the
+ *  Settings-protected `GET /overlay/plugins/{id}/config` endpoint. The public
+ *  plugin *list* redacts `config` (may carry secrets such as the weather
+ *  api_key), so the config editor loads values on demand when expanded (#756). */
+const configLoadingId = ref<string | null>(null)
 // Per-plugin config form state: { pluginId: { field: value } }. The dynamic
 // config values come from arbitrary plugin schemas; `any` keeps the index
 // accesses ergonomic (matching the config-store config blob convention).
@@ -134,15 +139,26 @@ const inputTypeLabel = (type: string): string => {
   return map[type] || type
 }
 
-const openConfig = (plugin: OverlayPlugin) => {
+const openConfig = async (plugin: OverlayPlugin) => {
   if (!plugin.has_config) return
   if (configPluginId.value === plugin.id) {
     configPluginId.value = null
     return
   }
-  // Seed the draft from the plugin's effective config.
-  configDrafts.value[plugin.id] = { ...(plugin.config || {}) }
-  configPluginId.value = plugin.id
+  // The public plugin *list* redacts `config` (may carry secrets such as the
+  // weather api_key), so fetch the effective config on demand from the
+  // Settings-protected per-plugin endpoint when expanding the editor (#756).
+  configLoadingId.value = plugin.id
+  try {
+    const result = await overlayStore.fetchPluginConfig(plugin.id)
+    configDrafts.value[plugin.id] = { ...result.config }
+    configPluginId.value = plugin.id
+  } catch (e) {
+    console.error(e)
+    showStatus('danger', t('settings.touchOverlay.pluginConfig.configFailed'))
+  } finally {
+    configLoadingId.value = null
+  }
 }
 
 const savePluginConfig = async (plugin: OverlayPlugin) => {
@@ -539,88 +555,102 @@ watch(
               class="mt-4 space-y-4 rounded-lg border border-gray-100 bg-gray-50 p-4 dark:border-gray-700/60 dark:bg-gray-900/30"
             >
               <div
-                v-for="(_schema, fieldName) in plugin.config_schema"
-                :key="fieldName"
-                class="space-y-1.5"
+                v-if="configLoadingId === plugin.id"
+                class="flex justify-center py-6"
+                role="status"
+                :aria-label="t('settings.touchOverlay.loading')"
               >
-                <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  {{ fieldLabel(plugin.id, fieldName) }}
-                  <span
-                    v-if="fieldHelp(plugin.id, fieldName)"
-                    class="ml-1 font-normal text-gray-500 dark:text-gray-400"
-                  >
-                    — {{ fieldHelp(plugin.id, fieldName) }}
-                  </span>
-                </label>
-
-                <!-- boolean -->
-                <ToggleSwitch
-                  v-if="plugin.config_schema[fieldName]?.type === 'boolean'"
-                  :model-value="!!configDrafts[plugin.id]?.[fieldName]"
-                  @update:model-value="value => (configDrafts[plugin.id][fieldName] = value)"
-                />
-
-                <!-- number / integer -->
-                <input
-                  v-else-if="['number', 'integer'].includes(plugin.config_schema[fieldName]?.type)"
-                  type="number"
-                  :value="configDrafts[plugin.id]?.[fieldName] ?? 0"
-                  :step="plugin.config_schema[fieldName]?.type === 'integer' ? 1 : 0.1"
-                  class="block w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                  @input="
-                    configDrafts[plugin.id][fieldName] = Number(
-                      ($event.target as HTMLInputElement).value
-                    )
-                  "
-                />
-
-                <!-- enum -->
-                <select
-                  v-else-if="Array.isArray(plugin.config_schema[fieldName]?.enum)"
-                  :value="configDrafts[plugin.id]?.[fieldName] ?? ''"
-                  class="w-full max-w-xs rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                  @change="
-                    configDrafts[plugin.id][fieldName] = ($event.target as HTMLSelectElement).value
-                  "
-                >
-                  <option
-                    v-for="opt in plugin.config_schema[fieldName]?.enum"
-                    :key="String(opt)"
-                    :value="opt"
-                  >
-                    {{ opt }}
-                  </option>
-                </select>
-
-                <!-- string (default) -->
-                <input
-                  v-else
-                  :value="configDrafts[plugin.id]?.[fieldName] ?? ''"
-                  type="text"
-                  class="block w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
-                  @input="
-                    configDrafts[plugin.id][fieldName] = ($event.target as HTMLInputElement).value
-                  "
-                />
+                <div class="h-7 w-7 animate-spin rounded-full border-b-2 border-indigo-600"></div>
               </div>
+              <div v-else class="space-y-4">
+                <div
+                  v-for="(_schema, fieldName) in plugin.config_schema"
+                  :key="fieldName"
+                  class="space-y-1.5"
+                >
+                  <label class="block text-xs font-semibold text-gray-700 dark:text-gray-300">
+                    {{ fieldLabel(plugin.id, fieldName) }}
+                    <span
+                      v-if="fieldHelp(plugin.id, fieldName)"
+                      class="ml-1 font-normal text-gray-500 dark:text-gray-400"
+                    >
+                      — {{ fieldHelp(plugin.id, fieldName) }}
+                    </span>
+                  </label>
 
-              <div class="flex items-center justify-end gap-3 pt-2">
-                <button
-                  type="button"
-                  class="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50"
-                  @click="configPluginId = null"
-                >
-                  {{ t('common.cancel') }}
-                </button>
-                <button
-                  type="button"
-                  :disabled="isSaving"
-                  class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
-                  @click="savePluginConfig(plugin)"
-                >
-                  <CheckIcon class="h-4 w-4" />
-                  {{ isSaving ? t('common.saving') : t('common.save') }}
-                </button>
+                  <!-- boolean -->
+                  <ToggleSwitch
+                    v-if="plugin.config_schema[fieldName]?.type === 'boolean'"
+                    :model-value="!!configDrafts[plugin.id]?.[fieldName]"
+                    @update:model-value="value => (configDrafts[plugin.id][fieldName] = value)"
+                  />
+
+                  <!-- number / integer -->
+                  <input
+                    v-else-if="
+                      ['number', 'integer'].includes(plugin.config_schema[fieldName]?.type)
+                    "
+                    type="number"
+                    :value="configDrafts[plugin.id]?.[fieldName] ?? 0"
+                    :step="plugin.config_schema[fieldName]?.type === 'integer' ? 1 : 0.1"
+                    class="block w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    @input="
+                      configDrafts[plugin.id][fieldName] = Number(
+                        ($event.target as HTMLInputElement).value
+                      )
+                    "
+                  />
+
+                  <!-- enum -->
+                  <select
+                    v-else-if="Array.isArray(plugin.config_schema[fieldName]?.enum)"
+                    :value="configDrafts[plugin.id]?.[fieldName] ?? ''"
+                    class="w-full max-w-xs rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    @change="
+                      configDrafts[plugin.id][fieldName] = (
+                        $event.target as HTMLSelectElement
+                      ).value
+                    "
+                  >
+                    <option
+                      v-for="opt in plugin.config_schema[fieldName]?.enum"
+                      :key="String(opt)"
+                      :value="opt"
+                    >
+                      {{ opt }}
+                    </option>
+                  </select>
+
+                  <!-- string (default) -->
+                  <input
+                    v-else
+                    :value="configDrafts[plugin.id]?.[fieldName] ?? ''"
+                    type="text"
+                    class="block w-full max-w-md rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+                    @input="
+                      configDrafts[plugin.id][fieldName] = ($event.target as HTMLInputElement).value
+                    "
+                  />
+                </div>
+
+                <div class="flex items-center justify-end gap-3 pt-2">
+                  <button
+                    type="button"
+                    class="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 transition-colors hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-700/50"
+                    @click="configPluginId = null"
+                  >
+                    {{ t('common.cancel') }}
+                  </button>
+                  <button
+                    type="button"
+                    :disabled="isSaving"
+                    class="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-indigo-500 disabled:cursor-not-allowed disabled:opacity-60"
+                    @click="savePluginConfig(plugin)"
+                  >
+                    <CheckIcon class="h-4 w-4" />
+                    {{ isSaving ? t('common.saving') : t('common.save') }}
+                  </button>
+                </div>
               </div>
             </div>
 

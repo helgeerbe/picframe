@@ -167,8 +167,16 @@ AUTH_PROTECTED_API_PREFIXES = (
     "/api/hardware-inputs",
     "/api/maintenance",
     "/api/auth/config",
-    "/api/overlay",
 )
+# Per-plugin overlay config/layout routes (`/api/overlay/plugins/<id>/config` and
+# `/api/overlay/plugins/<id>/layout`) carry plugin secrets (e.g. the weather
+# api_key) and write access, so they stay Settings-protected. The plugin *list*
+# (`/api/overlay/plugins`, no trailing slash) is intentionally PUBLIC under the
+# `settings` scope so Remote/Appearance can render the dock/catalog without auth
+# (#756). The prefix tuple above cannot express "sub-paths only" (the list path
+# is a literal prefix of the per-plugin paths), so this is handled explicitly in
+# `_requires_basic_auth` below.
+AUTH_PROTECTED_OVERLAY_PLUGIN_PREFIX = "/api/overlay/plugins/"
 AUTH_PROTECTED_EXACT_PATHS = {
     "/api/system/reboot",
     "/api/system/restart-service",
@@ -200,6 +208,8 @@ PUBLIC_WORKFLOW_KEYS = {
         "enabled",
         "idle_hide_seconds",
         "enabled_input_types",
+        "enabled_plugins",
+        "visible_plugins",
     },
 }
 
@@ -245,6 +255,8 @@ def _requires_basic_auth(path: str, method: str, scope: str) -> bool:
     if path == "/settings" or path.startswith("/settings/"):
         return True
     if path == "/logs" or path.startswith("/logs/"):
+        return True
+    if path.startswith(AUTH_PROTECTED_OVERLAY_PLUGIN_PREFIX):
         return True
     return any(
         path == prefix or path.startswith(f"{prefix}/") for prefix in AUTH_PROTECTED_API_PREFIXES
@@ -2000,17 +2012,20 @@ def create_app(
     @app.get(
         "/api/overlay/plugins",
         response_model=list[OverlayPluginResponse],
+        response_model_exclude_none=True,
         tags=["Overlay"],
         summary="List discovered overlay plugins",
         description=(
             "Return discovered overlay plugin descriptors (from the overlay controller, "
-            "which scans the configured plugin directory) with their effective config "
-            "(manifest defaults merged with persisted user values). Returns an empty list "
-            "when no overlay controller is available."
+            "which scans the configured plugin directory) with their config schema and "
+            "effective layout. Effective config *values* are intentionally omitted here "
+            "(they may carry secrets such as the weather api_key); fetch them from the "
+            "Settings-protected `GET /api/overlay/plugins/{plugin_id}/config` when editing. "
+            "Returns an empty list when no overlay controller is available."
         ),
     )
     async def api_get_overlay_plugins() -> list[dict[str, Any]]:
-        """List discovered overlay plugins with merged effective config."""
+        """List discovered overlay plugins (metadata + schema + layout; no config values)."""
         descriptors = _overlay_descriptor_map()
         return [
             {
@@ -2023,7 +2038,6 @@ def create_app(
                 "has_config": bool(descriptor.config_schema),
                 "size": descriptor.size,
                 "config_schema": descriptor.config_schema,
-                "config": _merged_plugin_config(descriptor),
                 "layout": _effective_plugin_layout(descriptor),
             }
             for descriptor in sorted(descriptors.values(), key=lambda d: d.id)

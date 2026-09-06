@@ -431,7 +431,14 @@ Optional Basic Auth is configured in **HTTP Settings** as one of three access
 scopes: **None**, **Settings, Logs and admin actions**, or **Complete website**.
 The Settings/admin scope protects configuration, logs, and maintenance actions
 while leaving Remote, Appearance, media APIs, and playback controls available on
-the local network. Complete website also protects the main UI, Remote,
+the local network. The overlay touch controls (the Remote dock and the Appearance
+overlay catalog) are also public under the Settings scope — including the plugin
+*list* (`GET /api/overlay/plugins`) and activating/visibility toggles via the
+public workflow-config controls — so a viewer can expand panels and toggle
+plugins without a password (#756). Per-plugin *config* (which may carry secrets
+such as the weather api key) and per-plugin *layout* remain Settings-protected;
+the Settings tab fetches those on demand when you open a plugin's config/layout
+editor. Complete website also protects the main UI, Remote,
 Appearance, static assets, media APIs, and live web sockets. Credentials are stored as
 plaintext JSON at `${PICFRAME_DATA}/basic_auth.json`; after you authenticate,
 Settings shows the saved password so it can be inspected or changed. SSL and

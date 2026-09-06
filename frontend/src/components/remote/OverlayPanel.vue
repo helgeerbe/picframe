@@ -53,7 +53,7 @@ const toggleVisible = async (pluginId: string) => {
   isSaving.value = true
   statusMessage.value = ''
   try {
-    await configStore.savePartialConfig({ overlay: { visible_plugins: next } })
+    await configStore.saveWorkflowConfig({ overlay: { visible_plugins: next } })
     showStatus('success', t('remote.touchOverlay.saved'))
   } catch (e) {
     console.error(e)
@@ -69,7 +69,7 @@ const setDockOnly = async () => {
   isSaving.value = true
   statusMessage.value = ''
   try {
-    await configStore.savePartialConfig({ overlay: { visible_plugins: [] } })
+    await configStore.saveWorkflowConfig({ overlay: { visible_plugins: [] } })
     showStatus('success', t('remote.touchOverlay.saved'))
   } catch (e) {
     console.error(e)
@@ -81,19 +81,18 @@ const setDockOnly = async () => {
 
 onMounted(async () => {
   await overlayStore.fetchPlugins()
-  // Plugin discovery (`GET /api/overlay/plugins`) is settings-auth-protected, so
-  // a 401 here means the caller is not authenticated to manage the overlay and
-  // the dock is non-functional regardless. In that case we must NOT call
-  // `fetchConfig()` (also settings-protected): its failure would clobber the
-  // shared `configStore.error`, which Remote renders as the "media selection
-  // unavailable" banner and would break Remote's core UI (#750). The contained
-  // `overlayError` is already shown in-panel.
+  // Plugin discovery (`GET /api/overlay/plugins`) and the workflow-config
+  // allowlist (now including enabled_plugins/visible_plugins) are both public
+  // under the Settings auth scope, so Remote's overlay dock works without a
+  // password (#756). We deliberately do NOT call `fetchConfig()` (full,
+  // settings-protected): a 401 would clobber the shared `configStore.error`,
+  // which Remote renders as the "media selection unavailable" banner and would
+  // break Remote's core UI (#750). The contained `overlayError` is already
+  // shown in-panel.
   if (overlayError.value) return
-  // `fetchConfig()` (full) is required: the workflow-config allowlist excludes
-  // enabled_plugins/visible_plugins, which the dock reads live.
   const ov = config.value?.overlay
   if (!Array.isArray(ov?.enabled_plugins)) {
-    await configStore.fetchConfig()
+    await configStore.fetchWorkflowConfig()
   }
 })
 </script>

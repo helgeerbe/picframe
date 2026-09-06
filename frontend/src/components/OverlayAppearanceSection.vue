@@ -56,7 +56,7 @@ const togglePlugin = async (plugin: OverlayPlugin, activate: boolean) => {
   isSaving.value = true
   statusMessage.value = ''
   try {
-    await configStore.savePartialConfig({ overlay: patch })
+    await configStore.saveWorkflowConfig({ overlay: patch })
     showStatus('success', t('appearance.overlay.plugins.saved'))
   } catch (e) {
     console.error(e)
@@ -67,15 +67,18 @@ const togglePlugin = async (plugin: OverlayPlugin, activate: boolean) => {
 }
 
 onMounted(async () => {
-  // `fetchConfig()` (full) is required here: Appearance otherwise only loads
-  // the workflow-config allowlist, which excludes enabled_plugins/visible_plugins.
+  // `fetchWorkflowConfig()` (public under the Settings auth scope, #756) is
+  // sufficient: enabled_plugins/visible_plugins are now in the workflow-config
+  // allowlist. We deliberately avoid `fetchConfig()` (settings-protected) so the
+  // Appearance overlay catalog works without a password; a 401 there would also
+  // clobber the shared `configStore.error`.
   const ov = config.value?.overlay
   if (
     !config.value ||
     Object.keys(config.value).length === 0 ||
     !Array.isArray(ov?.enabled_plugins)
   ) {
-    await configStore.fetchConfig()
+    await configStore.fetchWorkflowConfig()
   }
   await overlayStore.fetchPlugins()
 })

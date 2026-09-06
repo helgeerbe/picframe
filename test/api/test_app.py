@@ -472,6 +472,12 @@ def test_basic_auth_scope_matrix_for_http_routes(tmp_path: Path) -> None:
         ("POST", "/api/system/restart-service", {}),
         ("GET", "/api/system/service-status", {}),
         ("POST", "/api/system/shutdown", {}),
+        # Per-plugin overlay config/layout carry secrets (e.g. weather api_key)
+        # and write access, so they stay Settings-protected even though the
+        # plugin *list* is public (#756).
+        ("GET", "/api/overlay/plugins/test/config", {}),
+        ("PUT", "/api/overlay/plugins/test/config", {"json": {}}),
+        ("PUT", "/api/overlay/plugins/test/layout", {"json": {}}),
         ("GET", "/logs", {}),
         ("GET", "/settings", {}),
     ]
@@ -489,6 +495,9 @@ def test_basic_auth_scope_matrix_for_http_routes(tmp_path: Path) -> None:
         ("GET", "/api/media/filter-options", {}),
         ("GET", "/api/media/location-options?q=ber", {}),
         ("POST", "/api/media/selection-count", {"json": {}}),
+        # The overlay plugin *list* is public under the Settings scope so
+        # Remote/Appearance can render the dock/catalog without auth (#756).
+        ("GET", "/api/overlay/plugins", {}),
         ("GET", f"/media?path={media_path}", {}),
     ]
     for method, url, kwargs in settings_public:
@@ -888,6 +897,8 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
         "overlay.display_mode": "persistent",
         "overlay.idle_hide_seconds": 0.0,
         "overlay.enabled_input_types": ["touch", "mouse"],
+        "overlay.enabled_plugins": ["clock", "weather"],
+        "overlay.visible_plugins": ["clock"],
     }
     mock_publisher = MagicMock()
     app = create_app(
@@ -908,11 +919,13 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     assert data["overlay"]["enabled"] is True
     assert "display_mode" not in data["overlay"]
     assert data["overlay"]["enabled_input_types"] == ["touch", "mouse"]
+    # Overlay plugin activation/visibility are public workflow controls so the
+    # Remote dock and Appearance catalog work without auth (#756).
+    assert data["overlay"]["enabled_plugins"] == ["clock", "weather"]
+    assert data["overlay"]["visible_plugins"] == ["clock"]
     # Advanced/plugin-specific keys stay on PUT /api/config, not workflow-config.
     assert "backend" not in data["overlay"]
     assert "plugin_dir" not in data["overlay"]
-    assert "enabled_plugins" not in data["overlay"]
-    assert "visible_plugins" not in data["overlay"]
     assert "plugin_config" not in data["overlay"]
     assert "plugin_layout" not in data["overlay"]
 
@@ -1976,7 +1989,7 @@ def test_get_overlay_plugins_empty_without_controller() -> None:
     assert client.get("/api/overlay/plugins").json() == []
 
 
-def test_get_overlay_plugins_lists_descriptors_with_merged_config() -> None:
+def test_get_overlay_plugins_lists_descriptors_with_redacted_config() -> None:
     from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
 
     weather = _overlay_descriptor(
@@ -2007,12 +2020,18 @@ def test_get_overlay_plugins_lists_descriptors_with_merged_config() -> None:
         weather_plugin = next(p for p in plugins if p["id"] == "weather")
         assert weather_plugin["has_config"] is True
         assert weather_plugin["config_schema"]["api_key"]["required"] is True
-        # manifest default <- db override
-        assert weather_plugin["config"] == {"units": "imperial"}
+        # The public plugin *list* redacts effective config *values* (they may
+        # carry secrets such as the weather api_key); fetch them from the
+        # Settings-protected per-plugin endpoint when editing (#756).
+        assert "config" not in weather_plugin
+        # Schema and layout remain on the public list (needed to render the
+        # Settings config editor skeleton without a round-trip).
+        assert "config_schema" in weather_plugin
+        assert "layout" in weather_plugin
 
         clock_plugin = next(p for p in plugins if p["id"] == "clock")
         assert clock_plugin["has_config"] is False
-        assert clock_plugin["config"] == {}
+        assert "config" not in clock_plugin
     finally:
         repo.close()
 

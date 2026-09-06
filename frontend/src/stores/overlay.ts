@@ -27,8 +27,12 @@ export interface OverlayPlugin {
   // `unknown`/`Record<string, unknown>` keeps the index accesses ergonomic.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   config_schema: Record<string, Record<string, any>>
+  /** Effective per-plugin config. Redacted from the public plugin *list* (may
+   *  carry secrets such as the weather api_key); fetch on demand via
+   *  `fetchPluginConfig` (Settings-protected) when editing (#756). Absent from
+   *  the list response. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  config: Record<string, any>
+  config?: Record<string, any>
   /** Effective per-plugin layout (#752): manifest defaults <- db overrides. */
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   layout?: Record<string, any>
@@ -51,6 +55,22 @@ export const useOverlayStore = defineStore('overlay', () => {
       plugins.value = []
     } finally {
       isLoading.value = false
+    }
+  }
+
+  /**
+   * Fetch a single plugin's effective config (manifest defaults merged with
+   * persisted user values) from the Settings-protected per-plugin endpoint.
+   * The public plugin *list* redacts `config` (it may carry secrets such as
+   * the weather api_key), so the Settings config editor loads values on demand
+   * here (#756). Throws on HTTP error.
+   */
+  async function fetchPluginConfig(pluginId: string) {
+    const response = await api.get(`/overlay/plugins/${encodeURIComponent(pluginId)}/config`)
+    return response.data as {
+      plugin_id: string
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      config: Record<string, any>
     }
   }
 
@@ -103,6 +123,7 @@ export const useOverlayStore = defineStore('overlay', () => {
     isLoading,
     error,
     fetchPlugins,
+    fetchPluginConfig,
     updatePluginConfig,
     updatePluginLayout
   }
