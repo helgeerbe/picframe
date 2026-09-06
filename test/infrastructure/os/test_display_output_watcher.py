@@ -175,7 +175,11 @@ def test_watcher_event_drives_renderer_respawn(mock_run: MagicMock, monkeypatch)
         overlay_config={"enabled": True},
     )
     renderer._availability = True
-    renderer._running = True
+    # Simulate the external power-cycle case (#755): the worker crashed when
+    # the output was destroyed, so _running is False — but _stopped is False
+    # (not an intentional shutdown), so the handler must still respawn.
+    renderer._running = False
+    renderer._stopped = False
 
     states: list = [_WLR_RANDR_ON, _WLR_RANDR_OFF, _WLR_RANDR_ON, _WLR_RANDR_ON]
 
@@ -206,7 +210,12 @@ def test_watcher_event_drives_renderer_respawn(mock_run: MagicMock, monkeypatch)
             return None
 
     monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
-    with patch.object(renderer, "stop") as mock_stop, patch.object(renderer, "start") as mock_start:
+    with (
+        patch.object(renderer, "_unsubscribe_events") as mock_unsub,
+        patch.object(renderer, "_cleanup") as mock_cleanup,
+        patch.object(renderer, "start") as mock_start,
+    ):
         renderer._on_display_power_event(DisplayPowerEvent(power_on=True))
-        mock_stop.assert_called_once()
+        mock_unsub.assert_called_once()
+        mock_cleanup.assert_called_once()
         mock_start.assert_called_once()

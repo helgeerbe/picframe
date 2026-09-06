@@ -172,6 +172,7 @@ class WebKitOverlayRenderer(IOverlayController):
         self._running = False
         self._listener_thread: threading.Thread | None = None
         self._subscribed = False
+        self._stopped = False  # set by public stop() (shutdown); NOT by worker crash
         self._availability: bool | None = None
         # Guard for the display power-on restart path so a rapid sequence of
         # ``DisplayPowerEvent``s cannot overlap a stop/start cycle, and so the
@@ -194,6 +195,7 @@ class WebKitOverlayRenderer(IOverlayController):
 
     def start(self) -> None:
         """Start the overlay worker subprocess and subscribe to events."""
+        self._stopped = False
         if self._running:
             return
         if not self.is_available():
@@ -216,6 +218,7 @@ class WebKitOverlayRenderer(IOverlayController):
 
     def stop(self) -> None:
         """Stop the worker subprocess and unsubscribe from events."""
+        self._stopped = True
         self._unsubscribe_events()
         self._cleanup()
 
@@ -431,7 +434,7 @@ class WebKitOverlayRenderer(IOverlayController):
         wait can block up to ``_WORKER_SOCKET_TIMEOUT_SECONDS``) and is guarded
         so a burst of power events cannot stack restarts or race shutdown.
         """
-        if not event.power_on or not self._running:
+        if not event.power_on or self._stopped:
             return
         with self._restart_lock:
             if self._restarting:
@@ -441,10 +444,17 @@ class WebKitOverlayRenderer(IOverlayController):
         thread.start()
 
     def _restart_worker(self) -> None:
-        """Stop and re-``start`` the worker subprocess (display power-on path)."""
+        """Stop and re-``start`` the worker subprocess (display power-on path).
+
+        Calls the internal cleanup directly rather than the public :meth:`stop`
+        so the ``_stopped`` flag (shutdown-only) is never set during a respawn —
+        otherwise a subsequent ``DisplayPowerEvent`` arriving while the restart
+        thread is between cleanup and re-start would be incorrectly skipped.
+        """
         try:
             logger.info("Display powered on; restarting overlay worker to re-attach layer surface.")
-            self.stop()
+            self._unsubscribe_events()
+            self._cleanup()
             self.start()
         except Exception as e:  # pragma: no cover - defensive; cleanup self-heals
             logger.error("Failed to restart overlay worker after display power-on: %s", e)

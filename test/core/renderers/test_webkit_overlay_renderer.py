@@ -497,9 +497,14 @@ def test_display_power_on_restarts_worker(
     renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
     renderer._running = True  # simulate a live worker without spawning a subprocess
     monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
-    with patch.object(renderer, "stop") as mock_stop, patch.object(renderer, "start") as mock_start:
+    with (
+        patch.object(renderer, "_unsubscribe_events") as mock_unsub,
+        patch.object(renderer, "_cleanup") as mock_cleanup,
+        patch.object(renderer, "start") as mock_start,
+    ):
         renderer._on_display_power_event(DisplayPowerEvent(power_on=True))
-        mock_stop.assert_called_once()
+        mock_unsub.assert_called_once()
+        mock_cleanup.assert_called_once()
         mock_start.assert_called_once()
     assert renderer._restarting is False
 
@@ -531,12 +536,42 @@ def test_display_power_on_noop_when_overlay_not_running(
 ) -> None:
     """Display power-on never auto-enables a disabled/stopped overlay."""
     renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
-    renderer._running = False  # overlay disabled / not started
+    renderer._stopped = True  # overlay intentionally stopped (shutdown)
     monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
     with patch.object(renderer, "stop") as mock_stop, patch.object(renderer, "start") as mock_start:
         renderer._on_display_power_event(DisplayPowerEvent(power_on=True))
         mock_stop.assert_not_called()
         mock_start.assert_not_called()
+    assert renderer._restarting is False
+
+
+def test_display_power_on_restarts_after_worker_crash(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Power-on respawns even when the worker died (_running=False, _stopped=False).
+
+    This is the external power-cycle case (#755): the monitor's power button
+    destroys the Wayland output, the worker subprocess crashes, the IPC
+    listener gets EOFError and sets ``_running = False`` — but the overlay was
+    NOT intentionally stopped. The handler must still respawn.
+    """
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = False  # worker crashed (IPC EOF); NOT intentionally stopped
+    renderer._stopped = False
+    monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
+    with (
+        patch.object(renderer, "_unsubscribe_events") as mock_unsub,
+        patch.object(renderer, "_cleanup") as mock_cleanup,
+        patch.object(renderer, "start") as mock_start,
+    ):
+        renderer._on_display_power_event(DisplayPowerEvent(power_on=True))
+        mock_unsub.assert_called_once()
+        mock_cleanup.assert_called_once()
+        mock_start.assert_called_once()
     assert renderer._restarting is False
 
 
