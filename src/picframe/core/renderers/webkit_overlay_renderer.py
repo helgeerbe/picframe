@@ -39,6 +39,7 @@ from picframe.core.events.dto import (
     RENDER_WAKE_VIDEO_REVEAL,
     Command,
     CommandEvent,
+    DisplayPowerEvent,
     OverlayConfigChangedEvent,
     RenderCommand,
     SystemErrorEvent,
@@ -172,6 +173,12 @@ class WebKitOverlayRenderer(IOverlayController):
         self._listener_thread: threading.Thread | None = None
         self._subscribed = False
         self._availability: bool | None = None
+        # Guard for the display power-on restart path so a rapid sequence of
+        # ``DisplayPowerEvent``s cannot overlap a stop/start cycle, and so the
+        # restart is skipped during shutdown. ``threading.Lock`` serializes the
+        # check-and-set of ``_restarting``; ``_restarting`` prevents re-entrancy.
+        self._restart_lock = threading.Lock()
+        self._restarting = False
 
     # --- IOverlayController ---
 
@@ -381,12 +388,14 @@ class WebKitOverlayRenderer(IOverlayController):
     def _subscribe_events(self) -> None:
         self._subscriber.subscribe(OverlayConfigChangedEvent, self._on_overlay_config_changed)
         self._subscriber.subscribe(RenderCommand, self._on_render_command)
+        self._subscriber.subscribe(DisplayPowerEvent, self._on_display_power_event)
         self._subscribed = True
 
     def _unsubscribe_events(self) -> None:
         if self._subscribed:
             self._subscriber.unsubscribe(OverlayConfigChangedEvent, self._on_overlay_config_changed)
             self._subscriber.unsubscribe(RenderCommand, self._on_render_command)
+            self._subscriber.unsubscribe(DisplayPowerEvent, self._on_display_power_event)
             self._subscribed = False
 
     def _on_overlay_config_changed(self, event: OverlayConfigChangedEvent) -> None:
@@ -406,6 +415,42 @@ class WebKitOverlayRenderer(IOverlayController):
             self.set_opacity(0.0)
         elif action in (RENDER_PARK_VIDEO_REVEAL, RENDER_WAKE_VIDEO_REVEAL):
             self.set_opacity(1.0)
+
+    def _on_display_power_event(self, event: DisplayPowerEvent) -> None:
+        """Restart the worker when the display is turned back on.
+
+        The overlay is a ``wlr-layer-shell`` surface bound to a specific Wayland
+        output. When the display is powered off the compositor destroys that
+        output and the layer-shell surface is orphaned (labwc: "view has no
+        output"); when the display is powered back on the recreated output is a
+        new object the orphaned surface never re-attaches to, so the overlay
+        stays invisible until picframe is restarted. Respawning the worker
+        re-runs the proven surface-creation path against the now-live output.
+
+        The respawn runs off the single-threaded event bus worker (the socket
+        wait can block up to ``_WORKER_SOCKET_TIMEOUT_SECONDS``) and is guarded
+        so a burst of power events cannot stack restarts or race shutdown.
+        """
+        if not event.power_on or not self._running:
+            return
+        with self._restart_lock:
+            if self._restarting:
+                return
+            self._restarting = True
+        thread = threading.Thread(target=self._restart_worker, daemon=True)
+        thread.start()
+
+    def _restart_worker(self) -> None:
+        """Stop and re-``start`` the worker subprocess (display power-on path)."""
+        try:
+            logger.info("Display powered on; restarting overlay worker to re-attach layer surface.")
+            self.stop()
+            self.start()
+        except Exception as e:  # pragma: no cover - defensive; cleanup self-heals
+            logger.error("Failed to restart overlay worker after display power-on: %s", e)
+        finally:
+            with self._restart_lock:
+                self._restarting = False
 
     # --- Cleanup ---
 

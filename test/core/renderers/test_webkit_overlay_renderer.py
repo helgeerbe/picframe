@@ -12,6 +12,7 @@ from picframe.core.events.dto import (
     RENDER_WAKE_VIDEO_REVEAL,
     Command,
     CommandEvent,
+    DisplayPowerEvent,
     OverlayConfigChangedEvent,
     RenderCommand,
     SystemErrorEvent,
@@ -465,3 +466,96 @@ def test_worker_environment_no_warning_when_so_resolved(
         env = renderer._worker_environment()
     assert env["LD_PRELOAD"] == so_path
     assert not any("libgtk4-layer-shell0" in r.message for r in caplog.records)
+
+
+class _SyncThread:
+    """A drop-in for ``threading.Thread`` that runs ``target`` synchronously.
+
+    Makes the display-power-on restart path deterministic in tests (no real
+    worker thread, no real subprocess).
+    """
+
+    def __init__(self, target=None, args=(), kwargs=None, daemon=False) -> None:
+        self._target = target
+
+    def start(self) -> None:
+        if self._target is not None:
+            self._target()
+
+    def join(self, timeout=None) -> None:  # noqa: D401 - matches Thread API
+        return None
+
+
+def test_display_power_on_restarts_worker(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """On display power-on (worker running) the renderer respawns the worker."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True  # simulate a live worker without spawning a subprocess
+    monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
+    with patch.object(renderer, "stop") as mock_stop, patch.object(renderer, "start") as mock_start:
+        renderer._on_display_power_event(DisplayPowerEvent(power_on=True))
+        mock_stop.assert_called_once()
+        mock_start.assert_called_once()
+    assert renderer._restarting is False
+
+
+def test_display_power_off_does_not_restart_worker(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A display power-off event must not respawn the worker."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True
+    monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
+    with patch.object(renderer, "stop") as mock_stop, patch.object(renderer, "start") as mock_start:
+        renderer._on_display_power_event(DisplayPowerEvent(power_on=False))
+        mock_stop.assert_not_called()
+        mock_start.assert_not_called()
+    assert renderer._restarting is False
+
+
+def test_display_power_on_noop_when_overlay_not_running(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Display power-on never auto-enables a disabled/stopped overlay."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = False  # overlay disabled / not started
+    monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
+    with patch.object(renderer, "stop") as mock_stop, patch.object(renderer, "start") as mock_start:
+        renderer._on_display_power_event(DisplayPowerEvent(power_on=True))
+        mock_stop.assert_not_called()
+        mock_start.assert_not_called()
+    assert renderer._restarting is False
+
+
+def test_display_power_on_guard_skips_concurrent_restart(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A second power-on event while a restart is in flight is dropped."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True
+    renderer._restarting = True  # a restart is already underway
+    monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
+    with patch.object(renderer, "stop") as mock_stop, patch.object(renderer, "start") as mock_start:
+        renderer._on_display_power_event(DisplayPowerEvent(power_on=True))
+        mock_stop.assert_not_called()
+        mock_start.assert_not_called()
+    # The in-flight flag must be left untouched by the skipped attempt.
+    assert renderer._restarting is True
+    renderer._restarting = False  # tidy up so the fixture's renderer is clean

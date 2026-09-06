@@ -126,6 +126,30 @@ class StateEvent(Event):
 
 
 @dataclass(frozen=True)
+class DisplayPowerEvent(Event):
+    """An event notifying subscribers that the physical display power state changed.
+
+    Published by :class:`DisplayPowerManager` *after* a real state change
+    (not on the idempotent "already in that state" skip branches). Subscribers
+    that depend on a live Wayland output (e.g. the out-of-process WebKitGTK
+    overlay worker, whose ``wlr-layer-shell`` surface is bound to a specific
+    output and does not re-attach when the compositor destroys and recreates
+    that output on a display power-cycle) use this to rebuild their surface.
+
+    Attributes:
+        power_on: ``True`` when the display was just turned on, ``False`` when
+            it was just turned off.
+    """
+
+    power_on: bool
+
+    @property
+    def priority(self) -> int:
+        """Display power changes have normal priority (3)."""
+        return 3
+
+
+@dataclass(frozen=True)
 class OverlayConfig:
     """
     Configuration for dynamic overlays (text and clock) to be rendered on top of the image.

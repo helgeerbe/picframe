@@ -4,7 +4,7 @@ Tests for the DisplayPowerManager service.
 
 from unittest.mock import MagicMock
 
-from picframe.core.events.dto import Command, CommandEvent, State, StateEvent
+from picframe.core.events.dto import Command, CommandEvent, DisplayPowerEvent, State, StateEvent
 from picframe.core.services.display_power import DisplayPowerManager
 
 
@@ -50,7 +50,9 @@ def test_display_power_manager_display_on_publishes_play_when_previously_off() -
 
     mock_adapter.is_on.assert_called_once()
     mock_adapter.turn_on.assert_called_once()
-    mock_publisher.publish.assert_called_once_with(CommandEvent(command=Command.PLAY))
+    mock_publisher.publish.assert_any_call(CommandEvent(command=Command.PLAY))
+    mock_publisher.publish.assert_any_call(DisplayPowerEvent(power_on=True))
+    assert mock_publisher.publish.call_count == 2
 
 
 def test_display_power_manager_display_on_noops_when_already_on() -> None:
@@ -102,7 +104,9 @@ def test_display_power_manager_display_off_publishes_pause_when_previously_on() 
 
     mock_adapter.is_on.assert_called_once()
     mock_adapter.turn_off.assert_called_once()
-    mock_publisher.publish.assert_called_once_with(CommandEvent(command=Command.PAUSE))
+    mock_publisher.publish.assert_any_call(CommandEvent(command=Command.PAUSE))
+    mock_publisher.publish.assert_any_call(DisplayPowerEvent(power_on=False))
+    assert mock_publisher.publish.call_count == 2
 
 
 def test_display_power_manager_display_off_noops_when_already_off() -> None:
@@ -152,7 +156,9 @@ def test_display_power_manager_display_toggle_publishes_pause_when_final_state_o
 
     mock_adapter.toggle.assert_called_once()
     mock_adapter.is_on.assert_called_once()
-    mock_publisher.publish.assert_called_once_with(CommandEvent(command=Command.PAUSE))
+    mock_publisher.publish.assert_any_call(CommandEvent(command=Command.PAUSE))
+    mock_publisher.publish.assert_any_call(DisplayPowerEvent(power_on=False))
+    assert mock_publisher.publish.call_count == 2
 
 
 def test_display_power_manager_display_toggle_publishes_play_when_final_state_on() -> None:
@@ -170,7 +176,9 @@ def test_display_power_manager_display_toggle_publishes_play_when_final_state_on
 
     mock_adapter.toggle.assert_called_once()
     mock_adapter.is_on.assert_called_once()
-    mock_publisher.publish.assert_called_once_with(CommandEvent(command=Command.PLAY))
+    mock_publisher.publish.assert_any_call(CommandEvent(command=Command.PLAY))
+    mock_publisher.publish.assert_any_call(DisplayPowerEvent(power_on=True))
+    assert mock_publisher.publish.call_count == 2
 
 
 def test_display_power_manager_ignores_other_commands() -> None:

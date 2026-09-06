@@ -9,7 +9,13 @@ Hardware Abstraction Layer (HAL) adapter.
 import logging
 from typing import Any
 
-from picframe.core.events.dto import Command, CommandEvent, State, StateEvent
+from picframe.core.events.dto import (
+    Command,
+    CommandEvent,
+    DisplayPowerEvent,
+    State,
+    StateEvent,
+)
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.ports import IDisplayPower
 from picframe.core.repositories.interfaces import IConfigRepository
@@ -65,6 +71,7 @@ class DisplayPowerManager:
                 return
             self._adapter.turn_on()
             self._publish_playback_command(Command.PLAY)
+            self._publish_display_power_event(power_on=True)
         elif event.command == Command.DISPLAY_OFF:
             logger.info("DisplayPowerManager: Received DISPLAY_OFF command.")
             if not self._adapter.is_on():
@@ -72,10 +79,13 @@ class DisplayPowerManager:
                 return
             self._adapter.turn_off()
             self._publish_playback_command(Command.PAUSE)
+            self._publish_display_power_event(power_on=False)
         elif event.command == Command.DISPLAY_TOGGLE:
             logger.info("DisplayPowerManager: Received DISPLAY_TOGGLE command.")
             self._adapter.toggle()
-            self._publish_playback_command(Command.PLAY if self._adapter.is_on() else Command.PAUSE)
+            power_on = self._adapter.is_on()
+            self._publish_playback_command(Command.PLAY if power_on else Command.PAUSE)
+            self._publish_display_power_event(power_on=power_on)
         elif event.command == Command.SET_BRIGHTNESS:
             if event.payload is not None:
                 try:
@@ -97,6 +107,19 @@ class DisplayPowerManager:
         if self._event_publisher is None:
             return
         self._event_publisher.publish(CommandEvent(command=command))
+
+    def _publish_display_power_event(self, *, power_on: bool) -> None:
+        """Publish a :class:`DisplayPowerEvent` after a real display state change.
+
+        Subscribers (e.g. the WebKitGTK overlay worker) use this to rebuild
+        surfaces that are bound to a specific Wayland output and would otherwise
+        be orphaned when the compositor destroys and recreates that output on a
+        display power-cycle. Not published on the idempotent "already in that
+        state" skip branches.
+        """
+        if self._event_publisher is None:
+            return
+        self._event_publisher.publish(DisplayPowerEvent(power_on=power_on))
 
     def _handle_state_event(self, event: Any) -> None:
         """Retarget display-power commands after live viewer config changes."""

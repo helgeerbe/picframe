@@ -299,6 +299,32 @@ removed. The fallback code path is retained only as a graceful degrade for a
 half-installed `gtk4-layer-shell` on a `labwc` system, not as a supported
 compositor path.
 
+### Display power-cycle (output destroy/recreate)
+
+`WaylandDisplayPower.turn_off()` runs `wlr-randr --output <name> --off`, so the
+compositor **destroys** that Wayland output. The layer-shell surface is bound
+to that (now-destroyed) output, so labwc drops the view
+(`view has no output, not updating geometry`). When the display is turned back
+on (`wlr-randr ... --on`) the compositor creates a **new** output, but the
+orphaned layer-shell surface never re-attaches to it, so the overlay stays
+invisible until picframe is restarted. (pi3d's fullscreen surface survives the
+cycle because it re-commits continuously on the main render loop; the one-shot
+layer-shell surface in the separate worker process does not.)
+
+Fix: `DisplayPowerManager` publishes a `DisplayPowerEvent(power_on=...)` on the
+event bus after a **real** display state change (not on the idempotent
+"already in that state" skip branches). `WebKitOverlayRenderer` subscribes to
+it; on `power_on=True` (with the worker running) it respawns the worker
+subprocess (`stop()` → `start()`) on a daemon thread, re-running the proven
+`_build_surface()` / `_setup_layer_shell()` path against the now-live output.
+`start()` re-pushes the cached overlay config so the shell boots with the right
+plugins. The respawn is guarded so a burst of power events cannot stack
+restarts or race shutdown, and it is a no-op when the overlay is disabled
+(display power-on never auto-enables the overlay). This mirrors the
+worker-isolation non-negotiable: WebKitGTK can crash or leak, so respawn rather
+than fix the live process.
+
+
 ## 11. Built-in plugins & postMessage protocol
 
 Built-in plugins are self-contained static HTML (no build step) loaded via
