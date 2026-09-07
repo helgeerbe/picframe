@@ -72,6 +72,15 @@ body {
   box-shadow: none;
 }
 
+/* Text plugin (#752): the caption is a solid readability band rather than a
+ * gradient scrim, so its scale-mode panel is filled with the gradient's solid
+ * end color (rgba(0,0,0,0.45)) instead of staying transparent. Scoped to the
+ * text panel id so other scale-mode plugins (clock, weather) keep their own
+ * content-painted backgrounds and let the photo show through. */
+#pf-plugin-panel-text.pf-plugin-panel--scale {
+  background: rgba(0, 0, 0, 0.45);
+}
+
 /* Nine-anchor placement. Center/middle anchors use transforms; combined with
  * the inline width/height these keep the panel flush to the chosen edge. */
 .pf-anchor-top-left {

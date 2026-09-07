@@ -135,7 +135,6 @@ countdown; configure the duration with the panel's `idle_hide_seconds`.
 | `date_format` | string | `%b %d, %Y` | strftime-style format for the capture date. |
 | `font_size` | integer | `40` | Base text size in design pixels (scaled with the panel). |
 | `justify` | enum `L`/`C`/`R` | `L` | Text alignment: Left / Center / Right. |
-| `background_height` | number | `0.25` | Fraction of the panel height covered by the readability gradient. |
 | `opacity` | number | `1.0` | Text opacity (0–1). |
 
 ## Managing plugins from the web UI

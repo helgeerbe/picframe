@@ -34,10 +34,9 @@
     body[data-anchor="bottom-left"]   { align-items: flex-end;   justify-content: flex-start; }
     body[data-anchor="bottom-center"] { align-items: flex-end;   justify-content: center; }
     body[data-anchor="bottom-right"]  { align-items: flex-end;   justify-content: flex-end; }
-    /* The caption band: a readability gradient that hugs the bottom of the panel
-       and scales with `transform: scale()`. The gradient height is a fraction of
-       the panel height (background_height). Text sits inside the band, aligned
-       per `justify`, with a subtle text shadow for legibility over any photo. */
+    /* The caption sits on the solid readability band provided by the shell panel
+       (#pf-plugin-panel-text in style.css), so .pf-text itself is transparent.
+       Text is aligned per `justify`, with a subtle text shadow for legibility. */
     .pf-text {
       width: 100%;
       padding: 0.5rem 1rem;
@@ -63,7 +62,6 @@
         date_format: "%b %d, %Y",
         font_size: 40,
         justify: "L",
-        background_height: 0.25,
         opacity: 1.0
       };
       var currentMedia = null;
@@ -133,16 +131,9 @@
         el.style.fontSize = Math.max(8, Number(cfg.font_size) || 40) + "px";
         el.style.opacity = String(Math.max(0, Math.min(1, Number(cfg.opacity) || 1)));
         el.className = "pf-text pf-text--justify-" + (["L", "C", "R"].indexOf(cfg.justify) >= 0 ? cfg.justify : "L");
-        // Readability gradient band: a fraction of the panel height, anchored to
-        // the bottom edge so the photo shows through above it. Re-applies on
-        // config change without rebuilding the element.
-        var bh = Math.max(0, Math.min(1, Number(cfg.background_height) || 0));
-        var gradAlpha = (0.45 * (Number(cfg.opacity) || 1)).toFixed(3);
-        el.style.background =
-          "linear-gradient(to top, rgba(0,0,0," + gradAlpha + "), rgba(0,0,0,0))";
-        el.style.backgroundSize = "100% " + (bh * 100).toFixed(1) + "%";
-        el.style.backgroundPosition = "bottom";
-        el.style.backgroundRepeat = "no-repeat";
+        // The readability band is the shell panel itself (solid
+        // rgba(0,0,0,0.45); see #pf-plugin-panel-text in style.css), so no
+        // gradient is painted on the caption element.
 
         if (!currentMedia) {
           el.innerHTML = '<span class="pf-placeholder">Waiting for current photo…</span>';

@@ -33,12 +33,6 @@
       "label": "Justify",
       "help": "Text alignment: L = left, C = center, R = right."
     },
-    "background_height": {
-      "type": "number",
-      "default": 0.25,
-      "label": "Background height",
-      "help": "Fraction of the panel height (0-1) covered by the readability gradient."
-    },
     "opacity": {
       "type": "number",
       "default": 1.0,

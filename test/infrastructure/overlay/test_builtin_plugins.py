@@ -108,7 +108,6 @@ def test_text_plugin_schema_and_trigger() -> None:
         "date_format": "%b %d, %Y",
         "font_size": 40,
         "justify": "L",
-        "background_height": 0.25,
         "opacity": 1.0,
     }
     result = validate_plugin_config(
