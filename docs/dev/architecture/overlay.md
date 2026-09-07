@@ -312,41 +312,71 @@ cycle because it re-commits continuously on the main render loop; the one-shot
 layer-shell surface in the separate worker process does not.)
 
 The same orphaning happens for an **external** power-cycle — the monitor's
-physical power button or a compositor-initiated DPMS sleep — because the HPD
-drop removes the DRM connector and the compositor destroys the output. The
-in-process manager cannot see this: `WaylandDisplayPower.is_on()` only reflects
-picframe-initiated commands (it caches `self._is_on`), so no `DisplayPowerEvent`
-is published for external cycles.
+physical power button or a compositor-initiated DPMS sleep. Real-hardware
+diagnostics (#755) showed labwc keeps `Enabled: yes` through a sustained off
+(the connector is *not* removed while the monitor stays unplugged), but fires
+a ~1 s HPD blip at the **on-transition**: the connector listing vanishes
+momentarily then returns. That blip is only catchable by `wlr-randr` polling
+at ≤ 0.5 s, and only then because the watcher parser matches the connector
+name (first whitespace-delimited token, e.g. `HDMI-A-2`) rather than the
+whole `wlr-randr` name line, which on real hardware carries a quoted human
+description (`HDMI-A-2 "Samsung Electric Company SAMSUNG (HDMI-A-2)"`). The
+in-process manager cannot see this either: `WaylandDisplayPower.is_on()` only
+reflects picframe-initiated commands (it caches `self._is_on`), so no
+`DisplayPowerEvent` is published for external cycles.
 
 Fix (internal cycles): `DisplayPowerManager` publishes a
 `DisplayPowerEvent(power_on=...)` on the event bus after a **real** display
 state change (not on the idempotent "already in that state" skip branches).
 
-Fix (external cycles, #755): `DisplayOutputWatcher`
-(`infrastructure/os/display_output_watcher.py`) is constructed in `main.py`
-only when the overlay is enabled and available. It polls the configured
-output's presence/enabled state via `wlr-randr` (~2 s, daemon thread) and
-publishes `DisplayPowerEvent` on observed off->on / on->off transitions —
-edge-triggered, with no publish for the startup baseline so it never emits a
-spurious power-on. It is a no-op when `wlr-randr` is absent or the compositor
-lacks `wlr-output-management` (the probe returns `None` and nothing is
-published), so headless/VM/dev environments are unaffected. It deliberately
-polls rather than subscribing to `Gdk.Display::monitor-added`: that would drag
-a live GLib/GTK main loop into the main process (violating the
-keep-WebKit-out-of-process non-negotiable) and would miss DPMS-only blanks.
+Fix (external cycles, #755) is **hybrid** — an event-driven primary with a
+polling fallback, converging on the same guarded respawn:
 
-`WebKitOverlayRenderer` subscribes to `DisplayPowerEvent`; on `power_on=True`
-(with the worker running) it respawns the worker subprocess
-(`stop()` → `start()`) on a daemon thread, re-running the proven
-`_build_surface()` / `_setup_layer_shell()` path against the now-live output.
-`start()` re-pushes the cached overlay config so the shell boots with the right
-plugins. The respawn is guarded so a burst of power events cannot stack
-restarts or race shutdown, and it is a no-op when the overlay is disabled
-(display power-on never auto-enables the overlay). Because both the internal
-command path and the external watcher publish the same `DisplayPowerEvent`,
-their events collapse to a single respawn via the renderer's restart guard.
-This mirrors the worker-isolation non-negotiable: WebKitGTK can crash or leak,
-so respawn rather than fix the live process.
+1. **Primary — worker self-report.** The overlay worker already runs a GTK
+   main loop, so it connects `Gdk.Display::monitor-removed` on its window's
+   `GdkDisplay` in `_build_surface` (after `present()` realizes the display).
+   When the compositor destroys the bound output, the handler emits a
+   `SurfaceOrphanedEvent` over the IPC channel (registered in
+   `overlay_ipc._EVENT_TYPES`, so it is picked up by the automatic parser).
+   This is event-driven (zero miss, no continuous `wlr-randr` traffic) and
+   respects the keep-GTK-out-of-the-main-process non-negotiable: the signal is
+   subscribed in the *worker* (which already owns a GLib loop), not in the main
+   process — the `monitor-added` objection below only applies to a main-process
+   subscription. A once-per-cycle guard (`_output_lost_reported`, reset on each
+   fresh `_build_surface`) collapses the burst `monitor-removed` fires across
+   the HPD blip to a single report.
+
+2. **Fallback — poll watcher.** `DisplayOutputWatcher`
+   (`infrastructure/os/display_output_watcher.py`) is constructed in `main.py`
+   only when the overlay is enabled and available. It polls the configured
+   output's presence/enabled state via `wlr-randr` (0.5 s default, daemon
+   thread) and publishes `DisplayPowerEvent` on observed off->on / on->off
+   transitions — edge-triggered, with no publish for the startup baseline so
+   it never emits a spurious power-on, and per-probe DEBUG logging for Pi-side
+   diagnosis. It is a no-op when `wlr-randr` is absent or the compositor lacks
+   `wlr-output-management` (the probe returns `None` and nothing is
+   published), so headless/VM/dev environments are unaffected. It deliberately
+   polls rather than subscribing to `Gdk.Display::monitor-added` *in the main
+   process*: that would drag a live GLib/GTK main loop into the main process
+   (violating the keep-WebKit-out-of-process non-negotiable) and would miss
+   DPMS-only blanks. The worker-side subscription above is the permitted
+   counterpart.
+
+`WebKitOverlayRenderer` subscribes to `DisplayPowerEvent` **and** dispatches
+the worker's `SurfaceOrphanedEvent` in `_handle_event`; both converge on a
+shared guarded `_schedule_respawn()` helper. On the relevant event it
+respawns the worker subprocess (`stop()` → `start()`) on a daemon thread,
+re-running the proven `_build_surface()` / `_setup_layer_shell()` path
+against the now-live output. `start()` re-pushes the cached overlay config so
+the shell boots with the right plugins. The respawn is guarded so a burst of
+events (power + self-report, or a self-report burst) cannot stack restarts or
+race shutdown, and it is a no-op when the overlay is disabled (display
+power-on never auto-enables the overlay). Because both the internal command
+path, the external watcher poll, and the worker self-report publish/emit
+events that collapse to a single respawn via the renderer's restart guard,
+the two mechanisms are idempotent and defense-in-depth. This mirrors the
+worker-isolation non-negotiable: WebKitGTK can crash or leak, so respawn
+rather than fix the live process.
 
 
 ## 11. Built-in plugins & postMessage protocol

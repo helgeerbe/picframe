@@ -37,7 +37,7 @@ from picframe.core.events.interfaces import IEventPublisher
 
 logger = logging.getLogger(__name__)
 
-_DEFAULT_PROBE_INTERVAL_SECONDS = 2.0
+_DEFAULT_PROBE_INTERVAL_SECONDS = 0.5
 _PROBE_TIMEOUT_SECONDS = 3.0
 _WLR_RANDR = "wlr-randr"
 _ENABLED_RE = re.compile(r"^\s*enabled:\s*(yes|no)\s*$", re.IGNORECASE)
@@ -138,7 +138,13 @@ class DisplayOutputWatcher:
             )
             return None
 
-        return self._parse_output_state(stdout)
+        result = self._parse_output_state(stdout)
+        logger.debug(
+            "DisplayOutputWatcher: probe parsed %s state=%s",
+            self._display_output,
+            result,
+        )
+        return result
 
     def _parse_output_state(self, stdout: str) -> ProbeResult:
         """Parse a ``wlr-randr`` listing for the configured output's state.
@@ -147,6 +153,15 @@ class DisplayOutputWatcher:
         indented ``key: value`` lines. We locate the configured output's block
         and read its ``enabled:`` value. An absent output (monitor off, HPD
         drop) is reported as ``False`` (a real "off", not a probe error).
+
+        The unindented name line carries the connector name plus an optional
+        quoted human description, e.g. ``HDMI-A-2 "Samsung Electric Company
+        SAMSUNG (HDMI-A-2)"``. We match on the *first whitespace-delimited
+        token* (the connector name) rather than the whole line, so a real
+        ``wlr-randr`` dump with a description is correctly detected (#755).
+        The older exact-equality comparison only ever matched fictional fixtures
+        that emit a bare name, so the watcher silently mis-detected every real
+        output as absent/off.
         """
         in_target_block = False
         enabled: bool | None = None
@@ -154,7 +169,8 @@ class DisplayOutputWatcher:
             is_indented = line[:1].isspace()
             stripped = line.strip()
             if not is_indented and stripped:
-                in_target_block = stripped == self._display_output
+                name_token = stripped.split(None, 1)[0]
+                in_target_block = name_token == self._display_output
                 continue
             if not in_target_block:
                 continue

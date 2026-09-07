@@ -14,6 +14,7 @@ from picframe.core.renderers.overlay_ipc import (
     SetConfigCommand,
     SetOpacityCommand,
     ShutdownCommand,
+    SurfaceOrphanedEvent,
     parse_overlay_ipc_message,
 )
 
@@ -39,11 +40,22 @@ def test_events_round_trip_with_type_discriminator() -> None:
         InputEvent(action=INPUT_ACTION_NEXT),
         OverlayErrorEvent(details="boom", code="webkit_unavailable"),
         OverlayErrorEvent(details="boom"),
+        SurfaceOrphanedEvent(),
     ]
     for event in cases:
         again = parse_overlay_ipc_message(event.to_json())
         assert isinstance(again, type(event))
         assert again == event
+
+
+def test_surface_orphaned_event_round_trip() -> None:
+    """The output-loss self-report event survives a serialize/parse cycle (#755)."""
+    event = SurfaceOrphanedEvent()
+    data = json.loads(event.to_json())
+    assert data["type"] == "surface_orphaned"
+    again = parse_overlay_ipc_message(event.to_json())
+    assert isinstance(again, SurfaceOrphanedEvent)
+    assert again == event
 
 
 def test_set_opacity_command_carries_opacity() -> None:

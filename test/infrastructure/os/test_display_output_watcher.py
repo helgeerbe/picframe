@@ -12,6 +12,24 @@ _WLR_RANDR_ON = "DSI-1\n  enabled: no\n\nHDMI-A-1\n  enabled: yes\n  mode: 1920x
 _WLR_RANDR_OFF = "DSI-1\n  enabled: yes\n"  # HDMI-A-1 absent (HPD drop)
 _WLR_RANDR_DISABLED = "HDMI-A-1\n  enabled: no\n"
 
+# Real ``wlr-randr`` output on the Samsung monitor over labwc (#755): the
+# unindented name line carries the connector name *plus* a quoted human
+# description, e.g. ``HDMI-A-2 "Samsung Electric Company SAMSUNG (HDMI-A-2)"``.
+# The original exact-equality parser never matched this line, so the watcher
+# mis-detected the output as absent/off forever. These fixtures mirror the real
+# hardware dump captured during Diagnostics A/B.
+_WLR_RANDR_REAL_ON = (
+    "DSI-1\n  enabled: no\n\n"
+    'HDMI-A-2 "Samsung Electric Company SAMSUNG (HDMI-A-2)"\n'
+    "  enabled: yes\n"
+    "  mode: 1920x1080\n"
+    "  position: 0,0\n"
+    "  transform: normal\n"
+    "  scale: 1.000000\n"
+)
+_WLR_RANDR_REAL_OFF = "DSI-1\n  enabled: yes\n"  # HDMI-A-2 absent (HPD blip)
+_WLR_RANDR_REAL_DISABLED = 'HDMI-A-2 "Samsung Electric Company SAMSUNG (HDMI-A-2)"\n  enabled: no\n'
+
 
 def _completed(stdout: str, returncode: int = 0) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess(
@@ -39,6 +57,35 @@ def test_parse_output_state_listed_without_enabled_key_defaults_on() -> None:
     w = DisplayOutputWatcher("HDMI-A-1", MagicMock())
     # Older wlr-randr lists only enabled outputs with no `enabled:` key.
     assert w._parse_output_state("HDMI-A-1\n  mode: 1920x1080\n") is True
+
+
+def test_parse_output_state_real_hardware_name_with_description() -> None:
+    """Real wlr-randr name lines carry a quoted description (#755 regression).
+
+    The parser must match the connector name (first token) and ignore the
+    trailing human description, otherwise every real output is mis-detected as
+    absent/off.
+    """
+    w = DisplayOutputWatcher("HDMI-A-2", MagicMock())
+    assert w._parse_output_state(_WLR_RANDR_REAL_ON) is True
+
+
+def test_parse_output_state_real_hardware_absent_is_off() -> None:
+    """The HPD blip makes the connector listing vanish entirely (#755)."""
+    w = DisplayOutputWatcher("HDMI-A-2", MagicMock())
+    assert w._parse_output_state(_WLR_RANDR_REAL_OFF) is False
+
+
+def test_parse_output_state_real_hardware_disabled_is_off() -> None:
+    """Real hardware: enabled:no on a described connector still parses off."""
+    w = DisplayOutputWatcher("HDMI-A-2", MagicMock())
+    assert w._parse_output_state(_WLR_RANDR_REAL_DISABLED) is False
+
+
+def test_parse_output_state_real_hardware_wrong_connector_not_matched() -> None:
+    """A different connector with a description must not satisfy our target."""
+    w = DisplayOutputWatcher("HDMI-A-1", MagicMock())
+    assert w._parse_output_state(_WLR_RANDR_REAL_ON) is False
 
 
 @patch("picframe.infrastructure.os.display_output_watcher.subprocess.run")

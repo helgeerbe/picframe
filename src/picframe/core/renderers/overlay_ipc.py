@@ -110,6 +110,29 @@ class OverlayErrorEvent(OverlayIpcMessage):
     type: str = field(default="error", init=False)
 
 
+@dataclass(frozen=True)
+class SurfaceOrphanedEvent(OverlayIpcMessage):
+    """The overlay's layer-shell surface lost its bound Wayland output (#755).
+
+    Emitted by the worker when the compositor destroys the output the
+    ``wlr-layer-shell`` surface was attached to (e.g. an external monitor
+    power-cycle / HPD drop on labwc). labwc destroys the bound output on the
+    off->on transition; the orphaned surface never re-attaches to the recreated
+    output, so the overlay stays invisible until the worker is respawned. The
+    renderer treats this identically to a ``DisplayPowerEvent(power_on=True)``
+    and re-runs the proven surface-creation path against the now-live output.
+
+    This is the event-driven primary mechanism; the
+    :class:`~picframe.infrastructure.os.display_output_watcher.DisplayOutputWatcher`
+    poll path remains as a defense-in-depth fallback. The signal originates in
+    the worker process (which already runs a GTK main loop), so detecting it
+    there violates none of the keep-GTK-out-of-the-main-process non-negotiables
+    — unlike subscribing to ``Gdk.Display`` signals from the main process.
+    """
+
+    type: str = field(default="surface_orphaned", init=False)
+
+
 _COMMAND_TYPES: dict[str, type[OverlayIpcMessage]] = {
     "set_opacity": SetOpacityCommand,
     "set_config": SetConfigCommand,
@@ -121,6 +144,7 @@ _EVENT_TYPES: dict[str, type[OverlayIpcMessage]] = {
     "ready": ReadyEvent,
     "input": InputEvent,
     "error": OverlayErrorEvent,
+    "surface_orphaned": SurfaceOrphanedEvent,
 }
 
 
