@@ -90,8 +90,6 @@ export class Dock {
   showPluginIdle(pluginId: string): void {
     if (!this.isPluginEnabled(pluginId)) return
     const wasVisible = this.visiblePlugins.includes(pluginId)
-    // eslint-disable-next-line no-console -- diagnostic, forwarded to journal by the bridge
-    console.log('[dock] showPluginIdle', pluginId, 'wasVisible=', wasVisible)
     if (!wasVisible) {
       this.visiblePlugins = [...this.visiblePlugins, pluginId]
       this.render()

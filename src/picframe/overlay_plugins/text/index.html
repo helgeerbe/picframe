@@ -75,7 +75,6 @@
       }
 
       function applyMedia(media) {
-        console.log('[text] applyMedia', media && media.file_path);
         currentMedia = media || null;
         render();
       }
@@ -168,7 +167,6 @@
         if (fmt.indexOf("location") >= 0 && exif.location_name) parts.push(exif.location_name);
 
         el.textContent = parts.join(" - ");
-        console.log('[text] render parts=', JSON.stringify(parts), 'exif=', JSON.stringify(exif));
       }
 
       window.addEventListener("message", function (event) {

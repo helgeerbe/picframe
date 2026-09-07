@@ -153,20 +153,16 @@ export class OverlayShell {
    * iframes, and used to arm the `media_change` wake-after-blend driver.
    */
   private applyMedia(media: CurrentMedia): void {
-    // eslint-disable-next-line no-console -- diagnostic, forwarded to journal by the bridge
-    console.log('[shell] applyMedia', media?.file_path, media?.media_type)
+    const previousPath = this.latestMedia?.file_path
     this.latestMedia = media
     this.dock.postToVisiblePlugins({ type: 'picframe:media', media })
+    // Only re-trigger the wake-after-blend cycle when the photo actually
+    // changes. Periodic state updates (WS reconnects, duplicate IPC pushes)
+    // with the same file_path would otherwise hide the panel repeatedly via
+    // `scheduleMediaWake` → `showPluginIdle`, preventing it from ever becoming
+    // visible (#757).
+    if (previousPath === media?.file_path) return
     this.scheduleMediaWake()
-    // eslint-disable-next-line no-console -- diagnostic, forwarded to journal by the bridge
-    console.log(
-      '[shell] scheduleMediaWake targets:',
-      this.plugins
-        .filter(
-          p => (p.trigger ?? ['icon']).includes('media_change') && this.dock.isPluginEnabled(p.id)
-        )
-        .map(p => p.id)
-    )
   }
 
   /**
@@ -177,8 +173,6 @@ export class OverlayShell {
    * fallback when it is 0.
    */
   private wake(): void {
-    // eslint-disable-next-line no-console -- diagnostic, forwarded to journal by the bridge
-    console.log('[shell] wake panels:', this.dockVisiblePluginIds())
     this.root.classList.remove('pf-root--dock-idle')
     this.clearPanelIdle()
     this.clearDockIdle()
@@ -188,8 +182,6 @@ export class OverlayShell {
       const panel = this.content.querySelector<HTMLElement>(`#${CSS.escape(PANEL_ID_PREFIX + id)}`)
       panel?.classList.remove('pf-plugin-panel--idle')
       const seconds = this.panelIdleSeconds(id)
-      // eslint-disable-next-line no-console -- diagnostic, forwarded to journal by the bridge
-      console.log('[shell] wake panel', id, 'idleSeconds=', seconds)
       if (seconds !== null && seconds > 0) {
         const timer = window.setTimeout(
           () => {
