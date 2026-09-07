@@ -171,11 +171,18 @@ export class OverlayShell {
    * never get an idle timer. The dock timer always runs (the dock is chrome
    * and always auto-hides), using the global `idle_hide_seconds` or the dock
    * fallback when it is 0.
+   *
+   * @param revealDock When `false`, only the plugin panels are revealed and
+   *   re-armed; the dock is left untouched. Used by `scheduleMediaWake` so a
+   *   `media_change` trigger surfaces the text panel without also fading in the
+   *   dock (#757).
    */
-  private wake(): void {
-    this.root.classList.remove('pf-root--dock-idle')
+  private wake(revealDock = true): void {
+    if (revealDock) {
+      this.root.classList.remove('pf-root--dock-idle')
+      this.clearDockIdle()
+    }
     this.clearPanelIdle()
-    this.clearDockIdle()
 
     // Per-panel idle: clear each panel's --idle class and arm its own timer.
     for (const id of this.dockVisiblePluginIds()) {
@@ -194,18 +201,20 @@ export class OverlayShell {
       // persistent panels (seconds === null) never fade.
     }
 
-    // Dock: always auto-hides. Reuse idle_hide_seconds, or the fallback when 0.
-    // The cursor hides together with the dock so the two stay in sync: removing
-    // `pf-root--cursor` reverts the root to the inherited `cursor: none` (#739).
-    const dockSeconds =
-      this.globalIdleHideSeconds > 0 ? this.globalIdleHideSeconds : DOCK_IDLE_FALLBACK_SECONDS
-    this.dockIdleTimer = window.setTimeout(
-      () => {
-        this.root.classList.add('pf-root--dock-idle')
-        this.root.classList.remove('pf-root--cursor')
-      },
-      Math.max(0, dockSeconds) * 1000
-    )
+    if (revealDock) {
+      // Dock: always auto-hides. Reuse idle_hide_seconds, or the fallback when 0.
+      // The cursor hides together with the dock so the two stay in sync: removing
+      // `pf-root--cursor` reverts the root to the inherited `cursor: none` (#739).
+      const dockSeconds =
+        this.globalIdleHideSeconds > 0 ? this.globalIdleHideSeconds : DOCK_IDLE_FALLBACK_SECONDS
+      this.dockIdleTimer = window.setTimeout(
+        () => {
+          this.root.classList.add('pf-root--dock-idle')
+          this.root.classList.remove('pf-root--cursor')
+        },
+        Math.max(0, dockSeconds) * 1000
+      )
+    }
   }
 
   /** Return the effective idle-hide seconds for a panel, or `null` for
@@ -279,7 +288,10 @@ export class OverlayShell {
     const delay = Math.max(0, this.timeFade) * 1000
     this.mediaWakeTimer = window.setTimeout(() => {
       this.mediaWakeTimer = null
-      this.wake()
+      // Reveal only the media_change panels, not the dock. The dock is
+      // navigation chrome and should not appear on a photo change — only on
+      // user interaction (#757).
+      this.wake(false)
     }, delay)
   }
 
