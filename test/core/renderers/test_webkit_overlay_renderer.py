@@ -12,11 +12,13 @@ from picframe.core.events.dto import (
     RENDER_WAKE_VIDEO_REVEAL,
     Command,
     CommandEvent,
+    CurrentMediaChangedEvent,
     DisplayPowerEvent,
     OverlayConfigChangedEvent,
     RenderCommand,
     SystemErrorEvent,
 )
+from picframe.core.models.media import DisplayItem, MediaItem, MediaType
 from picframe.core.models.overlay import PluginDescriptor
 from picframe.core.renderers import webkit_overlay_renderer as wor
 from picframe.core.renderers.overlay_ipc import (
@@ -25,6 +27,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_PREV,
     INPUT_ACTION_TOGGLE,
     InputEvent,
+    MediaChangedCommand,
     OverlayErrorEvent,
     ReadyEvent,
     SetConfigCommand,
@@ -107,6 +110,7 @@ def test_start_spawns_worker_and_applies_initial_config(
     subscribed_types = {call.args[0] for call in mock_subscriber.subscribe.call_args_list}
     assert OverlayConfigChangedEvent in subscribed_types
     assert RenderCommand in subscribed_types
+    assert CurrentMediaChangedEvent in subscribed_types
     sent = mock_client.return_value.send.call_args_list[-1][0][0]
     assert '"type": "set_config"' in sent
 
@@ -339,6 +343,91 @@ def test_renderer_config_updated_skips_push_when_not_running(
         mock_send.assert_not_called()
 
 
+def _make_media_item(**overrides) -> MediaItem:
+    """Build a minimal ``MediaItem`` for media-change tests."""
+    defaults: dict[str, Any] = dict(
+        filepath="/photos/IMG_001.jpg",
+        filename="IMG_001.jpg",
+        directory_id=1,
+        media_type=MediaType.IMAGE,
+        file_size=1024,
+        last_modified=0.0,
+    )
+    defaults.update(overrides)
+    return MediaItem(**defaults)
+
+
+def test_media_changed_forwards_media_changed_command(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """A ``CurrentMediaChangedEvent`` sends a ``MediaChangedCommand`` with the
+    primary media item mapped to the ``CurrentMedia`` shape (#757)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True
+    item = _make_media_item(
+        latitude=48.1,
+        longitude=11.6,
+        location="Munich, Germany",
+        title="Sunset",
+        caption="A nice sunset",
+        make="Canon",
+        model="EOS R6",
+    )
+    display = DisplayItem.single(item)
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_media_changed(CurrentMediaChangedEvent(media_item=display))
+        mock_send.assert_called_once()
+        cmd = mock_send.call_args[0][0]
+        assert isinstance(cmd, MediaChangedCommand)
+        assert cmd.media["file_path"] == "/photos/IMG_001.jpg"
+        assert cmd.media["media_type"] == "image"
+        assert cmd.media["location"] == {"lat": 48.1, "lon": 11.6}
+        # The resolved location-name string surfaces as ``location_name`` in exif.
+        assert cmd.media["exif"]["location_name"] == "Munich, Germany"
+        assert cmd.media["exif"]["title"] == "Sunset"
+        assert cmd.media["exif"]["caption"] == "A nice sunset"
+        assert cmd.media["exif"]["make"] == "Canon"
+
+
+def test_media_changed_skips_push_when_not_running(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """Before the worker is up (or after a stop) media events are dropped."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = False
+    item = _make_media_item()
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_media_changed(CurrentMediaChangedEvent(media_item=DisplayItem.single(item)))
+        mock_send.assert_not_called()
+
+
+def test_display_item_to_overlay_dict_video_type() -> None:
+    """A video ``MediaItem`` maps to ``media_type == "video"``."""
+    item = _make_media_item(media_type=MediaType.VIDEO, filepath="/v/clip.mp4")
+    media = wor._display_item_to_overlay_dict(DisplayItem.single(item))
+    assert media["media_type"] == "video"
+    assert media["file_path"] == "/v/clip.mp4"
+
+
+def test_display_item_to_overlay_dict_no_location() -> None:
+    """A ``MediaItem`` without GPS coords yields ``location is None``."""
+    item = _make_media_item()
+    media = wor._display_item_to_overlay_dict(DisplayItem.single(item))
+    assert media["location"] is None
+
+
+def test_display_item_to_overlay_dict_unknown_payload_returns_placeholder() -> None:
+    """An unexpected payload shape never crashes the listener."""
+    media = wor._display_item_to_overlay_dict({"not": "a display item"})
+    assert media["file_path"] == "no_pictures.jpg"
+
+
 def test_set_opacity_sends_set_opacity_command(
     mock_publisher: MagicMock,
     mock_subscriber: MagicMock,
@@ -374,6 +463,7 @@ def test_stop_unsubscribes_and_sends_shutdown_and_terminates(
     unsubscribed_types = {call.args[0] for call in mock_subscriber.unsubscribe.call_args_list}
     assert OverlayConfigChangedEvent in unsubscribed_types
     assert RenderCommand in unsubscribed_types
+    assert CurrentMediaChangedEvent in unsubscribed_types
     sent = conn.send.call_args_list[-1][0][0]
     assert '"type": "shutdown"' in sent
     mock_popen.return_value.terminate.assert_called_once()

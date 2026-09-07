@@ -8,6 +8,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_PREV,
     INPUT_ACTION_TOGGLE,
     InputEvent,
+    MediaChangedCommand,
     OverlayErrorEvent,
     ReadyEvent,
     ReloadCommand,
@@ -23,11 +24,18 @@ def test_commands_round_trip_with_type_discriminator() -> None:
         (SetOpacityCommand(opacity=0.5), 0.5),
         (SetConfigCommand(config={"enabled": True}), {"enabled": True}),
         (ReloadCommand(), None),
+        (MediaChangedCommand(media={"file_path": "a.jpg", "exif": {}}), None),
         (ShutdownCommand(), None),
     ]
     for cmd, _ in cases:
         data = json.loads(cmd.to_json())
-        assert data["type"] in {"set_opacity", "set_config", "reload", "shutdown"}
+        assert data["type"] in {
+            "set_opacity",
+            "set_config",
+            "reload",
+            "media_changed",
+            "shutdown",
+        }
         again = parse_overlay_ipc_message(cmd.to_json())
         assert isinstance(again, type(cmd))
         assert again == cmd
@@ -56,6 +64,19 @@ def test_set_config_command_carries_config() -> None:
     cmd = parse_overlay_ipc_message(SetConfigCommand(config={"a": 1}).to_json())
     assert isinstance(cmd, SetConfigCommand)
     assert cmd.config == {"a": 1}
+
+
+def test_media_changed_command_carries_media() -> None:
+    payload = {
+        "file_path": "x.jpg",
+        "media_type": "image",
+        "exif": {"title": "T"},
+        "location": None,
+    }
+    cmd = parse_overlay_ipc_message(MediaChangedCommand(media=payload).to_json())
+    assert isinstance(cmd, MediaChangedCommand)
+    assert cmd.media == payload
+    assert cmd.media["file_path"] == "x.jpg"
 
 
 def test_input_event_action_constants() -> None:

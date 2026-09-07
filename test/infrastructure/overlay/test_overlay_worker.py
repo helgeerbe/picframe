@@ -13,6 +13,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
     INPUT_ACTION_TOGGLE,
+    MediaChangedCommand,
     OverlayErrorEvent,
     ReadyEvent,
     ReloadCommand,
@@ -404,6 +405,46 @@ def test_push_config_to_shell_noop_without_surface() -> None:
     worker = make_worker()
     worker._web_view = None
     worker._push_config_to_shell()  # must not raise
+
+
+def test_handle_media_changed_pushes_to_shell(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A ``MediaChangedCommand`` is forwarded to ``_push_media_to_shell`` (#757)."""
+    worker = make_worker()
+    pushed: list[dict[str, Any]] = []
+    monkeypatch.setattr(worker, "_push_media_to_shell", lambda media: pushed.append(media))
+    payload = {"file_path": "a.jpg", "media_type": "image", "exif": {}, "location": None}
+    assert worker.handle_command(MediaChangedCommand(media=payload)) is True
+    assert pushed == [payload]
+
+
+def test_push_media_to_shell_injects_apply_media(monkeypatch: pytest.MonkeyPatch) -> None:
+    """The media push injects ``window.picframe.applyMedia(<json>)`` via the
+    same ``_push_to_shell`` bridge used for config (#757)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    worker = make_worker()
+    worker._web_view = MagicMock()
+    pushed: list[str] = []
+    monkeypatch.setattr(worker, "_push_to_shell", lambda js: pushed.append(js))
+    payload = {
+        "file_path": "a.jpg",
+        "media_type": "image",
+        "exif": {"title": "T"},
+        "location": None,
+    }
+    worker._push_media_to_shell(payload)
+    assert len(pushed) == 1
+    assert "window.picframe.applyMedia(" in pushed[0]
+    assert "a.jpg" in pushed[0]
+    assert '"title": "T"' in pushed[0]
+
+
+def test_push_media_to_shell_noop_without_surface() -> None:
+    """Headless (no WebView) media push is a no-op, never raises."""
+    worker = make_worker()
+    worker._web_view = None
+    worker._push_media_to_shell({"file_path": "a.jpg"})  # must not raise
 
 
 def test_build_shell_config_merges_plugins_and_env(tmp_path) -> None:

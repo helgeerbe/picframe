@@ -73,6 +73,22 @@ class ReloadCommand(OverlayIpcMessage):
 
 
 @dataclass(frozen=True)
+class MediaChangedCommand(OverlayIpcMessage):
+    """Push the current media item to the overlay shell.
+
+    The controller (in-process with the event bus) forwards
+    ``CurrentMediaChangedEvent`` payloads to the worker via this command so the
+    shell's ``media_change`` plugins wake after the image blend — without
+    relying on the cross-origin ``/ws/state`` WebSocket from the ``file://``
+    overlay surface (#757). The worker injects the ``media`` dict into the
+    shell via the same ``evaluate_javascript`` bridge used for config.
+    """
+
+    media: dict[str, Any]
+    type: str = field(default="media_changed", init=False)
+
+
+@dataclass(frozen=True)
 class ShutdownCommand(OverlayIpcMessage):
     """Ask the worker to shut down cleanly."""
 
@@ -114,6 +130,7 @@ _COMMAND_TYPES: dict[str, type[OverlayIpcMessage]] = {
     "set_opacity": SetOpacityCommand,
     "set_config": SetConfigCommand,
     "reload": ReloadCommand,
+    "media_changed": MediaChangedCommand,
     "shutdown": ShutdownCommand,
 }
 

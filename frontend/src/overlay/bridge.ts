@@ -11,13 +11,15 @@
  * no-ops so the shell can still be inspected with `vite preview`.
  */
 
-import type { InputAction, OverlayShellConfig } from './types'
+import type { CurrentMedia, InputAction, OverlayShellConfig } from './types'
 
 type ApplyConfigHandler = (config: OverlayShellConfig) => void
+type ApplyMediaHandler = (media: CurrentMedia) => void
 
 interface PicframeBridge {
   send: (action: InputAction | { action: InputAction }) => void
   applyConfig?: ApplyConfigHandler
+  applyMedia?: ApplyMediaHandler
 }
 
 declare global {
@@ -49,4 +51,18 @@ export function sendAction(action: InputAction): void {
 /** Register the handler the worker calls to push the live shell config. */
 export function registerApplyConfig(handler: ApplyConfigHandler): void {
   ensureBridge().applyConfig = handler
+}
+
+/**
+ * Register the handler the worker calls to push the current media item (#757).
+ *
+ * The controller forwards `CurrentMediaChangedEvent` payloads over the IPC
+ * bridge (the reliable path that replaces the cross-origin `/ws/state`
+ * WebSocket from the `file://` overlay surface). The shell forwards the media
+ * into visible plugin iframes and arms the `media_change` wake-after-blend
+ * driver — the same body as the WS `onMedia` path, now shared via
+ * `OverlayShell.applyMedia`.
+ */
+export function registerApplyMedia(handler: ApplyMediaHandler): void {
+  ensureBridge().applyMedia = handler
 }

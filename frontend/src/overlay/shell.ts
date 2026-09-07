@@ -18,7 +18,7 @@
  * on any enabled input event.
  */
 
-import { registerApplyConfig, sendAction } from './bridge'
+import { registerApplyConfig, registerApplyMedia, sendAction } from './bridge'
 import { Dock } from './dock'
 import { readEnv } from './env'
 import { InputRouter } from './input'
@@ -99,18 +99,17 @@ export class OverlayShell {
     // keyboard activity never reveal the cursor (#739).
     this.veil.addEventListener('pointermove', this.onMouseMove)
     registerApplyConfig(config => this.applyConfig(config))
+    // The worker pushes current-media payloads over the IPC bridge (the reliable
+    // path that replaces the cross-origin `/ws/state` WebSocket from `file://`).
+    registerApplyMedia(media => this.applyMedia(media))
 
     const env = readEnv()
     if (env.wsPort) {
       this.state = new StateClient(env.wsPort, {
-        // Forward live media changes into all visible plugin iframes so plugins
-        // (e.g. `meta`, `text`) can react to photo changes without their own WS
-        // client, then arm the `media_change` wake-after-blend driver (#757).
-        onMedia: media => {
-          this.latestMedia = media
-          this.dock.postToVisiblePlugins({ type: 'picframe:media', media })
-          this.scheduleMediaWake()
-        }
+        // Best-effort fallback: when the cross-origin WS *does* connect it is a
+        // harmless secondary media path. Both the bridge and the WS feed the
+        // shared `applyMedia` so plugins see identical payloads (#757).
+        onMedia: media => this.applyMedia(media)
       })
       this.state.connect()
     }
@@ -143,6 +142,20 @@ export class OverlayShell {
     this.dock.setMediaProvider(() => this.latestMedia)
     this.dock.applyConfig(config)
     this.wake()
+  }
+
+  /**
+   * Apply a current-media payload from the IPC bridge or the `/ws/state` client
+   * (#757). Both paths feed this shared method so plugins see identical
+   * payloads regardless of which transport delivered them. The media is
+   * forwarded into all visible plugin iframes (so e.g. `meta`/`text` react to
+   * photo changes without their own WS client), cached for freshly-loaded
+   * iframes, and used to arm the `media_change` wake-after-blend driver.
+   */
+  private applyMedia(media: CurrentMedia): void {
+    this.latestMedia = media
+    this.dock.postToVisiblePlugins({ type: 'picframe:media', media })
+    this.scheduleMediaWake()
   }
 
   /**

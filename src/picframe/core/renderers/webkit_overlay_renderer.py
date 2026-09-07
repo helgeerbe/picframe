@@ -39,6 +39,7 @@ from picframe.core.events.dto import (
     RENDER_WAKE_VIDEO_REVEAL,
     Command,
     CommandEvent,
+    CurrentMediaChangedEvent,
     DisplayPowerEvent,
     OverlayConfigChangedEvent,
     RenderCommand,
@@ -46,6 +47,7 @@ from picframe.core.events.dto import (
     SystemErrorEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
+from picframe.core.models.media import DisplayItem, MediaItem
 from picframe.core.models.overlay import PluginDescriptor
 from picframe.core.ports.overlay import IOverlayController
 from picframe.core.renderers.overlay_ipc import (
@@ -54,6 +56,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_PREV,
     INPUT_ACTION_TOGGLE,
     InputEvent,
+    MediaChangedCommand,
     OverlayErrorEvent,
     OverlayIpcMessage,
     ReadyEvent,
@@ -70,6 +73,90 @@ logger = logging.getLogger(__name__)
 _WEBKIT_UNAVAILABLE_CODE = "webkit_unavailable"
 _WORKER_SOCKET_TIMEOUT_SECONDS = 20.0
 _WORKER_SOCKET_POLL_SECONDS = 0.1
+
+# Exif keys mirrored from ``api.app.MEDIA_DTO_EXIF_KEYS`` so the overlay's
+# ``CurrentMedia.exif`` blob is identical to the ``/ws/state`` payload shape.
+# The controller is a core module and must not import from the API layer, so the
+# key set is duplicated here with a reference to the canonical source.
+_OVERLAY_EXIF_KEYS = (
+    "make",
+    "model",
+    "lens",
+    "f_number",
+    "exposure_time",
+    "iso",
+    "focal_length",
+    "exif_datetime",
+    "caption",
+    "tags",
+    "location",
+    "title",
+    "rating",
+    "width",
+    "height",
+    "orientation",
+    "duration",
+    "codec",
+    "pixel_format",
+    "framerate",
+    "bitrate",
+    "displayed_count",
+    "last_displayed",
+)
+
+
+def _media_item_to_overlay_dict(item: MediaItem) -> dict[str, Any]:
+    """Build a ``CurrentMedia``-shaped dict from a core ``MediaItem``.
+
+    Mirrors ``api.app._media_item_to_dto`` but works from the core model
+    directly, without a ``MediaRepository``: the indexer already resolved
+    ``MediaItem.location`` to a name string at scan time, so ``location_name``
+    is derived from that field without a live reverse-geocode lookup. The result
+    is the same ``{file_path, media_type, exif, location}`` shape the
+    ``/ws/state`` WebSocket produces, so plugins consume both paths
+    identically (#757).
+    """
+    data: dict[str, Any] = item.to_dict()
+    file_path = str(data.get("filepath") or "no_pictures.jpg")
+    location: dict[str, float] | None = None
+    if data.get("latitude") is not None and data.get("longitude") is not None:
+        location = {"lat": float(data["latitude"]), "lon": float(data["longitude"])}
+    exif: dict[str, Any] = {}
+    for key in _OVERLAY_EXIF_KEYS:
+        if key in data and data[key] is not None:
+            if key == "location" and isinstance(data[key], dict):
+                continue
+            exif[key] = data[key]
+    # ``MediaItem.location`` is the resolved location-name string; expose it as
+    # ``location_name`` in exif (same as the WS DTO path).
+    loc = data.get("location")
+    if isinstance(loc, str) and loc:
+        exif["location_name"] = loc
+    elif "location" in exif and isinstance(exif["location"], str):
+        exif["location_name"] = exif["location"]
+    return {
+        "file_path": file_path,
+        "media_type": "video" if str(data.get("media_type", "")).lower() == "video" else "image",
+        "exif": exif,
+        "location": location,
+    }
+
+
+def _display_item_to_overlay_dict(media_item: Any) -> dict[str, Any]:
+    """Extract the primary ``MediaItem`` from a ``CurrentMediaChangedEvent`` payload.
+
+    The event carries a :class:`DisplayItem` (one slideshow slot, possibly a
+    portrait pair). The overlay only needs the primary item's metadata, so we
+    resolve via the ``primary`` property and map it. Falls back to an empty
+    placeholder dict for unexpected payload shapes so a malformed event never
+    crashes the listener.
+    """
+    if isinstance(media_item, DisplayItem):
+        return _media_item_to_overlay_dict(media_item.primary)
+    if isinstance(media_item, MediaItem):
+        return _media_item_to_overlay_dict(media_item)
+    return {"file_path": "no_pictures.jpg", "media_type": "image", "exif": {}, "location": None}
+
 
 # Probe priority for the WebKitGTK typelib. ``WebKit`` 6.x targets GTK4; the
 # 4.1 series targets GTK3 but is still common on Raspberry Pi OS. We accept
@@ -414,6 +501,7 @@ class WebKitOverlayRenderer(IOverlayController):
         self._subscriber.subscribe(RenderCommand, self._on_render_command)
         self._subscriber.subscribe(DisplayPowerEvent, self._on_display_power_event)
         self._subscriber.subscribe(RendererConfigUpdatedEvent, self._on_renderer_config_updated)
+        self._subscriber.subscribe(CurrentMediaChangedEvent, self._on_media_changed)
         self._subscribed = True
 
     def _unsubscribe_events(self) -> None:
@@ -424,12 +512,28 @@ class WebKitOverlayRenderer(IOverlayController):
             self._subscriber.unsubscribe(
                 RendererConfigUpdatedEvent, self._on_renderer_config_updated
             )
+            self._subscriber.unsubscribe(CurrentMediaChangedEvent, self._on_media_changed)
             self._subscribed = False
 
     def _on_overlay_config_changed(self, event: OverlayConfigChangedEvent) -> None:
         """Forward a live overlay config change to the worker."""
         self._overlay_config = dict(event.overlay_config)
         self._send_command(SetConfigCommand(config=self._worker_config()))
+
+    def _on_media_changed(self, event: CurrentMediaChangedEvent) -> None:
+        """Forward the current media to the worker so ``media_change`` plugins wake.
+
+        The controller is in-process with the event bus, so this path bypasses
+        the cross-origin ``/ws/state`` WebSocket (which the ``file://`` overlay
+        shell may not be able to establish under WebKitGTK). The worker pushes
+        the media to the shell via the same ``evaluate_javascript`` bridge used
+        for config, so the text overlay's ``media_change`` trigger fires on
+        every photo change (#757).
+        """
+        if not self._running:
+            return
+        media = _display_item_to_overlay_dict(event.media_item)
+        self._send_command(MediaChangedCommand(media=media))
 
     def _on_renderer_config_updated(self, event: RendererConfigUpdatedEvent) -> None:
         """Keep the injected ``time_fade`` live and re-push the shell config (#757).

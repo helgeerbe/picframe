@@ -36,6 +36,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_PREV,
     INPUT_ACTION_TOGGLE,
     InputEvent,
+    MediaChangedCommand,
     OverlayErrorEvent,
     OverlayIpcMessage,
     ReadyEvent,
@@ -197,6 +198,8 @@ class OverlayWorker:
             self._apply_config()
         elif isinstance(command, ReloadCommand):
             self._apply_config()
+        elif isinstance(command, MediaChangedCommand):
+            self._push_media_to_shell(command.media)
         elif isinstance(command, ShutdownCommand):
             return False
         return True
@@ -348,6 +351,29 @@ class OverlayWorker:
         js = (
             "if(window.picframe&&window.picframe.applyConfig)"
             f"{{window.picframe.applyConfig({payload});}}"
+        )
+        self._push_to_shell(js)
+
+    def _push_media_to_shell(self, media: dict[str, Any]) -> None:
+        """Push a current-media payload to the shell (no-op in headless mode).
+
+        Mirrors :meth:`_push_config_to_shell`: the controller forwards a
+        ``CurrentMediaChangedEvent`` (resolved to a ``CurrentMedia``-shaped dict)
+        over IPC, and the worker injects it into the shell via
+        ``window.picframe.applyMedia`` — the same ``evaluate_javascript`` bridge
+        used for config. This is the reliable media path that bypasses the
+        cross-origin ``/ws/state`` WebSocket from the ``file://`` overlay
+        surface, so the text overlay's ``media_change`` trigger fires on every
+        photo change (#757).
+        """
+        if self._web_view is None or not WEBKIT_AVAILABLE:
+            return
+        payload = json.dumps(media)
+        # Guard against the shell not having registered applyMedia yet (a race
+        # between an early media_changed and the page finishing boot).
+        js = (
+            "if(window.picframe&&window.picframe.applyMedia)"
+            f"{{window.picframe.applyMedia({payload});}}"
         )
         self._push_to_shell(js)
 
