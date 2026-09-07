@@ -1046,10 +1046,10 @@ class VideoFrameExtractor:
             except _FrameExtractionTimeout:
                 self.logger.warning(
                     "Tail-decoded final frame extraction timed out for %s; "
-                    "falling back to direct playback without cached final frame.",
+                    "trying next tail window or falling back to duration-offset.",
                     self.video_path,
                 )
-                raise
+                break
             if image is not None:
                 return image
 
@@ -1236,10 +1236,24 @@ class VideoFrameExtractor:
         if cache_dir:
             Path(cache_dir).expanduser().mkdir(parents=True, exist_ok=True)
 
+        first_image = None
+        last_image = None
         try:
             first_image = extractor._get_frame_as_image(0)
+        except _FrameExtractionTimeout:
+            logger.warning(
+                "Timed out extracting first transition frame for %s.",
+                video_path,
+            )
+        try:
             last_image = extractor._get_final_decoded_frame_as_image(duration)
         except _FrameExtractionTimeout:
+            logger.warning(
+                "Timed out extracting last transition frame for %s.",
+                video_path,
+            )
+
+        if first_image is None and last_image is None:
             logger.warning(
                 "Timed out extracting transition frames for %s; video will play directly.",
                 video_path,
@@ -1248,6 +1262,8 @@ class VideoFrameExtractor:
 
         if last_image is None and first_image is not None:
             last_image = first_image.copy()
+        if first_image is None and last_image is not None:
+            first_image = last_image.copy()
 
         if first_image is not None and last_image is not None:
             first_image = extractor._apply_sample_aspect_ratio(first_image, sar)

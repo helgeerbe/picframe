@@ -18,7 +18,6 @@ from picframe.core.utils.video_frame_extractor import (
     VideoFrameExtractor,
     VideoFrameMattingConfig,
     VideoTransitionFrameMetadata,
-    _FrameExtractionTimeout,
 )
 
 
@@ -606,17 +605,95 @@ def test_extract_and_save_frames_returns_false_on_first_frame_timeout(
     assert result is False
 
 
-def test_final_decoded_frame_aborts_on_tail_decode_timeout(
+def test_final_decoded_frame_falls_back_on_tail_decode_timeout(
     mock_subprocess_run: MagicMock,
 ) -> None:
+    """A tail-decode timeout falls through to the duration-offset fallback."""
     mock_subprocess_run.side_effect = subprocess.TimeoutExpired(
         cmd=["ffmpeg"],
         timeout=VideoFrameExtractor.FFMPEG_FRAME_TIMEOUT_SECONDS,
     )
     extractor = VideoFrameExtractor("test.mp4", 10, 10, fit_display=True)
 
-    with pytest.raises(_FrameExtractionTimeout):
-        extractor._get_final_decoded_frame_as_image(10.0)
+    result = extractor._get_final_decoded_frame_as_image(10.0)
+
+    assert result is None
+
+
+def test_final_decoded_frame_tail_timeout_falls_back_to_duration_offset(
+    mock_subprocess_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """A tail-decode timeout in one window falls through to duration-offset success."""
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    expected_image = Image.new("RGB", (10, 10), "red")
+
+    call_count = {"n": 0}
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        call_count["n"] += 1
+        # Tail-decode calls (ffmpeg -ss ... with output_pattern) time out on the
+        # first invocation; subsequent single-frame _get_frame_as_image calls
+        # succeed and return a JPEG.
+        if "-vsync" in cmd:
+            raise subprocess.TimeoutExpired(
+                cmd=cmd,
+                timeout=VideoFrameExtractor.FFMPEG_FRAME_TIMEOUT_SECONDS,
+            )
+        return MagicMock(returncode=0, stdout=b"fake_jpeg")
+
+    mock_subprocess_run.side_effect = fake_run
+    extractor = VideoFrameExtractor(str(video_path), 10, 10, fit_display=True)
+
+    with patch(
+        "picframe.core.utils.video_frame_extractor.Image.open",
+        return_value=expected_image,
+    ):
+        result = extractor._get_final_decoded_frame_as_image(10.0)
+
+    assert result is expected_image
+    assert call_count["n"] >= 2
+
+
+def test_extract_and_save_frames_survives_first_frame_timeout(
+    mock_subprocess_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """A first-frame timeout must not prevent last-frame extraction."""
+    import io
+
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    # Pre-encode a JPEG before Image.save is patched below.
+    jpeg_buf = io.BytesIO()
+    Image.new("RGB", (10, 10), "red").save(jpeg_buf, format="JPEG")
+    jpeg_bytes = jpeg_buf.getvalue()
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        # Tail-decode calls write to a file pattern and use -vsync; let them
+        # succeed by emitting a frame file (written directly to bypass the
+        # patched Image.save).
+        if "-vsync" in cmd:
+            output_pattern = Path(cmd[-1])
+            (output_pattern.parent / "frame-000001.jpg").write_bytes(jpeg_bytes)
+            return MagicMock(returncode=0, stderr=b"")
+        # Single-frame _get_frame_as_image(0) for the first frame times out.
+        if "-ss" in cmd and cmd[cmd.index("-ss") + 1] == "0":
+            raise subprocess.TimeoutExpired(
+                cmd=cmd,
+                timeout=VideoFrameExtractor.FFMPEG_FRAME_TIMEOUT_SECONDS,
+            )
+        raise AssertionError("unexpected subprocess call")
+
+    mock_subprocess_run.side_effect = fake_run
+    extractor = VideoFrameExtractor(str(video_path), 10, 10, fit_display=True)
+
+    with patch.object(Image.Image, "save") as mock_save:
+        result = extractor.extract_and_save_frames(str(video_path), 10.0, 10, 10)
+
+    assert result is True
+    assert mock_save.call_count == 2
 
 
 def test_get_frame_as_image_passes_strict_unofficial(
