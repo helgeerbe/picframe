@@ -367,7 +367,16 @@ class OverlayWorker:
         photo change (#757).
         """
         if self._web_view is None or not WEBKIT_AVAILABLE:
+            logger.debug(
+                "Overlay push media skipped (no surface in headless mode): file=%s",
+                media.get("file_path"),
+            )
             return
+        logger.info(
+            "Overlay push media: file=%s type=%s",
+            media.get("file_path"),
+            media.get("media_type"),
+        )
         payload = json.dumps(media)
         # Guard against the shell not having registered applyMedia yet (a race
         # between an early media_changed and the page finishing boot).
@@ -900,6 +909,8 @@ class OverlayWorker:
             "webkitMsg:!!(window.webkit&&window.webkit.messageHandlers"
             "&&window.webkit.messageHandlers.picframe),"
             "picframeSend:typeof(window.picframe&&window.picframe.send),"
+            "applyConfig:typeof(window.picframe&&window.picframe.applyConfig),"
+            "applyMedia:typeof(window.picframe&&window.picframe.applyMedia),"
             "root:!!document.getElementById('overlay-root'),"
             "children:document.querySelectorAll('#overlay-root > div').length,"
             "iframes:document.querySelectorAll('iframe').length,"

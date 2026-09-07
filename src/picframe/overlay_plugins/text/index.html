@@ -75,6 +75,7 @@
       }
 
       function applyMedia(media) {
+        console.log('[text] applyMedia', media && media.file_path);
         currentMedia = media || null;
         render();
       }

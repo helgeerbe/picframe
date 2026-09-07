@@ -493,6 +493,14 @@ class WebKitOverlayRenderer(IOverlayController):
                 self._conn.send(cmd.to_json())
             except Exception as e:
                 logger.error("Failed to send overlay IPC command: %s", e)
+        elif self._running:
+            # A command arrived while running but the IPC connection was lost
+            # (e.g. worker crashed). Without this line every media_changed /
+            # config command is silently dropped, hiding a dead overlay.
+            logger.warning(
+                "Overlay IPC send dropped (no connection): type=%s",
+                getattr(cmd, "type", type(cmd).__name__),
+            )
 
     # --- Event subscriptions ---
 
@@ -531,8 +539,17 @@ class WebKitOverlayRenderer(IOverlayController):
         every photo change (#757).
         """
         if not self._running:
+            logger.warning(
+                "Overlay media_changed received but overlay not running (dropped): file=%s",
+                getattr(event.media_item.primary, "filepath", "?"),
+            )
             return
         media = _display_item_to_overlay_dict(event.media_item)
+        logger.debug(
+            "Overlay media_changed: file=%s type=%s",
+            media.get("file_path"),
+            media.get("media_type"),
+        )
         self._send_command(MediaChangedCommand(media=media))
 
     def _on_renderer_config_updated(self, event: RendererConfigUpdatedEvent) -> None:

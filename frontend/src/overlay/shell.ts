@@ -153,9 +153,20 @@ export class OverlayShell {
    * iframes, and used to arm the `media_change` wake-after-blend driver.
    */
   private applyMedia(media: CurrentMedia): void {
+    // eslint-disable-next-line no-console -- diagnostic, forwarded to journal by the bridge
+    console.log('[shell] applyMedia', media?.file_path, media?.media_type)
     this.latestMedia = media
     this.dock.postToVisiblePlugins({ type: 'picframe:media', media })
     this.scheduleMediaWake()
+    // eslint-disable-next-line no-console -- diagnostic, forwarded to journal by the bridge
+    console.log(
+      '[shell] scheduleMediaWake targets:',
+      this.plugins
+        .filter(
+          p => (p.trigger ?? ['icon']).includes('media_change') && this.dock.isPluginEnabled(p.id)
+        )
+        .map(p => p.id)
+    )
   }
 
   /**
