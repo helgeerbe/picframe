@@ -60,7 +60,6 @@ from picframe.core.renderers.overlay_ipc import (
     SetConfigCommand,
     SetOpacityCommand,
     ShutdownCommand,
-    SurfaceOrphanedEvent,
     parse_overlay_ipc_message,
 )
 from picframe.infrastructure.overlay.plugin_loader import PluginLoader
@@ -369,15 +368,6 @@ class WebKitOverlayRenderer(IOverlayController):
             command = _command_for_input_action(event.action)
             if command is not None:
                 self._publisher.publish(CommandEvent(command=command))
-        elif isinstance(event, SurfaceOrphanedEvent):
-            # The worker's layer-shell surface lost its bound output (#755).
-            # The overlay never re-attaches to the recreated output, so respawn
-            # the worker via the same proven path the power-on event drives.
-            logger.info(
-                "Overlay worker reported its surface was orphaned (output "
-                "destroyed); scheduling a respawn to re-attach to the live output."
-            )
-            self._schedule_respawn()
         elif isinstance(event, OverlayErrorEvent):
             logger.error("Overlay worker error: %s", event.details)
             self._publisher.publish(
@@ -442,10 +432,7 @@ class WebKitOverlayRenderer(IOverlayController):
 
         The respawn runs off the single-threaded event bus worker (the socket
         wait can block up to ``_WORKER_SOCKET_TIMEOUT_SECONDS``) and is guarded
-        so a burst of power events cannot stack restarts or race shutdown. The
-        same guarded respawn is shared with the worker self-report path
-        (:meth:`_handle_event` ``SurfaceOrphanedEvent``) via
-        :meth:`_schedule_respawn`.
+        so a burst of power events cannot stack restarts or race shutdown.
         """
         if not event.power_on or self._stopped:
             return
@@ -454,8 +441,7 @@ class WebKitOverlayRenderer(IOverlayController):
     def _schedule_respawn(self) -> None:
         """Guarded, single-flight worker respawn for display/output recovery.
 
-        Shared by the ``DisplayPowerEvent`` (poll/watcher) and
-        ``SurfaceOrphanedEvent`` (worker self-report) paths. The
+        Driven by the ``DisplayPowerEvent`` (poll/watcher) path. The
         ``_restart_lock`` serializes the check-and-set of ``_restarting`` so a
         burst of events collapses to exactly one respawn; ``_stopped`` skips
         the respawn during an intentional shutdown.

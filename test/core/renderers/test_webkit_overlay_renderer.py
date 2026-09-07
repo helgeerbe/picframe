@@ -28,7 +28,6 @@ from picframe.core.renderers.overlay_ipc import (
     OverlayErrorEvent,
     ReadyEvent,
     SetConfigCommand,
-    SurfaceOrphanedEvent,
 )
 from picframe.core.renderers.webkit_overlay_renderer import (
     WebKitOverlayRenderer,
@@ -595,76 +594,3 @@ def test_display_power_on_guard_skips_concurrent_restart(
     # The in-flight flag must be left untouched by the skipped attempt.
     assert renderer._restarting is True
     renderer._restarting = False  # tidy up so the fixture's renderer is clean
-
-
-def test_surface_orphaned_event_schedules_respawn(
-    mock_publisher: MagicMock,
-    mock_subscriber: MagicMock,
-    plugin_loader: PluginLoader,
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A worker-reported ``SurfaceOrphanedEvent`` respawns the overlay (#755).
-
-    The worker self-report path converges on the same guarded respawn as the
-    poll/watcher ``DisplayPowerEvent`` path. Verify the dispatch in
-    ``_handle_event`` drives the restart (unsub -> cleanup -> start) and clears
-    the in-flight flag.
-    """
-    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
-    renderer._running = True
-    renderer._stopped = False
-    monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
-    with (
-        patch.object(renderer, "_unsubscribe_events") as mock_unsub,
-        patch.object(renderer, "_cleanup") as mock_cleanup,
-        patch.object(renderer, "start") as mock_start,
-    ):
-        renderer._handle_event(SurfaceOrphanedEvent())
-        mock_unsub.assert_called_once()
-        mock_cleanup.assert_called_once()
-        mock_start.assert_called_once()
-    assert renderer._restarting is False
-
-
-def test_surface_orphaned_event_guard_skips_concurrent_restart(
-    mock_publisher: MagicMock,
-    mock_subscriber: MagicMock,
-    plugin_loader: PluginLoader,
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A burst of ``SurfaceOrphanedEvent``s collapses to one respawn (#755).
-
-    ``monitor-removed`` can fire a burst across the ~1 s HPD blip; the renderer
-    guard must drop the second event so a single respawn runs.
-    """
-    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
-    renderer._running = True
-    renderer._restarting = True  # a restart is already underway
-    monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
-    with patch.object(renderer, "stop") as mock_stop, patch.object(renderer, "start") as mock_start:
-        renderer._handle_event(SurfaceOrphanedEvent())
-        mock_stop.assert_not_called()
-        mock_start.assert_not_called()
-    assert renderer._restarting is True
-    renderer._restarting = False  # tidy up
-
-
-def test_surface_orphaned_event_skipped_during_shutdown(
-    mock_publisher: MagicMock,
-    mock_subscriber: MagicMock,
-    plugin_loader: PluginLoader,
-    tmp_path,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    """A late ``SurfaceOrphanedEvent`` arriving during shutdown does not respawn."""
-    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
-    renderer._running = True
-    renderer._stopped = True  # intentional shutdown
-    monkeypatch.setattr(wor.threading, "Thread", _SyncThread)
-    with patch.object(renderer, "stop") as mock_stop, patch.object(renderer, "start") as mock_start:
-        renderer._handle_event(SurfaceOrphanedEvent())
-        mock_stop.assert_not_called()
-        mock_start.assert_not_called()
-    assert renderer._restarting is False

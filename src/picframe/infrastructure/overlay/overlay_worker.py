@@ -43,7 +43,6 @@ from picframe.core.renderers.overlay_ipc import (
     SetConfigCommand,
     SetOpacityCommand,
     ShutdownCommand,
-    SurfaceOrphanedEvent,
     parse_overlay_ipc_message,
 )
 from picframe.infrastructure.overlay.plugin_loader import PluginLoader
@@ -185,11 +184,6 @@ class OverlayWorker:
         self._cursor_idle_seconds: float = _CURSOR_IDLE_FALLBACK_SECONDS
         self._last_motion_time: float = float("-inf")
         self._cursor_tick_id: int | None = None
-        # Output-loss self-report (#755): ``monitor-removed`` can fire a burst
-        # during the ~1 s HPD blip, so emit ``SurfaceOrphanedEvent`` at most once
-        # per orphan cycle. Reset only when a fresh surface is built
-        # (``_build_surface``), which happens after the renderer respawns us.
-        self._output_lost_reported: bool = False
 
     # --- IPC plumbing (GTK-free, unit-tested) ---
 
@@ -495,14 +489,6 @@ class OverlayWorker:
         # GLib loop exists (production); skipped in headless/unit-test mode where
         # ``_loop`` is None (#739).
         self._install_cursor_controller()
-        # Output-loss self-report (#755): connect the display-level monitor
-        # signals so the worker notifies the main process when the bound output
-        # is destroyed (external power-cycle / HPD drop on labwc). Done after
-        # ``present()`` so the GdkDisplay is realized. Detection lives in the
-        # worker (which already runs a GTK main loop), so this violates none of
-        # the keep-GTK-out-of-the-main-process non-negotiables.
-        self._output_lost_reported = False
-        self._install_output_loss_detection()
 
     def _setup_layer_shell(self, window: Any) -> None:
         """Configure ``window`` as a fullscreen overlay layer surface.
@@ -687,58 +673,6 @@ class OverlayWorker:
         surface = window.get_surface()
         if surface is not None and hasattr(surface, "set_opaque"):
             surface.set_opaque(False)
-
-    def _install_output_loss_detection(self) -> None:
-        """Connect ``Gdk.Display::monitor-removed`` to self-report output loss.
-
-        The overlay is a ``wlr-layer-shell`` surface bound to a specific Wayland
-        output. On labwc an external monitor power-cycle destroys the bound
-        output (labwc logs "view has no output, not updating geometry"); the
-        recreated output is a new object the orphaned surface never
-        re-attaches to, so the overlay stays invisible until picframe is
-        restarted (#755). This hook turns that compositor event into an IPC
-        ``SurfaceOrphanedEvent`` so the renderer can respawn the worker against
-        the now-live output — event-driven, zero miss, no continuous
-        ``wlr-randr`` polling.
-
-        Detection lives in the worker (which already runs a GTK main loop), so
-        this respects the keep-GTK-out-of-the-main-process non-negotiable:
-        ``overlay.md:334`` only objects to a GTK main loop in the *main*
-        process, not in the worker. No-op in headless/unit-test mode (no
-        surface / WebKitGTK absent / no GLib loop) so the GTK-free IPC plumbing
-        stays unit-testable.
-
-        ``monitor-removed`` can fire a burst during the ~1 s HPD blip, so emit
-        at most once per orphan cycle (``_output_lost_reported``), reset on
-        each fresh surface build.
-        """
-        if not WEBKIT_AVAILABLE or self._loop is None or self._window is None:
-            return
-        display = self._window.get_display()
-        if display is None:
-            logger.debug("Output-loss detection skipped: no GdkDisplay on the window.")
-            return
-        try:
-            display.connect("monitor-removed", self._on_monitor_removed)
-        except Exception as exc:  # pragma: no cover - defensive, GTK runtime
-            logger.debug("Gdk.Display::monitor-removed connect failed: %s", exc)
-
-    def _on_monitor_removed(self, _display: Any, _monitor: Any) -> None:
-        """Handle ``Gdk.Display::monitor-removed``: emit ``SurfaceOrphanedEvent``.
-
-        Runs on the worker's GTK main-loop thread. Guarded to emit at most once
-        per orphan cycle so a burst across the HPD blip collapses to a single
-        respawn request; ``_output_lost_reported`` is reset when a fresh
-        surface is built (``_build_surface``).
-        """
-        if self._output_lost_reported:
-            return
-        self._output_lost_reported = True
-        logger.info(
-            "Overlay output lost (Gdk.Display::monitor-removed); reporting "
-            "SurfaceOrphanedEvent to main process for worker respawn (#755)."
-        )
-        self._send_event(SurfaceOrphanedEvent())
 
     def _shell_uri(self) -> str:
         """Return the ``file://`` URI of the overlay shell, with query params.

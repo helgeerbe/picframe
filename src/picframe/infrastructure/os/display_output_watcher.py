@@ -139,11 +139,6 @@ class DisplayOutputWatcher:
             return None
 
         result = self._parse_output_state(stdout)
-        logger.debug(
-            "DisplayOutputWatcher: probe parsed %s state=%s",
-            self._display_output,
-            result,
-        )
         return result
 
     def _parse_output_state(self, stdout: str) -> ProbeResult:
