@@ -33,6 +33,14 @@ def mock_image_fromarray() -> Generator[MagicMock, None, None]:
         yield mock_fromarray
 
 
+@pytest.fixture(autouse=True)
+def _clear_mat_resource_signature_cache() -> Generator[None, None, None]:
+    """Reset the lru_cache backing ``_mat_resource_signature`` between tests."""
+    VideoFrameExtractor._mat_resource_signature.cache_clear()
+    yield
+    VideoFrameExtractor._mat_resource_signature.cache_clear()
+
+
 def _color_bbox(
     image: Image.Image,
     color: tuple[int, int, int],
@@ -266,6 +274,44 @@ def test_matting_cache_signature_normalizes_mat_images_control() -> None:
     assert disabled == disabled_string == disabled_zero
     assert always == always_string
     assert disabled != always
+
+
+def test_mat_resource_signature_caches_repeated_calls(tmp_path: Path) -> None:
+    folder = tmp_path / "mats"
+    folder.mkdir()
+    (folder / "mat_texture.jpg").write_bytes(b"texture")
+    (folder / "9_patch_bevel.png").write_bytes(b"bevel")
+    (folder / "9_patch_drop_shadow.png").write_bytes(b"shadow")
+    (folder / "9_patch_inner_shadow.png").write_bytes(b"inner")
+    (folder / "9_patch_highlight.png").write_bytes(b"highlight")
+
+    first = VideoFrameExtractor._mat_resource_signature(str(folder))
+    second = VideoFrameExtractor._mat_resource_signature(str(folder))
+
+    assert first == second
+    assert VideoFrameExtractor._mat_resource_signature.cache_info().hits >= 1
+
+    # Mutating a texture file must not invalidate the cache until it is cleared.
+    (folder / "mat_texture.jpg").write_bytes(b"different")
+    assert VideoFrameExtractor._mat_resource_signature(str(folder)) == first
+
+    VideoFrameExtractor._mat_resource_signature.cache_clear()
+    refreshed = VideoFrameExtractor._mat_resource_signature(str(folder))
+    assert refreshed != first
+
+
+def test_mat_resource_signature_distinguishes_folders(tmp_path: Path) -> None:
+    folder_a = tmp_path / "a"
+    folder_b = tmp_path / "b"
+    folder_a.mkdir()
+    folder_b.mkdir()
+    (folder_a / "mat_texture.jpg").write_bytes(b"a-texture")
+    (folder_b / "mat_texture.jpg").write_bytes(b"b-texture")
+
+    sig_a = VideoFrameExtractor._mat_resource_signature(str(folder_a))
+    sig_b = VideoFrameExtractor._mat_resource_signature(str(folder_b))
+
+    assert sig_a != sig_b
 
 
 def test_transition_cache_signature_includes_processing_version() -> None:

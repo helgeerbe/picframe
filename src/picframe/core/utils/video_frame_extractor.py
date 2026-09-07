@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import threading
 from dataclasses import asdict, dataclass, replace
+from functools import lru_cache
 from hashlib import sha256
 from pathlib import Path
 from typing import Any
@@ -462,6 +463,7 @@ class VideoFrameExtractor:
         return os.path.expanduser(text)
 
     @staticmethod
+    @lru_cache(maxsize=8)
     def _mat_resource_signature(value: Any) -> str:
         folder = Path(VideoFrameExtractor._resolved_mat_resource_folder(value))
         names = (
