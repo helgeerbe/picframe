@@ -148,6 +148,13 @@ on by itself — you still enable it at runtime from the web UI's
 `overlay.enabled` to `true`; see the overlay docs). The toggle is boot-gated,
 so restart the picframe service after changing it.
 
+The overlay's built-in **Photo Caption** (`text`) plugin replaces the legacy
+pi3d text overlay as an HTML widget that auto-shows the current photo's
+title/date/location on each change (and works over video too); see
+[Overlay & Plugins → Photo Caption](overlay.md#photo-caption-text). The legacy
+`viewer.show_text*` keys still drive the pi3d renderer until that renderer is
+removed; the migration to `overlay.plugin_config.text.*` is tracked separately.
+
 The packages require Raspberry Pi OS **Trixie** or Ubuntu **24.04+**. On older
 releases (e.g. Bookworm) the typelib is absent, so the installer **soft-fails**:
 it prints a warning, skips the overlay packages, and Picframe runs unchanged

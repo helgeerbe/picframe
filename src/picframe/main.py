@@ -194,6 +194,7 @@ def run_picframe(
         plugin_dir=str(overlay_plugin_dir),
         ws_port=port,
         overlay_config=dict(overlay_config_section),
+        time_fade=renderer_config.time_fade,
     )
     if overlay_enabled and overlay_controller.is_available():
         logger.info("Starting overlay controller (WebKitGTK).")

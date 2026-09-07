@@ -439,7 +439,7 @@ class OverlayPluginResponse(BaseModel):
     name: str
     description: str = ""
     icon: str = ""
-    trigger: str = "icon"
+    trigger: list[str] = Field(default_factory=lambda: ["icon"])
     position: str = "top-right"
     has_config: bool = False
     size: dict[str, int] | None = None

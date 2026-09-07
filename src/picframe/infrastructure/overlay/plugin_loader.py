@@ -14,7 +14,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
-from picframe.core.models.overlay import PluginConfigError, PluginDescriptor
+from picframe.core.models.overlay import PluginConfigError, PluginDescriptor, normalize_trigger
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ def _descriptor_from_manifest(directory: Path, data: Any) -> PluginDescriptor:
         description=str(data.get("description", "")),
         icon=str(data.get("icon", "")),
         icon_svg=icon_svg,
-        trigger=str(data.get("trigger", "icon")),
+        trigger=normalize_trigger(data.get("trigger")),
         position=str(data.get("position", "top-right")),
         size=size,
         default_display_mode=str(data.get("default_display_mode", "auto_hide")),

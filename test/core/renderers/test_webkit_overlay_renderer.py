@@ -273,8 +273,70 @@ def test_overlay_config_changed_forwards_set_config(
         mock_send.assert_called_once()
         cmd = mock_send.call_args[0][0]
         assert isinstance(cmd, SetConfigCommand)
-        assert cmd.config == {"enabled_plugins": ["clock"]}
+        # #757: the renderer injects the live blend time (time_fade) into the
+        # worker config so the shell's media_change wake-after-blend driver
+        # waits for the image crossfade.
+        assert cmd.config == {"enabled_plugins": ["clock"], "time_fade": 2.0}
         assert renderer._overlay_config == {"enabled_plugins": ["clock"]}
+        assert renderer._time_fade == 2.0
+
+
+def test_worker_config_injects_time_fade(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """The config pushed to the worker carries time_fade for the shell (#757)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._time_fade = 7.5
+    renderer._overlay_config = {"enabled": True, "enabled_plugins": ["text"]}
+    cfg = renderer._worker_config()
+    assert cfg["enabled"] is True
+    assert cfg["time_fade"] == 7.5
+    # The original overlay config dict is not mutated.
+    assert "time_fade" not in renderer._overlay_config
+
+
+def test_renderer_config_updated_updates_time_fade_and_repushes(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """A RendererConfigUpdatedEvent updates time_fade and re-pushes config (#757)."""
+    from picframe.core.events.dto import RendererConfig, RendererConfigUpdatedEvent
+
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True
+    renderer._overlay_config = {"enabled": True}
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_renderer_config_updated(
+            RendererConfigUpdatedEvent(config=RendererConfig(time_fade=12.0))
+        )
+        assert renderer._time_fade == 12.0
+        mock_send.assert_called_once()
+        cmd = mock_send.call_args[0][0]
+        assert isinstance(cmd, SetConfigCommand)
+        assert cmd.config["time_fade"] == 12.0
+
+
+def test_renderer_config_updated_skips_push_when_not_running(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    from picframe.core.events.dto import RendererConfig, RendererConfigUpdatedEvent
+
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = False
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_renderer_config_updated(
+            RendererConfigUpdatedEvent(config=RendererConfig(time_fade=9.0))
+        )
+        assert renderer._time_fade == 9.0
+        mock_send.assert_not_called()
 
 
 def test_set_opacity_sends_set_opacity_command(

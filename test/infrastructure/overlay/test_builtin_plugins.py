@@ -23,7 +23,7 @@ def test_builtin_plugins_load_through_loader() -> None:
     loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
     descriptors = loader.list_plugins()
     ids = {d.id for d in descriptors}
-    assert {"clock", "weather", "meta"}.issubset(ids), ids
+    assert {"clock", "weather", "meta", "text"}.issubset(ids), ids
 
 
 def test_each_builtin_plugin_has_html_entry() -> None:
@@ -91,6 +91,33 @@ def test_meta_plugin_schema() -> None:
     assert result["map_zoom"] == 16
     assert result["show_map"] is False
     assert result["show_exif"] is True
+
+
+def test_text_plugin_schema_and_trigger() -> None:
+    """The text plugin (#757) reproduces the legacy pi3d text overlay fields and
+    is dock-activatable + media-change-triggered with auto_hide as the default."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    text = next(d for d in loader.list_plugins() if d.id == "text")
+    assert text.trigger == ["icon", "media_change"]
+    assert text.default_display_mode == "auto_hide"
+    assert text.size == {"w": 1280, "h": 220}
+    assert text.config_schema["justify"]["enum"] == ["L", "C", "R"]
+    defaults = plugin_config_defaults(text.config_schema)
+    assert defaults == {
+        "format": "title caption name date folder location",
+        "date_format": "%b %d, %Y",
+        "font_size": 40,
+        "justify": "L",
+        "background_height": 0.25,
+        "opacity": 1.0,
+    }
+    result = validate_plugin_config(
+        text.config_schema, {"justify": "R", "font_size": 56, "format": "title date"}
+    )
+    assert result["justify"] == "R"
+    assert result["font_size"] == 56
+    assert result["format"] == "title date"
+    assert result["date_format"] == "%b %d, %Y"
 
 
 def test_each_builtin_plugin_ships_icon_svg() -> None:

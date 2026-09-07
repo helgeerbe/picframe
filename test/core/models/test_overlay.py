@@ -14,13 +14,59 @@ def test_plugin_descriptor_defaults() -> None:
     descriptor = PluginDescriptor(id="clock")
     assert descriptor.id == "clock"
     assert descriptor.name == ""
-    assert descriptor.trigger == "icon"
+    assert descriptor.trigger == ["icon"]
     assert descriptor.position == "top-right"
     assert descriptor.size is None
     assert descriptor.requires == []
     assert descriptor.config_schema == {}
     assert descriptor.entry == "index.html"
     assert descriptor.directory == ""
+
+
+# ---------------------------------------------------------------------------
+# Trigger normalization (issue #757): str -> list[str], validation, defaults.
+# ---------------------------------------------------------------------------
+
+
+def test_normalize_trigger_string_yields_single_element_list() -> None:
+    from picframe.core.models.overlay import normalize_trigger
+
+    assert normalize_trigger("icon") == ["icon"]
+    assert normalize_trigger("media_change") == ["media_change"]
+
+
+def test_normalize_trigger_list_preserves_order_and_dedupes() -> None:
+    from picframe.core.models.overlay import normalize_trigger
+
+    assert normalize_trigger(["icon", "media_change"]) == ["icon", "media_change"]
+    assert normalize_trigger(["media_change", "icon"]) == ["media_change", "icon"]
+    # Duplicates collapse.
+    assert normalize_trigger(["icon", "icon"]) == ["icon"]
+
+
+def test_normalize_trigger_none_or_empty_yields_default_icon() -> None:
+    from picframe.core.models.overlay import normalize_trigger
+
+    assert normalize_trigger(None) == ["icon"]
+    assert normalize_trigger([]) == ["icon"]
+
+
+def test_normalize_trigger_rejects_unknown_mode() -> None:
+    from picframe.core.models.overlay import PluginConfigError, normalize_trigger
+
+    with pytest.raises(PluginConfigError, match="not one of"):
+        normalize_trigger(["icon", "bogus"])
+    with pytest.raises(PluginConfigError, match="not one of"):
+        normalize_trigger("bogus")
+
+
+def test_normalize_trigger_rejects_non_string_items() -> None:
+    from picframe.core.models.overlay import PluginConfigError, normalize_trigger
+
+    with pytest.raises(PluginConfigError, match="non-empty strings"):
+        normalize_trigger([123])  # type: ignore[list-item]
+    with pytest.raises(PluginConfigError, match="must be a string or a list"):
+        normalize_trigger(123)  # type: ignore[arg-type]
 
 
 def test_plugin_config_defaults_extracts_defaults() -> None:

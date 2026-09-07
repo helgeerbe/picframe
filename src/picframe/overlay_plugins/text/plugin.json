@@ -1,0 +1,49 @@
+{
+  "id": "text",
+  "name": "Photo Caption",
+  "description": "Title/caption/name/date/folder/location text overlay. Auto-shows on each photo change, then hides via auto-hide.",
+  "icon": "📝",
+  "trigger": ["icon", "media_change"],
+  "position": "bottom-left",
+  "size": { "w": 1280, "h": 220 },
+  "default_display_mode": "auto_hide",
+  "config_schema": {
+    "format": {
+      "type": "string",
+      "default": "title caption name date folder location",
+      "label": "Fields",
+      "help": "Space-separated tokens to show, in order: title caption name date folder location."
+    },
+    "date_format": {
+      "type": "string",
+      "default": "%b %d, %Y",
+      "label": "Date format",
+      "help": "strftime-style format for the capture date, e.g. %b %d, %Y."
+    },
+    "font_size": {
+      "type": "integer",
+      "default": 40,
+      "label": "Font size",
+      "help": "Base text size in design pixels (scaled with the panel)."
+    },
+    "justify": {
+      "type": "string",
+      "default": "L",
+      "enum": ["L", "C", "R"],
+      "label": "Justify",
+      "help": "Text alignment: L = left, C = center, R = right."
+    },
+    "background_height": {
+      "type": "number",
+      "default": 0.25,
+      "label": "Background height",
+      "help": "Fraction of the panel height (0-1) covered by the readability gradient."
+    },
+    "opacity": {
+      "type": "number",
+      "default": 1.0,
+      "label": "Opacity",
+      "help": "Text opacity (0-1)."
+    }
+  }
+}

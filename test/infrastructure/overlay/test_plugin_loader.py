@@ -125,3 +125,42 @@ def test_descriptor_icon_svg_uses_currentcolor_convention(tmp_path: Path) -> Non
     )
     loader = PluginLoader(tmp_path)
     assert "currentColor" in loader.list_plugins()[0].icon_svg
+
+
+# ---------------------------------------------------------------------------
+# Trigger activation modes (issue #757): list form + backward compatibility.
+# ---------------------------------------------------------------------------
+
+
+def test_descriptor_trigger_list_form_loaded_as_list(tmp_path: Path) -> None:
+    _write_plugin(
+        tmp_path,
+        "text",
+        {"id": "text", "trigger": ["icon", "media_change"], "position": "bottom-left"},
+    )
+    loader = PluginLoader(tmp_path)
+    descriptor = loader.list_plugins()[0]
+    assert descriptor.trigger == ["icon", "media_change"]
+
+
+def test_descriptor_trigger_bare_string_normalized_to_list(tmp_path: Path) -> None:
+    """A pre-#757 manifest using a bare string trigger keeps working (#757)."""
+    _write_plugin(tmp_path, "clock", {"id": "clock", "trigger": "icon"})
+    loader = PluginLoader(tmp_path)
+    descriptor = loader.list_plugins()[0]
+    assert descriptor.trigger == ["icon"]
+
+
+def test_descriptor_trigger_omitted_defaults_to_icon_list(tmp_path: Path) -> None:
+    _write_plugin(tmp_path, "clock", {"id": "clock"})
+    loader = PluginLoader(tmp_path)
+    descriptor = loader.list_plugins()[0]
+    assert descriptor.trigger == ["icon"]
+
+
+def test_descriptor_trigger_unknown_mode_is_skipped(tmp_path: Path) -> None:
+    """An invalid trigger mode makes the plugin skip discovery (manifest fault)."""
+    _write_plugin(tmp_path, "good", {"id": "good"})
+    _write_plugin(tmp_path, "bad", {"id": "bad", "trigger": ["icon", "bogus"]})
+    loader = PluginLoader(tmp_path)
+    assert [d.id for d in loader.list_plugins()] == ["good"]

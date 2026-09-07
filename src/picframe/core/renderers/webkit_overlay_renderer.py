@@ -42,6 +42,7 @@ from picframe.core.events.dto import (
     DisplayPowerEvent,
     OverlayConfigChangedEvent,
     RenderCommand,
+    RendererConfigUpdatedEvent,
     SystemErrorEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
@@ -157,6 +158,7 @@ class WebKitOverlayRenderer(IOverlayController):
         plugin_dir: str,
         ws_port: int = 9000,
         overlay_config: dict[str, Any] | None = None,
+        time_fade: float = 2.0,
     ) -> None:
         self._publisher = event_publisher
         self._subscriber = event_subscriber
@@ -165,6 +167,13 @@ class WebKitOverlayRenderer(IOverlayController):
         self._plugin_dir = plugin_dir
         self._ws_port = ws_port
         self._overlay_config = overlay_config or {}
+        # Image blend time (``model.fade_time`` / ``RendererConfig.time_fade``),
+        # injected into the shell config so the ``media_change`` wake-after-blend
+        # driver (#757) waits for the new photo to finish crossfading before
+        # revealing the auto-shown text panel. Kept live via
+        # ``RendererConfigUpdatedEvent`` so Appearance edits take effect without
+        # a restart.
+        self._time_fade = float(time_fade)
 
         self._socket_path = f"/tmp/picframe_overlay_{os.getpid()}.sock"
         self._worker_process: subprocess.Popen[str] | None = None
@@ -214,7 +223,19 @@ class WebKitOverlayRenderer(IOverlayController):
         self._subscribe_events()
         # Apply the initial config so the shell boots with the right
         # enabled/visible set + display mode + plugin config.
-        self._send_command(SetConfigCommand(config=dict(self._overlay_config)))
+        self._send_command(SetConfigCommand(config=self._worker_config()))
+
+    def _worker_config(self) -> dict[str, Any]:
+        """Return the overlay config dict augmented with the live ``time_fade``.
+
+        The shell reads ``time_fade`` to delay the ``media_change`` auto-wake
+        until the image blend has finished (#757). The worker's
+        ``_build_shell_config`` passes extra keys through unchanged, and the
+        shell's ``OverlayShellConfig`` type treats it as optional.
+        """
+        config = dict(self._overlay_config)
+        config["time_fade"] = self._time_fade
+        return config
 
     def stop(self) -> None:
         """Stop the worker subprocess and unsubscribe from events."""
@@ -392,6 +413,7 @@ class WebKitOverlayRenderer(IOverlayController):
         self._subscriber.subscribe(OverlayConfigChangedEvent, self._on_overlay_config_changed)
         self._subscriber.subscribe(RenderCommand, self._on_render_command)
         self._subscriber.subscribe(DisplayPowerEvent, self._on_display_power_event)
+        self._subscriber.subscribe(RendererConfigUpdatedEvent, self._on_renderer_config_updated)
         self._subscribed = True
 
     def _unsubscribe_events(self) -> None:
@@ -399,12 +421,27 @@ class WebKitOverlayRenderer(IOverlayController):
             self._subscriber.unsubscribe(OverlayConfigChangedEvent, self._on_overlay_config_changed)
             self._subscriber.unsubscribe(RenderCommand, self._on_render_command)
             self._subscriber.unsubscribe(DisplayPowerEvent, self._on_display_power_event)
+            self._subscriber.unsubscribe(
+                RendererConfigUpdatedEvent, self._on_renderer_config_updated
+            )
             self._subscribed = False
 
     def _on_overlay_config_changed(self, event: OverlayConfigChangedEvent) -> None:
         """Forward a live overlay config change to the worker."""
         self._overlay_config = dict(event.overlay_config)
-        self._send_command(SetConfigCommand(config=dict(event.overlay_config)))
+        self._send_command(SetConfigCommand(config=self._worker_config()))
+
+    def _on_renderer_config_updated(self, event: RendererConfigUpdatedEvent) -> None:
+        """Keep the injected ``time_fade`` live and re-push the shell config (#757).
+
+        ``model.fade_time`` / ``RendererConfig.time_fade`` is the image blend
+        duration the shell waits before revealing a ``media_change`` panel.
+        Appearance edits publish this event; we update the stored value and
+        re-push so the new blend time takes effect without an overlay restart.
+        """
+        self._time_fade = float(event.config.time_fade)
+        if self._running:
+            self._send_command(SetConfigCommand(config=self._worker_config()))
 
     def _on_render_command(self, event: RenderCommand) -> None:
         """Drive overlay opacity from video reveal render actions.

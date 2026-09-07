@@ -453,6 +453,10 @@ def test_build_shell_config_merges_plugins_and_env(tmp_path) -> None:
     # #752: the manifest design size is forwarded so the shell can scale the
     # widget iframe (scale mode). Absent -> None (fill mode, 100% × 100%).
     assert plugin["size"] is None
+    # #757: the plugin payload carries its activation modes so the shell can
+    # arm the media_change wake-after-blend driver. A manifest that omits
+    # `trigger` defaults to ["icon"] (dock-activatable only).
+    assert plugin["trigger"] == ["icon"]
 
 
 def test_build_shell_config_effective_layout_merges_db_overrides(tmp_path) -> None:

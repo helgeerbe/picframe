@@ -157,12 +157,33 @@ manifests are skipped with a warning so one bad plugin never breaks discovery.
 `PluginDescriptor` (`src/picframe/core/models/overlay.py`) is an immutable
 dataclass: `id` (defaults to the directory name), `name`, `description`, `icon`
 (emoji fallback), `icon_svg` (inline SVG markup from an optional `icon.svg`
-file — see *Dock icons* below), `trigger` (`"icon"` = dock tap), `position`,
-`size` (`{w,h}`), `requires` (informational capability list), `config_schema`,
+file — see *Dock icons* below), `trigger` (list of activation modes — see
+*Activation modes* below), `position`, `size` (`{w,h}`), `requires`
+(informational capability list), `default_display_mode`, `config_schema`,
 `entry`, `directory`. `plugin_config_defaults()` and `validate_plugin_config()`
 turn a `config_schema` into defaults and validate user payloads: unknown keys are
 rejected, `required` fields must be present, declared `type`s
 (`string`/`integer`/`number`/`boolean`) and `enum` constraints are enforced.
+
+#### Activation modes (#757)
+
+`trigger` is a **list of activation modes** (backward-compatible: a bare string
+is normalized to a single-element list by `normalize_trigger()`). Every plugin
+is **dock-activatable** — it appears in the dock and tapping its icon toggles
+its panel, with duration governed by the existing #752 `display_mode`
+(`persistent`/`auto_hide`) + per-plugin `idle_hide_seconds`.
+
+`"media_change"` is a **composable additional activation mode**: a plugin
+listing it (e.g. the built-in `text` plugin ships `["icon", "media_change"]`)
+also **auto-shows on each media change**. On every `picframe:media` reaching
+the shell, for each enabled plugin whose triggers include `"media_change"`,
+the shell mounts the panel hidden, waits the image blend time (`time_fade`,
+sourced from `model.fade_time` / `RendererConfig.time_fade` and injected into
+the shell config by `WebKitOverlayRenderer`), then **wakes** it via the same
+path as a dock tap — so the panel fades in and vanishes through the existing
+#752 `auto_hide` + `idle_hide_seconds`, and any input wakes it early. This
+replaces the legacy pi3d `show_text_tm` countdown; no fixed-countdown timing
+path is reintroduced. Unknown trigger modes are rejected at load time.
 
 Example `plugin.json`:
 

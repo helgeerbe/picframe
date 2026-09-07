@@ -23,7 +23,14 @@ import { Dock } from './dock'
 import { readEnv } from './env'
 import { InputRouter } from './input'
 import { StateClient } from './state-client'
-import type { DisplayMode, InputAction, InputType, OverlayShellConfig, PluginEntry } from './types'
+import type {
+  CurrentMedia,
+  DisplayMode,
+  InputAction,
+  InputType,
+  OverlayShellConfig,
+  PluginEntry
+} from './types'
 
 const DEFAULT_IDLE_HIDE_SECONDS = 5
 /** Dock fallback when `idle_hide_seconds` is 0 (content stays, dock still hides). */
@@ -43,6 +50,15 @@ export class OverlayShell {
   private globalIdleHideSeconds = DEFAULT_IDLE_HIDE_SECONDS
   /** Snapshot of the latest plugin list (for per-panel idle lookups). */
   private plugins: PluginEntry[] = []
+  /** Image blend time (s) — the shell waits this long after a media change
+   * before waking a `media_change` panel (#757). Sourced from
+   * `RendererConfig.time_fade` via the worker config. */
+  private timeFade = 2
+  /** Latest media received from `/ws/state`; forwarded to plugin iframes on
+   * load (#757) so a freshly auto-shown panel renders the current photo. */
+  private latestMedia: CurrentMedia | null = null
+  /** Pending `media_change` wake-after-blend timer (#757). */
+  private mediaWakeTimer: number | null = null
   /** Currently enabled input classes; the mouse-move cursor reveal only fires
    * when `mouse` is among them (#739). */
   private enabledTypes: InputType[] = ['touch', 'mouse', 'keyboard']
@@ -88,8 +104,13 @@ export class OverlayShell {
     if (env.wsPort) {
       this.state = new StateClient(env.wsPort, {
         // Forward live media changes into all visible plugin iframes so plugins
-        // (e.g. `meta`) can react to photo changes without their own WS client.
-        onMedia: media => this.dock.postToVisiblePlugins({ type: 'picframe:media', media })
+        // (e.g. `meta`, `text`) can react to photo changes without their own WS
+        // client, then arm the `media_change` wake-after-blend driver (#757).
+        onMedia: media => {
+          this.latestMedia = media
+          this.dock.postToVisiblePlugins({ type: 'picframe:media', media })
+          this.scheduleMediaWake()
+        }
       })
       this.state.connect()
     }
@@ -104,10 +125,12 @@ export class OverlayShell {
     this.state?.stop()
     this.clearPanelIdle()
     this.clearDockIdle()
+    this.clearMediaWake()
   }
 
   private applyConfig(config: OverlayShellConfig): void {
     this.globalIdleHideSeconds = config.idle_hide_seconds ?? DEFAULT_IDLE_HIDE_SECONDS
+    this.timeFade = config.time_fade ?? 2
     this.plugins = config._plugins ?? []
     const enabledTypes = (config.enabled_input_types ?? [
       'touch',
@@ -116,6 +139,8 @@ export class OverlayShell {
     ]) as InputType[]
     this.enabledTypes = enabledTypes
     this.router.setEnabledTypes(enabledTypes)
+    // Let newly-loaded plugin iframes receive the current photo (#757).
+    this.dock.setMediaProvider(() => this.latestMedia)
     this.dock.applyConfig(config)
     this.wake()
   }
@@ -212,6 +237,36 @@ export class OverlayShell {
     if (this.dockIdleTimer !== null) {
       window.clearTimeout(this.dockIdleTimer)
       this.dockIdleTimer = null
+    }
+  }
+
+  /**
+   * `media_change` wake-after-blend driver (#757). For every enabled plugin
+   * whose triggers include `"media_change"`, mount its panel hidden (so its
+   * iframe can load + receive the live media) and arm a single timer that
+   * wakes the shell after the image blend (`time_fade`) finishes — the same
+   * wake path as a dock tap, so the panel then fades in and vanishes via the
+   * existing #752 `auto_hide` + `idle_hide_seconds`. No-op when no plugin opts
+   * into `media_change` (clock/weather are dock-only and unaffected).
+   */
+  private scheduleMediaWake(): void {
+    this.clearMediaWake()
+    const targets = this.plugins.filter(
+      p => (p.trigger ?? ['icon']).includes('media_change') && this.dock.isPluginEnabled(p.id)
+    )
+    if (targets.length === 0) return
+    for (const p of targets) this.dock.showPluginIdle(p.id)
+    const delay = Math.max(0, this.timeFade) * 1000
+    this.mediaWakeTimer = window.setTimeout(() => {
+      this.mediaWakeTimer = null
+      this.wake()
+    }, delay)
+  }
+
+  private clearMediaWake(): void {
+    if (this.mediaWakeTimer !== null) {
+      window.clearTimeout(this.mediaWakeTimer)
+      this.mediaWakeTimer = null
     }
   }
 }

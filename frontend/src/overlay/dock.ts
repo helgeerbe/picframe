@@ -12,6 +12,7 @@
 
 import type {
   ContentOffset,
+  CurrentMedia,
   OverlayAnchor,
   OverlayShellConfig,
   PluginEntry,
@@ -40,12 +41,23 @@ export class Dock {
   /** Per-edge content offset (px), shared by all plugins; forwarded to each
    * plugin iframe so it can pad its content from the matching panel edge. */
   private contentOffset: ContentOffset = { top: 0, bottom: 0, left: 0, right: 0 }
+  /** Latest media snapshot (#757). When a plugin iframe finishes loading we
+   * forward this so a freshly auto-shown `media_change` plugin (whose iframe
+   * was not yet present when the `picframe:media` message arrived) renders the
+   * current photo instead of its placeholder. */
+  private mediaProvider: (() => CurrentMedia | null) | null = null
   private readonly root: HTMLElement
   private readonly callbacks: DockCallbacks
 
   constructor(root: HTMLElement, callbacks: DockCallbacks) {
     this.root = root
     this.callbacks = callbacks
+  }
+
+  /** Provide a function returning the latest media so newly-loaded plugin
+   * iframes receive it on load (#757). */
+  setMediaProvider(provider: () => CurrentMedia | null): void {
+    this.mediaProvider = provider
   }
 
   /** Apply a full shell config (plugins + enabled/visible set + per-plugin config). */
@@ -66,6 +78,28 @@ export class Dock {
     this.visiblePlugins = next
     this.render()
     this.callbacks.onVisiblePluginsChange(next)
+  }
+
+  /** Ensure a plugin is expanded but held hidden (``--idle``) until a later
+   * wake reveals it (#757). Used by the shell's ``media_change`` driver: the
+   * panel is mounted immediately (so its iframe can load + receive the media
+   * postMessage) but kept faded out, then the shell wakes it after the image
+   * blend finishes. No-op for disabled/unknown plugins. Unlike
+   * {@link togglePlugin} this does **not** fire ``onVisiblePluginsChange`` —
+   * the shell owns the scheduled wake. */
+  showPluginIdle(pluginId: string): void {
+    if (!this.isPluginEnabled(pluginId)) return
+    if (!this.visiblePlugins.includes(pluginId)) {
+      this.visiblePlugins = [...this.visiblePlugins, pluginId]
+      this.render()
+    }
+    const panel = this.root.querySelector<HTMLElement>(`#${CSS.escape(PANEL_ID_PREFIX + pluginId)}`)
+    panel?.classList.add('pf-plugin-panel--idle')
+  }
+
+  /** Whether a plugin id is currently enabled (loaded/active). */
+  isPluginEnabled(id: string | null | undefined): id is string {
+    return !!id && this.enabledPlugins.includes(id)
   }
 
   /**
@@ -96,10 +130,6 @@ export class Dock {
     // normalizer re-derived `visible_plugin` from `visible_plugins[0]`.
     const legacy = config.visible_plugin ?? null
     return legacy && this.isPluginEnabled(legacy) ? [legacy] : []
-  }
-
-  private isPluginEnabled(id: string | null | undefined): id is string {
-    return !!id && this.enabledPlugins.includes(id)
   }
 
   private render(): void {
@@ -237,6 +267,14 @@ export class Dock {
           },
           '*'
         )
+        // #757: forward the latest media so a freshly auto-shown plugin (whose
+        // iframe was not present when the live `picframe:media` message fired)
+        // renders the current photo instead of its placeholder. Harmless for
+        // plugins that ignore `picframe:media` (e.g. clock/weather).
+        const media = this.mediaProvider?.()
+        if (media) {
+          frame.contentWindow?.postMessage({ type: 'picframe:media', media }, '*')
+        }
       } catch {
         /* cross-origin frames may reject postMessage; ignore */
       }

@@ -70,11 +70,11 @@ overlay works identically once a touchscreen is connected.
 
 ## Built-in plugins
 
-Three plugins ship with picframe and are copied to
+Four plugins ship with picframe and are copied to
 `~/.picframe/overlay-plugins/` by `picframe init`. Activate the ones you want from
 the **Appearance** tab (Touch Overlay → Overlay plugins), configure their
 options and panel layout under **Settings → Touch Overlay**, and pick the
-one to show on the frame from the **Remote** tab (Touch overlay tile dock).
+ones to show on the frame from the **Remote** tab (Touch overlay tile dock).
 
 ### Clock
 
@@ -114,6 +114,29 @@ expand it fullscreen.
 | `map_zoom` | integer | `13` | Leaflet zoom level (1–19). |
 | `show_exif` | boolean | `true` | Display camera/lens/exposure metadata. |
 | `date_format` | string | `YYYY-MM-DD HH:mm` | moment-style token format for the capture date. |
+
+### Photo Caption (text)
+
+The legacy pi3d text overlay, reimagined as an HTML widget. It shows the current
+photo's title, caption, file name, capture date, folder, and/or location —
+whichever fields you enable — joined with a separator. Unlike the pi3d overlay,
+the HTML version renders **above the video surface too**, so the same caption
+shows during video playback.
+
+It is **dock-activatable** like every plugin (tap its icon to show/hide it) and
+additionally **auto-shows on each photo/video change**: after the image blend
+finishes the caption fades in, then hides again after the auto-hide idle
+interval (any input wakes it early). This replaces the legacy `show_text_tm`
+countdown; configure the duration with the panel's `idle_hide_seconds`.
+
+| Option | Type | Default | Notes |
+|---|---|---|---|
+| `format` | string | `title caption name date folder location` | Space-separated tokens to show, in order. |
+| `date_format` | string | `%b %d, %Y` | strftime-style format for the capture date. |
+| `font_size` | integer | `40` | Base text size in design pixels (scaled with the panel). |
+| `justify` | enum `L`/`C`/`R` | `L` | Text alignment: Left / Center / Right. |
+| `background_height` | number | `0.25` | Fraction of the panel height covered by the readability gradient. |
+| `opacity` | number | `1.0` | Text opacity (0–1). |
 
 ## Managing plugins from the web UI
 
@@ -191,7 +214,7 @@ Manifest fields:
 | `name` | no | Human-readable display name shown in the web UI. |
 | `description` | no | Short description shown in the web UI. |
 | `icon` | no | Emoji or short label for the dock icon. |
-| `trigger` | no | How the plugin is activated; `"icon"` = dock icon tap (the only supported value). |
+| `trigger` | no | Activation modes. A string or list of strings from `"icon"` (dock icon tap — the default, every plugin) and `"media_change"` (auto-show on each photo/video change, composable with `"icon"`; the panel wakes after the image blend and hides via auto-hide). A bare string is accepted for backward compatibility. |
 | `position` | no | Default screen position, e.g. `"top-right"`. |
 | `size` | no | `{"w": int, "h": int}` preferred size in pixels. |
 | `requires` | no | Informational capability list, e.g. `["network"]`, `["map"]`. |

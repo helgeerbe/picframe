@@ -197,6 +197,20 @@ This is a compact index of durable project decisions. Detailed rationale lives i
     app, frontend schema/locales, tests, docs) before adding `overlay`, because
     an unmodeled `peripherals` block would be silently ignored by the new
     `OverlayConfig` and risk confusion.
+  - **#757 text overlay plugin + `media_change` activation mode:** the legacy
+    pi3d `TextRenderer` is reproduced as a built-in HTML `text` plugin
+    (`overlay_plugins/text/`). `PluginDescriptor.trigger` changed from `str` to
+    `list[str]` (backward-compatible via `normalize_trigger()`; unknown modes
+    rejected at load). `media_change` is a **composable additional** activation
+    mode on top of the base dock-activatable behavior — the shell mounts the
+    panel hidden, waits the image blend time (`RendererConfig.time_fade`, injected
+    into the shell config by `WebKitOverlayRenderer` via `RendererConfigUpdatedEvent`),
+    then wakes it through the **same** path as a dock tap so it vanishes via the
+    existing #752 `auto_hide` + `idle_hide_seconds`. No `show_text_tm` fixed-countdown
+    path is reintroduced; `show_text_tm` has no next-gen consumer (removal is #753).
+    The HTML overlay renders above the GTK4 video surface, so `show_text_on_video`
+    is obsolete (removed in #753). PR #754 carries this via squash merge from
+    `feat/text-overlay-plugin`.
 
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

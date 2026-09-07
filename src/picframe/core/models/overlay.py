@@ -42,6 +42,12 @@ OVERLAY_ANCHORS: tuple[str, ...] = (
 )
 OVERLAY_DISPLAY_MODES: tuple[str, ...] = ("persistent", "auto_hide")
 
+# Activation modes a plugin manifest ``trigger`` may name (#757). ``icon`` =
+# dock-activatable (the base behavior every plugin gets); ``media_change`` =
+# auto-show on each media change (composable with ``icon``). A bare string in a
+# manifest is treated as a single-element list for backward compatibility.
+OVERLAY_TRIGGERS: tuple[str, ...] = ("icon", "media_change")
+
 
 class PluginConfigError(ValueError):
     """Raised when a plugin manifest or per-plugin config payload is invalid."""
@@ -61,7 +67,12 @@ class PluginDescriptor:
             read from an optional ``icon.svg`` file in the plugin directory.
             When non-empty the dock inlines it so the icon inherits the dock
             text color and renders crisply without an emoji font.
-        trigger: How the plugin is activated (``"icon"`` = dock icon tap).
+        trigger: Activation modes for the plugin (#757). A list of modes from
+            :data:`OVERLAY_TRIGGERS`; ``"icon"`` = dock-activatable (the base
+            behavior every plugin gets), ``"media_change"`` = auto-show on each
+            media change (composable with ``"icon"``). Existing manifests that
+            use a bare string are normalized to a single-element list by the
+            loader (:func:`normalize_trigger`) so they keep working.
         position: Default screen position (e.g. ``"top-right"``).
         size: Optional ``{"w": int, "h": int}`` preferred size.
         requires: Optional capability requirements (informational).
@@ -76,7 +87,7 @@ class PluginDescriptor:
     description: str = ""
     icon: str = ""
     icon_svg: str = ""
-    trigger: str = "icon"
+    trigger: list[str] = field(default_factory=lambda: ["icon"])
     position: str = "top-right"
     size: dict[str, int] | None = None
     # Default duration policy for this plugin's panel; overridden per-plugin by
@@ -87,6 +98,40 @@ class PluginDescriptor:
     config_schema: dict[str, dict[str, Any]] = field(default_factory=dict)
     entry: str = "index.html"
     directory: str = ""
+
+
+def normalize_trigger(raw: Any) -> list[str]:
+    """Normalize a manifest ``trigger`` value to a validated list of modes (#757).
+
+    Accepts either a single string (``"icon"``) or a list of strings
+    (``["icon", "media_change"]``) for backward compatibility with pre-#757
+    manifests. Each mode must be one of :data:`OVERLAY_TRIGGERS`; unknown modes
+    raise :class:`PluginConfigError`. ``None``/empty yields the default
+    ``["icon"]`` so a manifest that omits ``trigger`` keeps the base
+    dock-activatable behavior.
+    """
+    if raw is None:
+        return ["icon"]
+    if isinstance(raw, str):
+        items: list[Any] = [raw]
+    elif isinstance(raw, list):
+        items = list(raw)
+    else:
+        raise PluginConfigError("plugin 'trigger' must be a string or a list of strings")
+    modes: list[str] = []
+    for item in items:
+        if not isinstance(item, str) or not item:
+            raise PluginConfigError("plugin 'trigger' modes must be non-empty strings")
+        mode = item.strip()
+        if mode not in OVERLAY_TRIGGERS:
+            raise PluginConfigError(
+                f"plugin 'trigger' mode '{mode}' is not one of {list(OVERLAY_TRIGGERS)}"
+            )
+        if mode not in modes:
+            modes.append(mode)
+    if not modes:
+        return ["icon"]
+    return modes
 
 
 def plugin_config_defaults(config_schema: dict[str, dict[str, Any]]) -> dict[str, Any]:

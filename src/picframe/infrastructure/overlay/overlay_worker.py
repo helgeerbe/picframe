@@ -309,6 +309,7 @@ class OverlayWorker:
             "name": descriptor.name,
             "icon": descriptor.icon,
             "icon_svg": descriptor.icon_svg,
+            "trigger": descriptor.trigger,
             "position": descriptor.position,
             "size": descriptor.size,
             "default_display_mode": descriptor.default_display_mode,

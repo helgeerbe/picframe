@@ -31,6 +31,10 @@ export interface PluginEntry {
    * `icon.svg`. When present the dock inlines it so the icon inherits the dock
    * text color and renders without an emoji font. */
   icon_svg?: string
+  /** Activation modes (#757): `"icon"` = dock-activatable (every plugin);
+   * `"media_change"` = auto-show on each media change (composable with
+   * `"icon"`). Absent means `["icon"]` (legacy/default). */
+  trigger?: string[]
   position: string
   /** Manifest design size `{ w, h }` in CSS px. A plugin with a `size` is in
    * *scale mode*: the shell sizes the panel to `design × scale` (so its aspect
@@ -102,6 +106,11 @@ export interface OverlayShellConfig {
   enabled_input_types?: InputType[]
   idle_hide_seconds?: number
   transparent?: boolean
+  /** Image blend time in seconds (#757): the shell waits this long after a
+   * media change before waking a `media_change`-triggered panel so the new
+   * photo has finished crossfading. Sourced from `model.fade_time` /
+   * `RendererConfig.time_fade`; defaults to 2.0 when absent. */
+  time_fade?: number
   /** Per-edge content offset (px), shared by all plugins; forwarded to each
    * plugin's iframe via the `picframe:config` postMessage so the plugin can
    * pad its content from the matching panel edge. */
