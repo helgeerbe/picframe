@@ -38,6 +38,12 @@
       "default": 1.0,
       "label": "Opacity",
       "help": "Text opacity (0-1)."
+    },
+    "background_height": {
+      "type": "number",
+      "default": 0.25,
+      "label": "Background height",
+      "help": "Fraction of panel height (0-1) covered by the readability gradient at the bottom."
     }
   }
 }

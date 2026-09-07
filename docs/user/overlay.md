@@ -136,6 +136,7 @@ countdown; configure the duration with the panel's `idle_hide_seconds`.
 | `font_size` | integer | `40` | Base text size in design pixels (scaled with the panel). |
 | `justify` | enum `L`/`C`/`R` | `L` | Text alignment: Left / Center / Right. |
 | `opacity` | number | `1.0` | Text opacity (0–1). |
+| `background_height` | number | `0.25` | Fraction of panel height (0–1) covered by the readability gradient at the bottom. |
 
 ## Managing plugins from the web UI
 

@@ -109,6 +109,7 @@ def test_text_plugin_schema_and_trigger() -> None:
         "font_size": 40,
         "justify": "L",
         "opacity": 1.0,
+        "background_height": 0.25,
     }
     result = validate_plugin_config(
         text.config_schema, {"justify": "R", "font_size": 56, "format": "title date"}
