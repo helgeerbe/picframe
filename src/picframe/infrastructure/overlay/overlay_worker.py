@@ -141,6 +141,14 @@ if WEBKIT_AVAILABLE:
 _CURSOR_TICK_MS = 250
 _CURSOR_IDLE_FALLBACK_SECONDS = 5.0
 
+# Path polled for the clock plugin ``extra_source: file`` mode (#761), mirroring
+# the legacy ``clock_renderer.CLOCK_EXTRA_TXT_PATH``. The worker owns the host-fs
+# read (plugins run in a sandboxed WebKit iframe with no fs access) and pushes
+# the live contents to the clock plugin via the ``applyPluginData`` bridge.
+CLOCK_EXTRA_TXT_PATH = "/dev/shm/clock.txt"
+# Poll cadence (ms) for the clock extra-text file source.
+CLOCK_EXTRA_POLL_MS = 1000
+
 
 def _coerce_idle_seconds(value: Any) -> float:
     """Coerce a config ``idle_hide_seconds`` value to a positive float.
@@ -185,6 +193,12 @@ class OverlayWorker:
         self._cursor_idle_seconds: float = _CURSOR_IDLE_FALLBACK_SECONDS
         self._last_motion_time: float = float("-inf")
         self._cursor_tick_id: int | None = None
+        # Clock extra-text file source (#761): a GLib timeout polling
+        # /dev/shm/clock.txt and pushing changes to the clock plugin via the
+        # ``applyPluginData`` bridge. Only armed when a plugin configures
+        # ``extra_source: file``; stopped on any other mode / shutdown.
+        self._clock_file_poll_id: int | None = None
+        self._clock_file_text: str | None = None
 
     # --- IPC plumbing (GTK-free, unit-tested) ---
 
@@ -222,13 +236,90 @@ class OverlayWorker:
 
         Also refreshes the worker-owned cursor idle threshold from
         ``idle_hide_seconds`` so a live config change (Settings UI) takes effect
-        without a worker restart (#739).
+        without a worker restart (#739), and (re)arms the clock extra-text file
+        poller per the clock plugin's ``extra_source`` (#761).
         """
         self._cursor_idle_seconds = _coerce_idle_seconds(self._config.get("idle_hide_seconds"))
+        self._reconcile_clock_file_poller()
         if self._web_view is not None and WEBKIT_AVAILABLE:
             self._push_config_to_shell()
         else:
             logger.debug("Config applied (no surface in headless mode).")
+
+    def _reconcile_clock_file_poller(self) -> None:
+        """Arm or stop the clock extra-text file poller (#761).
+
+        The clock plugin's ``extra_source: file`` mode shows the live contents of
+        :data:`CLOCK_EXTRA_TXT_PATH`. Plugins run in a sandboxed WebKit iframe
+        with no host-fs access, so the worker owns the read and pushes changes to
+        the clock plugin via the generic ``applyPluginData`` bridge (mirroring
+        ``applyMedia``). No-op in headless mode (no surface / GLib loop).
+        """
+        clock_cfg = ((self._config.get("plugin_config") or {}).get("clock")) or {}
+        want_file = str(clock_cfg.get("extra_source", "")).strip().lower() == "file"
+        if not want_file:
+            self._stop_clock_file_poller()
+            return
+        # Only arm when the GTK surface + GLib loop are live; in headless/test
+        # mode there is nothing to push to.
+        if self._web_view is None or not WEBKIT_AVAILABLE or self._loop is None:
+            return
+        if self._clock_file_poll_id is None:
+            self._clock_file_text = None
+            self._clock_file_poll_id = GLib.timeout_add(CLOCK_EXTRA_POLL_MS, self._clock_file_tick)
+            # Immediate first read so the line appears without waiting a tick.
+            self._clock_file_tick()
+
+    def _stop_clock_file_poller(self) -> None:
+        """Cancel the clock extra-text file poller if armed (#761)."""
+        if self._clock_file_poll_id is not None and WEBKIT_AVAILABLE:
+            try:
+                GLib.source_remove(self._clock_file_poll_id)
+            except Exception as exc:  # noqa: BLE001 - best-effort cleanup
+                logger.error("Failed to remove clock file poller: %s", exc)
+        self._clock_file_poll_id = None
+        self._clock_file_text = None
+
+    def _clock_file_tick(self) -> bool:
+        """Read the clock extra-text file and push it to the shell if changed.
+
+        Returns ``True`` so the GLib timeout repeats. Mirrors the legacy
+        ``ClockRenderer._read_clock_extra_file`` (empty string on missing/unreadable
+        file), so the clock line clears cleanly when the file is deleted.
+        """
+        text = self._read_clock_extra_file()
+        if text != self._clock_file_text:
+            self._clock_file_text = text
+            self._push_plugin_data_to_shell("clock", "extra_text", text)
+        return True
+
+    @staticmethod
+    def _read_clock_extra_file() -> str:
+        """Read :data:`CLOCK_EXTRA_TXT_PATH`, returning ``""`` on failure (#761)."""
+        try:
+            if not os.path.isfile(CLOCK_EXTRA_TXT_PATH):
+                return ""
+            with open(CLOCK_EXTRA_TXT_PATH, encoding="utf-8", errors="replace") as fh:
+                return fh.read().strip()
+        except OSError:
+            return ""
+
+    def _push_plugin_data_to_shell(self, plugin_id: str, key: str, value: Any) -> None:
+        """Push a per-plugin data update to the shell (no-op in headless mode).
+
+        Mirrors :meth:`_push_media_to_shell`: the worker calls
+        ``window.picframe.applyPluginData(pluginId, key, value)`` over the same
+        ``evaluate_javascript`` bridge, and the shell forwards it to the matching
+        plugin iframe as a ``picframe:data`` postMessage (#761).
+        """
+        if self._web_view is None or not WEBKIT_AVAILABLE:
+            return
+        js = (
+            "if(window.picframe&&window.picframe.applyPluginData)"
+            f"{{window.picframe.applyPluginData("
+            f"{json.dumps(plugin_id)},{json.dumps(key)},{json.dumps(value)});}}"
+        )
+        self._push_to_shell(js)
 
     def _handle_bridge_message(self, data: dict[str, Any]) -> None:
         """Handle a parsed message from the JS shell bridge (GTK-free, testable).
@@ -984,6 +1075,8 @@ class OverlayWorker:
             except Exception as exc:  # pragma: no cover - defensive, GTK runtime
                 logger.debug("GLib.source_remove(cursor tick) failed: %s", exc)
             self._cursor_tick_id = None
+        # Stop the clock extra-text file poller (#761).
+        self._stop_clock_file_poller()
         if self._loop is not None:
             self._loop.quit()
 

@@ -32,6 +32,31 @@
       "default": true,
       "label": "Show date",
       "help": "Display the current date below the time."
+    },
+    "custom_format": {
+      "type": "string",
+      "default": "",
+      "label": "Custom time format",
+      "help": "Optional strftime pattern (digital only) that overrides the 12h/24h + seconds toggles when non-empty, e.g. '%-I:%M %p' or '%a %H:%M'. Leave empty for the friendly toggles."
+    },
+    "opacity": {
+      "type": "number",
+      "default": 1.0,
+      "label": "Opacity",
+      "help": "Clock opacity 0.0 (transparent) to 1.0 (opaque)."
+    },
+    "extra_source": {
+      "type": "string",
+      "default": "off",
+      "enum": ["off", "text", "file"],
+      "label": "Extra text source",
+      "help": "off = none; text = show the static 'Extra text' string; file = show the live contents of /dev/shm/clock.txt (polled by the worker)."
+    },
+    "extra_text": {
+      "type": "string",
+      "default": "",
+      "label": "Extra text",
+      "help": "Static line shown below the time when 'Extra text source' is 'text'."
     }
   }
 }

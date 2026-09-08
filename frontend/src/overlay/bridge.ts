@@ -15,11 +15,14 @@ import type { CurrentMedia, InputAction, OverlayShellConfig } from './types'
 
 type ApplyConfigHandler = (config: OverlayShellConfig) => void
 type ApplyMediaHandler = (media: CurrentMedia) => void
+/** Per-plugin data push (e.g. clock extra-text file source, #761). */
+type ApplyPluginDataHandler = (pluginId: string, key: string, value: unknown) => void
 
 interface PicframeBridge {
   send: (action: InputAction | { action: InputAction }) => void
   applyConfig?: ApplyConfigHandler
   applyMedia?: ApplyMediaHandler
+  applyPluginData?: ApplyPluginDataHandler
 }
 
 declare global {
@@ -65,4 +68,17 @@ export function registerApplyConfig(handler: ApplyConfigHandler): void {
  */
 export function registerApplyMedia(handler: ApplyMediaHandler): void {
   ensureBridge().applyMedia = handler
+}
+
+/**
+ * Register the handler the worker calls to push a per-plugin data update (#761).
+ *
+ * The clock plugin's ``extra_source: file`` mode shows the live contents of
+ * ``/dev/shm/clock.txt``; the worker owns the host-fs read (plugins run in a
+ * sandboxed WebKit iframe) and pushes the text here, and the shell forwards it
+ * to the matching plugin iframe as a ``picframe:data`` postMessage. Generic so
+ * other plugins can reuse the same channel.
+ */
+export function registerApplyPluginData(handler: ApplyPluginDataHandler): void {
+  ensureBridge().applyPluginData = handler
 }

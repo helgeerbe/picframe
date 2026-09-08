@@ -447,6 +447,127 @@ def test_push_media_to_shell_noop_without_surface() -> None:
     worker._push_media_to_shell({"file_path": "a.jpg"})  # must not raise
 
 
+# --- Clock extra-text file source (#761) ---
+
+
+def test_read_clock_extra_file_returns_empty_when_missing(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "CLOCK_EXTRA_TXT_PATH", str(tmp_path / "nope.txt"))
+    assert OverlayWorker._read_clock_extra_file() == ""
+
+
+def test_read_clock_extra_file_reads_and_strips(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    f = tmp_path / "clock.txt"
+    f.write_text("  21.0C\n")
+    monkeypatch.setattr(mod, "CLOCK_EXTRA_TXT_PATH", str(f))
+    assert OverlayWorker._read_clock_extra_file() == "21.0C"
+
+
+def test_reconcile_clock_file_poller_arms_for_file_source(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A clock plugin config with ``extra_source: file`` arms the GLib poller and
+    fires an immediate first read that pushes the (here empty) file content
+    through the ``applyPluginData`` bridge (#761)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "GLib", MagicMock())
+    worker = make_worker()
+    worker._web_view = MagicMock()
+    worker._loop = MagicMock()
+    monkeypatch.setattr(worker, "_read_clock_extra_file", lambda: "")
+    pushed: list[str] = []
+    monkeypatch.setattr(worker, "_push_to_shell", lambda js: pushed.append(js))
+    worker._config = {"plugin_config": {"clock": {"extra_source": "file"}}}
+    worker._reconcile_clock_file_poller()
+    assert worker._clock_file_poll_id is not None
+    assert len(pushed) == 1
+    assert "window.picframe.applyPluginData(" in pushed[0]
+
+
+def test_reconcile_clock_file_poller_disarms_for_non_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Switching away from ``file`` stops the poller and clears cached text
+    (#761)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    monkeypatch.setattr(mod, "GLib", MagicMock())
+    worker = make_worker()
+    worker._web_view = MagicMock()
+    worker._loop = MagicMock()
+    worker._clock_file_poll_id = 999
+    worker._clock_file_text = "x"
+    worker._config = {"plugin_config": {"clock": {"extra_source": "off"}}}
+    worker._reconcile_clock_file_poller()
+    assert worker._clock_file_poll_id is None
+    assert worker._clock_file_text is None
+
+
+def test_reconcile_clock_file_poller_noop_headless() -> None:
+    """In headless mode (no surface/loop) the poller is never armed, never
+    raises (#761)."""
+    worker = make_worker()
+    worker._web_view = None
+    worker._config = {"plugin_config": {"clock": {"extra_source": "file"}}}
+    worker._reconcile_clock_file_poller()  # must not raise
+    assert worker._clock_file_poll_id is None
+
+
+def test_push_plugin_data_to_shell_injects_apply_plugin_data(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The data push injects ``window.picframe.applyPluginData(<json>)`` via the
+    same ``_push_to_shell`` bridge used for config/media (#761)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    worker = make_worker()
+    worker._web_view = MagicMock()
+    pushed: list[str] = []
+    monkeypatch.setattr(worker, "_push_to_shell", lambda js: pushed.append(js))
+    worker._push_plugin_data_to_shell("clock", "extra_text", "21.0C")
+    assert len(pushed) == 1
+    assert "window.picframe.applyPluginData(" in pushed[0]
+    assert '"clock"' in pushed[0]
+    assert '"extra_text"' in pushed[0]
+    assert '"21.0C"' in pushed[0]
+
+
+def test_push_plugin_data_to_shell_noop_without_surface() -> None:
+    """Headless (no WebView) data push is a no-op, never raises (#761)."""
+    worker = make_worker()
+    worker._web_view = None
+    worker._push_plugin_data_to_shell("clock", "extra_text", "x")  # must not raise
+
+
+def test_handle_set_config_reconciles_clock_file_poller(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ``SetConfigCommand`` applies the config and (re)arms the clock file
+    poller (#761)."""
+    worker = make_worker()
+    called: list[bool] = []
+    monkeypatch.setattr(worker, "_reconcile_clock_file_poller", lambda: called.append(True))
+    assert (
+        worker.handle_command(
+            SetConfigCommand(config={"plugin_config": {"clock": {"extra_source": "file"}}})
+        )
+        is True
+    )
+    assert called == [True]
+    assert worker._config == {"plugin_config": {"clock": {"extra_source": "file"}}}
+
+
 def test_build_shell_config_merges_plugins_and_env(tmp_path) -> None:
     """The shell config carries overlay keys plus the plugin list + env."""
     plugin_dir = tmp_path / "plugins"

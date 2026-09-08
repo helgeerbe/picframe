@@ -55,6 +55,10 @@ export class Dock {
    * was not yet present when the `picframe:media` message arrived) renders the
    * current photo instead of its placeholder. */
   private mediaProvider: (() => CurrentMedia | null) | null = null
+  /** Cached per-plugin data (#761) so a freshly-loaded iframe (e.g. the clock
+   * panel opened after the worker already pushed the live extra-text file)
+   * receives the latest value on load, mirroring the media provider. */
+  private pluginDataProvider: (() => Record<string, Record<string, unknown>> | null) | null = null
   private readonly root: HTMLElement
   private readonly callbacks: DockCallbacks
 
@@ -67,6 +71,27 @@ export class Dock {
    * iframes receive it on load (#757). */
   setMediaProvider(provider: () => CurrentMedia | null): void {
     this.mediaProvider = provider
+  }
+
+  /** Provide a function returning cached per-plugin data so newly-loaded
+   * plugin iframes receive the latest pushed values on load (#761). */
+  setPluginDataProvider(provider: () => Record<string, Record<string, unknown>> | null): void {
+    this.pluginDataProvider = provider
+  }
+
+  /** Forward a `postMessage` to a single plugin's iframe (#761). Used to push
+   * per-plugin data (e.g. the clock extra-text file contents) to the matching
+   * plugin only, rather than broadcasting to every visible plugin. No-op when
+   * the plugin panel/iframe is not currently mounted. */
+  postToPlugin(pluginId: string, message: unknown): void {
+    const panel = this.root.querySelector<HTMLElement>(`#${CSS.escape(PANEL_ID_PREFIX + pluginId)}`)
+    const frame = panel?.querySelector<HTMLIFrameElement>('iframe')
+    if (!frame?.contentWindow) return
+    try {
+      frame.contentWindow.postMessage(message, '*')
+    } catch {
+      /* cross-origin frames may reject postMessage; ignore */
+    }
   }
 
   /** Apply a full shell config (plugins + enabled/visible set + per-plugin config). */
@@ -328,6 +353,15 @@ export class Dock {
         const media = this.mediaProvider?.()
         if (media) {
           frame.contentWindow?.postMessage({ type: 'picframe:media', media }, '*')
+        }
+        // #761: forward any cached per-plugin data (e.g. the clock extra-text
+        // file contents the worker already pushed) so a freshly-opened panel
+        // shows the latest value instead of waiting for the next poll.
+        const pdata = this.pluginDataProvider?.()?.[plugin.id]
+        if (pdata) {
+          for (const [key, value] of Object.entries(pdata)) {
+            frame.contentWindow?.postMessage({ type: 'picframe:data', key, value }, '*')
+          }
         }
       } catch {
         /* cross-origin frames may reject postMessage; ignore */

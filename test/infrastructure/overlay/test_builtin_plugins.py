@@ -45,12 +45,89 @@ def test_clock_plugin_schema() -> None:
         "clock_format": "24h",
         "show_seconds": False,
         "show_date": True,
+        "custom_format": "",
+        "opacity": 1.0,
+        "extra_source": "off",
+        "extra_text": "",
     }
     # A user payload overriding only some fields merges with defaults.
     result = validate_plugin_config(clock.config_schema, {"style": "analog"})
     assert result["style"] == "analog"
     assert result["clock_format"] == "24h"
     assert result["show_seconds"] is False
+
+
+def test_clock_plugin_schema_extra_source_enum_and_opacity() -> None:
+    """#761: the clock plugin exposes the legacy-parity extra-text source enum,
+    a custom strftime override, and a whole-clock opacity field. Guards the
+    shipped ``plugin.json`` so a regression that drops them is caught."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    clock = next(d for d in loader.list_plugins() if d.id == "clock")
+    assert clock.config_schema["extra_source"]["enum"] == ["off", "text", "file"]
+    assert clock.config_schema["extra_source"]["default"] == "off"
+    assert clock.config_schema["custom_format"]["type"] == "string"
+    assert clock.config_schema["custom_format"]["default"] == ""
+    assert clock.config_schema["opacity"]["type"] == "number"
+    assert clock.config_schema["opacity"]["default"] == 1.0
+    assert clock.config_schema["extra_text"]["type"] == "string"
+    # Valid overrides round-trip through validation.
+    result = validate_plugin_config(
+        clock.config_schema,
+        {
+            "extra_source": "file",
+            "custom_format": "%-I:%M %p",
+            "opacity": 0.5,
+            "extra_text": "21.0C",
+        },
+    )
+    assert result["extra_source"] == "file"
+    assert result["custom_format"] == "%-I:%M %p"
+    assert result["opacity"] == 0.5
+    assert result["extra_text"] == "21.0C"
+    # An invalid enum value is rejected.
+    import pytest
+
+    with pytest.raises(Exception, match="one of"):
+        validate_plugin_config(clock.config_schema, {"extra_source": "clock_txt"})
+
+
+def test_clock_plugin_html_renders_extra_text_elements() -> None:
+    """#761: the clock ``index.html`` ships an extra-text element for both the
+    digital and analog styles, and the JS reads ``cfg.extra_source`` /
+    ``cfg.extra_text`` plus a ``picframe:data`` push for the file source."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    clock = next(d for d in loader.list_plugins() if d.id == "clock")
+    html = (Path(clock.directory) / clock.entry).read_text(encoding="utf-8")
+    assert 'id="extra"' in html, "digital clock must include an extra-text element (#761)"
+    assert 'id="analog-extra"' in html, "analog clock must include an extra-text element (#761)"
+    assert "cfg.extra_source" in html, "clock must branch on cfg.extra_source (#761)"
+    assert "cfg.extra_text" in html, "clock must read cfg.extra_text (#761)"
+    # The file source is fed by a picframe:data postMessage with key extra_text.
+    assert '"picframe:data"' in html, "clock must listen for picframe:data (#761)"
+    assert 'data.key === "extra_text"' in html, "clock must filter picframe:data by key (#761)"
+
+
+def test_clock_plugin_html_custom_format_overrides_digital() -> None:
+    """#761: a non-empty ``custom_format`` (strftime) overrides the 12h/24h +
+    seconds toggles for the digital time line. Guards the shipped JS."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    clock = next(d for d in loader.list_plugins() if d.id == "clock")
+    html = (Path(clock.directory) / clock.entry).read_text(encoding="utf-8")
+    assert "cfg.custom_format" in html, "clock must branch on cfg.custom_format (#761)"
+    assert "function strftime(" in html, "clock must ship a strftime helper (#761)"
+    # The glibc '-' non-padding modifier (legacy default '%-I:%M') must be honored.
+    assert '"-"' in html, "strftime must support the '-' non-padding modifier (#761)"
+
+
+def test_clock_plugin_html_opacity_css_var() -> None:
+    """#761: clock opacity is applied via a ``--pf-opacity`` CSS variable on both
+    styles. Guards the shipped CSS/JS against the regression of hardcoding full
+    opacity."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    clock = next(d for d in loader.list_plugins() if d.id == "clock")
+    html = (Path(clock.directory) / clock.entry).read_text(encoding="utf-8")
+    assert "--pf-opacity" in html, "clock must use the --pf-opacity CSS var (#761)"
+    assert "setOpacity" in html, "clock must expose an opacity setter (#761)"
 
 
 def test_weather_plugin_schema_requires_api_key_and_coords() -> None:

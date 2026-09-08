@@ -18,7 +18,12 @@
  * on any enabled input event.
  */
 
-import { registerApplyConfig, registerApplyMedia, sendAction } from './bridge'
+import {
+  registerApplyConfig,
+  registerApplyMedia,
+  registerApplyPluginData,
+  sendAction
+} from './bridge'
 import { Dock } from './dock'
 import { readEnv } from './env'
 import { InputRouter } from './input'
@@ -60,6 +65,10 @@ export class OverlayShell {
   /** Latest media received from `/ws/state`; forwarded to plugin iframes on
    * load (#757) so a freshly auto-shown panel renders the current photo. */
   private latestMedia: CurrentMedia | null = null
+  /** Per-plugin data cache (#761): the worker pushes e.g. the clock extra-text
+   * file contents here; forwarded to plugin iframes on load so a freshly-opened
+   * panel shows the latest value instead of waiting for the next poll. */
+  private pluginData: Record<string, Record<string, unknown>> = {}
   /** Pending `media_change` wake-after-blend timer (#757). */
   private mediaWakeTimer: number | null = null
   /** Currently enabled input classes; the mouse-move cursor reveal only fires
@@ -105,6 +114,10 @@ export class OverlayShell {
     // The worker pushes current-media payloads over the IPC bridge (the reliable
     // path that replaces the cross-origin `/ws/state` WebSocket from `file://`).
     registerApplyMedia(media => this.applyMedia(media))
+    // The worker pushes per-plugin data (e.g. the clock extra-text file
+    // contents) over the same IPC bridge (#761); forwarded to the matching
+    // plugin iframe and cached for freshly-loaded panels.
+    registerApplyPluginData((pluginId, key, value) => this.applyPluginData(pluginId, key, value))
 
     const env = readEnv()
     if (env.wsPort) {
@@ -144,6 +157,8 @@ export class OverlayShell {
     this.router.setEnabledTypes(enabledTypes)
     // Let newly-loaded plugin iframes receive the current photo (#757).
     this.dock.setMediaProvider(() => this.latestMedia)
+    // And the latest per-plugin data (clock extra-text file, #761).
+    this.dock.setPluginDataProvider(() => this.pluginData)
     this.dock.applyConfig(config)
     this.wake()
   }
@@ -167,6 +182,19 @@ export class OverlayShell {
     // visible (#757).
     if (previousPath === media?.file_path) return
     this.scheduleMediaWake()
+  }
+
+  /**
+   * Apply a per-plugin data push from the worker IPC bridge (#761). The worker
+   * owns host-fs reads plugins cannot do from their sandboxed WebKit iframe
+   * (e.g. the clock's `/dev/shm/clock.txt` extra-text source) and pushes the
+   * value here; the shell forwards it to the matching plugin iframe as a
+   * `picframe:data` postMessage and caches it for freshly-loaded panels.
+   */
+  private applyPluginData(pluginId: string, key: string, value: unknown): void {
+    if (!this.pluginData[pluginId]) this.pluginData[pluginId] = {}
+    this.pluginData[pluginId][key] = value
+    this.dock.postToPlugin(pluginId, { type: 'picframe:data', key, value })
   }
 
   /**

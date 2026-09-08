@@ -53,6 +53,8 @@
       padding: 0.15rem 0.5rem;
       background: rgba(0, 0, 0, 0.35);
       border-radius: 8px;
+      /* clock_opacity (#761): whole-clock dim 0..1, applied to both styles. */
+      opacity: var(--pf-opacity, 1);
     }
     /* max() floors legibility at small scales; no upper cap — the shell scales
        the whole widget, so when the user shrinks the panel the widget shrinks
@@ -64,6 +66,11 @@
     .pf-clock__date {
       margin-top: 0.15rem; font-size: max(0.9rem, calc(var(--w) * 0.045));
       opacity: 0.85; font-weight: 500;
+    }
+    /* Extra text line (#761): mirrors the legacy clock_extra_source line. */
+    .pf-clock__extra {
+      margin-top: 0.1rem; font-size: max(0.8rem, calc(var(--w) * 0.04));
+      opacity: 0.85; font-weight: 500; white-space: pre;
     }
     .pf-clock--hidden { display: none; }
     /* Analog layout (#760): the face + optional date live in a column flex
@@ -80,6 +87,7 @@
     .pf-analog-wrap {
       display: flex; flex-direction: column; align-items: center;
       width: 100%; height: 100%;
+      opacity: var(--pf-opacity, 1);
     }
     .pf-analog-svg-wrap { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
     svg.pf-analog { width: 100%; height: 100%; }
@@ -95,6 +103,7 @@
   <div class="pf-clock pf-digital" id="digital">
     <div class="pf-clock__time" id="time"></div>
     <div class="pf-clock__date" id="date"></div>
+    <div class="pf-clock__extra pf-clock--hidden" id="extra"></div>
   </div>
   <div class="pf-clock pf-analog-wrap pf-clock--hidden" id="analog">
     <div class="pf-analog-svg-wrap">
@@ -109,20 +118,78 @@
       </svg>
     </div>
     <div class="pf-clock__date pf-clock--hidden" id="analog-date"></div>
+    <div class="pf-clock__extra pf-clock--hidden" id="analog-extra"></div>
   </div>
   <script>
     (function () {
       "use strict";
-      var cfg = { style: "digital", clock_format: "24h", show_seconds: false, show_date: true };
+      var cfg = {
+        style: "digital", clock_format: "24h", show_seconds: false, show_date: true,
+        custom_format: "", opacity: 1.0, extra_source: "off", extra_text: ""
+      };
+      var fileText = ""; // live /dev/shm/clock.txt content pushed via picframe:data
       var timer = null;
       function applyConfig(config) {
         if (!config) return;
         Object.keys(cfg).forEach(function (k) { if (config[k] !== undefined) cfg[k] = config[k]; });
-        render(); restartTimer();
+        setOpacity(cfg.opacity);
+        render(); restartTimer(); updateExtra();
+      }
+      function setOpacity(value) {
+        var o = Math.max(0, Math.min(1, Number(value) || 1));
+        document.documentElement.style.setProperty("--pf-opacity", String(o));
       }
       function isAnalog() { return cfg.style === "analog"; }
       function use12h() { return cfg.clock_format === "12h"; }
       function pad(n) { return n < 10 ? "0" + n : String(n); }
+      /* Minimal strftime subset (digital-only custom_format, #761) covering the
+         directives legacy picframe users put in viewer.clock_format, incl. the
+         glibc '-' non-padding modifier (e.g. '%-I:%M'). Unsupported tokens are
+         passed through verbatim so a typo never blanks the clock. */
+      function strftime(fmt, now) {
+        var names = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+        var months = ["January","February","March","April","May","June","July",
+          "August","September","October","November","December"];
+        var h12 = (now.getHours() % 12) || 12;
+        var repl = function (token) {
+          switch (token) {
+            case "Y": return String(now.getFullYear());
+            case "y": return pad(now.getFullYear() % 100);
+            case "m": return pad(now.getMonth() + 1);
+            case "d": return pad(now.getDate());
+            case "e": return String(now.getDate());
+            case "H": return pad(now.getHours());
+            case "I": return pad(h12);
+            case "M": return pad(now.getMinutes());
+            case "S": return pad(now.getSeconds());
+            case "p": return now.getHours() >= 12 ? "PM" : "AM";
+            case "A": return names[now.getDay()];
+            case "a": return names[now.getDay()].slice(0, 3);
+            case "B": return months[now.getMonth()];
+            case "b": return months[now.getMonth()].slice(0, 3);
+            case "j": return pad(dayOfYear(now));
+            case "w": return String(now.getDay());
+            case "%": return "%";
+            default: return null;
+          }
+        };
+        var out = "", i = 0;
+        while (i < fmt.length) {
+          if (fmt[i] !== "%") { out += fmt[i++]; continue; }
+          var mod = "", j = i + 1;
+          if (fmt[j] === "-") { mod = "-"; j++; }
+          var token = fmt[j];
+          var val = repl(token);
+          if (val === null) { out += "%" + mod + token; }
+          else { out += (mod === "-" && /^\d+$/.test(val)) ? String(parseInt(val, 10)) : val; }
+          i = j + 1;
+        }
+        return out;
+      }
+      function dayOfYear(now) {
+        var start = new Date(now.getFullYear(), 0, 0);
+        return Math.floor((now - start) / 86400000);
+      }
       function render() {
         var now = new Date();
         var digital = document.getElementById("digital");
@@ -132,17 +199,26 @@
         } else {
           analog.classList.add("pf-clock--hidden"); digital.classList.remove("pf-clock--hidden"); drawDigital(now);
         }
+        updateExtra();
       }
       function drawDigital(now) {
-        var h = now.getHours();
-        var m = pad(now.getMinutes());
-        var s = pad(now.getSeconds());
-        var suffix = "";
-        if (use12h()) { suffix = h >= 12 ? " PM" : " AM"; h = h % 12 || 12; }
-        var time = h + ":" + m;
-        if (cfg.show_seconds) time += ":" + s;
-        time += suffix;
-        document.getElementById("time").textContent = time;
+        var timeEl = document.getElementById("time");
+        // custom_format (#761): a non-empty strftime pattern overrides the 12h/24h
+        // + show_seconds toggles for the digital time line (mirrors legacy
+        // viewer.clock_format). The show_date line stays independent.
+        if (cfg.custom_format) {
+          timeEl.textContent = strftime(cfg.custom_format, now);
+        } else {
+          var h = now.getHours();
+          var m = pad(now.getMinutes());
+          var s = pad(now.getSeconds());
+          var suffix = "";
+          if (use12h()) { suffix = h >= 12 ? " PM" : " AM"; h = h % 12 || 12; }
+          var time = h + ":" + m;
+          if (cfg.show_seconds) time += ":" + s;
+          time += suffix;
+          timeEl.textContent = time;
+        }
         var dateEl = document.getElementById("date");
         if (cfg.show_date) {
           dateEl.classList.remove("pf-clock--hidden");
@@ -171,6 +247,25 @@
           line.setAttribute("class", "pf-tick"); g.appendChild(line);
         }
       }
+      /* Extra text line (#761): mirrors legacy clock_extra_source. off = none,
+         text = static cfg.extra_text, file = live /dev/shm/clock.txt content
+         delivered via picframe:data (key "extra_text"). Rendered below the time
+         in digital mode and below the date in analog mode. */
+      function extraText() {
+        if (cfg.extra_source === "off") return "";
+        if (cfg.extra_source === "file") return fileText;
+        return cfg.extra_text || "";
+      }
+      function updateExtra() {
+        var text = extraText();
+        var ids = isAnalog() ? ["analog-extra"] : ["extra", "analog-extra"];
+        ids.forEach(function (id) {
+          var el = document.getElementById(id);
+          if (!el) return;
+          if (text) { el.textContent = text; el.classList.remove("pf-clock--hidden"); }
+          else { el.textContent = ""; el.classList.add("pf-clock--hidden"); }
+        });
+      }
       function restartTimer() {
         if (timer) { clearInterval(timer); timer = null; }
         timer = setInterval(render, cfg.show_seconds ? 1000 : 1000);
@@ -180,6 +275,12 @@
       window.addEventListener("message", function (event) {
         var data = event.data || {};
         if (data.type === "picframe:config" && data.config) applyConfig(data.config);
+        // #761: worker pushes live /dev/shm/clock.txt content for the file extra
+        // source as { type: "picframe:data", key: "extra_text", value: "..." }.
+        if (data.type === "picframe:data" && data.key === "extra_text") {
+          fileText = data.value || "";
+          updateExtra();
+        }
         if (data.anchor) document.body.dataset.anchor = data.anchor;
         // Per-edge content offset (px): each anchor picks up the relevant edges
         // via body padding (see CSS above). Defaults to 0 (flush) when absent.
