@@ -66,10 +66,23 @@
       opacity: 0.85; font-weight: 500;
     }
     .pf-clock--hidden { display: none; }
-    /* Analog: a filled disc behind the face gives readability without a square
-       background. The disc diameter (r=95 → 190px) matches the clock outline,
-       so it covers only the face, not the full 320x240 panel. #752 */
-    svg.pf-analog { width: min(calc(var(--w) * 0.9), calc(var(--h) * 0.9)); height: min(calc(var(--w) * 0.9), calc(var(--h) * 0.9)); }
+    /* Analog layout (#760): the face + optional date live in a column flex
+       wrapper that fills the content area left after the per-edge content
+       offset (body padding). The SVG wrapper is `flex: 1; min-height: 0` so it
+       grows to fill whatever vertical space remains after the date row, and
+       the SVG itself is `width/height: 100%` of that wrapper. The default SVG
+       `preserveAspectRatio="xMidYMid meet"` then letterboxes the 200x200
+       viewBox inside the wrapper — so the face is always fully visible and
+       never clipped, regardless of offset or whether the date is shown.
+       This replaces the old fixed `min(calc(var(--w)*0.9), calc(var(--h)*0.9))`
+       sizing, which ignored the content_offset and could clip the face
+       bottom when the offset left too little clearance. */
+    .pf-analog-wrap {
+      display: flex; flex-direction: column; align-items: center;
+      width: 100%; height: 100%;
+    }
+    .pf-analog-svg-wrap { flex: 1 1 auto; min-height: 0; width: 100%; display: flex; align-items: center; justify-content: center; }
+    svg.pf-analog { width: 100%; height: 100%; }
     .pf-analog .pf-hand { stroke: var(--fg); stroke-linecap: round; }
     .pf-analog .pf-hand--hour { stroke-width: 6; }
     .pf-analog .pf-hand--minute { stroke-width: 4; }
@@ -83,15 +96,20 @@
     <div class="pf-clock__time" id="time"></div>
     <div class="pf-clock__date" id="date"></div>
   </div>
-  <svg class="pf-clock pf-analog pf-clock--hidden" id="analog" viewBox="-100 -100 200 200">
-    <circle r="95" fill="#000000" fill-opacity="0.35" />
-    <circle r="95" fill="none" stroke="var(--fg)" stroke-width="3" stroke-opacity="0.5" />
-    <g id="ticks"></g>
-    <line class="pf-hand pf-hand--hour" id="hand-hour" x1="0" y1="0" x2="0" y2="-50" />
-    <line class="pf-hand pf-hand--minute" id="hand-minute" x1="0" y1="0" x2="0" y2="-72" />
-    <line class="pf-hand pf-hand--second" id="hand-second" x1="0" y1="0" x2="0" y2="-82" />
-    <circle class="pf-center" r="4" />
-  </svg>
+  <div class="pf-clock pf-analog-wrap pf-clock--hidden" id="analog">
+    <div class="pf-analog-svg-wrap">
+      <svg class="pf-clock pf-analog" viewBox="-100 -100 200 200">
+        <circle r="95" fill="#000000" fill-opacity="0.35" />
+        <circle r="95" fill="none" stroke="var(--fg)" stroke-width="3" stroke-opacity="0.5" />
+        <g id="ticks"></g>
+        <line class="pf-hand pf-hand--hour" id="hand-hour" x1="0" y1="0" x2="0" y2="-50" />
+        <line class="pf-hand pf-hand--minute" id="hand-minute" x1="0" y1="0" x2="0" y2="-72" />
+        <line class="pf-hand pf-hand--second" id="hand-second" x1="0" y1="0" x2="0" y2="-82" />
+        <circle class="pf-center" r="4" />
+      </svg>
+    </div>
+    <div class="pf-clock__date pf-clock--hidden" id="analog-date"></div>
+  </div>
   <script>
     (function () {
       "use strict";
@@ -138,6 +156,11 @@
         var secHand = document.getElementById("hand-second");
         if (cfg.show_seconds) { secHand.style.display = ""; secHand.setAttribute("transform", "rotate(" + (s * 6) + ")"); }
         else { secHand.style.display = "none"; }
+        var dateEl = document.getElementById("analog-date");
+        if (cfg.show_date) {
+          dateEl.classList.remove("pf-clock--hidden");
+          dateEl.textContent = now.toLocaleDateString(undefined, { weekday: "long", year: "numeric", month: "long", day: "numeric" });
+        } else { dateEl.classList.add("pf-clock--hidden"); }
       }
       function buildTicks() {
         var g = document.getElementById("ticks"), ns = "http://www.w3.org/2000/svg";

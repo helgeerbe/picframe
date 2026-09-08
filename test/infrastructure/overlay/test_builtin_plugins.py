@@ -163,3 +163,51 @@ def test_text_plugin_background_grows_with_wrapped_text() -> None:
     assert '* 100).toFixed(1) + "%"' not in html, (
         "text plugin must not keep the old fixed-percentage backgroundSize (#757)"
     )
+
+
+def test_clock_plugin_analog_has_date_element() -> None:
+    """Regression test for #760: the analog clock must render the date when
+    ``show_date`` is true. The pre-fix analog mode only updated the clock hands
+    and the date element lived inside the (hidden) digital div, so the date
+    was silently dropped. This guards against the analog-date element going
+    missing from the shipped ``index.html``."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    clock = next(d for d in loader.list_plugins() if d.id == "clock")
+    html = (Path(clock.directory) / clock.entry).read_text(encoding="utf-8")
+    assert 'id="analog-date"' in html, "clock analog mode must include a date element (#760)"
+
+
+def test_clock_plugin_analog_draw_updates_date() -> None:
+    """Regression test for #760: ``drawAnalog`` must honor ``cfg.show_date`` by
+    showing/hiding the analog date element. String-presence check on the
+    shipped ``index.html`` guards against the date logic being dropped."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    clock = next(d for d in loader.list_plugins() if d.id == "clock")
+    html = (Path(clock.directory) / clock.entry).read_text(encoding="utf-8")
+    assert '"analog-date"' in html, "drawAnalog must reference the analog date element (#760)"
+    assert "cfg.show_date" in html, "drawAnalog must check cfg.show_date (#760)"
+    draw_analog_idx = html.find("function drawAnalog(now)")
+    assert draw_analog_idx != -1, "clock plugin must define drawAnalog (#760)"
+    analog_date_idx = html.find('"analog-date"', draw_analog_idx)
+    assert analog_date_idx != -1, "drawAnalog must update the analog date (#760)"
+
+
+def test_clock_plugin_analog_uses_flex_wrapper_not_fixed_size() -> None:
+    """Regression test for #760: the analog clock face must not be sized with a
+    fixed fraction of the full panel dimensions (``min(calc(var(--w)*0.9),
+    calc(var(--h)*0.9))``), which ignored the per-edge content_offset and could
+    clip the bottom of the face. The fix wraps the SVG in a column flex layout
+    that fills the content area and lets the SVG's ``preserveAspectRatio``
+    letterbox the face. String-presence/absence checks guard the shipped
+    ``index.html``."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    clock = next(d for d in loader.list_plugins() if d.id == "clock")
+    html = (Path(clock.directory) / clock.entry).read_text(encoding="utf-8")
+    assert "pf-analog-wrap" in html, "analog must use a flex wrapper (#760)"
+    assert "pf-analog-svg-wrap" in html, "analog SVG must live in a flex wrapper (#760)"
+    assert "svg.pf-analog { width: 100%; height: 100%; }" in html, (
+        "analog SVG must fill its wrapper rather than use a fixed size (#760)"
+    )
+    assert "min(calc(var(--w) * 0.9), calc(var(--h) * 0.9))" not in html, (
+        "analog must not keep the old fixed-size SVG sizing that clipped the face (#760)"
+    )
