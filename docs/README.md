@@ -30,6 +30,7 @@ FastAPI backend, and API docs are available at `/docs`.
 ## User Docs
 
 - [User manual](user/manual.md)
+- [Touch overlay & plugins](user/overlay.md)
 - [Video format validation](user/video-format-validation.md)
 - [Install helper script](user/install_picframe.sh)
 
@@ -38,6 +39,7 @@ FastAPI backend, and API docs are available at `/docs`.
 - [Developer workflow](dev/workflow.md)
 - [Architecture overview](dev/architecture/overview.md)
 - [Frontend architecture notes](dev/architecture/frontend.md)
+- [Overlay architecture notes](dev/architecture/overlay.md)
 - [GStreamer hardware discovery notes](dev/architecture/video-gst-hw-discovery.md)
 - [Video hardware limits notes](dev/architecture/video-hw-limits.md)
 

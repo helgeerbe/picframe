@@ -172,11 +172,14 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   Tests were updated to use the `http` section instead of `peripherals`.
 
 ## Current / In Progress
-- **#739 — WebKitGTK touch overlay + plugin system** (feature branch
-  `feat/739-webkit-overlay`, cut from `dev` `4217f6e`). Six locked design
-  decisions recorded in `decisionLog.md`. Prerequisite **#749** complete
-  (`5924130`). **Phase 0 (items 1–7) is now complete** — config + port + API
-  foundation, TDD throughout, all gates green (see Verification below).
+- **#739 — WebKitGTK touch overlay + plugin system** — **merged to `dev`** as
+  `6ec7c74` via PR #754 (squash); 9 issues closed manually (#739, #750–#752,
+  #757–#761). Six locked design decisions recorded in `decisionLog.md`.
+  Prerequisite **#749** complete (`5924130`). All numbered tasks 1–21 are done;
+  only the hardware-blocked real-Wayland integration test remains open (tracked
+  in #739 verification criteria). The follow-up **#753** (deprecate the pi3d
+  Clock/Text renderers now that the WebKitGTK overlay ships Clock and Photo
+  Caption plugins) is still open.
 
 ## Phase 0 Done (#739 items 1–7)
 - `overlay` section added to `default_config.yaml` (enabled/backend/plugin_dir/
@@ -244,14 +247,17 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `test/infrastructure/overlay/test_overlay_worker.py` (12). All gates green:
   ruff, ruff format (161 files), mypy strict (87 files), pytest 873 passed.
 
-## Phase 1 Still Open
-- Item **8**: worker uses a plain borderless `Gtk.Window` instead of
-  `wlr-layer-shell`, and the Phase-1 spike (`file://`→`ws://localhost`
-  cross-origin WS + `wlr-layer-shell` on labwc) needs a real Wayland display
-  to validate.
+## Phase 1 Resolved
+- Item **8**: the worker now uses `Gtk4LayerShell` (`wlr-layer-shell`) for the
+  overlay surface and falls back to a plain borderless `Gtk.Window` only when
+  the layer-shell typelib is absent (see `overlay_worker.py` and
+  `webkit_overlay_renderer.py`). The Phase-1 spike (`file://`→`ws://localhost`
+  cross-origin WS + `wlr-layer-shell` on labwc) still needs a real Wayland
+  display to validate end-to-end — the only remaining hardware-blocked item.
 - Items **10** (overlay HTML shell, Vite multi-page →
   `src/picframe/html/overlay/`) and **11** (pointer + keyboard input routing)
-  — the next chunk (frontend/WebKit-dependent).
+  — delivered in Phase 3 (`dock.postToActivePlugin()`, `shell.ts`
+  `StateClient`, parallel input routing).
 
 ## Phase 3 Done (built-in plugins, `cacf113`)
 - Three built-in overlay plugins shipped under `src/picframe/overlay_plugins/`
@@ -300,25 +306,29 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   were updated.
 
 ## Next
-- **#739 final close-out:** flip task 21 to `[x]` and post the final progress
-  comment on the issue (GitHub Issues/board is the authoritative tracker).
 - **Real-Wayland integration test** (spawning a live worker on labwc) —
-  hardware-blocked, tracked in #739 verification criteria.
+  hardware-blocked, tracked in #739 verification criteria; the only remaining
+  open item from #739.
+- **#753 — deprecate pi3d Clock/Text renderers** now that the WebKitGTK overlay
+  ships Clock and Photo Caption plugins — still open.
 - **`dev → main` release PR** (deferred, user's call): `dev` is
   +62,857/−9,123 across 280 files vs `main`. Pushing to `main` triggers
   `release.yml` (calver auto-tag + PyPI trusted publishing + GitHub Release
   with PR-title changelog categories). Verify the release workflow
   end-to-end before relying on it.
-- **Done:** superseded `v2-dev` branch deleted (local + remote, `cb69484`);
-  all commits preserved on `dev`.
+- **Done:** PR #754 squash-merged to `dev` (`6ec7c74`); 9 issues closed
+  (#739, #750–#752, #757–#761); superseded `v2-dev` branch deleted (local +
+  remote, `cb69484`); all commits preserved on `dev`.
 
 ## Known Verification State
-- Backend: `.venv/bin/python -m pytest` ran green (**833 passed**, +32 vs the
-  801 baseline after #749) on `feat/739-webkit-overlay` after Phase 0. ruff,
-  ruff format, and mypy strict (84 files) were clean.
-- Frontend: unchanged by Phase 0; `yarn build` + `yarn lint` + `yarn format:check`
-  + `vue-tsc -b` pass clean on `feat/739-webkit-overlay` after #749.
-- Current `feat/739-webkit-overlay` head: Phase 0 changes (uncommitted, ready to
-  commit and push).
-- Current `dev` head: `4217f6e` (chore: remove stale v2-dev references, #747).
+- Backend (at merge `6ec7c74`): `.venv/bin/python -m pytest` green (**891
+  passed** at the Phase 3 built-in-plugins checkpoint; 833 after Phase 0).
+  ruff, ruff format, and mypy strict (88 files) clean.
+- Frontend (at merge `6ec7c74`): `yarn build` + `yarn lint` +
+  `yarn format:check` + `vue-tsc -b` pass clean; both Vite builds (app +
+  overlay page) succeed.
+- The `feat/739-webkit-overlay` feature branch was deleted after the squash
+  merge to `dev`.
+- Current `dev` head: `6ec7c74` (PR #754: WebKitGTK touch overlay + plugin
+  system, closes #739 et al.).
 

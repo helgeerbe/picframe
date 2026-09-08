@@ -28,6 +28,27 @@
 - `TextRenderer` draws overlay text at a 1px font width and lets the GPU scale it to the target display dimensions. This avoids PIL text rasterization, keeps text crisp at any resolution, and maintains a consistent z-order by drawing text above (after) the clock on the pi3d sprite stack.
 - `ClockRenderer` re-reads the `clock_extra_source` value on each clock refresh, not just at config-load time, so switching between `off`, `clock_txt`, and `ui_text` takes effect on the next clock tick without a renderer restart. When the source is `clock_txt`, the renderer re-reads `/dev/shm/clock.txt` on every refresh so external scripts can update the extra line dynamically.
 
+## Touch Overlay And Plugins
+- The WebKitGTK touch overlay is an optional, off-process component
+  (`infrastructure/overlay/overlay_worker.py`) that mirrors the `gst_worker.py`
+  isolation pattern: it runs its own GLib `MainLoop` + `WebKitGTK WebView` over a
+  `wlr-layer-shell` surface (falling back to a plain borderless `Gtk.Window`
+  when the typelib is absent) and communicates with the main process over
+  Unix-domain-socket IPC. See `docs/dev/architecture/overlay.md`.
+- `WebKitOverlayRenderer` drives the worker from the main thread behind
+  `overlay.enabled` + `is_available()`; `main.py` wires start/stop in the signal
+  handler and the engine `finally` block. The overlay stacks above the GTK4
+  video host and stays input-capturing while invisible (opacity 0, never
+  withdrawn) so any touch/keyboard/mouse event wakes it.
+- Plugins are stateless HTML widgets under `src/picframe/overlay_plugins/`
+  (package data) copied to `~/.picframe/overlay-plugins/` on `picframe init`.
+  Four built-ins ship: Clock (`clock`), Photo Info (`meta`), Photo Caption
+  (`text`), and Weather (`weather`). Active plugin(s) receive media state via a
+  `picframe:media` postMessage; default-enable logic lives in `api/models.py`.
+- #753 remains open to deprecate the legacy pi3d `ClockRenderer`/`TextRenderer`
+  now that the WebKitGTK overlay ships Clock and Photo Caption plugins.
+
+
 ## Video Handoff
 - The First/Last Frame Sandwich pattern hides GStreamer startup/shutdown artifacts:
   - Extract/cache the first decoded video frame and a tail-decoded final EOS frame under the managed runtime cache directory.

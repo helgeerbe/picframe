@@ -15,10 +15,11 @@
 ## Runtime Components
 - The installed `picframe` console script points to the next-gen CLI in `picframe.main`.
 - `picframe init` bootstraps user-space state under `~/.picframe/`.
-- `picframe run` starts repositories, event bus, state tracker, optional Home Assistant MQTT adapter, HAL adapters, media monitor/indexer, pi3d renderer, GStreamer video renderer, playback engine, and FastAPI server.
+- `picframe run` starts repositories, event bus, state tracker, optional Home Assistant MQTT adapter, HAL adapters, media monitor/indexer, pi3d renderer, GStreamer video renderer, playback engine, optional WebKitGTK touch overlay controller, and FastAPI server.
 - Config database defaults to `<base_dir>/data/config.db3`; media cache defaults to `<base_dir>/data/media_cache.db3`; generated cache artifacts live under `<base_dir>/data/cache`.
 - `PICFRAME_DIR`, `PICFRAME_PORT`, `PICFRAME_CONFIG_DB`, `PICFRAME_MEDIA_DB`, and `PICFRAME_HTML_DIR` can override defaults.
 - Runtime matting resources are copied from package data into `<base_dir>/data/mat`; the next-gen renderer uses them in memory and does not write matted-image cache files.
+- The optional WebKitGTK touch overlay runs out of process (`overlay_worker.py`) over `wlr-layer-shell`, hosting stateless HTML plugins (Clock, Photo Info, Photo Caption, Weather); built-ins are copied to `~/.picframe/overlay-plugins/` on `picframe init`. See `docs/dev/architecture/overlay.md`.
 
 ## Display And Media Constraints
 - Wayland is the only supported display protocol.

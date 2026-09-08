@@ -37,6 +37,10 @@ When I started 2019 my DIY project building a raspberry powered digital picture 
   - live clock
   - automatic pairing of portrait images
   - optional local hardware input support
+- Touch overlay & plugins (WebKitGTK, off by default)
+  - touch / mouse / keyboard playback control over photos and video
+  - pluggable HTML widgets: Clock, Photo Info (+ GPS map), Photo Caption, Weather
+  - per-plugin position, size, opacity, and idle-fade layout
 - Filter by
   - IPTC tags
   - location
@@ -157,8 +161,10 @@ Local documentation is split by audience:
 - [Documentation index](docs/README.md)
 - [User manual](docs/user/manual.md)
 - [Install helper script](docs/user/install_picframe.sh)
+- [Touch overlay & plugins](docs/user/overlay.md)
 - [Architecture overview and component diagram](docs/dev/architecture/overview.md)
 - [Frontend architecture notes](docs/dev/architecture/frontend.md)
+- [Overlay architecture notes](docs/dev/architecture/overlay.md)
 - [GStreamer hardware discovery notes](docs/dev/architecture/video-gst-hw-discovery.md)
 - [Video hardware limits notes](docs/dev/architecture/video-hw-limits.md)
 
