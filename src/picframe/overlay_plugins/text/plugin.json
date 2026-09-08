@@ -43,7 +43,7 @@
       "type": "number",
       "default": 0.25,
       "label": "Background height",
-      "help": "Fraction of panel height (0-1) covered by the readability gradient at the bottom."
+      "help": "Minimum fraction of panel height (0-1) covered by the readability gradient at the bottom. The band grows as needed to cover all wrapped text lines (#757)."
     }
   }
 }

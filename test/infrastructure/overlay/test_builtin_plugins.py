@@ -132,3 +132,34 @@ def test_each_builtin_plugin_ships_icon_svg() -> None:
         assert "currentColor" in markup, (
             f"{descriptor.id} icon.svg must use currentColor to inherit dock color"
         )
+
+
+def test_text_plugin_background_grows_with_wrapped_text() -> None:
+    """Regression test for #757: the text overlay background must grow to cover
+    the full rendered caption height (multi-line wrap), not stay fixed at one
+    line. The plugin has no browser/jsdom harness, so this is a string-presence
+    check on the shipped ``index.html`` that guards against accidental removal
+    of the dynamic ``offsetHeight``-driven sizing."""
+    loader = PluginLoader(_BUILTIN_PLUGINS_DIR)
+    text = next(d for d in loader.list_plugins() if d.id == "text")
+    html = (Path(text.directory) / text.entry).read_text(encoding="utf-8")
+
+    # The dynamic band must be sized from the measured caption height...
+    assert "el.offsetHeight" in html, "text plugin must measure caption offsetHeight (#757)"
+    # ...combined with the minimum (background_height * panel height)...
+    assert "bh * panelH" in html, (
+        "text plugin must compute a minimum band from background_height * panel height (#757)"
+    )
+    # ...taking the max so multi-line captions keep their background.
+    assert "Math.max(minBand" in html, (
+        "text plugin must max(min band, caption height) so the band never"
+        " clips wrapped lines (#757)"
+    )
+    # And the band must be applied as an absolute px size, not a fixed
+    # percentage of the panel (the pre-#757 one-line bug).
+    assert 'backgroundSize = "100% " + bandPx + "px"' in html, (
+        "text plugin must set backgroundSize in px from bandPx (#757)"
+    )
+    assert '* 100).toFixed(1) + "%"' not in html, (
+        "text plugin must not keep the old fixed-percentage backgroundSize (#757)"
+    )

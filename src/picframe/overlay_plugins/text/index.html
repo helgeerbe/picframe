@@ -135,20 +135,22 @@
         el.style.fontSize = Math.max(8, Number(cfg.font_size) || 40) + "px";
         el.style.opacity = String(Math.max(0, Math.min(1, Number(cfg.opacity) || 1)));
         el.className = "pf-text pf-text--justify-" + (["L", "C", "R"].indexOf(cfg.justify) >= 0 ? cfg.justify : "L");
-        // Readability gradient on <body> (the full panel, 220px design height) so
-        // backgroundSize % is measured against the panel, not the caption line.
-        // Fades transparent (top) -> dark 0.45*opacity (bottom) over
-        // background_height of the panel — reproduces the legacy pi3d scrim.
+        // Readability gradient on <body> (the full panel, 220px design height).
+        // Fades transparent (top) -> dark 0.45*opacity (bottom) — reproduces the
+        // legacy pi3d scrim. The band covers at least `background_height` of the
+        // panel AND the full rendered caption height, so multi-line captions
+        // keep their background (#757). Sizing happens after the text is set
+        // (see applyBackgroundSize) so the measured height reflects the wrap.
         var bh = Math.max(0, Math.min(1, Number(cfg.background_height) || 0));
         var gradAlpha = (0.45 * Math.max(0, Math.min(1, Number(cfg.opacity) || 1))).toFixed(3);
         document.body.style.background =
           "linear-gradient(to top, rgba(0,0,0," + gradAlpha + "), rgba(0,0,0,0))";
-        document.body.style.backgroundSize = "100% " + (bh * 100).toFixed(1) + "%";
         document.body.style.backgroundPosition = "bottom";
         document.body.style.backgroundRepeat = "no-repeat";
 
         if (!currentMedia) {
           el.innerHTML = '<span class="pf-placeholder">Waiting for current photo…</span>';
+          applyBackgroundSize(el, bh);
           return;
         }
         var exif = (currentMedia.exif && typeof currentMedia.exif === "object") ? currentMedia.exif : {};
@@ -170,6 +172,21 @@
         if (fmt.indexOf("location") >= 0 && exif.location_name) parts.push(exif.location_name);
 
         el.textContent = parts.join(" - ");
+        applyBackgroundSize(el, bh);
+      }
+
+      /** Size the readability band to cover at least `bh` of the panel height and
+       * the full rendered caption height, so multi-line captions keep their
+       * background (#757). `body.clientHeight` is the panel height (220px at the
+       * design size, measured before the shell's `transform: scale()` so the
+       * px units stay consistent with `offsetHeight`). The gradient is anchored
+       * to the bottom (`backgroundPosition: bottom`), so a taller band simply
+       * extends upward to cover the extra wrapped lines. */
+      function applyBackgroundSize(el, bh) {
+        var panelH = document.body.clientHeight || 220;
+        var minBand = Math.round(bh * panelH);
+        var bandPx = Math.max(minBand, el.offsetHeight);
+        document.body.style.backgroundSize = "100% " + bandPx + "px";
       }
 
       window.addEventListener("message", function (event) {
