@@ -126,6 +126,30 @@ class StateEvent(Event):
 
 
 @dataclass(frozen=True)
+class DisplayPowerEvent(Event):
+    """An event notifying subscribers that the physical display power state changed.
+
+    Published by :class:`DisplayPowerManager` *after* a real state change
+    (not on the idempotent "already in that state" skip branches). Subscribers
+    that depend on a live Wayland output (e.g. the out-of-process WebKitGTK
+    overlay worker, whose ``wlr-layer-shell`` surface is bound to a specific
+    output and does not re-attach when the compositor destroys and recreates
+    that output on a display power-cycle) use this to rebuild their surface.
+
+    Attributes:
+        power_on: ``True`` when the display was just turned on, ``False`` when
+            it was just turned off.
+    """
+
+    power_on: bool
+
+    @property
+    def priority(self) -> int:
+        """Display power changes have normal priority (3)."""
+        return 3
+
+
+@dataclass(frozen=True)
 class OverlayConfig:
     """
     Configuration for dynamic overlays (text and clock) to be rendered on top of the image.
@@ -227,6 +251,32 @@ class RendererConfigUpdatedEvent(Event):
     """
 
     config: RendererConfig
+
+    @property
+    def priority(self) -> int:
+        return 2
+
+
+@dataclass(frozen=True)
+class OverlayConfigChangedEvent(Event):
+    """Published when the WebKitGTK touch overlay configuration changes (#739).
+
+    This is **distinct from** the ``RENDER_UPDATE_OVERLAY`` constant, which
+    drives the unrelated pi3d text/clock overlay. The overlay controller
+    (Phase 1) subscribes to this event and applies the new config live, without
+    a restart.
+
+    Attributes:
+        overlay_config: The full nested ``overlay`` config section (manifest
+            defaults merged with persisted user values) ready to apply.
+        updated_plugin_id: When the change was a single plugin's config or
+            layout write, the affected plugin id; ``None`` for general overlay
+            section writes (#752: derived from a single-entry
+            ``plugin_config`` or ``plugin_layout`` map).
+    """
+
+    overlay_config: dict[str, Any]
+    updated_plugin_id: str | None = None
 
     @property
     def priority(self) -> int:

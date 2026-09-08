@@ -324,22 +324,6 @@ class HttpConfig(BaseModel):
     cors_allowed_origins: list[str] = Field(default_factory=lambda: ["*"])
 
 
-class PeripheralButtons(BaseModel):
-    pause: str = " "
-    display_off: str = "o"
-    location: str = "l"
-    exit: str = "e"
-    power_down: str = "p"
-
-
-class PeripheralsConfig(BaseModel):
-    input_type: str | None = None
-    buttons: PeripheralButtons = Field(default_factory=PeripheralButtons)
-    enable: bool = True
-    label: str = ""
-    shortcut: str = ""
-
-
 class HardwareInputsConfig(BaseModel):
     enabled: bool = False
     inputs: dict[str, dict[str, Any]] = Field(default_factory=dict)
@@ -359,13 +343,188 @@ class HardwareInputsUpdateResponse(StatusMessageResponse):
     )
 
 
+# Nine-anchor screen positions for panel placement and content alignment (#752).
+PluginLayoutAnchor = Literal[
+    "top-left",
+    "top-center",
+    "top-right",
+    "middle-left",
+    "middle-center",
+    "middle-right",
+    "bottom-left",
+    "bottom-center",
+    "bottom-right",
+]
+
+
+class PluginLayout(BaseModel):
+    """User-editable per-plugin panel layout (issue #752).
+
+    A plugin with a manifest ``size`` is in *scale mode*: ``scale`` zooms the
+    widget uniformly and the panel is sized to ``design × scale`` (no
+    contain-fit gaps). A plugin without ``size`` is in *fill mode*:
+    ``width``/``height`` enlarge the panel and the iframe fills it.
+
+    Attributes:
+        position: 9-anchor screen position of the panel.
+        width/height: Panel size in pixels (fill mode); ``null`` = use the
+            default. Ignored for scale-mode plugins.
+        scale: Zoom factor for scale-mode widgets (default 1.0); ``null`` = no
+            scaling (fill mode).
+        display_mode: ``persistent`` (always visible) or ``auto_hide`` (fades
+            after ``idle_hide_seconds``). Per-plugin, replacing the old global.
+        idle_hide_seconds: Per-plugin idle fade delay; ``null`` = inherit the
+            global ``overlay.idle_hide_seconds``.
+        z_order: Stacking order for free overlap (higher = on top).
+    """
+
+    position: PluginLayoutAnchor = "top-right"
+    width: int | None = None
+    height: int | None = None
+    scale: float | None = None
+    display_mode: Literal["persistent", "auto_hide"] = "auto_hide"
+    idle_hide_seconds: float | None = None
+    z_order: int = 0
+
+
+class ContentOffset(BaseModel):
+    """Per-edge content offset (px) inside each plugin panel, shared by all
+    plugins. Each anchor picks up the relevant edges: ``top-left`` uses
+    ``top``+``left``, ``middle-right`` uses ``right``, ``middle-center`` uses
+    none. Values are design-space pixels (pre-``transform: scale()``), so the
+    offset scales with the widget. ``0`` = flush to the panel edge.
+    """
+
+    top: int = 8
+    bottom: int = 8
+    left: int = 8
+    right: int = 8
+
+
+class DockLayout(BaseModel):
+    """User-editable dock (plugin-icon row) placement (issue #758).
+
+    Unlike the per-plugin ``PluginLayout`` there is a single dock, so this is a
+    flat object persisted under ``overlay.dock_layout.*`` and written through
+    the dedicated ``PUT /api/overlay/dock-layout`` endpoint.
+
+    Attributes:
+        position: 9-anchor screen position of the dock.
+        margin: Edge offset in pixels (applied to the relevant edge(s) of the
+            chosen anchor; center/middle anchors combine it with the 50% +
+            transform centering).
+        idle_hide_seconds: Dock idle fade delay; ``null`` = inherit the global
+            ``overlay.idle_hide_seconds`` (matching the per-plugin layout
+            semantics).
+    """
+
+    position: PluginLayoutAnchor = "bottom-center"
+    margin: int = 16
+    idle_hide_seconds: float | None = None
+
+
+class OverlayDockLayoutUpdateResponse(StatusMessageResponse):
+    """Result returned after updating the dock placement (#758)."""
+
+    dock_layout: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validated dock layout that was persisted.",
+    )
+
+
+class OverlayConfig(BaseModel):
+    """Pydantic model for the ``overlay`` config section (#739, #752).
+
+    This is the single blocking prerequisite for the feature: Pydantic v2
+    ``extra='ignore'`` silently drops unknown YAML keys, so an ``overlay``
+    section absent from the Pydantic schema would be dropped entirely during
+    ``picframe init`` seeding. Note this is unrelated to the existing
+    ``picframe.core.events.dto.OverlayConfig`` dataclass (the pi3d text/clock
+    overlay config).
+
+    Issue #752 replaces the single-visible-plugin model (``visible_plugin:
+    str | None`` + a global ``display_mode``) with a multi-widget model:
+    ``visible_plugins: list[str]`` (simultaneous widgets) and a per-plugin
+    ``plugin_layout`` map (position/scale/width/height/display_mode/idle_hide/
+    z_order). Legacy ``visible_plugin`` / global ``display_mode`` keys are
+    ignored here (``extra='ignore'``); the read-time ``normalize_legacy_overlay``
+    bridge keeps the out-of-process worker/shell fed until Phase B.
+    """
+
+    enabled: bool = False
+    backend: Literal["webkit"] = "webkit"
+    plugin_dir: str = "~/.picframe/overlay-plugins"
+    enabled_plugins: list[str] = Field(default_factory=lambda: ["clock", "meta"])
+    visible_plugins: list[str] = Field(default_factory=lambda: ["clock"])
+    enabled_input_types: list[str] = Field(default_factory=lambda: ["touch", "mouse", "keyboard"])
+    idle_hide_seconds: float = 5.0
+    plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    plugin_layout: dict[str, PluginLayout] = Field(default_factory=dict)
+    content_offset: ContentOffset = Field(default_factory=ContentOffset)
+    dock_layout: DockLayout = Field(default_factory=DockLayout)
+
+
+class OverlayPluginResponse(BaseModel):
+    """A discovered overlay plugin with its effective (merged) config and layout."""
+
+    id: str
+    name: str
+    description: str = ""
+    icon: str = ""
+    trigger: list[str] = Field(default_factory=lambda: ["icon"])
+    position: str = "top-right"
+    has_config: bool = False
+    size: dict[str, int] | None = None
+    config_schema: dict[str, dict[str, Any]] = Field(default_factory=dict)
+    config: dict[str, Any] | None = Field(
+        default=None,
+        description=(
+            "Effective config: manifest defaults merged with persisted user values. "
+            "Redacted from the public plugin *list* (may carry secrets such as the "
+            "weather api_key); fetched on demand from the Settings-protected "
+            "per-plugin endpoint when editing (#756)."
+        ),
+    )
+    layout: dict[str, Any] | None = Field(
+        default=None,
+        description="Effective per-plugin layout (manifest defaults <- db overrides).",
+    )
+
+
+class OverlayPluginConfigResponse(BaseModel):
+    """Effective per-plugin config (manifest defaults <- db overrides)."""
+
+    plugin_id: str
+    config: dict[str, Any] = Field(default_factory=dict)
+
+
+class OverlayPluginConfigUpdateResponse(StatusMessageResponse):
+    """Result returned after updating a single plugin's config."""
+
+    plugin_id: str
+    config: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validated per-plugin config that was persisted.",
+    )
+
+
+class OverlayPluginLayoutUpdateResponse(StatusMessageResponse):
+    """Result returned after updating a single plugin's layout (#752)."""
+
+    plugin_id: str
+    layout: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validated per-plugin layout that was persisted.",
+    )
+
+
 class AppConfig(BaseModel):
     viewer: ViewerConfig = Field(default_factory=ViewerConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
     mqtt: MqttConfig = Field(default_factory=MqttConfig)
     http: HttpConfig = Field(default_factory=HttpConfig)
-    peripherals: PeripheralsConfig = Field(default_factory=PeripheralsConfig)
     hardware_inputs: HardwareInputsConfig = Field(default_factory=HardwareInputsConfig)
+    overlay: OverlayConfig = Field(default_factory=OverlayConfig)
 
 
 class EmptyConfigResponse(BaseModel):

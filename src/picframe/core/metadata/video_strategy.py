@@ -188,15 +188,20 @@ class VideoMetadataStrategy(IMetadataStrategy):
                 except (TypeError, ValueError):
                     pass
 
-            # Extract and cache first/last frames
-            if width and height and duration > 0:
+            # Extract and cache first/last frames. Defer to playback when display
+            # dimensions are unknown at indexing time: the indexer cannot know the
+            # renderer's actual display rect, so caching with video-native fallback
+            # dimensions produces a processing_signature that never matches
+            # playback-time signatures, forcing a re-extraction timeout on every
+            # transition.
+            if width and height and duration > 0 and self.display_w > 0 and self.display_h > 0:
                 try:
                     from picframe.core.utils.video_frame_extractor import VideoFrameExtractor
 
                     # We don't have sample_aspect_ratio easily available here, default to 1:1
                     # It could be extracted from ffprobe output if needed
-                    target_w = self.display_w if self.display_w > 0 else width
-                    target_h = self.display_h if self.display_h > 0 else height
+                    target_w = self.display_w
+                    target_h = self.display_h
                     fit_display: bool = False
                     background: Any = None
                     matting_config: Any = None

@@ -2,6 +2,7 @@
 import { computed, onErrorCaptured, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import {
+  mergeConfig,
   useConfigStore,
   useSystemStore,
   type AuthScope,
@@ -10,6 +11,7 @@ import {
 import { useI18n } from 'vue-i18n'
 import configSchema from '../configSchema.json'
 import HardwareInputsEditor from '../components/HardwareInputsEditor.vue'
+import TouchOverlaySettingsSection from '../components/TouchOverlaySettingsSection.vue'
 import ColorField from '../components/settings/ColorField.vue'
 import FieldRow from '../components/settings/FieldRow.vue'
 import FixedChoiceListEditor from '../components/settings/FixedChoiceListEditor.vue'
@@ -85,7 +87,8 @@ const tabs = [
   { id: 'model', labelKey: 'config.model._title' },
   { id: 'mqtt', labelKey: 'config.mqtt._title' },
   { id: 'http', labelKey: 'config.http._title' },
-  { id: 'hardware_inputs', labelKey: 'config.hardware_inputs._title' }
+  { id: 'hardware_inputs', labelKey: 'config.hardware_inputs._title' },
+  { id: 'touch_overlay', labelKey: 'settings.touchOverlay.tab' }
 ]
 
 const matStyleOptions = [
@@ -318,17 +321,28 @@ function normalizeAuthScope(value: unknown, enabled?: boolean): AuthScope {
 function serviceRestartSettingsChanged() {
   const savedViewer = config.value?.viewer || {}
   const draftViewer = localConfig.value?.viewer || {}
-  return serviceRestartViewerKeys.some(
+  const viewerChanged = serviceRestartViewerKeys.some(
     key => Boolean(savedViewer[key]) !== Boolean(draftViewer[key])
   )
+  // The WebKitGTK touch overlay renderer starts only at service startup
+  // (main.py composition root); there is no dynamic start/stop. Toggling its
+  // master enable therefore requires a restart to take effect, exactly like
+  // the viewer GL backend switches above.
+  const overlayChanged =
+    Boolean(config.value?.overlay?.enabled) !== Boolean(localConfig.value?.overlay?.enabled)
+  return viewerChanged || overlayChanged
 }
 
 function restoreServiceRestartSettings() {
   const savedViewer = config.value?.viewer || {}
   const draftViewer = localConfig.value?.viewer
-  if (!draftViewer) return
-  for (const key of serviceRestartViewerKeys) {
-    draftViewer[key] = Boolean(savedViewer[key])
+  if (draftViewer) {
+    for (const key of serviceRestartViewerKeys) {
+      draftViewer[key] = Boolean(savedViewer[key])
+    }
+  }
+  if (localConfig.value?.overlay) {
+    localConfig.value.overlay.enabled = Boolean(config.value?.overlay?.enabled)
   }
 }
 
@@ -476,8 +490,12 @@ async function executeConfirm() {
 }
 
 function exportConfig() {
+  // Export the full config: stored blob deep-merged with the editable
+  // schema-driven `localConfig` so non-schema sections (e.g. `overlay`) are
+  // included alongside the user's working-copy edits.
+  const exportBlob = mergeConfig(config.value, localConfig.value)
   const dataStr =
-    'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(localConfig.value, null, 2))
+    'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(exportBlob, null, 2))
   const downloadAnchorNode = document.createElement('a')
   downloadAnchorNode.setAttribute('href', dataStr)
   downloadAnchorNode.setAttribute('download', 'picframe_config.json')
@@ -513,13 +531,36 @@ async function importConfig(event: Event) {
     }
   } else {
     const reader = new FileReader()
-    reader.onload = e => {
+    reader.onload = async e => {
       try {
         const imported = JSON.parse(e.target?.result as string)
-        localConfig.value = initializeConfig(imported)
-        showSuccess(t('settings.importedNeedsSave'))
+        if (!imported || typeof imported !== 'object' || Array.isArray(imported)) {
+          alert(t('settings.invalidJson'))
+          return
+        }
+        // Persist the full imported blob through the validated PUT /api/config
+        // path (the same one Settings Save uses), then refresh — so JSON import
+        // behaves identically to YAML import and round-trips the ENTIRE config,
+        // including the Appearance-managed overlay fields + per-plugin config
+        // (which the schema-only initializeConfig() path would drop, since the
+        // configSchema only models `overlay.enabled` + `overlay.enabled_input_types`).
+        const response = await fetch('/api/config', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(imported)
+        })
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}))
+          throw new Error(errorData.detail || t('settings.importFailed'))
+        }
+        await configStore.fetchConfig()
+        showSuccess(t('settings.importedJson'))
       } catch (err) {
-        alert(t('settings.invalidJson'))
+        if (err instanceof SyntaxError) {
+          alert(t('settings.invalidJson'))
+        } else {
+          alert(err instanceof Error ? err.message : t('settings.importFailed'))
+        }
       }
     }
     reader.readAsText(file)
@@ -727,7 +768,12 @@ function setBackgroundColor(event: Event) {
           class="min-h-[600px] rounded-lg border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-800/90"
         >
           <div
-            v-if="configError && activeTab !== 'danger' && !localConfig[activeTab]"
+            v-if="
+              configError &&
+              activeTab !== 'danger' &&
+              activeTab !== 'touch_overlay' &&
+              !localConfig[activeTab]
+            "
             class="p-6 sm:p-8"
           >
             <EmptyState
@@ -1658,6 +1704,10 @@ function setBackgroundColor(event: Event) {
             >
               <HardwareInputsEditor v-model="localConfig.hardware_inputs" />
             </SettingsSection>
+          </section>
+
+          <section v-else-if="activeTab === 'touch_overlay'" class="space-y-8 p-6 sm:p-8">
+            <TouchOverlaySettingsSection v-model="localConfig.overlay" />
           </section>
 
           <section v-else-if="activeTab === 'danger'" class="space-y-6 p-6 sm:p-8">

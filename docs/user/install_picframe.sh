@@ -11,7 +11,8 @@ LOCAL_PATH="${PICFRAME_LOCAL_PATH:-}"
 PICFRAME_LOCALE="${PICFRAME_LOCALE:-}"
 NON_INTERACTIVE=false
 ENABLE_SERVICE="${PICFRAME_ENABLE_SERVICE:-ask}"
-DISPLAY_MODE="${PICFRAME_DISPLAY_MODE:-wayland-kiosk}"
+ENABLE_OVERLAY="${PICFRAME_ENABLE_OVERLAY:-ask}"
+DISPLAY_MODE="${PICFRAME_DISPLAY_MODE:-labwc-kiosk}"
 
 usage() {
     cat <<'EOF'
@@ -25,9 +26,11 @@ Options:
   --locale LOCALE              Picframe locale, for example en_US.UTF-8 or de_DE.UTF-8
   --enable-service             Create and enable a systemd service for boot startup
   --disable-service            Do not create a systemd service
-  --display-mode MODE          Service display mode: wayland-kiosk, labwc-kiosk,
-                                or existing-wayland
-                                (default: wayland-kiosk)
+  --enable-overlay             Install WebKitGTK touch overlay packages (default)
+  --disable-overlay            Skip WebKitGTK touch overlay packages (low-perf platforms)
+  --display-mode MODE          Service display mode: labwc-kiosk or
+                                existing-wayland
+                                (default: labwc-kiosk)
   -y, --yes                    Use defaults without interactive prompts
   -h, --help                   Show this help
 
@@ -37,7 +40,7 @@ Examples:
   sudo ./install_picframe.sh --branch dev --enable-service
   sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
   sudo ./install_picframe.sh --source local --local-path /home/pi/Development/picframe
-  sudo ./install_picframe.sh --source pypi
+  sudo ./install_picframe.sh --disable-overlay --source pypi
 EOF
 }
 
@@ -113,18 +116,10 @@ configure_systemd_service() {
     local service_file="/etc/systemd/system/picframe.service"
     local service_tmp
     local exec_start
-    local cage_path=""
     local labwc_path=""
     local labwc_config_dir=""
 
     case "$DISPLAY_MODE" in
-        wayland-kiosk)
-            cage_path=$(command -v cage || true)
-            if [ -z "$cage_path" ]; then
-                die "cage is required for --display-mode wayland-kiosk"
-            fi
-            exec_start="$cage_path -s -- $VENV_DIR/bin/picframe run"
-            ;;
         labwc-kiosk)
             labwc_path=$(command -v labwc || true)
             if [ -z "$labwc_path" ]; then
@@ -172,7 +167,7 @@ EOF
     systemctl daemon-reload
     systemctl enable picframe.service
 
-    if [ "$DISPLAY_MODE" = "wayland-kiosk" ] || [ "$DISPLAY_MODE" = "labwc-kiosk" ]; then
+    if [ "$DISPLAY_MODE" = "labwc-kiosk" ]; then
         systemctl enable --now seatd.service >/dev/null 2>&1 || true
     fi
 }
@@ -244,6 +239,14 @@ while [ "$#" -gt 0 ]; do
             ENABLE_SERVICE=false
             shift
             ;;
+        --enable-overlay)
+            ENABLE_OVERLAY=true
+            shift
+            ;;
+        --disable-overlay)
+            ENABLE_OVERLAY=false
+            shift
+            ;;
         --display-mode)
             require_option_value "$1" "${2:-}"
             DISPLAY_MODE="${2:-}"
@@ -282,9 +285,14 @@ case "$ENABLE_SERVICE" in
     *) die "PICFRAME_ENABLE_SERVICE must be ask, true, or false" ;;
 esac
 
+case "$ENABLE_OVERLAY" in
+    ask|true|false) ;;
+    *) die "PICFRAME_ENABLE_OVERLAY must be ask, true, or false" ;;
+esac
+
 case "$DISPLAY_MODE" in
-    wayland-kiosk|labwc-kiosk|existing-wayland) ;;
-    *) die "--display-mode must be one of: wayland-kiosk, labwc-kiosk, existing-wayland" ;;
+    labwc-kiosk|existing-wayland) ;;
+    *) die "--display-mode must be one of: labwc-kiosk, existing-wayland" ;;
 esac
 
 # Ensure script is run as root
@@ -333,10 +341,23 @@ if [ "$NON_INTERACTIVE" = false ] && [ -t 0 ]; then
             ENABLE_SERVICE=false
         fi
     fi
+
+    if [ "$ENABLE_OVERLAY" = "ask" ]; then
+        ENABLE_OVERLAY=$(prompt_yes_no "Install WebKitGTK touch overlay packages?" "yes")
+        if [ "$ENABLE_OVERLAY" = "yes" ]; then
+            ENABLE_OVERLAY=true
+        else
+            ENABLE_OVERLAY=false
+        fi
+    fi
 fi
 
 if [ "$ENABLE_SERVICE" = "ask" ]; then
     ENABLE_SERVICE=false
+fi
+
+if [ "$ENABLE_OVERLAY" = "ask" ]; then
+    ENABLE_OVERLAY=true
 fi
 
 if [ "$INSTALL_SOURCE" = "local" ] && [ -z "$LOCAL_PATH" ]; then
@@ -360,6 +381,7 @@ echo "Systemd boot service: $ENABLE_SERVICE"
 if [ "$ENABLE_SERVICE" = true ]; then
     echo "Service display mode: $DISPLAY_MODE"
 fi
+echo "Touch overlay packages: $ENABLE_OVERLAY"
 echo "======================================================="
 
 # 1. Install Base APT dependencies
@@ -368,7 +390,6 @@ apt-get update
 apt-get install -y \
     build-essential \
     ca-certificates \
-    cage \
     labwc \
     dbus-user-session \
     libsdl2-dev \
@@ -489,6 +510,25 @@ else
     echo "  -> No specific hardware acceleration packages identified."
 fi
 
+# Optional WebKitGTK touch overlay (#739). Installed by default; the runtime
+# overlay stays off until `overlay.enabled` is set, but the packages are pulled
+# in so the feature works out of the box on Trixie/Ubuntu 24.04+. Soft-fail so
+# older OS releases (e.g. Bookworm, which lacks gir1.2-webkit-6.0) still install.
+if [ "$ENABLE_OVERLAY" = true ]; then
+    echo "  -> Installing WebKitGTK touch overlay packages..."
+    if apt-get install -y gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0 fonts-noto-color-emoji; then
+        echo "  -> WebKitGTK overlay packages installed."
+    else
+        echo "  -> Warning: overlay packages unavailable on this OS release" >&2
+        echo "     (need Raspberry Pi OS Trixie / Ubuntu 24.04+)." >&2
+        echo "     Picframe will run with the touch overlay disabled." >&2
+        ENABLE_OVERLAY=false
+    fi
+else
+    echo "  -> WebKitGTK overlay packages skipped. Install later with:"
+    echo "     sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0 fonts-noto-color-emoji"
+fi
+
 # 4. Configure user privileges
 echo "[4/7] Configuring user groups for hardware access..."
 usermod -aG i2c "$ACTUAL_USER"
@@ -542,6 +582,38 @@ gi.require_version("Gst", "1.0")
 gi.require_version("GstPbutils", "1.0")
 from gi.repository import Gst, GstPbutils  # noqa: F401
 PY
+
+if [ "$ENABLE_OVERLAY" = true ]; then
+    echo "  -> Verifying WebKitGTK bindings..."
+    if sudo -u "$ACTUAL_USER" "$VENV_DIR/bin/python" - <<'PY'
+import ctypes
+
+import gi
+
+gi.require_version("Gtk", "4.0")
+gi.require_version("WebKit", "6.0")
+from gi.repository import WebKit  # noqa: F401
+# The gtk4-layer-shell *typelib* imports without the runtime shared library:
+# GObject-introspection dlopens libgtk4-layer-shell.so.0 lazily on first call,
+# not at import. That mismatch (typelib present, .so absent) is the exact cause
+# of the overlay rendering invisibly behind pi3d. So when the typelib is present
+# we also probe the runtime .so directly and fail the verification if missing.
+try:
+    gi.require_version("Gtk4LayerShell", "1.0")
+    from gi.repository import Gtk4LayerShell  # noqa: F401
+    ctypes.CDLL("libgtk4-layer-shell.so.0")
+except (ImportError, ValueError):
+    pass  # gir1.2-gtk4layershell-1.0 optional; worker falls back to a plain window
+except OSError as exc:
+    raise SystemExit(f"libgtk4-layer-shell.so.0 not found: {exc}")
+PY
+    then
+        echo "  -> WebKitGTK bindings verified (layer-shell runtime present)."
+    else
+        echo "  -> Warning: WebKitGTK/layer-shell runtime missing; overlay will stay disabled." >&2
+        echo "     Install: sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0" >&2
+    fi
+fi
 
 case "$INSTALL_SOURCE" in
     github)
@@ -601,6 +673,11 @@ echo "You can run picframe using: $VENV_DIR/bin/picframe run"
 if [ "$ENABLE_SERVICE" = true ]; then
     echo "Picframe service enabled: systemctl status picframe.service"
     echo "Start now with: sudo systemctl start picframe.service"
+fi
+if [ "$ENABLE_OVERLAY" = true ]; then
+    echo "Touch overlay packages installed. Enable at runtime by setting overlay.enabled = true."
+else
+    echo "Touch overlay packages skipped. To enable later: sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0 fonts-noto-color-emoji"
 fi
 echo "Note: You may need to log out and log back in for group changes (i2c, video, render, input, seat) to take effect."
 echo "======================================================="

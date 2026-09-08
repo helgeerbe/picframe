@@ -161,13 +161,149 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   `getApiErrorMessage`); 20 `catch (e: any)` → `catch (e: unknown)`; 5
   genuinely-dynamic blobs kept with scoped disables + rationale. A Sourcery
   review nit on `getErrorMessage` was addressed in follow-up commit `a307cec`.
+- **#749 — remove dead `peripherals` config section** (prerequisite for #739,
+  branch `feat/739-webkit-overlay`, `5924130`): removed the unused legacy
+  `peripherals` block from backend models/config/service/app, frontend
+  `configSchema.json`/locales, tests, and docs; SPA rebuilt. Note: Pydantic v2
+  default `extra='ignore'` silently drops unknown YAML keys (no validation
+  error), so the issue's "blocks `picframe init`" wording is imprecise — the
+  real failure mode is silent default-drop. `update_nested_config` has no write
+  whitelist (persists any section); only `get_nested_config` filters on read.
+  Tests were updated to use the `http` section instead of `peripherals`.
 
 ## Current / In Progress
-- Nothing. All planned post-merge cleanup work is complete. Local `dev` is
-  synced to `origin/dev` (`a307cec`), clean working tree. All merged feature
-  branches deleted (local + remote).
+- **#739 — WebKitGTK touch overlay + plugin system** (feature branch
+  `feat/739-webkit-overlay`, cut from `dev` `4217f6e`). Six locked design
+  decisions recorded in `decisionLog.md`. Prerequisite **#749** complete
+  (`5924130`). **Phase 0 (items 1–7) is now complete** — config + port + API
+  foundation, TDD throughout, all gates green (see Verification below).
+
+## Phase 0 Done (#739 items 1–7)
+- `overlay` section added to `default_config.yaml` (enabled/backend/plugin_dir/
+  enabled_plugins/visible_plugin/display_mode/
+  enabled_input_types/idle_hide_seconds/transparent/plugin_config).
+- Pydantic `OverlayConfig` model + `overlay` field on `AppConfig`
+  (`src/picframe/api/models.py`). Also `OverlayPluginResponse`,
+  `OverlayPluginConfigResponse`, `OverlayPluginConfigUpdateResponse`.
+  Fixed a pre-existing seed bug: `viewer.clock_extra_source: off` (YAML 1.1
+  bool coercion) → `'off'`, so `AppConfig(**seed)` validates and `picframe init`
+  re-seeding works. Guard test added in `test_bootstrapper.py`.
+- `ConfigService`: `overlay` added to `get_nested_config` read whitelist + fallback;
+  `OverlayConfigChangedEvent` published on `overlay` writes (distinct from
+  `RENDER_UPDATE_OVERLAY`); new `update_plugin_config(plugin_id, config)` does
+  scoped `delete_app_config_prefix("overlay.plugin_config.<id>")` + re-write
+  (reuses the `hardware_inputs` pattern, scoped so it never wipes the rest of
+  `overlay`). No blanket overlay delete in `update_nested_config` (avoids wiping
+  the section on a single-plugin SET_CONFIG).
+- `PluginDescriptor` core DTO + `plugin_config_defaults` +
+  `validate_plugin_config` (`src/picframe/core/models/overlay.py`, pure, no GTK).
+- `IOverlayController` port (`src/picframe/core/ports/overlay.py`, exported from
+  `core/ports/__init__.py`): `list_plugins`, `is_available`, `start`, `stop`,
+  `set_opacity`, `reload`.
+- `OverlayConfigChangedEvent` DTO (`src/picframe/core/events/dto.py`).
+- Plugin manifest loader (`src/picframe/infrastructure/overlay/plugin_loader.py`,
+  `PluginLoader`): scan `plugin_dir`, read each `plugin.json`, return sorted
+  `PluginDescriptor` list. No WebKitGTK import.
+- API endpoints (`src/picframe/api/app.py`, injected `overlay_controller:
+  IOverlayController | None`): `GET /api/overlay/plugins` (descriptors with
+  merged effective config = manifest defaults <- db overrides),
+  `GET /api/overlay/plugins/{id}/config`, `PUT /api/overlay/plugins/{id}/config`
+  (validate against `config_schema`, persist under `overlay.plugin_config.<id>.*`,
+  broadcast SET_CONFIG → OverlayConfigChangedEvent). `/api/overlay` added to
+  `AUTH_PROTECTED_API_PREFIXES`; "Overlay" OpenAPI tag added.
+- Tests: `test/core/models/test_overlay.py` (13), `test/infrastructure/overlay/
+  test_plugin_loader.py` (8), `test/core/services/test_config_service.py`
+  overlay tests (6), `test/api/test_app.py` overlay endpoint + openapi tests (8),
+  seed-validation guard test (1). No frontend changes (Phase 2); no
+  `configSchema.json` entries (overlay is in dedicated components).
+
+## Phase 1 Backend Done (#739 items 9, 12, 13)
+- `core/renderers/overlay_ipc.py`: overlay IPC protocol mirroring
+  `ipc_protocol.py` — commands `SetOpacity`/`SetConfig`/`Reload`/`Shutdown`,
+  events `Ready`/`Input`/`Error`, `parse_overlay_ipc_message` parser.
+- `core/renderers/webkit_overlay_renderer.py`: `WebKitOverlayRenderer`
+  implements `IOverlayController` as an IPC client — spawns
+  `overlay_worker.py` via `subprocess.Popen` (env `GDK_BACKEND=wayland`),
+  AF_UNIX socket IPC, listener thread translating worker `InputEvent` →
+  `CommandEvent` (prev/next/toggle=play/hide=stop), subscribes to
+  `OverlayConfigChangedEvent` (forwards `SetConfig`) and `RenderCommand`
+  (PROMOTE_VIDEO_REVEAL → opacity 0, PARK/WAKE → opacity 1), graceful
+  degradation probe (`_probe_webkit` → `SystemErrorEvent(code="webkit_unavailable")`,
+  no worker spawn when absent). `list_plugins` delegates to `PluginLoader`.
+- `infrastructure/overlay/overlay_worker.py`: out-of-process worker — guarded
+  `gi`/Gtk/WebKit import, GLib `MainLoop` + WebKitGTK `WebView` + JS bridge
+  (`window.picframe` user-message handler), transparent borderless `Gtk.Window`,
+  `_apply_opacity` calls `window.set_opacity` (hide = opacity 0, never
+  withdrawn). GTK-free IPC plumbing (`handle_command`/`_serve`/`emit_input`)
+  unit-tested headless.
+- `main.py`: composition-root wiring behind `overlay.enabled` +
+  `is_available()`; `overlay_controller` injected into `create_app`;
+  start/stop in the signal handler + the engine `finally` block.
+- Tests (40 new): `test/core/renderers/test_overlay_ipc.py` (12),
+  `test/core/renderers/test_webkit_overlay_renderer.py` (16),
+  `test/infrastructure/overlay/test_overlay_worker.py` (12). All gates green:
+  ruff, ruff format (161 files), mypy strict (87 files), pytest 873 passed.
+
+## Phase 1 Still Open
+- Item **8**: worker uses a plain borderless `Gtk.Window` instead of
+  `wlr-layer-shell`, and the Phase-1 spike (`file://`→`ws://localhost`
+  cross-origin WS + `wlr-layer-shell` on labwc) needs a real Wayland display
+  to validate.
+- Items **10** (overlay HTML shell, Vite multi-page →
+  `src/picframe/html/overlay/`) and **11** (pointer + keyboard input routing)
+  — the next chunk (frontend/WebKit-dependent).
+
+## Phase 3 Done (built-in plugins, `cacf113`)
+- Three built-in overlay plugins shipped under `src/picframe/overlay_plugins/`
+  (package data, `picframe.overlay_plugins = ["**"]`): **clock** (analog/digital,
+  12h/24h, show_seconds/show_date), **weather** (OpenWeatherMap One Call 3.0;
+  api_key/lat/lon/units/language/refresh_seconds), **meta** (current image
+  EXIF + Leaflet GPS map with offline fallback + tap-to-expand; updates on
+  photo change via `picframe:media`).
+- Bootstrapper `_copy_overlay_plugins()` copies built-ins to
+  `~/.picframe/overlay-plugins/` on `picframe init` (force-overwrites built-ins,
+  preserves user plugins).
+- Shell media forwarding: `dock.postToActivePlugin()` + `shell.ts`
+  `StateClient.onMedia` → `picframe:media` postMessage to the active plugin;
+  `CurrentMedia.location` added.
+- Tests: 7 new (`test_builtin_plugins.py`, bootstrapper copy) + patched
+  `test_bootstrap_full`. All gates green: pytest 891, mypy strict 88, ruff
+  clean, ruff format 163 files, frontend lint 0 errors, format:check clean,
+  both Vite builds succeed.
+
+## Phase 4 Done (docs, task 21)
+- Wrote `docs/dev/architecture/overlay.md` (337 lines): goal/constraints, runtime
+  component diagram, out-of-process process model, IPC protocol tables, config
+  & plugin storage, manifest/loader, API, composition root + graceful
+  degradation, frontend shell (file table + parallel input routing), video
+  stacking/Z-order/opacity, built-in plugins + `postMessage` protocol, web UI
+  controls, tests index, open/hardware-blocked items.
+- Wrote `docs/user/overlay.md` (300 lines): enabling, overlay settings table,
+  navigation, the three built-in plugins with full config tables, web UI
+  management, plugin directory/updates, and a complete "Create your own
+  plugin" guide (manifest fields, `config_schema` field definitions, an example
+  `index.html`, the `postMessage` protocol with `CurrentMedia` shape, reload
+  steps) plus a troubleshooting section.
+- All doc claims verified against the source tree (package-data declaration,
+  component/store/test paths, i18n namespaces). All #739 numbered tasks 1–21
+  now complete; only the hardware-blocked real-Wayland integration test remains
+  (tracked in the issue's verification criteria, not a numbered task).
+
+## Compositor Requirement (#739)
+- `wlr-layer-shell` is now a hard requirement for the touch overlay. `cage`
+  does not implement the protocol (confirmed via cage wiki), so the overlay
+  degrades behind the GTK4 video host during playback. The installer no longer
+  ships `cage`; `labwc-kiosk` is the default kiosk mode, `wayland-kiosk` was
+  removed, and `existing-wayland` requires a layer-shell compositor. Installer
+  (`install_picframe.sh`), user docs (`manual.md`, `overlay.md`), architecture
+  doc (`overlay.md` §10), `overlay_worker.py` comments, and the memory bank
+  were updated.
 
 ## Next
+- **#739 final close-out:** flip task 21 to `[x]` and post the final progress
+  comment on the issue (GitHub Issues/board is the authoritative tracker).
+- **Real-Wayland integration test** (spawning a live worker on labwc) —
+  hardware-blocked, tracked in #739 verification criteria.
 - **`dev → main` release PR** (deferred, user's call): `dev` is
   +62,857/−9,123 across 280 files vs `main`. Pushing to `main` triggers
   `release.yml` (calver auto-tag + PyPI trusted publishing + GitHub Release
@@ -177,15 +313,12 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   all commits preserved on `dev`.
 
 ## Known Verification State
-- Backend: full `.venv/bin/python -m pytest` was last reported green (753
-  tests, 1 GI deprecation warning) on the `v2-dev` line before the `dev` merge.
-  The 3 follow-up PRs (#744/#745/#746) passed their targeted CI checks
-  (ruff, mypy, pytest, ESLint, Prettier, frontend build) before squash-merge.
-- Frontend: `yarn build` + `yarn lint` + `yarn format:check` pass clean on
-  `dev` after #743 (#746's initial CI failure from a stray blank line in
-  `errors.ts` was caught and fixed via `yarn format` before merge).
-- Current `dev` head: `a307cec` (Sourcery fixup to `getErrorMessage`).
-- Note: backend test counts grew through the modernization (640 → 753+ on
-  `v2-dev`); the exact count on post-merge `dev` should be re-verified with
-  a fresh `.venv/bin/python -m pytest` run before the release.
+- Backend: `.venv/bin/python -m pytest` ran green (**833 passed**, +32 vs the
+  801 baseline after #749) on `feat/739-webkit-overlay` after Phase 0. ruff,
+  ruff format, and mypy strict (84 files) were clean.
+- Frontend: unchanged by Phase 0; `yarn build` + `yarn lint` + `yarn format:check`
+  + `vue-tsc -b` pass clean on `feat/739-webkit-overlay` after #749.
+- Current `feat/739-webkit-overlay` head: Phase 0 changes (uncommitted, ready to
+  commit and push).
+- Current `dev` head: `4217f6e` (chore: remove stale v2-dev references, #747).
 

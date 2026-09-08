@@ -8,7 +8,7 @@ from picframe.core.models.media import MediaType
 
 @pytest.fixture
 def strategy() -> VideoMetadataStrategy:
-    return VideoMetadataStrategy()
+    return VideoMetadataStrategy(display_w=1920, display_h=1080)
 
 
 @patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
@@ -346,3 +346,72 @@ def test_extract_os_error(mock_stat: MagicMock, strategy: VideoMetadataStrategy)
     media_item = strategy.extract(filepath, directory_id)
 
     assert media_item is None
+
+
+@patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
+@patch("picframe.core.metadata.video_strategy.subprocess.run")
+@patch("picframe.core.metadata.video_strategy.os.stat")
+def test_extract_skips_frame_caching_when_display_dims_unknown(
+    mock_stat: MagicMock,
+    mock_run: MagicMock,
+    mock_extract: MagicMock,
+) -> None:
+    """Indexing must not cache transition frames when display dimensions are unknown.
+
+    The indexer cannot know the renderer's actual display rect, so caching with
+    video-native fallback dimensions would produce a processing_signature that
+    never matches playback-time signatures, forcing a re-extraction timeout on
+    every transition. Extraction is deferred to playback instead.
+    """
+    mock_stat_result = MagicMock()
+    mock_stat_result.st_size = 1024
+    mock_stat_result.st_mtime = 1600000000.0
+    mock_stat.return_value = mock_stat_result
+    mock_run_result = MagicMock()
+    mock_run_result.stdout = """
+    {
+        "format": {"duration": "10.0"},
+        "streams": [
+            {"codec_type": "video", "width": 1920, "height": 1200}
+        ]
+    }
+    """
+    mock_run.return_value = mock_run_result
+    strategy = VideoMetadataStrategy(display_w=0, display_h=0)
+
+    media_item = strategy.extract("/path/to/video.mp4", 1)
+
+    assert media_item is not None
+    assert media_item.width == 1920
+    assert media_item.height == 1200
+    mock_extract.assert_not_called()
+
+
+@patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
+@patch("picframe.core.metadata.video_strategy.subprocess.run")
+@patch("picframe.core.metadata.video_strategy.os.stat")
+def test_extract_caches_frames_when_display_dims_configured(
+    mock_stat: MagicMock,
+    mock_run: MagicMock,
+    mock_extract: MagicMock,
+) -> None:
+    """Indexing caches transition frames using configured display dimensions."""
+    mock_stat_result = MagicMock()
+    mock_stat_result.st_size = 1024
+    mock_stat_result.st_mtime = 1600000000.0
+    mock_stat.return_value = mock_stat_result
+    mock_run_result = MagicMock()
+    mock_run_result.stdout = """
+    {
+        "format": {"duration": "10.0"},
+        "streams": [
+            {"codec_type": "video", "width": 1920, "height": 1200}
+        ]
+    }
+    """
+    mock_run.return_value = mock_run_result
+    strategy = VideoMetadataStrategy(display_w=1920, display_h=1080)
+
+    strategy.extract("/path/to/video.mp4", 1)
+
+    mock_extract.assert_called_once_with("/path/to/video.mp4", 10.0, 1920, 1080)

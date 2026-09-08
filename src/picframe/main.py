@@ -172,6 +172,56 @@ def run_picframe(
         max_software_decode_resolution=max_software_decode_resolution,
     )
 
+    # 5b. Initialize Overlay Controller (WebKitGTK touch overlay, #739).
+    # Runs out-of-process (overlay_worker.py) mirroring the gst_worker pattern.
+    # Constructed behind the port and only started when overlay.enabled is true
+    # and the WebKitGTK backend is available; degrades gracefully otherwise.
+    overlay_config_section = nested_config.get("overlay", {})
+    overlay_enabled = bool(overlay_config_section.get("enabled", False))
+    display_output_watcher = None
+    from picframe.core.renderers.webkit_overlay_renderer import WebKitOverlayRenderer
+    from picframe.infrastructure.overlay.plugin_loader import PluginLoader
+
+    overlay_plugin_dir = resource_paths.resolve(
+        str(overlay_config_section.get("plugin_dir", "~/.picframe/overlay-plugins"))
+    )
+    overlay_html_dir = html_dir or str(resource_paths.html_dir)
+    overlay_controller = WebKitOverlayRenderer(
+        event_publisher=event_bus,
+        event_subscriber=event_bus,
+        plugin_loader=PluginLoader(overlay_plugin_dir),
+        html_dir=overlay_html_dir,
+        plugin_dir=str(overlay_plugin_dir),
+        ws_port=port,
+        overlay_config=dict(overlay_config_section),
+        time_fade=renderer_config.time_fade,
+    )
+    if overlay_enabled and overlay_controller.is_available():
+        logger.info("Starting overlay controller (WebKitGTK).")
+        overlay_controller.start()
+        # 5c. Watch the configured output for external power-cycles (#755).
+        # The overlay's layer-shell surface is bound to one Wayland output; a
+        # monitor-button / DPMS power-cycle destroys and recreates that output
+        # and the orphaned surface never re-attaches. WaylandDisplayPower only
+        # tracks picframe-initiated commands, so this watcher polls the real
+        # compositor state and publishes DisplayPowerEvent on observed off->on
+        # transitions, driving the same respawn path the command path uses.
+        # It is a no-op without wlr-randr / wlr-output-management.
+        from picframe.infrastructure.os.display_output_watcher import (
+            DisplayOutputWatcher,
+        )
+
+        display_output_watcher = DisplayOutputWatcher(
+            display_output,
+            event_bus,
+        )
+        display_output_watcher.start()
+    elif overlay_enabled and not overlay_controller.is_available():
+        logger.warning(
+            "overlay.enabled is true but WebKitGTK is not installed; "
+            "running without the touch overlay."
+        )
+
     # 6. Initialize Engine
     engine = PlaybackEngine(
         event_bus,
@@ -208,6 +258,7 @@ def run_picframe(
         resource_paths=resource_paths,
         log_event_buffer=logging_service.buffer,
         system_manager=hal_adapters.system_manager,
+        overlay_controller=overlay_controller,
     )
     web_server = WebServer(app, port=port)
 
@@ -230,6 +281,9 @@ def run_picframe(
         logging_service.stop()
         engine.stop()
         media_indexer_service.stop()
+        overlay_controller.stop()
+        if display_output_watcher is not None:
+            display_output_watcher.stop()
         event_bus.stop()
         # Keep a reference to display_power_manager to prevent garbage collection
         # and allow it to handle events until the bus stops.
@@ -282,6 +336,9 @@ def run_picframe(
         hardware_input_service.stop()
         web_server.stop()
         engine.stop()
+        overlay_controller.stop()
+        if display_output_watcher is not None:
+            display_output_watcher.stop()
         event_bus.stop()
         logger.info("Picframe stopped.")
 

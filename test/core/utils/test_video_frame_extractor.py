@@ -18,7 +18,6 @@ from picframe.core.utils.video_frame_extractor import (
     VideoFrameExtractor,
     VideoFrameMattingConfig,
     VideoTransitionFrameMetadata,
-    _FrameExtractionTimeout,
 )
 
 
@@ -32,6 +31,14 @@ def mock_subprocess_run() -> Generator[MagicMock, None, None]:
 def mock_image_fromarray() -> Generator[MagicMock, None, None]:
     with patch("picframe.core.utils.video_frame_extractor.Image.fromarray") as mock_fromarray:
         yield mock_fromarray
+
+
+@pytest.fixture(autouse=True)
+def _clear_mat_resource_signature_cache() -> Generator[None, None, None]:
+    """Reset the lru_cache backing ``_mat_resource_signature`` between tests."""
+    VideoFrameExtractor._mat_resource_signature.cache_clear()
+    yield
+    VideoFrameExtractor._mat_resource_signature.cache_clear()
 
 
 def _color_bbox(
@@ -267,6 +274,44 @@ def test_matting_cache_signature_normalizes_mat_images_control() -> None:
     assert disabled == disabled_string == disabled_zero
     assert always == always_string
     assert disabled != always
+
+
+def test_mat_resource_signature_caches_repeated_calls(tmp_path: Path) -> None:
+    folder = tmp_path / "mats"
+    folder.mkdir()
+    (folder / "mat_texture.jpg").write_bytes(b"texture")
+    (folder / "9_patch_bevel.png").write_bytes(b"bevel")
+    (folder / "9_patch_drop_shadow.png").write_bytes(b"shadow")
+    (folder / "9_patch_inner_shadow.png").write_bytes(b"inner")
+    (folder / "9_patch_highlight.png").write_bytes(b"highlight")
+
+    first = VideoFrameExtractor._mat_resource_signature(str(folder))
+    second = VideoFrameExtractor._mat_resource_signature(str(folder))
+
+    assert first == second
+    assert VideoFrameExtractor._mat_resource_signature.cache_info().hits >= 1
+
+    # Mutating a texture file must not invalidate the cache until it is cleared.
+    (folder / "mat_texture.jpg").write_bytes(b"different")
+    assert VideoFrameExtractor._mat_resource_signature(str(folder)) == first
+
+    VideoFrameExtractor._mat_resource_signature.cache_clear()
+    refreshed = VideoFrameExtractor._mat_resource_signature(str(folder))
+    assert refreshed != first
+
+
+def test_mat_resource_signature_distinguishes_folders(tmp_path: Path) -> None:
+    folder_a = tmp_path / "a"
+    folder_b = tmp_path / "b"
+    folder_a.mkdir()
+    folder_b.mkdir()
+    (folder_a / "mat_texture.jpg").write_bytes(b"a-texture")
+    (folder_b / "mat_texture.jpg").write_bytes(b"b-texture")
+
+    sig_a = VideoFrameExtractor._mat_resource_signature(str(folder_a))
+    sig_b = VideoFrameExtractor._mat_resource_signature(str(folder_b))
+
+    assert sig_a != sig_b
 
 
 def test_transition_cache_signature_includes_processing_version() -> None:
@@ -606,17 +651,95 @@ def test_extract_and_save_frames_returns_false_on_first_frame_timeout(
     assert result is False
 
 
-def test_final_decoded_frame_aborts_on_tail_decode_timeout(
+def test_final_decoded_frame_falls_back_on_tail_decode_timeout(
     mock_subprocess_run: MagicMock,
 ) -> None:
+    """A tail-decode timeout falls through to the duration-offset fallback."""
     mock_subprocess_run.side_effect = subprocess.TimeoutExpired(
         cmd=["ffmpeg"],
         timeout=VideoFrameExtractor.FFMPEG_FRAME_TIMEOUT_SECONDS,
     )
     extractor = VideoFrameExtractor("test.mp4", 10, 10, fit_display=True)
 
-    with pytest.raises(_FrameExtractionTimeout):
-        extractor._get_final_decoded_frame_as_image(10.0)
+    result = extractor._get_final_decoded_frame_as_image(10.0)
+
+    assert result is None
+
+
+def test_final_decoded_frame_tail_timeout_falls_back_to_duration_offset(
+    mock_subprocess_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """A tail-decode timeout in one window falls through to duration-offset success."""
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    expected_image = Image.new("RGB", (10, 10), "red")
+
+    call_count = {"n": 0}
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        call_count["n"] += 1
+        # Tail-decode calls (ffmpeg -ss ... with output_pattern) time out on the
+        # first invocation; subsequent single-frame _get_frame_as_image calls
+        # succeed and return a JPEG.
+        if "-vsync" in cmd:
+            raise subprocess.TimeoutExpired(
+                cmd=cmd,
+                timeout=VideoFrameExtractor.FFMPEG_FRAME_TIMEOUT_SECONDS,
+            )
+        return MagicMock(returncode=0, stdout=b"fake_jpeg")
+
+    mock_subprocess_run.side_effect = fake_run
+    extractor = VideoFrameExtractor(str(video_path), 10, 10, fit_display=True)
+
+    with patch(
+        "picframe.core.utils.video_frame_extractor.Image.open",
+        return_value=expected_image,
+    ):
+        result = extractor._get_final_decoded_frame_as_image(10.0)
+
+    assert result is expected_image
+    assert call_count["n"] >= 2
+
+
+def test_extract_and_save_frames_survives_first_frame_timeout(
+    mock_subprocess_run: MagicMock,
+    tmp_path: Path,
+) -> None:
+    """A first-frame timeout must not prevent last-frame extraction."""
+    import io
+
+    video_path = tmp_path / "video.mp4"
+    video_path.write_bytes(b"video")
+    # Pre-encode a JPEG before Image.save is patched below.
+    jpeg_buf = io.BytesIO()
+    Image.new("RGB", (10, 10), "red").save(jpeg_buf, format="JPEG")
+    jpeg_bytes = jpeg_buf.getvalue()
+
+    def fake_run(cmd: list[str], **kwargs: Any) -> MagicMock:
+        # Tail-decode calls write to a file pattern and use -vsync; let them
+        # succeed by emitting a frame file (written directly to bypass the
+        # patched Image.save).
+        if "-vsync" in cmd:
+            output_pattern = Path(cmd[-1])
+            (output_pattern.parent / "frame-000001.jpg").write_bytes(jpeg_bytes)
+            return MagicMock(returncode=0, stderr=b"")
+        # Single-frame _get_frame_as_image(0) for the first frame times out.
+        if "-ss" in cmd and cmd[cmd.index("-ss") + 1] == "0":
+            raise subprocess.TimeoutExpired(
+                cmd=cmd,
+                timeout=VideoFrameExtractor.FFMPEG_FRAME_TIMEOUT_SECONDS,
+            )
+        raise AssertionError("unexpected subprocess call")
+
+    mock_subprocess_run.side_effect = fake_run
+    extractor = VideoFrameExtractor(str(video_path), 10, 10, fit_display=True)
+
+    with patch.object(Image.Image, "save") as mock_save:
+        result = extractor.extract_and_save_frames(str(video_path), 10.0, 10, 10)
+
+    assert result is True
+    assert mock_save.call_count == 2
 
 
 def test_get_frame_as_image_passes_strict_unofficial(

@@ -84,6 +84,9 @@ sudo ./install_picframe.sh --source local --local-path /home/pi/Development/picf
 
 # Install from PyPI
 sudo ./install_picframe.sh --source pypi
+
+# Skip the WebKitGTK touch overlay packages (low-perf platforms)
+sudo ./install_picframe.sh --disable-overlay
 ```
 
 #### Optional Systemd Boot Service
@@ -95,16 +98,30 @@ enable Picframe on boot:
 sudo ./install_picframe.sh --enable-service
 ```
 
-On Raspberry Pi OS Lite the default service display mode is `wayland-kiosk`,
-which starts Picframe inside the lightweight `cage` Wayland compositor instead
-of requiring a full desktop environment. The installer also installs `labwc`;
-if it behaves better on the target Pi, use `--display-mode labwc-kiosk`
-instead. The installer enables `seatd` for kiosk compositor modes. Cage is
-fullscreen-kiosk oriented; use `labwc-kiosk` for custom non-fullscreen
+On Raspberry Pi OS Lite the default service display mode is `labwc-kiosk`,
+which starts Picframe inside the `labwc` Wayland compositor instead of
+requiring a full desktop environment. The installer enables `seatd` for the
+kiosk compositor mode. In `labwc-kiosk` mode Picframe writes its own labwc
+rules so the pi3d window and the GTK video window use the same configured
 `viewer.display_x`, `viewer.display_y`, `viewer.display_w`, and
-`viewer.display_h` layouts. In `labwc-kiosk` mode Picframe writes its own
-labwc rules so the pi3d window and the GTK video window use the same configured
-display rectangle.
+`viewer.display_h` display rectangle.
+
+> **Compositor requirement:** `labwc-kiosk` (the default) is the supported
+> kiosk compositor. The touch overlay uses the Wayland `wlr-layer-shell`
+> protocol to keep its transparent surface above the GTK4 video host and stay
+> input-capturing while invisible; `labwc` implements this protocol. `cage`
+> does **not** implement `wlr-layer-shell`, so the overlay would fall back to
+> a plain window that renders behind the video host during playback (the clock
+> becomes invisible and touch input is lost). For this reason the installer no
+> longer ships or supports `cage`, and the `wayland-kiosk` display mode has
+> been removed. If you already run a `wayland-kiosk` service unit written by
+> an older installer, re-run the installer (or switch to `--display-mode
+> labwc-kiosk`) to regenerate the service file.
+
+`existing-wayland` runs Picframe directly under an already-started Wayland
+session compositor. It is only supported when that compositor implements
+`wlr-layer-shell` (e.g. `labwc`, Sway, or Hyprland); compositors that lack it
+(cage, Mutter, Weston) leave the touch overlay unable to stack above video.
 
 ```bash
 sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
@@ -117,6 +134,50 @@ sudo systemctl status picframe.service
 sudo systemctl start picframe.service
 sudo systemctl stop picframe.service
 sudo systemctl disable picframe.service
+```
+
+#### Touch Overlay Packages (WebKitGTK)
+
+The installer **installs the WebKitGTK touch overlay packages by default**
+(`gir1.2-webkit-6.0`, `gir1.2-gtk4layershell-1.0`, and `libgtk4-layer-shell0`).
+These are needed for the
+touch overlay and plugin system described in
+[Overlay & Plugins](overlay.md). Installing them does not turn the overlay
+on by itself — you still enable it at runtime from the web UI's
+**Settings → Touch Overlay → Enable touch overlay** toggle (or by setting
+`overlay.enabled` to `true`; see the overlay docs). The toggle is boot-gated,
+so restart the picframe service after changing it.
+
+The overlay's built-in **Photo Caption** (`text`) plugin replaces the legacy
+pi3d text overlay as an HTML widget that auto-shows the current photo's
+title/date/location on each change (and works over video too); see
+[Overlay & Plugins → Photo Caption](overlay.md#photo-caption-text). The legacy
+`viewer.show_text*` keys still drive the pi3d renderer until that renderer is
+removed; the migration to `overlay.plugin_config.text.*` is tracked separately.
+
+The packages require Raspberry Pi OS **Trixie** or Ubuntu **24.04+**. On older
+releases (e.g. Bookworm) the typelib is absent, so the installer **soft-fails**:
+it prints a warning, skips the overlay packages, and Picframe runs unchanged
+without the overlay.
+
+On a low-performance platform where you want to skip the overlay packages
+entirely, pass `--disable-overlay`:
+
+```bash
+sudo ./install_picframe.sh --disable-overlay
+```
+
+A typical full install with boot service and the overlay ready is simply:
+
+```bash
+sudo ./install_picframe.sh --enable-service --display-mode labwc-kiosk
+```
+
+To add the overlay packages later on a box that was installed with
+`--disable-overlay`:
+
+```bash
+sudo apt install gir1.2-webkit-6.0 gir1.2-gtk4layershell-1.0 libgtk4-layer-shell0
 ```
 
 #### Updating an Existing Service Install
@@ -225,11 +286,15 @@ The Vue SPA is served by the FastAPI backend from `~/.picframe/html` by
 default. The main views are:
 
 *   **Remote:** playback controls, current media details, selected media
-    filters, shuffle controls, display controls, and current-media delete actions.
-*   **Appearance:** text overlays, slideshow delay/fade timing, and portrait
-    pair presentation.
+    filters, shuffle controls, display controls, current-media delete actions,
+    and the Touch overlay tile dock for picking which overlay plugin is expanded
+    on the frame.
+*   **Appearance:** text overlays, slideshow delay/fade timing, portrait
+    pair presentation, and Touch overlay behavior (display mode, auto/idle hide,
+    transparency, and which overlay plugins are activated).
 *   **Settings:** runtime configuration stored in `config.db3`, media/library
-    paths, renderer options, MQTT, GPIO inputs, legacy YAML import, and
+    paths, renderer options, MQTT, GPIO inputs, the Touch overlay master toggle
+    and input devices plus per-plugin configuration, legacy YAML import, and
     maintenance actions.
 
 The Remote play/pause button reflects the backend playback state delivered over
@@ -262,24 +327,20 @@ inside the same lightweight Wayland kiosk environment used by the optional
 systemd service:
 
 ```bash
-dbus-run-session -- cage -s -- bash -lc 'exec /home/pi/picframe_env/bin/picframe run --dir /home/pi/.picframe --port 9000'
-```
-
-If `cage` logs EGL messages such as `eglQueryDeviceStringEXT` with
-`EGL_BAD_PARAMETER` but Picframe renders normally, the message is compositor
-startup noise rather than a Picframe playback failure. On Raspberry Pi systems
-where `labwc` is available, this equivalent launch is quieter:
-
-```bash
 dbus-run-session -- labwc --session 'bash -lc "exec /home/pi/picframe_env/bin/picframe run --dir /home/pi/.picframe --port 9000"'
 ```
+
+If the compositor logs EGL messages such as `eglQueryDeviceStringEXT` with
+`EGL_BAD_PARAMETER` but Picframe renders normally, the message is compositor
+startup noise rather than a Picframe playback failure. Use the `labwc`
+compositor (`labwc-kiosk` is the supported default); `cage` is not supported
+because it lacks the `wlr-layer-shell` protocol the touch overlay needs.
 
 For a development checkout using the repository virtual environment and a
 separate development base directory:
 
 ```bash
-dbus-run-session -- cage -s -- bash -lc 'cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000'
-dbus-run-session -- labwc --session 'bash -lc "cd /home/pi/Development/picframe && exec /home/pi/picframe_env/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000"'
+dbus-run-session -- labwc --session 'bash -lc "cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000"'
 ```
 
 `--html-dir` can usually be omitted because it defaults to `<dir>/html`, which
@@ -287,7 +348,7 @@ is populated by `picframe init`. If a development base directory has not been
 initialized with frontend assets yet, point it at the checkout copy:
 
 ```bash
-dbus-run-session -- cage -s -- bash -lc 'cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000 --html-dir /home/pi/Development/picframe/src/picframe/html'
+dbus-run-session -- labwc --session 'bash -lc "cd /home/pi/Development/picframe && exec .venv/bin/python -m picframe.main run --dir /home/pi/.picframe-dev --port 9000 --html-dir /home/pi/Development/picframe/src/picframe/html"'
 ```
 
 Picframe enables `GST_V4L2_ENABLE_PROBE=1` for its GStreamer worker on
@@ -377,7 +438,14 @@ Optional Basic Auth is configured in **HTTP Settings** as one of three access
 scopes: **None**, **Settings, Logs and admin actions**, or **Complete website**.
 The Settings/admin scope protects configuration, logs, and maintenance actions
 while leaving Remote, Appearance, media APIs, and playback controls available on
-the local network. Complete website also protects the main UI, Remote,
+the local network. The overlay touch controls (the Remote dock and the Appearance
+overlay catalog) are also public under the Settings scope — including the plugin
+*list* (`GET /api/overlay/plugins`) and activating/visibility toggles via the
+public workflow-config controls — so a viewer can expand panels and toggle
+plugins without a password (#756). Per-plugin *config* (which may carry secrets
+such as the weather api key) and per-plugin *layout* remain Settings-protected;
+the Settings tab fetches those on demand when you open a plugin's config/layout
+editor. Complete website also protects the main UI, Remote,
 Appearance, static assets, media APIs, and live web sockets. Credentials are stored as
 plaintext JSON at `${PICFRAME_DATA}/basic_auth.json`; after you authenticate,
 Settings shows the saved password so it can be inspected or changed. SSL and
@@ -405,8 +473,6 @@ Settings:
     `${PICFRAME_DATA}/basic_auth.json`.
 *   `http.use_ssl`, `http.keyfile`, and `http.certfile`: accepted by config
     import/API models but not wired into FastAPI/Uvicorn.
-*   `peripherals.*`: legacy keyboard/touch settings; GPIO runtime inputs use
-    `hardware_inputs`.
 
 The MQTT current-media sensor publishes compact state (`filename`, `layout`,
 and `id`) on `media/state` and all known normalized `MediaItem` attributes on
@@ -439,8 +505,7 @@ change playback state.
 ### GPIO Hardware Inputs
 
 Raspberry Pi GPIO inputs are configured from the Settings UI under **GPIO Inputs**.
-These mappings are stored in `config.db3` as `hardware_inputs` and are separate
-from the legacy-style keyboard/touch `peripherals` settings.
+These mappings are stored in `config.db3` as `hardware_inputs`.
 
 Pins use BCM numbering. Each input has a label, a device type, a BCM pin, and
 one or more action mappings:
@@ -657,8 +722,8 @@ inside mats, solid bars, edge fill, or blurred backdrops. If GTK4 or
 system error instead of using a legacy sink fallback.
 
 When the display rectangle is effectively fullscreen, Picframe makes the GTK
-video window fullscreen as well; this is the preferred path for both Cage and
-labwc. For custom non-fullscreen geometry, the installer-provisioned
+video window fullscreen as well; this is the preferred path under labwc.
+For custom non-fullscreen geometry, the installer-provisioned
 `labwc-kiosk` mode uses a Picframe-owned labwc configuration under
 `~/.picframe/labwc` to suppress server-side decorations and to place the pi3d
 window with the configured `viewer.display_x`, `viewer.display_y`,
@@ -797,7 +862,7 @@ sudo apt-get install -y libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev xvfb gstr
 ```bash
 sudo apt-get update
 sudo apt-get install -y \
-  build-essential ca-certificates cage labwc dbus-user-session git locales \
+  build-essential ca-certificates labwc dbus-user-session git locales \
   python3 python3-dev python3-gi python3-gst-1.0 python3-pip python3-venv sudo \
   libsdl2-dev libegl1-mesa-dev libgles2-mesa-dev \
   gir1.2-gst-plugins-base-1.0 gir1.2-gstreamer-1.0 gir1.2-gtk-4.0 mesa-utils \

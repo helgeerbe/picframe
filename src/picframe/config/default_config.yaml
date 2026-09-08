@@ -67,7 +67,7 @@ viewer:
   clock_hgt_offset_pct: 3.0
   # Extra text source shown below the clock. off disables it, clock_txt reads
   # /dev/shm/clock.txt, ui_text uses clock_extra_text from the settings UI.
-  clock_extra_source: off
+  clock_extra_source: 'off'
   clock_extra_text: ''
   menu_text_sz: 40
   menu_autohide_tm: 10.0
@@ -184,19 +184,59 @@ http:
   command_debounce_ms: 200
   cors_allowed_origins:
     - "*"
-peripherals:
-  # Optional local input shortcuts.
-  input_type: null
-  buttons:
-    pause: ' '
-    display_off: o
-    location: l
-    exit: e
-    power_down: p
-  enable: true
-  label: ''
-  shortcut: ''
 hardware_inputs:
   # Optional Raspberry Pi GPIO inputs. Pins use BCM numbering.
   enabled: false
   inputs: {}
+overlay:
+  # WebKitGTK touch overlay + plugin system (#739). The overlay runs in its own
+  # process (overlay_worker.py) mirroring the gst_worker.py pattern, so the main
+  # process stays GTK/WebKit-free. Disabled by default; degrades gracefully when
+  # WebKitGTK is absent.
+  enabled: false
+  # Overlay backend. "webkit" is the transparent Wayland surface (primary).
+  backend: webkit
+  # Directory scanned for plugin sub-directories (each with a plugin.json).
+  plugin_dir: ~/.picframe/overlay-plugins
+  # Which plugins are loaded/active on the frame.
+  enabled_plugins:
+  - clock
+  - meta
+  # Which plugins are currently expanded on screen (multi-widget, #752). A list
+  # so several widgets can show at once; an empty list = dock only.
+  visible_plugins:
+  - clock
+  # Which input device classes are active. Remove one to disable, e.g.
+  # ["mouse","keyboard"] on a kiosk. Activity tracking counts any enabled event.
+  enabled_input_types:
+  - touch
+  - mouse
+  - keyboard
+  # Seconds idle before fading to opacity 0 (wake on any input); photos too.
+  # Per-plugin idle_hide_seconds may override this (null = inherit this value).
+  idle_hide_seconds: 5.0
+  # Per-plugin user config map: { "<plugin_id>": { ... } }. Persisted here, not
+  # in the plugin directory; effective config = manifest defaults <- db overrides.
+  plugin_config: {}
+  # Per-plugin panel layout map (#752): { "<plugin_id>": { position, width,
+  # height, scale, display_mode, idle_hide_seconds, z_order } }. Empty
+  # = each plugin uses its manifest defaults. display_mode is per-plugin here
+  # (persistent | auto_hide), replacing the old global display_mode.
+  plugin_layout: {}
+  # Per-edge content offset (px) inside each plugin panel, shared by all
+  # plugins. Each anchor picks up the relevant edges (top-left -> top+left,
+  # middle-right -> right, middle-center -> none). 0 = flush to the panel edge.
+  content_offset:
+    top: 8
+    bottom: 8
+    left: 8
+    right: 8
+  # Dock placement (#758): the row of plugin icons. position is a 9-anchor
+  # screen position, margin the edge offset in px (applied to the relevant
+  # edge(s) of the chosen anchor; center/middle anchors combine it with the
+  # 50% + transform centering), idle_hide_seconds (null = inherit the global
+  # idle_hide_seconds) overrides the dock's idle fade.
+  dock_layout:
+    position: bottom-center
+    margin: 16
+    idle_hide_seconds: null

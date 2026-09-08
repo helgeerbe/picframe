@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Picframe Photo Caption</title>
+  <style>
+    :root { --fg: #f8fafc; --bg: transparent; --w: 1280px; --h: 220px; }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    /* Scale mode (#752): the shell lays this iframe out at the fixed design size
+       (--w × --h, from the manifest `size`) and applies `transform: scale()`.
+       Content is sized once at the design size. The panel is sized to design ×
+       scale so its aspect matches the widget exactly. */
+    html, body { height: 100%; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      display: flex; align-items: flex-end; justify-content: flex-start;
+      -webkit-user-select: none; user-select: none; overflow: hidden;
+      padding-top: var(--pf-offset-top, 0px);
+      padding-bottom: var(--pf-offset-bottom, 0px);
+      padding-left: var(--pf-offset-left, 0px);
+      padding-right: var(--pf-offset-right, 0px);
+    }
+    /* Anchor-driven content alignment (#752). The shell stamps the panel anchor
+       on <body data-anchor>; these rules push the flex content to the matching
+       edge so the caption hugs the panel corner instead of sitting centered. */
+    body[data-anchor="top-left"]      { align-items: flex-start; justify-content: flex-start; }
+    body[data-anchor="top-center"]    { align-items: flex-start; justify-content: center; }
+    body[data-anchor="top-right"]     { align-items: flex-start; justify-content: flex-end; }
+    body[data-anchor="middle-left"]   { align-items: center;     justify-content: flex-start; }
+    body[data-anchor="middle-center"] { align-items: center;     justify-content: center; }
+    body[data-anchor="middle-right"]  { align-items: center;     justify-content: flex-end; }
+    body[data-anchor="bottom-left"]   { align-items: flex-end;   justify-content: flex-start; }
+    body[data-anchor="bottom-center"] { align-items: flex-end;   justify-content: center; }
+    body[data-anchor="bottom-right"]  { align-items: flex-end;   justify-content: flex-end; }
+    /* The readability gradient is painted on <body> (the full 220px panel design
+       height) so backgroundSize percentages are measured against the panel, not
+       the one-line caption element. .pf-text itself is transparent; text is
+       aligned per `justify`, with a subtle text shadow for legibility. The
+       gradient fades transparent (top) -> dark 0.45 (bottom) over
+       background_height of the panel, reproducing the legacy pi3d scrim. */
+    .pf-text {
+      width: 100%;
+      padding: 0.5rem 1rem;
+      text-shadow: 0 1px 4px rgba(0, 0, 0, 0.6);
+      word-break: break-word;
+      line-height: 1.25;
+    }
+    .pf-text--justify-L { text-align: left; }
+    .pf-text--justify-C { text-align: center; }
+    .pf-text--justify-R { text-align: right; }
+    .pf-placeholder { color: rgba(248, 250, 252, 0.55); font-style: italic; }
+  </style>
+</head>
+<body>
+  <div class="pf-text pf-text--justify-L" id="caption">
+    <span class="pf-placeholder">Waiting for current photo…</span>
+  </div>
+  <script>
+    (function () {
+      "use strict";
+      var cfg = {
+        format: "title caption name date folder location",
+        date_format: "%b %d, %Y",
+        font_size: 40,
+        justify: "L",
+        opacity: 1.0,
+        background_height: 0.25
+      };
+      var currentMedia = null;
+
+      function applyConfig(config) {
+        if (!config) return;
+        Object.keys(cfg).forEach(function (k) { if (config[k] !== undefined) cfg[k] = config[k]; });
+        render();
+      }
+
+      function applyMedia(media) {
+        currentMedia = media || null;
+        render();
+      }
+
+      function basename(p) {
+        if (!p) return "";
+        var parts = String(p).replace(/\\/g, "/").split("/").filter(Boolean);
+        return parts.length ? parts[parts.length - 1] : "";
+      }
+      function dirname(p) {
+        if (!p) return "";
+        var parts = String(p).replace(/\\/g, "/").split("/").filter(Boolean);
+        parts.pop();
+        return parts.length ? parts[parts.length - 1] : "";
+      }
+
+      // Minimal strftime covering the tokens the default/legacy date formats use
+      // (%b %B %a %A %d %e %m %Y %y %H %M %S %p). Runs in the plugin iframe only.
+      var MONTHS = ["January", "February", "March", "April", "May", "June",
+        "July", "August", "September", "October", "November", "December"];
+      var MONTHS_ABBR = MONTHS.map(function (m) { return m.slice(0, 3); });
+      var DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+      var DAYS_ABBR = DAYS.map(function (d) { return d.slice(0, 3); });
+      function pad2(n) { return n < 10 ? "0" + n : String(n); }
+      function strftime(fmt, d) {
+        if (!fmt) return "";
+        return fmt.replace(/%([bBadYyHMSpe])/g, function (_m, t) {
+          switch (t) {
+            case "b": return MONTHS_ABBR[d.getMonth()];
+            case "B": return MONTHS[d.getMonth()];
+            case "a": return DAYS_ABBR[d.getDay()];
+            case "A": return DAYS[d.getDay()];
+            case "d": return pad2(d.getDate());
+            case "e": return String(d.getDate());
+            case "m": return pad2(d.getMonth() + 1);
+            case "Y": return String(d.getFullYear());
+            case "y": return pad2(d.getFullYear() % 100);
+            case "H": return pad2(d.getHours());
+            case "M": return pad2(d.getMinutes());
+            case "S": return pad2(d.getSeconds());
+            case "p": return d.getHours() < 12 ? "AM" : "PM";
+            default: return "%" + t;
+          }
+        });
+      }
+
+      function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, function (c) {
+          return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+        });
+      }
+
+      function render() {
+        var el = document.getElementById("caption");
+        // Style knobs.
+        el.style.fontSize = Math.max(8, Number(cfg.font_size) || 40) + "px";
+        el.style.opacity = String(Math.max(0, Math.min(1, Number(cfg.opacity) || 1)));
+        el.className = "pf-text pf-text--justify-" + (["L", "C", "R"].indexOf(cfg.justify) >= 0 ? cfg.justify : "L");
+        // Readability gradient on <body> (the full panel, 220px design height).
+        // Fades transparent (top) -> dark 0.45*opacity (bottom) — reproduces the
+        // legacy pi3d scrim. The band covers at least `background_height` of the
+        // panel AND the full rendered caption height, so multi-line captions
+        // keep their background (#757). Sizing happens after the text is set
+        // (see applyBackgroundSize) so the measured height reflects the wrap.
+        var bh = Math.max(0, Math.min(1, Number(cfg.background_height) || 0));
+        var gradAlpha = (0.45 * Math.max(0, Math.min(1, Number(cfg.opacity) || 1))).toFixed(3);
+        document.body.style.background =
+          "linear-gradient(to top, rgba(0,0,0," + gradAlpha + "), rgba(0,0,0,0))";
+        document.body.style.backgroundPosition = "bottom";
+        document.body.style.backgroundRepeat = "no-repeat";
+
+        if (!currentMedia) {
+          el.innerHTML = '<span class="pf-placeholder">Waiting for current photo…</span>';
+          applyBackgroundSize(el, bh);
+          return;
+        }
+        var exif = (currentMedia.exif && typeof currentMedia.exif === "object") ? currentMedia.exif : {};
+        var fmt = String(cfg.format || "").toLowerCase();
+        var parts = [];
+        if (fmt.indexOf("title") >= 0 && exif.title) parts.push(exif.title);
+        if (fmt.indexOf("caption") >= 0 && exif.caption) parts.push(exif.caption);
+        if (fmt.indexOf("name") >= 0 && currentMedia.file_path) parts.push(basename(currentMedia.file_path));
+        if (fmt.indexOf("date") >= 0 && exif.exif_datetime != null) {
+          try {
+            var dt = new Date(Number(exif.exif_datetime) * 1000);
+            if (!isNaN(dt.getTime())) parts.push(strftime(cfg.date_format, dt));
+          } catch (e) { /* ignore bad timestamp */ }
+        }
+        if (fmt.indexOf("folder") >= 0 && currentMedia.file_path) {
+          var folder = dirname(currentMedia.file_path);
+          if (folder) parts.push(folder);
+        }
+        if (fmt.indexOf("location") >= 0 && exif.location_name) parts.push(exif.location_name);
+
+        el.textContent = parts.join(" - ");
+        applyBackgroundSize(el, bh);
+      }
+
+      /** Size the readability band to cover at least `bh` of the panel height and
+       * the full rendered caption height, so multi-line captions keep their
+       * background (#757). `body.clientHeight` is the panel height (220px at the
+       * design size, measured before the shell's `transform: scale()` so the
+       * px units stay consistent with `offsetHeight`). The gradient is anchored
+       * to the bottom (`backgroundPosition: bottom`), so a taller band simply
+       * extends upward to cover the extra wrapped lines. */
+      function applyBackgroundSize(el, bh) {
+        var panelH = document.body.clientHeight || 220;
+        var minBand = Math.round(bh * panelH);
+        var bandPx = Math.max(minBand, el.offsetHeight);
+        document.body.style.backgroundSize = "100% " + bandPx + "px";
+      }
+
+      window.addEventListener("message", function (event) {
+        var data = event.data || {};
+        if (data.type === "picframe:config" && data.config) applyConfig(data.config);
+        else if (data.type === "picframe:media") applyMedia(data.media);
+        if (data.anchor) document.body.dataset.anchor = data.anchor;
+        // Per-edge content offset (px): each anchor picks up the relevant edges
+        // via body padding (see CSS above). Defaults to 0 (flush) when absent.
+        if (data.content_offset) {
+          var o = data.content_offset;
+          document.body.style.setProperty("--pf-offset-top", (o.top || 0) + "px");
+          document.body.style.setProperty("--pf-offset-bottom", (o.bottom || 0) + "px");
+          document.body.style.setProperty("--pf-offset-left", (o.left || 0) + "px");
+          document.body.style.setProperty("--pf-offset-right", (o.right || 0) + "px");
+        }
+      });
+    })();
+  </script>
+</body>
+</html>
+

@@ -80,6 +80,7 @@ where = ["src"]
 "picframe.data" = ["**"]
 "picframe.config" = ["**"]
 "picframe.html" = ["**"]
+"picframe.overlay_plugins" = ["**"]
 
 [tool.setuptools_scm]
 write_to = "src/picframe/_version.py"

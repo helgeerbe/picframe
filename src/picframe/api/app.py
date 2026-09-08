@@ -54,6 +54,11 @@ from picframe.api.models import (
     MediaResponseDTO,
     MediaSelectionCountRequest,
     MediaSelectionCountResponse,
+    OverlayDockLayoutUpdateResponse,
+    OverlayPluginConfigResponse,
+    OverlayPluginConfigUpdateResponse,
+    OverlayPluginLayoutUpdateResponse,
+    OverlayPluginResponse,
     StateWebSocketMessage,
     StatusMessageResponse,
     StatusResponse,
@@ -63,8 +68,16 @@ from picframe.api.models import (
 )
 from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
+from picframe.core.models.overlay import (
+    PluginDescriptor,
+    effective_plugin_layout,
+    plugin_config_defaults,
+    validate_dock_layout,
+    validate_plugin_config,
+    validate_plugin_layout,
+)
 from picframe.core.models.playlist import PlaylistCriteria
-from picframe.core.ports import ISystemManager
+from picframe.core.ports import IOverlayController, ISystemManager
 from picframe.core.repositories.interfaces import IConfigRepository, IMediaRepository
 from picframe.core.services.basic_auth import AUTH_COOKIE_NAME, BasicAuthStore
 from picframe.core.services.locale_utils import language_from_locale
@@ -122,6 +135,10 @@ OPENAPI_TAGS = [
     {"name": "Configuration", "description": "Runtime Picframe configuration endpoints."},
     {"name": "Media", "description": "Media selection helpers and media file serving."},
     {"name": "Hardware Inputs", "description": "GPIO button and PIR sensor configuration."},
+    {
+        "name": "Overlay",
+        "description": "WebKitGTK touch overlay plugin discovery and per-plugin config.",
+    },
 ]
 BAD_REQUEST_RESPONSE: dict[int | str, dict[str, Any]] = {
     400: {"model": APIErrorResponse, "description": "Invalid request for the endpoint."},
@@ -153,11 +170,24 @@ AUTH_PROTECTED_API_PREFIXES = (
     "/api/maintenance",
     "/api/auth/config",
 )
+# Per-plugin overlay config/layout routes (`/api/overlay/plugins/<id>/config` and
+# `/api/overlay/plugins/<id>/layout`) carry plugin secrets (e.g. the weather
+# api_key) and write access, so they stay Settings-protected. The plugin *list*
+# (`/api/overlay/plugins`, no trailing slash) is intentionally PUBLIC under the
+# `settings` scope so Remote/Appearance can render the dock/catalog without auth
+# (#756). The prefix tuple above cannot express "sub-paths only" (the list path
+# is a literal prefix of the per-plugin paths), so this is handled explicitly in
+# `_requires_basic_auth` below.
+AUTH_PROTECTED_OVERLAY_PLUGIN_PREFIX = "/api/overlay/plugins/"
 AUTH_PROTECTED_EXACT_PATHS = {
     "/api/system/reboot",
     "/api/system/restart-service",
     "/api/system/service-status",
     "/api/system/shutdown",
+    # The dock-layout write carries placement prefs + write access and is only
+    # relevant in Settings, so it stays Settings-protected (#758). The public
+    # overlay plugin *list* (`/api/overlay/plugins`) remains open.
+    "/api/overlay/dock-layout",
 }
 PUBLIC_WORKFLOW_KEYS = {
     "model": {
@@ -180,7 +210,43 @@ PUBLIC_WORKFLOW_KEYS = {
         "text_overlay_format",
         "show_text_on_video",
     },
+    "overlay": {
+        "enabled",
+        "idle_hide_seconds",
+        "enabled_input_types",
+        "enabled_plugins",
+        "visible_plugins",
+    },
 }
+
+
+class _NoopEventPublisher(IEventPublisher):
+    """No-op publisher for scoped, side-effect-free :class:`ConfigService`
+    instances built inside request handlers (read-only config access, #752)."""
+
+    def publish(self, event: Any) -> None:
+        pass
+
+
+class _NoopEventSubscriber(IEventSubscriber):
+    """No-op subscriber paired with :class:`_NoopEventPublisher`."""
+
+    def subscribe(self, event_type: type, callback: Any) -> None:
+        pass
+
+    def unsubscribe(self, event_type: type, callback: Any) -> None:
+        pass
+
+
+def _scoped_config_service(config_repository: Any) -> Any:
+    """Build a throwaway :class:`ConfigService` over ``config_repository`` with
+    no-op pub/sub, for read-only nested-config access inside request handlers.
+    The long-running :class:`ConfigService` (with real pub/sub) remains the
+    single source of truth for live updates; these scoped instances only read.
+    """
+    from picframe.core.services.config_service import ConfigService
+
+    return ConfigService(config_repository, _NoopEventSubscriber(), _NoopEventPublisher())
 
 
 def _requires_basic_auth(path: str, method: str, scope: str) -> bool:
@@ -195,6 +261,8 @@ def _requires_basic_auth(path: str, method: str, scope: str) -> bool:
     if path == "/settings" or path.startswith("/settings/"):
         return True
     if path == "/logs" or path.startswith("/logs/"):
+        return True
+    if path.startswith(AUTH_PROTECTED_OVERLAY_PLUGIN_PREFIX):
         return True
     return any(
         path == prefix or path.startswith(f"{prefix}/") for prefix in AUTH_PROTECTED_API_PREFIXES
@@ -238,9 +306,11 @@ def _filter_public_workflow_config(payload: dict[str, Any]) -> dict[str, dict[st
 def _workflow_config_from_app_config(config: AppConfig) -> dict[str, dict[str, Any]]:
     model_dump = config.model.model_dump()
     viewer_dump = config.viewer.model_dump()
+    overlay_dump = config.overlay.model_dump()
     return {
         "model": {key: model_dump[key] for key in PUBLIC_WORKFLOW_KEYS["model"]},
         "viewer": {key: viewer_dump[key] for key in PUBLIC_WORKFLOW_KEYS["viewer"]},
+        "overlay": {key: overlay_dump[key] for key in PUBLIC_WORKFLOW_KEYS["overlay"]},
     }
 
 
@@ -944,14 +1014,6 @@ def _normalize_legacy_yaml_config(yaml_data: dict[str, Any]) -> dict[str, Any]:
         for key in STARTUP_ONLY_LEGACY_HTTP_KEYS:
             http.pop(key, None)
 
-    peripherals = yaml_data.get("peripherals")
-    if isinstance(peripherals, dict):
-        buttons = peripherals.get("buttons")
-        if isinstance(buttons, dict):
-            for key, value in buttons.items():
-                if isinstance(value, dict) and "shortcut" in value:
-                    buttons[key] = value["shortcut"]
-
     return yaml_data
 
 
@@ -1018,6 +1080,7 @@ def create_app(
     log_event_buffer: LogEventBuffer | None = None,
     auth_store: BasicAuthStore | None = None,
     system_manager: ISystemManager | None = None,
+    overlay_controller: IOverlayController | None = None,
 ) -> FastAPI:
     """
     Create and configure the FastAPI application instance.
@@ -1904,6 +1967,254 @@ def create_app(
             "status": "success",
             "hardware_inputs": config_dict,
         }
+
+    def _overlay_descriptor_map() -> dict[str, PluginDescriptor]:
+        """Return discovered plugin descriptors keyed by id (empty if no controller)."""
+        if overlay_controller is None:
+            return {}
+        return {descriptor.id: descriptor for descriptor in overlay_controller.list_plugins()}
+
+    def _merged_plugin_config(descriptor: PluginDescriptor) -> dict[str, Any]:
+        """Effective config = manifest defaults <- persisted db overrides."""
+        if not config_repository:
+            return plugin_config_defaults(descriptor.config_schema)
+
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None:
+                pass
+
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+        from picframe.core.services.config_service import ConfigService
+
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+        nested = temp_service.get_nested_config()
+        plugin_config_section = nested.get("overlay", {}).get("plugin_config", {})
+        db_values = plugin_config_section.get(descriptor.id, {})
+        if not isinstance(db_values, dict):
+            db_values = {}
+        merged = plugin_config_defaults(descriptor.config_schema)
+        merged.update(db_values)
+        return merged
+
+    def _effective_plugin_layout(descriptor: PluginDescriptor) -> dict[str, Any]:
+        """Effective per-plugin layout = manifest defaults <- persisted db overrides (#752)."""
+        if not config_repository:
+            return effective_plugin_layout(descriptor, None)
+
+        temp_service = _scoped_config_service(config_repository)
+        nested = temp_service.get_nested_config()
+        plugin_layout_section = nested.get("overlay", {}).get("plugin_layout", {})
+        db_layout = plugin_layout_section.get(descriptor.id, {})
+        if not isinstance(db_layout, dict):
+            db_layout = {}
+        return effective_plugin_layout(descriptor, db_layout)
+
+    @app.get(
+        "/api/overlay/plugins",
+        response_model=list[OverlayPluginResponse],
+        response_model_exclude_none=True,
+        tags=["Overlay"],
+        summary="List discovered overlay plugins",
+        description=(
+            "Return discovered overlay plugin descriptors (from the overlay controller, "
+            "which scans the configured plugin directory) with their config schema and "
+            "effective layout. Effective config *values* are intentionally omitted here "
+            "(they may carry secrets such as the weather api_key); fetch them from the "
+            "Settings-protected `GET /api/overlay/plugins/{plugin_id}/config` when editing. "
+            "Returns an empty list when no overlay controller is available."
+        ),
+    )
+    async def api_get_overlay_plugins() -> list[dict[str, Any]]:
+        """List discovered overlay plugins (metadata + schema + layout; no config values)."""
+        descriptors = _overlay_descriptor_map()
+        return [
+            {
+                "id": descriptor.id,
+                "name": descriptor.name,
+                "description": descriptor.description,
+                "icon": descriptor.icon,
+                "trigger": descriptor.trigger,
+                "position": descriptor.position,
+                "has_config": bool(descriptor.config_schema),
+                "size": descriptor.size,
+                "config_schema": descriptor.config_schema,
+                "layout": _effective_plugin_layout(descriptor),
+            }
+            for descriptor in sorted(descriptors.values(), key=lambda d: d.id)
+        ]
+
+    @app.get(
+        "/api/overlay/plugins/{plugin_id}/config",
+        response_model=OverlayPluginConfigResponse,
+        tags=["Overlay"],
+        summary="Get a plugin's effective config",
+        description=(
+            "Return a single plugin's effective config (manifest defaults merged with "
+            "persisted user values from `overlay.plugin_config.<id>.*`)."
+        ),
+        responses={**NOT_FOUND_RESPONSE},
+    )
+    async def api_get_overlay_plugin_config(plugin_id: str) -> dict[str, Any]:
+        """Get a plugin's effective config."""
+        descriptors = _overlay_descriptor_map()
+        descriptor = descriptors.get(plugin_id)
+        if descriptor is None:
+            raise HTTPException(status_code=404, detail=f"Overlay plugin '{plugin_id}' not found")
+        return {"plugin_id": plugin_id, "config": _merged_plugin_config(descriptor)}
+
+    @app.put(
+        "/api/overlay/plugins/{plugin_id}/config",
+        response_model=OverlayPluginConfigUpdateResponse,
+        response_model_exclude_none=True,
+        tags=["Overlay"],
+        summary="Update a plugin's config",
+        description=(
+            "Validate a plugin's config against its manifest `config_schema`, persist it "
+            "under `overlay.plugin_config.<id>.*`, and broadcast an "
+            "`OverlayConfigChangedEvent` so the overlay applies it live."
+        ),
+        responses={**NOT_FOUND_RESPONSE, **VALIDATION_RESPONSE, **BAD_REQUEST_RESPONSE},
+    )
+    async def api_put_overlay_plugin_config(
+        plugin_id: str,
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, Any]:
+        """Validate and persist a single plugin's config."""
+        descriptors = _overlay_descriptor_map()
+        descriptor = descriptors.get(plugin_id)
+        if descriptor is None:
+            raise HTTPException(status_code=404, detail=f"Overlay plugin '{plugin_id}' not found")
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+
+        try:
+            validated_config = validate_plugin_config(descriptor.config_schema, payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        class DummyPublisher(IEventPublisher):
+            def publish(self, event: Any) -> None:
+                pass
+
+        class DummySubscriber(IEventSubscriber):
+            def subscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+            def unsubscribe(self, event_type: type, callback: Any) -> None:
+                pass
+
+        from picframe.core.services.config_service import ConfigService
+
+        temp_service = ConfigService(config_repository, DummySubscriber(), DummyPublisher())
+        temp_service.update_plugin_config(plugin_id, validated_config)
+
+        if event_publisher:
+            event_publisher.publish(
+                CommandEvent(
+                    command=Command.SET_CONFIG,
+                    payload={"overlay": {"plugin_config": {plugin_id: validated_config}}},
+                )
+            )
+
+        return {"status": "success", "plugin_id": plugin_id, "config": validated_config}
+
+    @app.put(
+        "/api/overlay/plugins/{plugin_id}/layout",
+        response_model=OverlayPluginLayoutUpdateResponse,
+        response_model_exclude_none=True,
+        tags=["Overlay"],
+        summary="Update a plugin's panel layout",
+        description=(
+            "Validate a plugin's per-plugin layout (position/scale/width/height/"
+            "display_mode/idle_hide_seconds/z_order) against the fixed overlay "
+            "schema, persist it under `overlay.plugin_layout.<id>.*`, and "
+            "broadcast an `OverlayConfigChangedEvent` so the overlay applies it "
+            "live (#752)."
+        ),
+        responses={**NOT_FOUND_RESPONSE, **VALIDATION_RESPONSE, **BAD_REQUEST_RESPONSE},
+    )
+    async def api_put_overlay_plugin_layout(
+        plugin_id: str,
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, Any]:
+        """Validate and persist a single plugin's panel layout."""
+        descriptors = _overlay_descriptor_map()
+        descriptor = descriptors.get(plugin_id)
+        if descriptor is None:
+            raise HTTPException(status_code=404, detail=f"Overlay plugin '{plugin_id}' not found")
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+
+        try:
+            validated_layout = validate_plugin_layout(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        temp_service = _scoped_config_service(config_repository)
+        temp_service.update_plugin_layout(plugin_id, validated_layout)
+
+        if event_publisher:
+            # ``None`` (inherit/default) keys are dropped so the long-running
+            # ConfigService re-persist via ``update_nested_config`` matches the
+            # scoped write (which skips ``None``).
+            publishable = {k: v for k, v in validated_layout.items() if v is not None}
+            event_publisher.publish(
+                CommandEvent(
+                    command=Command.SET_CONFIG,
+                    payload={"overlay": {"plugin_layout": {plugin_id: publishable}}},
+                )
+            )
+
+        # Return the effective layout (manifest defaults <- persisted overrides),
+        # mirroring how the config endpoint returns merged config.
+        effective = effective_plugin_layout(descriptor, validated_layout)
+        return {"status": "success", "plugin_id": plugin_id, "layout": effective}
+
+    @app.put(
+        "/api/overlay/dock-layout",
+        response_model=OverlayDockLayoutUpdateResponse,
+        response_model_exclude_none=True,
+        tags=["Overlay"],
+        summary="Update the dock placement",
+        description=(
+            "Validate the dock (plugin-icon row) placement "
+            "(position/margin/idle_hide_seconds) against the fixed overlay schema, "
+            "persist it under `overlay.dock_layout.*`, and broadcast an "
+            "`OverlayConfigChangedEvent` so the overlay applies it live (#758)."
+        ),
+        responses={**VALIDATION_RESPONSE, **BAD_REQUEST_RESPONSE},
+    )
+    async def api_put_overlay_dock_layout(
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, Any]:
+        """Validate and persist the dock placement (issue #758)."""
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+
+        try:
+            validated_layout = validate_dock_layout(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        temp_service = _scoped_config_service(config_repository)
+        temp_service.update_dock_layout(validated_layout)
+
+        if event_publisher:
+            publishable = {k: v for k, v in validated_layout.items() if v is not None}
+            event_publisher.publish(
+                CommandEvent(
+                    command=Command.SET_CONFIG,
+                    payload={"overlay": {"dock_layout": publishable}},
+                )
+            )
+
+        return {"status": "success", "dock_layout": validated_layout}
 
     @app.post(
         "/api/config/import-yaml",

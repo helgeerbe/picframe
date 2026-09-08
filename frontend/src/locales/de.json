@@ -4,7 +4,10 @@
     "close": "Schließen",
     "dismiss": "Ausblenden",
     "systemError": "Systemfehler",
-    "retry": "Erneut versuchen"
+    "retry": "Erneut versuchen",
+    "save": "Speichern",
+    "saving": "Speichere...",
+    "cancel": "Abbrechen"
   },
   "nav": {
     "primary": "Hauptnavigation",
@@ -144,6 +147,18 @@
       "textLocationHelper": "Zeigt den Ort an, an dem das Medium aufgenommen wurde.",
       "saved": "Overlay-Einstellungen gespeichert.",
       "failed": "Overlay-Einstellungen konnten nicht gespeichert werden."
+    },
+    "touchOverlay": {
+      "title": "Touch-Overlay",
+      "description": "WebKitGTK-Overlay-Plugins auf dem Bilderrahmen entdecken und konfigurieren.",
+      "loading": "Overlay-Plugins werden geladen",
+      "empty": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu oder aktivieren Sie das Overlay in der Darstellung.",
+      "dockOnly": "Nur Dock",
+      "saved": "Overlay-Plugin-Auswahl gespeichert.",
+      "failed": "Overlay-Plugin-Auswahl konnte nicht gespeichert werden.",
+      "collapse": "Einklappen",
+      "expand": "{plugin} ausklappen",
+      "noPluginsDiscovered": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu oder aktivieren Sie das Overlay in den Einstellungen."
     }
   },
   "appearance": {
@@ -171,6 +186,21 @@
     "portraitPairs": {
       "label": "Portrait-Paare",
       "help": "Passende Hochformatfotos nebeneinander anzeigen."
+    },
+    "overlay": {
+      "title": "Touch-Overlay",
+      "description": "Aktivieren Sie, welche Overlay-Plugins der Bilderrahmen anbietet. Layout und Optionen konfigurieren Sie unter Einstellungen.",
+      "disabledTitle": "Touch-Overlay ist deaktiviert",
+      "disabledMessage": "Aktivieren Sie den Touch-Overlay in den Einstellungen und aktivieren Sie Plugins hier.",
+      "plugins": {
+        "title": "Overlay-Plugins",
+        "description": "Aktivieren Sie, welche Overlay-Plugins der Bilderrahmen anbietet. Layout und Optionen konfigurieren Sie unter Einstellungen.",
+        "noPlugins": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu.",
+        "enableFirstHint": "Aktivieren Sie das Touch-Overlay in den Einstellungen, um aktivierte Plugins auf dem Bilderrahmen verfügbar zu machen.",
+        "activate": "Aktivieren",
+        "saved": "Overlay-Plugin-Auswahl gespeichert.",
+        "failed": "Overlay-Plugin-Auswahl konnte nicht gespeichert werden."
+      }
     }
   },
   "logs": {
@@ -197,6 +227,7 @@
     "saved": "Einstellungen gespeichert.",
     "actionCompleted": "Aktion erfolgreich abgeschlossen.",
     "imported": "Legacy-YAML-Konfiguration erfolgreich importiert.",
+    "importedJson": "Konfiguration erfolgreich importiert.",
     "importedNeedsSave": "Konfiguration importiert. Speichern, um sie anzuwenden.",
     "importFailed": "Konfiguration konnte nicht importiert werden.",
     "invalidJson": "Ungültige JSON-Konfigurationsdatei.",
@@ -297,7 +328,6 @@
       "model": "Modell-Einstellungen",
       "mqtt": "MQTT-Einstellungen",
       "http": "HTTP-Einstellungen",
-      "peripherals": "Peripherie-Einstellungen",
       "hardware_inputs": "GPIO-Eingänge"
     },
     "domain": {
@@ -364,6 +394,79 @@
       "moveRight": "Fallback später verwenden",
       "removePart": "Ortsteil entfernen",
       "removeKey": "Fallback entfernen"
+    },
+    "touchOverlay": {
+      "title": "Touch-Overlay",
+      "description": "Aktivieren Sie das WebKitGTK-Touch-Overlay und wählen Sie, welche Eingabegeräte es aktivieren.",
+      "enable": {
+        "label": "Touch-Overlay aktivieren",
+        "help": "Das transparente WebKitGTK-Touch-Overlay ein- oder ausschalten."
+      },
+      "restartRequired": "Erfordert einen Neustart des Picframe-Dienstes, um wirksam zu werden.",
+      "inputTypes": {
+        "label": "Aktive Eingaben",
+        "help": "Welche Eingabegeräte-Klassen das Overlay aktivieren. Eine Klasse entfernen, um sie zu deaktivieren, z. B. für einen reinen Touch-Kiosk."
+      },
+      "inputTouch": "Touch",
+      "inputMouse": "Maus",
+      "inputKeyboard": "Tastatur",
+      "displayMode": {
+        "persistent": "Bis ausgeschaltet",
+        "autoHide": "Auto-Ausblenden"
+      },
+      "idleHideSeconds": {
+        "label": "Leerlauf-Verblassen",
+        "help": "Sekunden Leerlauf bevor das Overlay ausblendt. 0 hält es stets sichtbar. Jede Eingabe weckt es."
+      },
+      "contentOffset": {
+        "label": "Inhalt-Versatz",
+        "help": "Randabstand (px) pro Seite innerhalb jedes Plugin-Panels, gemeinsam für alle Plugins. Jede Ankerposition nutzt die entsprechenden Kanten (oben-links nutzt oben+links, Mitte-rechts nutzt rechts, Mitte-Mitte keine). 0 = bündig zur Panelkante.",
+        "top": "Oben",
+        "bottom": "Unten",
+        "left": "Links",
+        "right": "Rechts",
+        "px": "px"
+      },
+      "dockLayout": {
+        "label": "Dock-Platzierung",
+        "help": "Positioniert die Plugin-Icon-Leiste (das Dock) auf dem Bildschirm und legt ihren Randabstand fest. Das Dock wird immer nach der Leerlaufzeit ausgeblendet.",
+        "position": "Position",
+        "margin": "Randabstand",
+        "idleHideSeconds": "Dock-Ausblendeverzögerung",
+        "idleHint": "Bei 0 wird die globale Ausblendeverzögerung übernommen.",
+        "saved": "Dock-Platzierung gespeichert.",
+        "failed": "Dock-Platzierung konnte nicht gespeichert werden."
+      },
+      "saved": "Overlay-Einstellungen gespeichert.",
+      "failed": "Overlay-Einstellungen konnten nicht gespeichert werden.",
+      "layout": {
+        "title": "Panel-Layout",
+        "position": "Position",
+        "displayMode": "Anzeigemodus",
+        "width": "Breite",
+        "height": "Höhe",
+        "scale": "Skalieren",
+        "zOrder": "Z-Reihenfolge",
+        "idleHideSeconds": "Leerlauf-Verblassen",
+        "inheritHint": "Widgets mit festem Design skalieren einheitlich über den Skalieren-Regler. Widgets ohne festes Design füllen ein Breite × Höhe Panel. Leerlauf-Verblassen auf 0 lassen, um den globalen Wert zu übernehmen.",
+        "editLayout": "Layout",
+        "hideLayout": "Layout ausblenden",
+        "save": "Layout speichern",
+        "saved": "Panel-Layout gespeichert.",
+        "failed": "Panel-Layout konnte nicht gespeichert werden."
+      },
+      "pluginConfig": {
+        "title": "Plugin-Konfiguration",
+        "description": "Passen Sie die Einstellungen für alle gefundenen Overlay-Plugins an. Aktivieren Sie ein Plugin in der Darstellung, um es im Remote-Dock anzuzeigen.",
+        "noPlugins": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu.",
+        "disabledHint": "Das Overlay ist deaktiviert — aktivieren Sie es oben, damit diese Einstellungen wirksam werden.",
+        "hideConfig": "Einstellungen ausblenden",
+        "editConfig": "Konfigurieren",
+        "configSaved": "Plugin-Einstellungen gespeichert.",
+        "configFailed": "Plugin-Einstellungen konnten nicht gespeichert werden.",
+        "activatedBadge": "Im Remote sichtbar",
+        "inactiveBadge": "In der Darstellung aktivieren, um im Remote anzuzeigen"
+      }
     }
   },
   "config": {
@@ -477,21 +580,6 @@
       "websocket_broadcast_capacity": "default=20, maximale Burst-Größe für Statusaktualisierungen",
       "command_debounce_ms": "default=200, Verzögerung in Millisekunden zum Entprellen hochfrequenter eingehender Befehle",
       "cors_allowed_origins": "default=[\"*\"]. Sicherheitseinstellung, um anderen Websites die Verbindung zu Ihrem Rahmen zu erlauben. Beispiel: [\"http://localhost:5173\"] für lokale Entwicklung oder [\"*\"] um alle zuzulassen."
-    },
-    "peripherals": {
-      "_title": "Peripherals",
-      "input_type": "default=null, valid options: [null, \"keyboard\", \"touch\", \"mouse\"]",
-      "buttons": {
-        "_title": "Buttons",
-        "pause": "",
-        "display_off": "",
-        "location": "",
-        "exit": "",
-        "power_down": ""
-      },
-      "enable": "default=False",
-      "label": "default=\"Power down\"",
-      "shortcut": "default=\"p\""
     },
     "hardware_inputs": {
       "_title": "GPIO-Eingänge",
