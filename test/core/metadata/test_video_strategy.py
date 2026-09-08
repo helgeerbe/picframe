@@ -347,6 +347,7 @@ def test_extract_os_error(mock_stat: MagicMock, strategy: VideoMetadataStrategy)
 
     assert media_item is None
 
+
 @patch("picframe.core.utils.video_frame_extractor.VideoFrameExtractor.extract_and_save_frames")
 @patch("picframe.core.metadata.video_strategy.subprocess.run")
 @patch("picframe.core.metadata.video_strategy.os.stat")
