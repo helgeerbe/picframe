@@ -231,3 +231,12 @@ overlay:
     bottom: 8
     left: 8
     right: 8
+  # Dock placement (#758): the row of plugin icons. position is a 9-anchor
+  # screen position, margin the edge offset in px (applied to the relevant
+  # edge(s) of the chosen anchor; center/middle anchors combine it with the
+  # 50% + transform centering), idle_hide_seconds (null = inherit the global
+  # idle_hide_seconds) overrides the dock's idle fade.
+  dock_layout:
+    position: bottom-center
+    margin: 16
+    idle_hide_seconds: null

@@ -427,6 +427,16 @@
         "right": "Right",
         "px": "px"
       },
+      "dockLayout": {
+        "label": "Dock placement",
+        "help": "Position the row of plugin icons (the dock) on screen and set its edge margin. The dock always auto-hides after the idle interval.",
+        "position": "Position",
+        "margin": "Edge margin",
+        "idleHideSeconds": "Dock idle fade",
+        "idleHint": "Leave at 0 to inherit the global idle fade.",
+        "saved": "Dock placement saved.",
+        "failed": "Could not save the dock placement."
+      },
       "saved": "Overlay settings saved.",
       "failed": "Could not save overlay settings.",
       "layout": {

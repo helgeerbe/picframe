@@ -164,6 +164,7 @@ def test_openapi_documents_rest_response_models(client: ASGITestClient) -> None:
         ("/api/overlay/plugins/{plugin_id}/config", "get"): "OverlayPluginConfigResponse",
         ("/api/overlay/plugins/{plugin_id}/config", "put"): "OverlayPluginConfigUpdateResponse",
         ("/api/overlay/plugins/{plugin_id}/layout", "put"): "OverlayPluginLayoutUpdateResponse",
+        ("/api/overlay/dock-layout", "put"): "OverlayDockLayoutUpdateResponse",
         ("/api/config/import-yaml", "post"): "StatusMessageResponse",
         ("/api/config", "put"): "StatusMessageResponse",
     }
@@ -478,6 +479,9 @@ def test_basic_auth_scope_matrix_for_http_routes(tmp_path: Path) -> None:
         ("GET", "/api/overlay/plugins/test/config", {}),
         ("PUT", "/api/overlay/plugins/test/config", {"json": {}}),
         ("PUT", "/api/overlay/plugins/test/layout", {"json": {}}),
+        # The dock-layout write carries placement prefs + write access and is
+        # only relevant in Settings, so it stays Settings-protected (#758).
+        ("PUT", "/api/overlay/dock-layout", {"json": {}}),
         ("GET", "/logs", {}),
         ("GET", "/settings", {}),
     ]
@@ -928,6 +932,8 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     assert "plugin_dir" not in data["overlay"]
     assert "plugin_config" not in data["overlay"]
     assert "plugin_layout" not in data["overlay"]
+    assert "content_offset" not in data["overlay"]
+    assert "dock_layout" not in data["overlay"]
 
     update = {
         "model": {"shuffle": False, "portrait_pairs": False},
@@ -2301,3 +2307,89 @@ def test_put_overlay_plugin_layout_404_when_unknown() -> None:
     client = ASGITestClient(app)
     response = client.put("/api/overlay/plugins/bogus/layout", json={})
     assert response.status_code == 404
+
+
+def test_put_overlay_dock_layout_validates_and_persists() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        publisher = MagicMock()
+        app = create_app(
+            cors_allowed_origins=["*"],
+            config_repository=repo,
+            event_publisher=publisher,
+        )
+        client = ASGITestClient(app)
+
+        response = client.put(
+            "/api/overlay/dock-layout",
+            json={"position": "top-left", "margin": 32, "idle_hide_seconds": 7.5},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        assert body["status"] == "success"
+        assert body["dock_layout"] == {
+            "position": "top-left",
+            "margin": 32,
+            "idle_hide_seconds": 7.5,
+        }
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.dock_layout.position"] == "top-left"
+        assert all_config["overlay.dock_layout.margin"] == 32
+        assert all_config["overlay.dock_layout.idle_hide_seconds"] == 7.5
+
+        from picframe.core.events.dto import Command, CommandEvent
+
+        published = [call.args[0] for call in publisher.publish.call_args_list]
+        expected_publishable = {"position": "top-left", "margin": 32, "idle_hide_seconds": 7.5}
+        assert any(
+            isinstance(e, CommandEvent)
+            and e.command == Command.SET_CONFIG
+            and e.payload == {"overlay": {"dock_layout": expected_publishable}}
+            for e in published
+        )
+    finally:
+        repo.close()
+
+
+def test_put_overlay_dock_layout_skips_none_idle_hide_seconds() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        app = create_app(cors_allowed_origins=["*"], config_repository=repo)
+        client = ASGITestClient(app)
+
+        response = client.put(
+            "/api/overlay/dock-layout",
+            json={"position": "bottom-center", "margin": 16, "idle_hide_seconds": None},
+        )
+        assert response.status_code == 200
+        body = response.json()
+        # None (inherit global) is dropped from the publishable payload but the
+        # validated layout returned in the response keeps it.
+        assert body["dock_layout"]["idle_hide_seconds"] is None
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.dock_layout.position"] == "bottom-center"
+        assert all_config["overlay.dock_layout.margin"] == 16
+        # None (inherit global) is not stored.
+        assert "overlay.dock_layout.idle_hide_seconds" not in all_config
+    finally:
+        repo.close()
+
+
+def test_put_overlay_dock_layout_422_on_invalid_payload() -> None:
+    from picframe.core.repositories.sqlite_config import SQLiteConfigRepository
+
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        app = create_app(cors_allowed_origins=["*"], config_repository=repo)
+        client = ASGITestClient(app)
+
+        response = client.put("/api/overlay/dock-layout", json={"position": "nowhere"})
+        assert response.status_code == 422
+    finally:
+        repo.close()

@@ -400,6 +400,47 @@ def test_update_plugin_layout_skips_none_values():
         repo.close()
 
 
+def test_update_dock_layout_scoped_delete_and_write():
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        repo.set_app_config("overlay.enabled", True)
+        repo.set_app_config("overlay.dock_layout.position", "top-left")
+        repo.set_app_config("overlay.dock_layout.margin", 8)
+
+        service = ConfigService(repo, MagicMock(), MagicMock())
+        service.update_dock_layout(
+            {"position": "top-right", "margin": 32, "idle_hide_seconds": 6.0}
+        )
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.dock_layout.position"] == "top-right"
+        assert all_config["overlay.dock_layout.margin"] == 32
+        assert all_config["overlay.dock_layout.idle_hide_seconds"] == 6.0
+        # The previous position/margin keys were replaced (scoped delete + rewrite).
+        assert len([k for k in all_config if k.startswith("overlay.dock_layout.")]) == 3
+        # rest of overlay untouched
+        assert all_config["overlay.enabled"] is True
+    finally:
+        repo.close()
+
+
+def test_update_dock_layout_skips_none_idle_hide_seconds():
+    repo = SQLiteConfigRepository(":memory:")
+    try:
+        service = ConfigService(repo, MagicMock(), MagicMock())
+        service.update_dock_layout(
+            {"position": "bottom-center", "margin": 16, "idle_hide_seconds": None}
+        )
+
+        all_config = repo.get_all_app_config()
+        assert all_config["overlay.dock_layout.position"] == "bottom-center"
+        assert all_config["overlay.dock_layout.margin"] == 16
+        # None (inherit global) is not stored
+        assert "overlay.dock_layout.idle_hide_seconds" not in all_config
+    finally:
+        repo.close()
+
+
 def test_handle_set_config_plugin_layout_reports_updated_plugin_id(
     config_service, mock_repo, mock_publisher
 ):

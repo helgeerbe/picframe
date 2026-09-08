@@ -575,6 +575,36 @@ def test_build_shell_config_forwards_content_offset(tmp_path) -> None:
     assert cfg["content_offset"] == {"top": 8, "bottom": 8, "left": 8, "right": 8}
 
 
+def test_build_shell_config_forwards_dock_layout(tmp_path) -> None:
+    """The dock_layout (position/margin/idle_hide_seconds) is forwarded verbatim
+    into the shell config so the dock applies the placement inline and the
+    shell honors the dock idle override (#758)."""
+    plugin_dir = tmp_path / "plugins"
+    clock = plugin_dir / "clock"
+    clock.mkdir(parents=True)
+    (clock / "plugin.json").write_text(
+        json.dumps({"id": "clock", "name": "Clock", "entry": "index.html"})
+    )
+    (clock / "index.html").write_text("<html></html>")
+    worker = OverlayWorker(
+        socket_path="/tmp/x.sock",
+        html_dir=str(tmp_path / "html"),
+        plugin_dir=str(plugin_dir),
+        ws_port=9000,
+    )
+    worker._config = {
+        "enabled_plugins": ["clock"],
+        "visible_plugins": ["clock"],
+        "dock_layout": {"position": "top-left", "margin": 24, "idle_hide_seconds": 7.0},
+    }
+    cfg = worker._build_shell_config()
+    assert cfg["dock_layout"] == {
+        "position": "top-left",
+        "margin": 24,
+        "idle_hide_seconds": 7.0,
+    }
+
+
 def test_build_shell_config_empty_plugin_dir(tmp_path) -> None:
     """A missing/empty plugin dir yields an empty plugin list, not an error."""
     worker = OverlayWorker(

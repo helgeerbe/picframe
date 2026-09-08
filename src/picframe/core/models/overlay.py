@@ -350,6 +350,91 @@ def effective_plugin_layout(descriptor: PluginDescriptor, db_layout: Any) -> dic
     return merged
 
 
+# ---------------------------------------------------------------------------
+# Dock layout (issue #758)
+#
+# The dock is the row of plugin icons. Unlike per-plugin panels, there is a
+# single dock, so its layout is a flat object (no per-plugin map) persisted
+# under ``overlay.dock_layout.*``. The shell applies it to the ``#pf-dock``
+# element inline (anchor + margin) so the dock position is user-configurable
+# without CSS edits.
+# ---------------------------------------------------------------------------
+
+# Fields of a DockLayout, in stable order. ``idle_hide_seconds`` ``None`` means
+# "inherit the global ``overlay.idle_hide_seconds``" (matching the per-plugin
+# layout semantics).
+_DOCK_LAYOUT_FIELDS: tuple[str, ...] = (
+    "position",
+    "margin",
+    "idle_hide_seconds",
+)
+
+
+class DockLayoutError(ValueError):
+    """Raised when a dock layout payload is invalid (issue #758)."""
+
+
+def dock_layout_defaults() -> dict[str, Any]:
+    """Return the default dock layout.
+
+    The defaults match the pre-#758 static ``#pf-dock`` CSS rule
+    (``bottom-center`` + a 16px edge margin) so existing setups render
+    unchanged until a user overrides them.
+    """
+    return {
+        "position": "bottom-center",
+        "margin": 16,
+        "idle_hide_seconds": None,
+    }
+
+
+def validate_dock_layout(payload: Any) -> dict[str, Any]:
+    """Validate a dock layout payload against the fixed schema (#758).
+
+    Returns the normalized layout with defaults filled for absent fields,
+    enforcing the 9-anchor enum (``position``), a non-negative integer
+    ``margin`` and a non-negative ``idle_hide_seconds`` (or ``None`` = inherit
+    the global value). Unknown keys are rejected.
+    """
+    if not isinstance(payload, dict):
+        raise DockLayoutError("Dock layout must be an object")
+
+    unknown = sorted(set(payload) - set(_DOCK_LAYOUT_FIELDS))
+    if unknown:
+        raise DockLayoutError(f"Dock layout has unknown fields: {', '.join(unknown)}")
+
+    result = dock_layout_defaults()
+
+    position = payload.get("position")
+    if position is not None:
+        if not isinstance(position, str) or position not in OVERLAY_ANCHORS:
+            raise DockLayoutError(f"Dock layout 'position' must be one of {list(OVERLAY_ANCHORS)}")
+        result["position"] = position
+
+    margin = payload.get("margin")
+    if margin is not None:
+        # ``bool`` is a subclass of ``int``; reject it explicitly.
+        if isinstance(margin, bool) or not isinstance(margin, int):
+            raise DockLayoutError("Dock layout 'margin' must be a non-negative integer")
+        if margin < 0:
+            raise DockLayoutError("Dock layout 'margin' must be a non-negative integer")
+        result["margin"] = margin
+
+    idle_hide_seconds = payload.get("idle_hide_seconds")
+    if idle_hide_seconds is not None:
+        if isinstance(idle_hide_seconds, bool) or not isinstance(idle_hide_seconds, (int, float)):
+            raise DockLayoutError(
+                "Dock layout 'idle_hide_seconds' must be a non-negative number or null"
+            )
+        if idle_hide_seconds < 0:
+            raise DockLayoutError(
+                "Dock layout 'idle_hide_seconds' must be a non-negative number or null"
+            )
+        result["idle_hide_seconds"] = float(idle_hide_seconds)
+
+    return result
+
+
 def normalize_legacy_overlay(overlay: Any) -> dict[str, Any]:
     """Normalize an ``overlay`` config dict for the widget model (issue #752).
 

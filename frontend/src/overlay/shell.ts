@@ -48,6 +48,9 @@ export class OverlayShell {
   /** Per-plugin idle timers keyed by plugin id (#752). */
   private panelIdleTimers = new Map<string, number>()
   private globalIdleHideSeconds = DEFAULT_IDLE_HIDE_SECONDS
+  /** Dock idle-hide override (#758): `null` = inherit `globalIdleHideSeconds`.
+   * Sourced from `dock_layout.idle_hide_seconds`. */
+  private dockIdleHideSeconds: number | null = null
   /** Snapshot of the latest plugin list (for per-panel idle lookups). */
   private plugins: PluginEntry[] = []
   /** Image blend time (s) — the shell waits this long after a media change
@@ -129,6 +132,7 @@ export class OverlayShell {
 
   private applyConfig(config: OverlayShellConfig): void {
     this.globalIdleHideSeconds = config.idle_hide_seconds ?? DEFAULT_IDLE_HIDE_SECONDS
+    this.dockIdleHideSeconds = config.dock_layout?.idle_hide_seconds ?? null
     this.timeFade = config.time_fade ?? 2
     this.plugins = config._plugins ?? []
     const enabledTypes = (config.enabled_input_types ?? [
@@ -202,11 +206,12 @@ export class OverlayShell {
     }
 
     if (revealDock) {
-      // Dock: always auto-hides. Reuse idle_hide_seconds, or the fallback when 0.
-      // The cursor hides together with the dock so the two stay in sync: removing
-      // `pf-root--cursor` reverts the root to the inherited `cursor: none` (#739).
-      const dockSeconds =
-        this.globalIdleHideSeconds > 0 ? this.globalIdleHideSeconds : DOCK_IDLE_FALLBACK_SECONDS
+      // Dock: always auto-hides. The dock layout may override the idle delay
+      // (#758); otherwise reuse `idle_hide_seconds`, or the fallback when it
+      // is 0. The cursor hides together with the dock so the two stay in sync:
+      // removing `pf-root--cursor` reverts the root to the inherited
+      // `cursor: none` (#739).
+      const dockSeconds = this.dockIdleSeconds()
       this.dockIdleTimer = window.setTimeout(
         () => {
           this.root.classList.add('pf-root--dock-idle')
@@ -215,6 +220,15 @@ export class OverlayShell {
         Math.max(0, dockSeconds) * 1000
       )
     }
+  }
+
+  /** Effective dock idle-hide seconds (#758): the dock layout override when set
+   * and positive, else the global value (or the fallback when the global is 0,
+   * matching the pre-#758 behavior). */
+  private dockIdleSeconds(): number {
+    const override = this.dockIdleHideSeconds
+    if (override != null && override > 0) return override
+    return this.globalIdleHideSeconds > 0 ? this.globalIdleHideSeconds : DOCK_IDLE_FALLBACK_SECONDS
   }
 
   /** Return the effective idle-hide seconds for a panel, or `null` for

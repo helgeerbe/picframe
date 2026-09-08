@@ -13,6 +13,7 @@
 import type {
   ContentOffset,
   CurrentMedia,
+  DockLayout,
   OverlayAnchor,
   OverlayShellConfig,
   PluginEntry,
@@ -41,6 +42,14 @@ export class Dock {
   /** Per-edge content offset (px), shared by all plugins; forwarded to each
    * plugin iframe so it can pad its content from the matching panel edge. */
   private contentOffset: ContentOffset = { top: 0, bottom: 0, left: 0, right: 0 }
+  /** Dock placement (#758): position/margin/idle_hide_seconds. Applied inline
+   * to `#pf-dock` in `render()` (the `pf-anchor-*` classes hardcode 12px, so
+   * the dock uses inline styles to keep `margin` configurable). */
+  private dockLayout: DockLayout = {
+    position: 'bottom-center',
+    margin: 16,
+    idle_hide_seconds: null
+  }
   /** Latest media snapshot (#757). When a plugin iframe finishes loading we
    * forward this so a freshly auto-shown `media_change` plugin (whose iframe
    * was not yet present when the `picframe:media` message arrived) renders the
@@ -66,8 +75,14 @@ export class Dock {
     this.enabledPlugins = config.enabled_plugins ?? []
     this.pluginConfig = config.plugin_config ?? {}
     this.contentOffset = config.content_offset ?? { top: 0, bottom: 0, left: 0, right: 0 }
+    this.dockLayout = config.dock_layout ?? this.dockLayout
     this.visiblePlugins = this.resolveVisiblePlugins(config)
     this.render()
+  }
+
+  /** Return the effective dock placement (#758). */
+  getDockLayout(): DockLayout {
+    return this.dockLayout
   }
 
   /** Toggle a plugin in/out of the visible set (dock tap). */
@@ -142,6 +157,7 @@ export class Dock {
       dock.className = 'pf-dock'
       this.root.appendChild(dock)
     }
+    this.applyDockPlacement(dock, this.dockLayout)
     dock.replaceChildren(...enabled.map(p => this.buildIcon(p)))
 
     // Render one panel per visible plugin, ordered by layout z_order (stable
@@ -175,6 +191,43 @@ export class Dock {
     }
     this.applyPanelLayout(panel, plugin, layout)
     panel.replaceChildren(this.buildFrame(plugin, layout))
+  }
+
+  /** Apply the dock placement (9-anchor + margin) inline to `#pf-dock` (#758).
+   *
+   * The `pf-anchor-*` classes hardcode a 12px edge margin, so the dock uses
+   * inline styles to keep `margin` configurable. Center/middle anchors combine
+   * the 50% offset with a `translate` transform so the dock stays centered
+   * while the margin offsets it from the chosen edge. */
+  private applyDockPlacement(dock: HTMLElement, layout: DockLayout): void {
+    const m = `${layout.margin}px`
+    dock.style.top = ''
+    dock.style.bottom = ''
+    dock.style.left = ''
+    dock.style.right = ''
+    dock.style.transform = ''
+    const [v, h] = layout.position.split('-') as [
+      'top' | 'middle' | 'bottom',
+      'left' | 'center' | 'right'
+    ]
+    const translate: string[] = []
+    if (v === 'top') {
+      dock.style.top = m
+    } else if (v === 'bottom') {
+      dock.style.bottom = m
+    } else {
+      dock.style.top = '50%'
+      translate.push('translateY(-50%)')
+    }
+    if (h === 'left') {
+      dock.style.left = m
+    } else if (h === 'right') {
+      dock.style.right = m
+    } else {
+      dock.style.left = '50%'
+      translate.push('translateX(-50%)')
+    }
+    if (translate.length) dock.style.transform = translate.join(' ')
   }
 
   /** Apply the effective layout to a panel element (anchor class + size/z).

@@ -118,6 +118,25 @@ export const useOverlayStore = defineStore('overlay', () => {
     }
   }
 
+  /**
+   * Validate and persist the dock (plugin-icon row) placement (#758):
+   * position/margin/idle_hide_seconds. Returns the validated dock layout the
+   * backend persisted, or throws on validation/HTTP error. `null`
+   * `idle_hide_seconds` means "inherit the global value" and is not stored.
+   */
+  async function updateDockLayout(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    layout: Record<string, any>
+  ) {
+    const response = await api.put('/overlay/dock-layout', layout)
+    return response.data as {
+      status: string
+      message?: string
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      dock_layout: Record<string, any>
+    }
+  }
+
   return {
     plugins,
     isLoading,
@@ -125,6 +144,7 @@ export const useOverlayStore = defineStore('overlay', () => {
     fetchPlugins,
     fetchPluginConfig,
     updatePluginConfig,
-    updatePluginLayout
+    updatePluginLayout,
+    updateDockLayout
   }
 })

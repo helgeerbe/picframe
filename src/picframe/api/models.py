@@ -401,6 +401,37 @@ class ContentOffset(BaseModel):
     right: int = 8
 
 
+class DockLayout(BaseModel):
+    """User-editable dock (plugin-icon row) placement (issue #758).
+
+    Unlike the per-plugin ``PluginLayout`` there is a single dock, so this is a
+    flat object persisted under ``overlay.dock_layout.*`` and written through
+    the dedicated ``PUT /api/overlay/dock-layout`` endpoint.
+
+    Attributes:
+        position: 9-anchor screen position of the dock.
+        margin: Edge offset in pixels (applied to the relevant edge(s) of the
+            chosen anchor; center/middle anchors combine it with the 50% +
+            transform centering).
+        idle_hide_seconds: Dock idle fade delay; ``null`` = inherit the global
+            ``overlay.idle_hide_seconds`` (matching the per-plugin layout
+            semantics).
+    """
+
+    position: PluginLayoutAnchor = "bottom-center"
+    margin: int = 16
+    idle_hide_seconds: float | None = None
+
+
+class OverlayDockLayoutUpdateResponse(StatusMessageResponse):
+    """Result returned after updating the dock placement (#758)."""
+
+    dock_layout: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Validated dock layout that was persisted.",
+    )
+
+
 class OverlayConfig(BaseModel):
     """Pydantic model for the ``overlay`` config section (#739, #752).
 
@@ -430,6 +461,7 @@ class OverlayConfig(BaseModel):
     plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
     plugin_layout: dict[str, PluginLayout] = Field(default_factory=dict)
     content_offset: ContentOffset = Field(default_factory=ContentOffset)
+    dock_layout: DockLayout = Field(default_factory=DockLayout)
 
 
 class OverlayPluginResponse(BaseModel):

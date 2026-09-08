@@ -427,6 +427,16 @@
         "right": "Rechts",
         "px": "px"
       },
+      "dockLayout": {
+        "label": "Dock-Platzierung",
+        "help": "Positioniert die Plugin-Icon-Leiste (das Dock) auf dem Bildschirm und legt ihren Randabstand fest. Das Dock wird immer nach der Leerlaufzeit ausgeblendet.",
+        "position": "Position",
+        "margin": "Randabstand",
+        "idleHideSeconds": "Dock-Ausblendeverzögerung",
+        "idleHint": "Bei 0 wird die globale Ausblendeverzögerung übernommen.",
+        "saved": "Dock-Platzierung gespeichert.",
+        "failed": "Dock-Platzierung konnte nicht gespeichert werden."
+      },
       "saved": "Overlay-Einstellungen gespeichert.",
       "failed": "Overlay-Einstellungen konnten nicht gespeichert werden.",
       "layout": {

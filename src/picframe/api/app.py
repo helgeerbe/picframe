@@ -54,6 +54,7 @@ from picframe.api.models import (
     MediaResponseDTO,
     MediaSelectionCountRequest,
     MediaSelectionCountResponse,
+    OverlayDockLayoutUpdateResponse,
     OverlayPluginConfigResponse,
     OverlayPluginConfigUpdateResponse,
     OverlayPluginLayoutUpdateResponse,
@@ -71,6 +72,7 @@ from picframe.core.models.overlay import (
     PluginDescriptor,
     effective_plugin_layout,
     plugin_config_defaults,
+    validate_dock_layout,
     validate_plugin_config,
     validate_plugin_layout,
 )
@@ -182,6 +184,10 @@ AUTH_PROTECTED_EXACT_PATHS = {
     "/api/system/restart-service",
     "/api/system/service-status",
     "/api/system/shutdown",
+    # The dock-layout write carries placement prefs + write access and is only
+    # relevant in Settings, so it stays Settings-protected (#758). The public
+    # overlay plugin *list* (`/api/overlay/plugins`) remains open.
+    "/api/overlay/dock-layout",
 }
 PUBLIC_WORKFLOW_KEYS = {
     "model": {
@@ -2169,6 +2175,46 @@ def create_app(
         # mirroring how the config endpoint returns merged config.
         effective = effective_plugin_layout(descriptor, validated_layout)
         return {"status": "success", "plugin_id": plugin_id, "layout": effective}
+
+    @app.put(
+        "/api/overlay/dock-layout",
+        response_model=OverlayDockLayoutUpdateResponse,
+        response_model_exclude_none=True,
+        tags=["Overlay"],
+        summary="Update the dock placement",
+        description=(
+            "Validate the dock (plugin-icon row) placement "
+            "(position/margin/idle_hide_seconds) against the fixed overlay schema, "
+            "persist it under `overlay.dock_layout.*`, and broadcast an "
+            "`OverlayConfigChangedEvent` so the overlay applies it live (#758)."
+        ),
+        responses={**VALIDATION_RESPONSE, **BAD_REQUEST_RESPONSE},
+    )
+    async def api_put_overlay_dock_layout(
+        payload: dict[str, Any] = Body(...),
+    ) -> dict[str, Any]:
+        """Validate and persist the dock placement (issue #758)."""
+        if not config_repository:
+            return {"status": "error", "message": "Config repository not available"}
+
+        try:
+            validated_layout = validate_dock_layout(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+        temp_service = _scoped_config_service(config_repository)
+        temp_service.update_dock_layout(validated_layout)
+
+        if event_publisher:
+            publishable = {k: v for k, v in validated_layout.items() if v is not None}
+            event_publisher.publish(
+                CommandEvent(
+                    command=Command.SET_CONFIG,
+                    payload={"overlay": {"dock_layout": publishable}},
+                )
+            )
+
+        return {"status": "success", "dock_layout": validated_layout}
 
     @app.post(
         "/api/config/import-yaml",

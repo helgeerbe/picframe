@@ -132,9 +132,9 @@ body {
 
 #pf-dock {
   position: absolute;
-  bottom: 16px;
-  left: 50%;
-  transform: translateX(-50%);
+  /* Anchor + edge margin are applied inline by the dock from `dock_layout`
+   * (#758) so the position/margin are user-configurable; the `pf-anchor-*`
+   * classes hardcode 12px and can't express a configurable margin. */
   display: flex;
   gap: 8px;
   padding: 6px 10px;

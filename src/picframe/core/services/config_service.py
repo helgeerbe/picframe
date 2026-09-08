@@ -186,6 +186,24 @@ class ConfigService:
                 continue
             self._config_repository.set_app_config(f"{prefix}.{key}", value)
 
+    def update_dock_layout(self, dock_layout: dict[str, Any]) -> None:
+        """Persist the dock placement under ``overlay.dock_layout.*`` (#758).
+
+        Reuses the same scoped ``delete_app_config_prefix`` + re-write pattern
+        as ``update_plugin_layout``. ``None`` ``idle_hide_seconds`` (inherit the
+        global value) is not stored: an absent key reads back as the default.
+        """
+        if not self._config_repository:
+            logger.warning("Cannot update dock layout: no config repository is available")
+            return
+
+        prefix = "overlay.dock_layout"
+        self._config_repository.delete_app_config_prefix(prefix)
+        for key, value in dock_layout.items():
+            if value is None:
+                continue
+            self._config_repository.set_app_config(f"{prefix}.{key}", value)
+
     def _handle_set_config(self, payload: Any) -> None:
         """
         Process a SET_CONFIG payload.

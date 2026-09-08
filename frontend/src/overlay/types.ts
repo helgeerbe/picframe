@@ -115,6 +115,10 @@ export interface OverlayShellConfig {
    * plugin's iframe via the `picframe:config` postMessage so the plugin can
    * pad its content from the matching panel edge. */
   content_offset?: ContentOffset
+  /** Dock (plugin-icon row) placement (#758): position/margin/idle_hide_seconds.
+   * The shell applies position+margin inline to `#pf-dock`. Absent = defaults
+   * (bottom-center, 16px, inherit global idle). */
+  dock_layout?: DockLayout
   plugin_config?: Record<string, Record<string, unknown>>
   _plugins?: PluginEntry[]
   _ws_port?: number
@@ -129,6 +133,20 @@ export interface ContentOffset {
   bottom: number
   left: number
   right: number
+}
+
+/**
+ * Dock (plugin-icon row) placement (#758). Unlike the per-plugin
+ * `PluginLayout` there is a single dock, so this is a flat object. The shell
+ * applies `position` + `margin` inline to the `#pf-dock` element (the
+ * `pf-anchor-*` classes hardcode 12px, so the dock uses inline styles to keep
+ * `margin` configurable). `idle_hide_seconds` `null` = inherit the global
+ * `overlay.idle_hide_seconds` (matching the per-plugin layout semantics).
+ */
+export interface DockLayout {
+  position: OverlayAnchor
+  margin: number
+  idle_hide_seconds: number | null
 }
 
 /** Minimal slice of the current media item the shell forwards to plugins. */

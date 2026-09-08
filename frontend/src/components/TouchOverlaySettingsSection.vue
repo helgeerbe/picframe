@@ -74,6 +74,16 @@ const contentOffset = reactive({
   right: 8
 })
 
+/** Dock (plugin-icon row) placement (#758): position/margin/idle_hide_seconds.
+ *  Auto-saves via the dedicated `PUT /overlay/dock-layout` endpoint; not part
+ *  of the schema-driven working copy. `idle_hide_seconds` null = inherit the
+ *  global idle fade. */
+const dockLayout = reactive({
+  position: 'bottom-center' as string,
+  margin: 16,
+  idle_hide_seconds: 0
+})
+
 /** Nine anchors for the position select. */
 const ANCHORS = [
   'top-left',
@@ -203,6 +213,12 @@ const syncFromConfig = () => {
   contentOffset.bottom = co ? asNumber(co.bottom, 8) : 8
   contentOffset.left = co ? asNumber(co.left, 8) : 8
   contentOffset.right = co ? asNumber(co.right, 8) : 8
+  const dl = ov.dock_layout
+  dockLayout.position = typeof dl?.position === 'string' ? dl.position : 'bottom-center'
+  dockLayout.margin = dl ? asNumber(dl.margin, 16) : 16
+  // 0 in the editor means "inherit the global idle fade" (sent as null).
+  dockLayout.idle_hide_seconds =
+    dl && dl.idle_hide_seconds != null ? asNumber(dl.idle_hide_seconds, 0) : 0
 }
 
 /** Auto-save the global idle fade through `savePartialConfig` (#754). */
@@ -244,6 +260,37 @@ const saveContentOffset = async () => {
   } catch (e) {
     console.error(e)
     showStatus('danger', t('settings.touchOverlay.failed'))
+    syncFromConfig()
+  } finally {
+    isSaving.value = false
+  }
+}
+
+/** Save the dock placement via the dedicated `PUT /overlay/dock-layout`
+ *  endpoint (#758). 0 for `idle_hide_seconds` is sent as null (inherit the
+ *  global idle fade). */
+const saveDockLayout = async () => {
+  if (isSaving.value) return
+  const payload: Record<string, unknown> = {
+    position: dockLayout.position,
+    margin: Math.max(0, Math.round(Number(dockLayout.margin) || 0))
+  }
+  const idle = Number(dockLayout.idle_hide_seconds)
+  payload.idle_hide_seconds = Number.isFinite(idle) && idle > 0 ? idle : null
+  isSaving.value = true
+  statusMessage.value = ''
+  try {
+    const result = await overlayStore.updateDockLayout(payload)
+    // Reflect the validated layout the backend persisted.
+    const dl = result.dock_layout
+    dockLayout.position = typeof dl?.position === 'string' ? dl.position : 'bottom-center'
+    dockLayout.margin = dl ? asNumber(dl.margin, 16) : 16
+    dockLayout.idle_hide_seconds =
+      dl && dl.idle_hide_seconds != null ? asNumber(dl.idle_hide_seconds, 0) : 0
+    showStatus('success', t('settings.touchOverlay.dockLayout.saved'))
+  } catch (e) {
+    console.error(e)
+    showStatus('danger', t('settings.touchOverlay.dockLayout.failed'))
     syncFromConfig()
   } finally {
     isSaving.value = false
@@ -337,7 +384,11 @@ onMounted(async () => {
 })
 
 watch(
-  () => [config.value?.overlay?.idle_hide_seconds, config.value?.overlay?.content_offset],
+  () => [
+    config.value?.overlay?.idle_hide_seconds,
+    config.value?.overlay?.content_offset,
+    config.value?.overlay?.dock_layout
+  ],
   () => {
     if (!isSaving.value) syncFromConfig()
   }
@@ -459,6 +510,62 @@ watch(
               :aria-label="t('settings.touchOverlay.contentOffset.right')"
               @update:model-value="saveContentOffset()"
             />
+          </div>
+        </div>
+      </FieldRow>
+
+      <FieldRow
+        :label="t('settings.touchOverlay.dockLayout.label')"
+        :help="t('settings.touchOverlay.dockLayout.help')"
+      >
+        <div class="space-y-4">
+          <div>
+            <label
+              class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+              for="dock-layout-position"
+              >{{ t('settings.touchOverlay.dockLayout.position') }}</label
+            >
+            <select
+              id="dock-layout-position"
+              v-model="dockLayout.position"
+              class="block w-full rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm text-gray-900 focus:border-indigo-500 focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-700 dark:text-white"
+              @change="saveDockLayout()"
+            >
+              <option v-for="anchor in ANCHORS" :key="anchor" :value="anchor">
+                {{ anchor }}
+              </option>
+            </select>
+          </div>
+          <div>
+            <label
+              class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+              for="dock-layout-margin"
+              >{{ t('settings.touchOverlay.dockLayout.margin') }}</label
+            >
+            <NumberField
+              v-model="dockLayout.margin"
+              :min="0"
+              :step="1"
+              :unit="t('settings.touchOverlay.contentOffset.px')"
+              @update:model-value="saveDockLayout()"
+            />
+          </div>
+          <div>
+            <label
+              class="mb-1 block text-xs font-medium text-gray-600 dark:text-gray-400"
+              for="dock-layout-idle"
+              >{{ t('settings.touchOverlay.dockLayout.idleHideSeconds') }}</label
+            >
+            <NumberField
+              v-model="dockLayout.idle_hide_seconds"
+              :min="0"
+              :step="0.5"
+              unit="s"
+              @update:model-value="saveDockLayout()"
+            />
+            <p class="mt-1 text-xs text-gray-400 dark:text-gray-500">
+              {{ t('settings.touchOverlay.dockLayout.idleHint') }}
+            </p>
           </div>
         </div>
       </FieldRow>

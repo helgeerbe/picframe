@@ -362,6 +362,110 @@ def test_effective_plugin_layout_fill_mode_applies_width_height() -> None:
 
 
 # ---------------------------------------------------------------------------
+# Dock layout validation (issue #758)
+# ---------------------------------------------------------------------------
+
+
+def test_dock_layout_defaults() -> None:
+    from picframe.core.models.overlay import dock_layout_defaults
+
+    assert dock_layout_defaults() == {
+        "position": "bottom-center",
+        "margin": 16,
+        "idle_hide_seconds": None,
+    }
+
+
+def test_validate_dock_layout_fills_defaults_for_absent_fields() -> None:
+    from picframe.core.models.overlay import validate_dock_layout
+
+    assert validate_dock_layout({}) == {
+        "position": "bottom-center",
+        "margin": 16,
+        "idle_hide_seconds": None,
+    }
+
+
+def test_validate_dock_layout_accepts_full_payload() -> None:
+    from picframe.core.models.overlay import validate_dock_layout
+
+    payload = {"position": "top-left", "margin": 24, "idle_hide_seconds": 7.5}
+    assert validate_dock_layout(payload) == {
+        "position": "top-left",
+        "margin": 24,
+        "idle_hide_seconds": 7.5,
+    }
+
+
+def test_validate_dock_layout_coerces_int_idle_to_float() -> None:
+    from picframe.core.models.overlay import validate_dock_layout
+
+    assert validate_dock_layout({"idle_hide_seconds": 4})["idle_hide_seconds"] == 4.0
+
+
+def test_validate_dock_layout_rejects_non_object() -> None:
+    from picframe.core.models.overlay import DockLayoutError, validate_dock_layout
+
+    with pytest.raises(DockLayoutError, match="must be an object"):
+        validate_dock_layout("nope")  # type: ignore[arg-type]
+
+
+def test_validate_dock_layout_rejects_unknown_fields() -> None:
+    from picframe.core.models.overlay import DockLayoutError, validate_dock_layout
+
+    with pytest.raises(DockLayoutError, match="unknown fields"):
+        validate_dock_layout({"bogus": 1})
+
+
+def test_validate_dock_layout_rejects_bad_anchor() -> None:
+    from picframe.core.models.overlay import DockLayoutError, validate_dock_layout
+
+    with pytest.raises(DockLayoutError, match="position"):
+        validate_dock_layout({"position": "nowhere"})
+
+
+def test_validate_dock_layout_rejects_negative_margin() -> None:
+    from picframe.core.models.overlay import DockLayoutError, validate_dock_layout
+
+    with pytest.raises(DockLayoutError, match="margin"):
+        validate_dock_layout({"margin": -1})
+
+
+def test_validate_dock_layout_rejects_non_integer_margin() -> None:
+    from picframe.core.models.overlay import DockLayoutError, validate_dock_layout
+
+    with pytest.raises(DockLayoutError, match="margin"):
+        validate_dock_layout({"margin": 12.5})
+
+
+def test_validate_dock_layout_rejects_bool_margin() -> None:
+    from picframe.core.models.overlay import DockLayoutError, validate_dock_layout
+
+    with pytest.raises(DockLayoutError, match="margin"):
+        validate_dock_layout({"margin": True})
+
+
+def test_validate_dock_layout_rejects_negative_idle_hide_seconds() -> None:
+    from picframe.core.models.overlay import DockLayoutError, validate_dock_layout
+
+    with pytest.raises(DockLayoutError, match="idle_hide_seconds"):
+        validate_dock_layout({"idle_hide_seconds": -2.0})
+
+
+def test_validate_dock_layout_rejects_bool_idle_hide_seconds() -> None:
+    from picframe.core.models.overlay import DockLayoutError, validate_dock_layout
+
+    with pytest.raises(DockLayoutError, match="idle_hide_seconds"):
+        validate_dock_layout({"idle_hide_seconds": True})
+
+
+def test_validate_dock_layout_accepts_zero_margin() -> None:
+    from picframe.core.models.overlay import validate_dock_layout
+
+    assert validate_dock_layout({"margin": 0})["margin"] == 0
+
+
+# ---------------------------------------------------------------------------
 # Legacy overlay normalization (issue #752 compatibility shim)
 # ---------------------------------------------------------------------------
 
