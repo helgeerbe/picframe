@@ -34,6 +34,18 @@ This is a compact index of durable project decisions. Detailed rationale lives i
 - Enforce a software decode ceiling with graceful skip/error events for unsupported video.
 - Use the First/Last Frame Sandwich pattern for seamless image/video handoff.
 - On Wayland, GTK4 `gtk4paintablesink` playback is mandatory; if GTK4 presentation is unavailable, publish `gtk_presentation_unavailable` instead of falling back to legacy sinks.
+- **Wake-on-input (#762):** a dedicated `IWakeInputListener` HAL port +
+  `EvdevWakeAdapter` (lazy `evdev`, passive no-grab `/dev/input/event*` read,
+  mouse+keyboard only, touch excluded) feeds `WakeOnInputService`, which
+  publishes only `Command.DISPLAY_ON` (never `PLAY` — that side-effect stays
+  owned by `DisplayPowerManager`) so the display wakes from the
+  `wlr-randr --off`-destroyed state where the overlay's JS listeners cannot
+  fire. Deliberately distinct from the GPIO/PIR `HardwareInputService`; gated
+  by the existing `overlay.enabled_input_types` (no new config key),
+  idempotent via `IDisplayPower.is_on()`, 1 s debounce, live-reloads on
+  overlay config change. `evdev>=1.6.0` is a Linux-only marker dependency.
+  PR #768 → `8c2f94a`; design in `docs/dev/architecture/overlay.md`
+  §"Wake-on-input while the output is off".
 - The GStreamer worker subprocess must enforce `GDK_BACKEND=wayland` so GTK4 never falls back to X11/Xwayland (which green-screens / segfaults on Raspberry Pi 5 under labwc). When `WAYLAND_DISPLAY` is missing, the renderer dynamically detects a single `wayland-*` socket in `XDG_RUNTIME_DIR` and warns on zero/multiple. The worker logs display env vars before GTK4 init (#710).
 - Fullscreen video fills the GTK4 host. Raspberry Pi/labwc uses a transparent fixed host for fullscreen plain videos so playback-status overlays can sit above the live paintable; inset/custom video rectangles use an opaque fixed host with the cached backdrop when available or `viewer.background` as fallback. GNOME/VM uses an opaque fullscreen host colored from `viewer.background`. Custom non-fullscreen video places the paintable at the renderer-reported `viewer.display_x/y/w/h` rectangle.
 - At EOS, dim the GTK4 video window to 99% opacity, wake pi3d to redraw, then close the video window. Do not add GStreamer alpha handoff tricks or legacy sink fallbacks to the production path.

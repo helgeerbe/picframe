@@ -1,10 +1,11 @@
 # Active Context
 
 ## Current Focus
-**PR #754 (WebKitGTK touch overlay + plugin system) squash-merged to `dev`
-as `6ec7c74`.** Nine issues closed manually: #739, #750, #751, #752, #757,
-#758, #759, #760, #761. The feature branch `feat/739-webkit-overlay` has been
-deleted; all work is now on `dev`.
+**WebKitGTK touch overlay + plugin system (#739) shipped via PR #754
+(squash-merged to `dev` as `6ec7c74`)** — nine issues closed (#739, #750,
+#751, #752, #757, #758, #759, #760, #761). **Wake-on-input (#762) then
+shipped via PR #768 (squash-merged to `dev` as `8c2f94a`); issue #762
+closed.** `dev` head is now `8c2f94a`; both feature branches deleted.
 
 **What shipped:**
 - Out-of-process WebKitGTK overlay worker (`infrastructure/overlay/overlay_worker.py`)

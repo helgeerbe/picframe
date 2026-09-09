@@ -319,16 +319,21 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - **Done:** PR #754 squash-merged to `dev` (`6ec7c74`); 9 issues closed
   (#739, #750–#752, #757–#761); superseded `v2-dev` branch deleted (local +
   remote, `cb69484`); all commits preserved on `dev`.
+- **Done:** PR #768 (wake-on-input, #762) squash-merged to `dev` (`8c2f94a`);
+  issue #762 closed; `feat/762-hardware-wake-on-input` branch deleted.
+  Additive HAL wake-input port (`IWakeInputListener` + `EvdevWakeAdapter`) so
+  the display wakes from `wlr-randr --off` where the overlay's JS listeners
+  cannot fire. See `docs/dev/architecture/overlay.md` §"Wake-on-input".
 
 ## Known Verification State
-- Backend (at merge `6ec7c74`): `.venv/bin/python -m pytest` green (**891
-  passed** at the Phase 3 built-in-plugins checkpoint; 833 after Phase 0).
-  ruff, ruff format, and mypy strict (88 files) clean.
+- Backend (at merge `8c2f94a`): `.venv/bin/python -m pytest` green (**891
+  passed** at the Phase 3 built-in-plugins checkpoint; #762 added 43
+  new/affected tests). ruff, ruff format, and mypy strict clean.
 - Frontend (at merge `6ec7c74`): `yarn build` + `yarn lint` +
   `yarn format:check` + `vue-tsc -b` pass clean; both Vite builds (app +
-  overlay page) succeed.
-- The `feat/739-webkit-overlay` feature branch was deleted after the squash
-  merge to `dev`.
-- Current `dev` head: `6ec7c74` (PR #754: WebKitGTK touch overlay + plugin
-  system, closes #739 et al.).
+  overlay page) succeed. #768 was backend-only (no frontend changes).
+- The `feat/739-webkit-overlay` and `feat/762-hardware-wake-on-input`
+  feature branches were deleted after their squash merges to `dev`.
+- Current `dev` head: `8c2f94a` (PR #768: wake display on mouse/keyboard
+  input via evdev, #762).
 
