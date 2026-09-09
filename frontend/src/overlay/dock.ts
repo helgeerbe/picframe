@@ -223,8 +223,53 @@ export class Dock {
     if (!this.visiblePlugins.includes(pluginId)) return
     // The plugin is already opted-in (visible); re-arm the idle class so the
     // shell's scheduled wake fades it in after the image blend (#757).
+    // #766: route through `setPluginIdle` so the dock icon de-activates too.
+    this.setPluginIdle(pluginId, true)
+  }
+
+  /** Set a visible plugin's idle state on its panel **and** its dock icon
+   * together (#766). When `idle` is true the panel fades out
+   * (`pf-plugin-panel--idle`) and the icon loses `pf-dock-icon--active`; when
+   * false the panel shows and the icon is highlighted. No-op when the panel
+   * is not mounted (unknown/disabled/collapsed plugin). The shell's per-panel
+   * idle timers and the `media_change` driver call this so the icon always
+   * reflects the on-screen state rather than just the toggled-on config set. */
+  setPluginIdle(pluginId: string, idle: boolean): void {
     const panel = this.root.querySelector<HTMLElement>(`#${CSS.escape(PANEL_ID_PREFIX + pluginId)}`)
-    panel?.classList.add('pf-plugin-panel--idle')
+    if (!panel) return
+    if (idle) panel.classList.add('pf-plugin-panel--idle')
+    else panel.classList.remove('pf-plugin-panel--idle')
+    // The icon is `--active` when the plugin is opted-in *and* currently shown
+    // (not idle). A collapsed plugin has no panel/icon here, so this only
+    // governs the auto-hide highlight, not the on/off toggle.
+    this.setIconActive(pluginId, !idle)
+  }
+
+  /** Toggle `pf-dock-icon--active` on the dock icon matching `pluginId`
+   * (#766). Located via the `data-plugin-id` attribute set in `buildIcon` so a
+   * re-render's rebuilt icon is always found. No-op when the icon is absent
+   * (e.g. the plugin is disabled and not in the dock row). */
+  private setIconActive(pluginId: string, active: boolean): void {
+    const icon = this.dockRoot.querySelector<HTMLElement>(
+      `#${DOCK_ID} .pf-dock-icon[data-plugin-id="${CSS.escape(pluginId)}"]`
+    )
+    icon?.classList.toggle('pf-dock-icon--active', active)
+  }
+
+  /** Reconcile each visible plugin's dock-icon `--active` state with its
+   * panel's current `--idle` class after a `render()` (#766). `applyPanelLayout`
+   * preserves `--idle` across re-renders (#767); a brand-new panel has none, so
+   * its icon stays active (shown). Called once at the end of `render()` so the
+   * rebuilt icons reflect reality rather than just the toggled-on set. */
+  private syncIconStates(): void {
+    for (const plugin of this.plugins.filter(p => this.enabledPlugins.includes(p.id))) {
+      if (!this.visiblePlugins.includes(plugin.id)) continue
+      const panel = this.root.querySelector<HTMLElement>(
+        `#${CSS.escape(PANEL_ID_PREFIX + plugin.id)}`
+      )
+      const idle = panel?.classList.contains('pf-plugin-panel--idle') ?? false
+      this.setIconActive(plugin.id, !idle)
+    }
   }
 
   /** Whether a plugin id is currently enabled (loaded/active). */
@@ -320,6 +365,11 @@ export class Dock {
         const id = panel.id.slice(PANEL_ID_PREFIX.length)
         if (!seen.has(id)) panel.remove()
       })
+    // #766: the dock icons were just rebuilt; reconcile their `--active` state
+    // with the panels' current `--idle` classes (preserved by
+    // `applyPanelLayout`, #767) so an auto-hidden plugin's icon is not
+    // highlighted while its panel is faded out.
+    this.syncIconStates()
   }
 
   private renderPanel(plugin: PluginEntry): void {
@@ -429,6 +479,10 @@ export class Dock {
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = 'pf-dock-icon'
+    // #766: tag the icon with its plugin id so `setIconActive`/`syncIconStates`
+    // can locate the rebuilt icon after a re-render and keep its `--active`
+    // state in sync with the panel's on-screen (idle) state.
+    btn.setAttribute('data-plugin-id', plugin.id)
     if (this.visiblePlugins.includes(plugin.id)) btn.classList.add('pf-dock-icon--active')
     btn.setAttribute('aria-label', plugin.name || plugin.id)
     // The hover tooltip shows the plugin's display name (same as the

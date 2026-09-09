@@ -23,8 +23,10 @@ export interface InputRouterOptions {
   root: HTMLElement
   enabledTypes: InputType[]
   onAction: (action: InputAction) => void
-  /** Called for every enabled event, to reset the idle timer / wake content. */
-  onActivity: () => void
+  /** Called for every enabled event, to reset the idle timer / wake content.
+   * Carries the originating `InputType` so the shell can wake dock-only for
+   * mouse (matching `onMouseMove`) but fully for touch/keyboard (#766). */
+  onActivity: (source: InputType) => void
 }
 
 const POINTER_TYPE_MAP: Record<string, InputType> = {
@@ -37,7 +39,7 @@ export class InputRouter {
   private readonly root: HTMLElement
   private enabledTypes: InputType[]
   private readonly onAction: (action: InputAction) => void
-  private readonly onActivity: () => void
+  private readonly onActivity: (source: InputType) => void
   private boundPointer: (e: PointerEvent) => void
   private boundKey: (e: KeyboardEvent) => void
   private boundContext: (e: Event) => void
@@ -80,23 +82,25 @@ export class InputRouter {
     // buttons (prev/toggle/next). A tap on the veil only wakes the shell
     // — it resets the idle timers and re-reveals the content but no longer
     // fires prev/next/toggle, so a stray tap never skips a photo.
-    this.onActivity()
+    // #766: pass the mapped InputType so the shell can wake dock-only for
+    // mouse (ambient activity, like pointermove) but fully for touch.
+    this.onActivity(POINTER_TYPE_MAP[e.pointerType] ?? 'touch')
   }
 
   private handleKey(e: KeyboardEvent): void {
     if (!this.enabledTypes.includes('keyboard')) return
     switch (e.key) {
       case 'ArrowLeft':
-        this.onActivity()
+        this.onActivity('keyboard')
         this.onAction('prev')
         break
       case 'ArrowRight':
-        this.onActivity()
+        this.onActivity('keyboard')
         this.onAction('next')
         break
       case 'Enter':
       case ' ':
-        this.onActivity()
+        this.onActivity('keyboard')
         this.onAction('toggle')
         break
       default:

@@ -125,7 +125,14 @@ export class OverlayShell {
       onAction: (action: InputAction) => {
         if (action !== '__request_config') sendAction(action)
       },
-      onActivity: () => this.wake()
+      onActivity: (source: InputType) => {
+        // #766: a mouse click is ambient activity (like pointermove), not an
+        // intentional request to view content — wake the dock only, leaving
+        // auto-hide panels in their current state. Touch and keyboard keep the
+        // full wake (reveal + re-arm panel idle timers).
+        if (source === 'mouse') this.wake(true, false)
+        else this.wake()
+      }
     })
   }
 
@@ -254,16 +261,16 @@ export class OverlayShell {
       this.clearPanelIdle()
 
       // Per-panel idle: clear each panel's --idle class and arm its own timer.
+      // #766: route through `dock.setPluginIdle` so the dock icon's `--active`
+      // state stays in sync with the panel's on-screen state (highlighted when
+      // shown, not when auto-hidden).
       for (const id of this.dockVisiblePluginIds()) {
-        const panel = this.content.querySelector<HTMLElement>(
-          `#${CSS.escape(PANEL_ID_PREFIX + id)}`
-        )
-        panel?.classList.remove('pf-plugin-panel--idle')
+        this.dock.setPluginIdle(id, false)
         const seconds = this.panelIdleSeconds(id)
         if (seconds !== null && seconds > 0) {
           const timer = window.setTimeout(
             () => {
-              panel?.classList.add('pf-plugin-panel--idle')
+              this.dock.setPluginIdle(id, true)
             },
             Math.max(0, seconds) * 1000
           )
