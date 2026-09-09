@@ -224,5 +224,18 @@ This is a compact index of durable project decisions. Detailed rationale lives i
     is obsolete (removed in #753). PR #754 carries this via squash merge from
     `feat/text-overlay-plugin`.
 
+- **Frontend test framework (#769):** adopt **Vitest** (not Jest/Vue CLI) for the
+  Vue 3 + Pinia frontend, with `@vue/test-utils`, `happy-dom` (not jsdom —
+  lighter and sufficient for component/unit scope), and `@vitest/coverage-v8`.
+  `globals: false` — tests use explicit `import { describe, it, expect } from
+  'vitest'` so editor/lint semantics match real imports. No coverage threshold
+  gate initially (collect-and-report only) to avoid churn while the suite is
+  small. Test files live next to source as `*.test.ts` and are excluded from
+  the app `tsconfig.app.json` build graph. To make env-branchy URL-rewriting in
+  `player.ts` unit-testable without activating a Pinia store or mocking
+  WebSocket, `normalizeMediaUrl`/`normalizeMediaUrls` were extracted
+  (behavior-preserving) into `src/utils/media-url.ts`; the store re-imports
+  from there. CI gained a `frontend-test` job running `yarn test --run`.
+
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.
