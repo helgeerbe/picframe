@@ -34,6 +34,7 @@ from picframe.core.renderers.overlay_ipc import (
     OverlayErrorEvent,
     ReadyEvent,
     SetConfigCommand,
+    VisiblePluginsChangedEvent,
 )
 from picframe.core.renderers.webkit_overlay_renderer import (
     WebKitOverlayRenderer,
@@ -218,6 +219,43 @@ def test_handle_error_event_publishes_system_error(
     assert isinstance(event, SystemErrorEvent)
     assert event.message == "doh"
     assert event.code == "webkit_unavailable"
+
+
+def test_handle_visible_plugins_changed_publishes_set_config(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """A dock-driven visible-plugin change is republished as the exact
+    ``CommandEvent(SET_CONFIG, {overlay: {visible_plugins}})`` the Remote/
+    Appearance REST endpoint publishes, so ConfigService persists it to
+    ``config.db3`` and both UIs refresh through ``OverlayConfigChangedEvent``
+    (#765)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(VisiblePluginsChangedEvent(visible_plugins=("clock", "text")))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, CommandEvent)
+    assert event.command == Command.SET_CONFIG
+    assert event.payload == {"overlay": {"visible_plugins": ["clock", "text"]}}
+
+
+def test_handle_visible_plugins_changed_empty_publishes_empty_list(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """Collapsing every panel persists an empty list (dock-only), not a drop
+    of the key (#765)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(VisiblePluginsChangedEvent(visible_plugins=()))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, CommandEvent)
+    assert event.command == Command.SET_CONFIG
+    assert event.payload == {"overlay": {"visible_plugins": []}}
 
 
 def test_render_command_promote_sets_opacity_zero(

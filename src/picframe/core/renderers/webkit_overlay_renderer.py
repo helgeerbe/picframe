@@ -67,6 +67,7 @@ from picframe.core.renderers.overlay_ipc import (
     SetConfigCommand,
     SetOpacityCommand,
     ShutdownCommand,
+    VisiblePluginsChangedEvent,
     parse_overlay_ipc_message,
 )
 from picframe.infrastructure.overlay.plugin_loader import PluginLoader
@@ -488,6 +489,21 @@ class WebKitOverlayRenderer(IOverlayController):
                     message=event.details,
                     component="WebKitOverlayRenderer",
                     code=event.code,
+                )
+            )
+        elif isinstance(event, VisiblePluginsChangedEvent):
+            # The dock toggle changed the expanded plugin set (#765). Republish
+            # it as the exact ``CommandEvent(SET_CONFIG, {overlay:
+            # {visible_plugins}})`` the Remote/Appearance REST endpoint
+            # (``PUT /api/workflow-config``) publishes. ConfigService then
+            # persists it to ``config.db3`` and emits
+            # ``OverlayConfigChangedEvent``, which this renderer forwards back
+            # to the worker/shell — so the dock's optimistic update is
+            # reconciled with the persisted truth and both UIs stay in sync.
+            self._publisher.publish(
+                CommandEvent(
+                    command=Command.SET_CONFIG,
+                    payload={"overlay": {"visible_plugins": list(event.visible_plugins)}},
                 )
             )
 

@@ -129,6 +129,7 @@ Events (Worker → Main):
 | `ReadyEvent` | — | Worker finished initializing the surface |
 | `InputEvent` | `action: str` | `prev`/`next`/`toggle` → translated to `Command` |
 | `OverlayErrorEvent` | `details: str`, `code: str?` | e.g. WebKitGTK init failure |
+| `VisiblePluginsChangedEvent` | `visible_plugins: tuple[str, ...]` | Dock toggle changed the expanded set → renderer republishes as `CommandEvent(SET_CONFIG, {overlay: {visible_plugins}})` (#765) |
 
 `parse_overlay_ipc_message()` returns `None` for malformed JSON or unknown
 types so a bad line from the worker never crashes the listener. Input actions
@@ -166,6 +167,32 @@ constant (the pi3d text/clock overlay). **Per-plugin user values persist in
 `config.db3` under `overlay.plugin_config.<id>.*`** (flat dotted keys,
 JSON-encoded), never inside the plugin directory. Effective config = manifest
 defaults ← db overrides.
+
+### Visible-plugins persistence (#765)
+
+`overlay.visible_plugins` (a list of plugin ids expanded on screen; empty =
+dock only) is the **single source of truth** for which panels are expanded,
+shared by the touch overlay dock and the Remote/Appearance web tabs. Both UIs
+write it through the **same** `CommandEvent(SET_CONFIG, {overlay:
+{visible_plugins}})` path, so a toggle from either side persists to
+`config.db3` and both refresh through the resulting `OverlayConfigChangedEvent`
+round-trip — surviving `media_change` and restarts.
+
+- **Web tabs** (`OverlayPanel.vue` / `OverlayAppearanceSection.vue`) call
+  `configStore.saveWorkflowConfig({ overlay: { visible_plugins } })`, which
+  hits `PUT /api/workflow-config` → `ConfigService` → `CommandEvent(SET_CONFIG)`.
+- **Touch overlay dock** (`dock.ts`) toggles optimistically, then the shell's
+  `onVisiblePluginsChange` callback calls the JS bridge `setVisiblePlugins(ids)`
+  (`bridge.ts` → `{ action: "__set_visible_plugins", plugins: [...] }`). The
+  worker sanitizes the payload (non-string entries dropped; missing/non-list
+  `plugins` → empty tuple) and emits a `VisiblePluginsChangedEvent`. The
+  renderer republishes it as the exact `CommandEvent(SET_CONFIG, {overlay:
+  {visible_plugins}})` the REST endpoint publishes, so ConfigService persists
+  it and the `OverlayConfigChangedEvent` reconciles the dock's optimistic update.
+- **`media_change` auto-show** (`dock.ts` `showPluginIdle`) only expands a
+  plugin while it remains in `visible_plugins`; collapsing a plugin (now
+  persisted) keeps it collapsed across subsequent photo changes until the user
+  expands it again — matching the remote-tab semantics.
 
 ## 6. Plugin manifest & loader
 

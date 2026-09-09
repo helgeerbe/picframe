@@ -18,6 +18,7 @@ from picframe.core.renderers.overlay_ipc import (
     SetConfigCommand,
     SetOpacityCommand,
     ShutdownCommand,
+    VisiblePluginsChangedEvent,
     parse_overlay_ipc_message,
 )
 
@@ -50,6 +51,8 @@ def test_events_round_trip_with_type_discriminator() -> None:
         InputEvent(action=INPUT_ACTION_NEXT),
         OverlayErrorEvent(details="boom", code="webkit_unavailable"),
         OverlayErrorEvent(details="boom"),
+        VisiblePluginsChangedEvent(visible_plugins=("clock", "text")),
+        VisiblePluginsChangedEvent(visible_plugins=()),
     ]
     for event in cases:
         again = parse_overlay_ipc_message(event.to_json())
@@ -118,3 +121,19 @@ def test_overlay_error_event_optional_code() -> None:
     event = parse_overlay_ipc_message(OverlayErrorEvent(details="x").to_json())
     assert isinstance(event, OverlayErrorEvent)
     assert event.code is None
+
+
+def test_visible_plugins_changed_event_carries_list() -> None:
+    """The dock-driven visible-plugin change round-trips with its id list (#765)."""
+    event = parse_overlay_ipc_message(
+        VisiblePluginsChangedEvent(visible_plugins=("clock", "text")).to_json()
+    )
+    assert isinstance(event, VisiblePluginsChangedEvent)
+    assert event.visible_plugins == ("clock", "text")
+
+
+def test_visible_plugins_changed_event_empty_list() -> None:
+    """An empty list (user collapsed every panel) round-trips (#765)."""
+    event = parse_overlay_ipc_message(VisiblePluginsChangedEvent(visible_plugins=()).to_json())
+    assert isinstance(event, VisiblePluginsChangedEvent)
+    assert event.visible_plugins == ()

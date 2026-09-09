@@ -22,7 +22,8 @@ import {
   registerApplyConfig,
   registerApplyMedia,
   registerApplyPluginData,
-  sendAction
+  sendAction,
+  setVisiblePlugins
 } from './bridge'
 import { Dock } from './dock'
 import { readEnv } from './env'
@@ -90,7 +91,23 @@ export class OverlayShell {
     this.root.appendChild(this.veil)
 
     this.dock = new Dock(this.content, this.root, {
-      onVisiblePluginsChange: () => this.wake(),
+      onVisiblePluginsChange: (pluginIds: string[]) => {
+        // Persist the dock-driven visible-plugin change to `config.db3` via the
+        // same `CommandEvent(SET_CONFIG, {overlay:{visible_plugins}})` path the
+        // Remote/Appearance REST endpoint uses (#765). The dock already updated
+        // optimistically (`togglePlugin`); the config round-trip reconciles it
+        // (and refreshes the remote tab) once ConfigService persists + emits
+        // `OverlayConfigChangedEvent`.
+        setVisiblePlugins(pluginIds)
+        // #767: reveal the dock only — a plugin toggle must not un-hide or
+        // reset the idle timers of unrelated auto-hidden panels. The toggled
+        // plugin's panel is already mounted/removed by `render()`, so no panel
+        // reveal is needed. A full `wake()` here was removing `--idle` from
+        // idle siblings (e.g. a `media_change` text panel) and re-arming their
+        // timers, briefly revealing them for `idle_hide_seconds`. Touch,
+        // keyboard, and pointermove paths still call the full `wake()`.
+        this.wake(true, false)
+      },
       onAction: (action: InputAction) => {
         // Reset the idle timers on every dock action (transport buttons,
         // danger-menu confirm) so touch users tapping dock controls don't

@@ -133,6 +133,41 @@ class OverlayErrorEvent(OverlayIpcMessage):
     type: str = field(default="error", init=False)
 
 
+@dataclass(frozen=True)
+class VisiblePluginsChangedEvent(OverlayIpcMessage):
+    """The user changed the expanded plugin set from the overlay dock (#765).
+
+    Carries the next list of visible plugin ids (the dock's
+    ``visiblePlugins``) from the worker to the main process. The renderer
+    republishes it as a ``CommandEvent(SET_CONFIG, {overlay:
+    {visible_plugins}})`` — the exact command the Remote/Appearance REST
+    endpoint (``PUT /api/workflow-config``) publishes — so both UIs write the
+    same persisted key and refresh through the same
+    ``OverlayConfigChangedEvent`` round-trip. A single source of truth
+    (``overlay.visible_plugins`` in ``config.db3``) keeps the dock and the
+    web UI in sync across ``media_change`` and restarts.
+    """
+
+    visible_plugins: tuple[str, ...]
+    type: str = field(default="visible_plugins_changed", init=False)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> VisiblePluginsChangedEvent:
+        """Coerce the JSON list back into the declared tuple type.
+
+        JSON has no tuple literal, so ``json.loads`` always produces a list;
+        without this the round-tripped message would hold a list and fail
+        equality against the original (tuple-typed) event.
+        """
+        filtered = {k: v for k, v in data.items() if k != "type"}
+        plugins = filtered.get("visible_plugins")
+        if isinstance(plugins, (list, tuple)):
+            filtered["visible_plugins"] = tuple(str(p) for p in plugins)
+        else:
+            filtered["visible_plugins"] = ()
+        return cls(**filtered)
+
+
 _COMMAND_TYPES: dict[str, type[OverlayIpcMessage]] = {
     "set_opacity": SetOpacityCommand,
     "set_config": SetConfigCommand,
@@ -145,6 +180,7 @@ _EVENT_TYPES: dict[str, type[OverlayIpcMessage]] = {
     "ready": ReadyEvent,
     "input": InputEvent,
     "error": OverlayErrorEvent,
+    "visible_plugins_changed": VisiblePluginsChangedEvent,
 }
 
 

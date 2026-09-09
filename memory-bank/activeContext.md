@@ -42,6 +42,55 @@ deleted; all work is now on `dev`.
   on labwc); tracked in #739 verification criteria. The clock overlay was
   confirmed rendering on `picframepoc` (labwc) after the bridge-signal fix.
 
+**#765 — dock visible-plugin persistence (in progress on a working branch):**
+the touch-overlay dock icon toggle now persists `overlay.visible_plugins` to
+`config.db3` through the same `CommandEvent(SET_CONFIG)` path the Remote/
+Appearance REST endpoint uses, so both UIs share one source of truth and the
+choice survives `media_change` and restarts. Backend: `VisiblePluginsChangedEvent`
+added to `overlay_ipc.py` (+ `from_dict` coerces the JSON list back to the
+declared tuple) and registered in `_EVENT_TYPES`; the worker handles
+`__set_visible_plugins` bridge action → `emit_visible_plugins()`; the renderer
+republishes the event as `CommandEvent(SET_CONFIG, {overlay:{visible_plugins}})`.
+Frontend: `setVisiblePlugins()` emitter added to `bridge.ts` (typed via
+`BridgeSendPayload`); `shell.ts` calls it in `onVisiblePluginsChange`;
+`dock.ts` `showPluginIdle` guards on `visiblePlugins.includes(pluginId)` so a
+collapsed `media_change` plugin stays collapsed across photo changes. Tests
+added for IPC round-trip, worker bridge handler, and renderer event→CommandEvent.
+Docs updated in `docs/dev/architecture/overlay.md`. All gates green (pytest,
+mypy, ruff, yarn lint/format/build). GitHub issue #765 tracks this.
+
+**#767 — sibling-panel reveal regression fix (done):** toggling one dock
+plugin (e.g. always-visible `clock`) was revealing an unrelated auto-hidden
+plugin (e.g. `text` in `--idle` awaiting a `media_change` wake). Two root
+causes, both in the `togglePlugin` path: (1) `dock.ts` `applyPanelLayout`
+reset `panel.className` entirely on re-render, wiping the
+`pf-plugin-panel--idle` class `showPluginIdle`/the per-panel idle timers had
+armed → the panel's CSS transition faded the hidden sibling in; (2)
+`shell.ts` `onVisiblePluginsChange` called a full `this.wake()`, which
+removes `--idle` from every visible panel and re-arms idle timers, un-hiding
+idle siblings for `idle_hide_seconds`. Fixes: `applyPanelLayout` now
+captures `wasIdle` before resetting `className` and re-adds `--idle`
+after, so `render()` is non-destructive w.r.t. idle state (a brand-new panel
+has no `--idle` to preserve; `applyConfig` is followed by a full `wake()`
+that reconciles, same as before). `onVisiblePluginsChange` now calls
+`this.wake(true, false)` — reveal the dock only, never reset/un-hide
+unrelated panels. Touch/keyboard/pointermove paths still call the full
+`wake()`. Defensible behavior shift: an `auto_hide` plugin toggled ON via
+the dock no longer gets its idle timer armed immediately by the toggle; it
+stays visible until the next touch/pointermove/keyboard activity, after
+which the full `wake()` arms its timer and it auto-hides normally —
+consistent with "focus only on the clicked plugin". No frontend test
+runner exists in this project (vitest/jest not configured; `package.json`
+scripts are dev/build/lint/format only), so the fix was verified by
+`yarn build` (vue-tsc + vite), `yarn lint` (0 errors), and
+`yarn format:check`. vitest introduction is a deferred follow-up (the
+first case would be a #767 regression test against `Dock.render` panel
+reconciliation + `shell.wake` reveal flags). Manual device verification
+still pending: (a) hide `clock` while `text` is auto-hidden → `text` stays
+hidden; (b) toggle `clock` back on → `clock` reappears without disturbing
+`text`; (c) `media_change` still wakes only opted-in `text`; (d) touch the
+screen → auto-hidden panels still reveal (full `wake()` path intact).
+
 **Commit-message convention** codified in `decisionLog.md`: use the `(#NNN)`
 trailer form (e.g. `fix(overlay): ... (#755)`); bare ` #NNN` tolerated, not
 preferred; `Refs #NNN` not used.

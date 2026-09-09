@@ -210,14 +210,19 @@ export class Dock {
    * postMessage) but kept faded out, then the shell wakes it after the image
    * blend finishes. No-op for disabled/unknown plugins. Unlike
    * {@link togglePlugin} this does **not** fire ``onVisiblePluginsChange`` —
-   * the shell owns the scheduled wake. */
+   * the shell owns the scheduled wake.
+   *
+   * #765: a plugin the user collapsed (removed from ``visiblePlugins`` via the
+   * dock toggle, which now persists to ``overlay.visible_plugins``) stays
+   * collapsed across photo changes — ``visiblePlugins`` is the single source
+   * of truth, matching the remote-tab semantics. So a ``media_change`` plugin
+   * auto-shows only while it remains opted-in there; collapsing it stops the
+   * auto-show until the user expands it again. */
   showPluginIdle(pluginId: string): void {
     if (!this.isPluginEnabled(pluginId)) return
-    const wasVisible = this.visiblePlugins.includes(pluginId)
-    if (!wasVisible) {
-      this.visiblePlugins = [...this.visiblePlugins, pluginId]
-      this.render()
-    }
+    if (!this.visiblePlugins.includes(pluginId)) return
+    // The plugin is already opted-in (visible); re-arm the idle class so the
+    // shell's scheduled wake fades it in after the image blend (#757).
     const panel = this.root.querySelector<HTMLElement>(`#${CSS.escape(PANEL_ID_PREFIX + pluginId)}`)
     panel?.classList.add('pf-plugin-panel--idle')
   }
@@ -378,7 +383,17 @@ export class Dock {
    * Fill mode (no `size`): `width`/`height` size the panel (or the CSS default);
    * the iframe fills it 100% × 100%. */
   private applyPanelLayout(panel: HTMLElement, plugin: PluginEntry, layout: PluginLayout): void {
+    // #767: preserve the idle class across re-renders. `render()` reuses an
+    // existing panel element (looked up by id) but resetting `className` here
+    // would wipe `pf-plugin-panel--idle` that shell.ts armed via
+    // `showPluginIdle` / the per-panel idle timers — revealing an auto-hidden
+    // sibling when an unrelated plugin is toggled. Capture + re-apply so a
+    // re-render never changes a panel's idle state. `applyConfig` is unaffected:
+    // it's followed by a full `wake()` that reconciles idle state (same as
+    // today), and a brand-new panel has no `--idle` class to preserve.
+    const wasIdle = panel.classList.contains('pf-plugin-panel--idle')
     panel.className = `pf-plugin-panel pf-anchor-${layout.position}`
+    if (wasIdle) panel.classList.add('pf-plugin-panel--idle')
     panel.style.zIndex = String(layout.z_order)
     const design = plugin.size
     if (design) {
