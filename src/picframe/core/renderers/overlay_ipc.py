@@ -118,9 +118,10 @@ class InputEvent(OverlayIpcMessage):
     """An input event captured by the overlay shell (pointer or keyboard).
 
     ``action`` is one of :data:`INPUT_ACTION_PREV`, :data:`INPUT_ACTION_NEXT`,
-    :data:`INPUT_ACTION_TOGGLE`, or a danger-menu
-    action (:data:`INPUT_ACTION_DISPLAY_OFF`, :data:`INPUT_ACTION_RESTART_SERVICE`,
-    :data:`INPUT_ACTION_REBOOT_HOST`, :data:`INPUT_ACTION_SHUTDOWN_HOST`).
+    :data:`INPUT_ACTION_TOGGLE`, or a danger-menu action
+    (:data:`INPUT_ACTION_DISPLAY_OFF`, :data:`INPUT_ACTION_RESTART_SERVICE`,
+    :data:`INPUT_ACTION_REBOOT_HOST`, :data:`INPUT_ACTION_SHUTDOWN_HOST`,
+    :data:`INPUT_ACTION_STOP`).
     """
 
     action: str
