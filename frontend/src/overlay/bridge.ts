@@ -26,7 +26,10 @@ type ApplyPluginDataHandler = (pluginId: string, key: string, value: unknown) =>
  * `__request_config`.
  */
 type BridgeSendPayload =
-  InputAction | { action: InputAction } | { action: '__set_visible_plugins'; plugins: string[] }
+  | InputAction
+  | { action: InputAction }
+  | { action: '__set_visible_plugins'; plugins: string[] }
+  | { action: '__set_on_screen_plugins'; plugins: string[] }
 
 interface PicframeBridge {
   send: (payload: BridgeSendPayload) => void
@@ -78,6 +81,29 @@ export function setVisiblePlugins(pluginIds: string[]): void {
     bridge.send({ action: '__set_visible_plugins', plugins: pluginIds })
   } catch (e) {
     console.warn('picframe bridge setVisiblePlugins failed', e)
+  }
+}
+
+/**
+ * Push the transient on-screen (runtime) plugin set to the worker (#766).
+ *
+ * Sends `{ action: '__set_on_screen_plugins', plugins: [...] }` — which
+ * expanded plugins are actually shown on screen (visible in `visible_plugins`
+ * **and** not auto-hidden). Auto-hide is a client-side CSS fade that never
+ * persists, so this is a separate runtime channel from `setVisiblePlugins`
+ * (the persisted config path). The worker emits an `OnScreenPluginsChangedEvent`
+ * the renderer republishes as `OverlayVisibilityChangedEvent`, which the
+ * `/ws/state` endpoint forwards to browsers so the Remote tab's tile
+ * highlights mirror the dock icon during auto-hide/wake fades. The dock's
+ * `emitOnScreen` diff-guards so this only fires when the on-screen set
+ * actually changes.
+ */
+export function setOnScreenPlugins(pluginIds: string[]): void {
+  const bridge = ensureBridge()
+  try {
+    bridge.send({ action: '__set_on_screen_plugins', plugins: pluginIds })
+  } catch (e) {
+    console.warn('picframe bridge setOnScreenPlugins failed', e)
   }
 }
 

@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import json
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -8,6 +9,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from PIL import Image
+from starlette.websockets import WebSocketDisconnect
 
 from picframe.api.app import _send_websocket_text, create_app, media_event_to_response_dto
 from picframe.core.events.dto import Command
@@ -2393,3 +2395,247 @@ def test_put_overlay_dock_layout_422_on_invalid_payload() -> None:
         assert response.status_code == 422
     finally:
         repo.close()
+
+
+class _FakeEventSubscriber:
+    """Captures callbacks registered by the /ws/state handler (mirrors the MQTT
+    test double) so we can exercise the overlay-config filtering without a live
+    WebSocket transport (httpx ASGITransport does not support ws://)."""
+
+    def __init__(self) -> None:
+        self.callbacks: dict[type, list[Any]] = {}
+
+    def subscribe(self, event_type: type, callback: Any) -> None:
+        self.callbacks.setdefault(event_type, []).append(callback)
+
+    def unsubscribe(self, event_type: type, callback: Any) -> None:
+        if event_type in self.callbacks:
+            self.callbacks[event_type] = [
+                cb for cb in self.callbacks[event_type] if cb is not callback
+            ]
+
+
+def test_overlay_config_websocket_message_strips_settings_scope_keys() -> None:
+    """The public overlay subset pushed to browsers must include public dock
+    toggles (visible_plugins/enabled_plugins) but strip settings-scope keys
+    (plugin_config with api_keys, plugin_layout, backend) (#765)."""
+    from picframe.api.app import overlay_config_websocket_message
+    from picframe.core.events.dto import OverlayConfigChangedEvent
+
+    event = OverlayConfigChangedEvent(
+        overlay_config={
+            "enabled": True,
+            "idle_hide_seconds": 5.0,
+            "enabled_input_types": ["touch"],
+            "enabled_plugins": ["clock"],
+            "visible_plugins": ["clock", "weather"],
+            # settings-scope keys that must never reach the browser
+            "plugin_config": {"weather": {"api_key": "super-secret-key"}},
+            "plugin_layout": {"weather": {"position": "top-right"}},
+            "backend": {"shell": "picframe-shell"},
+        },
+        updated_plugin_id=None,
+    )
+
+    msg = overlay_config_websocket_message(event)
+    assert msg is not None
+    payload = json.loads(msg)
+    assert payload["type"] == "OverlayConfigChangedEvent"
+    overlay = payload["overlay"]
+    # public keys forwarded
+    assert overlay["visible_plugins"] == ["clock", "weather"]
+    assert overlay["enabled_plugins"] == ["clock"]
+    assert overlay["enabled"] is True
+    assert overlay["idle_hide_seconds"] == 5.0
+    assert overlay["enabled_input_types"] == ["touch"]
+    # settings-scope keys stripped — no secret leakage
+    assert "plugin_config" not in overlay
+    assert "plugin_layout" not in overlay
+    assert "backend" not in overlay
+    assert "api_key" not in json.dumps(overlay)
+
+
+def test_overlay_config_websocket_message_returns_none_when_only_settings_scope() -> None:
+    """An event that only touched settings-scope keys (no public key present)
+    must forward nothing — the caller should not push an empty message."""
+    from picframe.api.app import overlay_config_websocket_message
+    from picframe.core.events.dto import OverlayConfigChangedEvent
+
+    event = OverlayConfigChangedEvent(
+        overlay_config={
+            "plugin_config": {"weather": {"api_key": "super-secret-key"}},
+            "backend": {"shell": "picframe-shell"},
+        },
+        updated_plugin_id="weather",
+    )
+    assert overlay_config_websocket_message(event) is None
+
+
+def test_websocket_state_pushes_filtered_overlay_config() -> None:
+    """Drive the /ws/state ASGI endpoint by hand (httpx has no ws:// support) to
+    verify it subscribes to OverlayConfigChangedEvent on accept and that firing
+    the registered callback pushes only the public overlay subset — secrets
+    (plugin_config api_key, backend) are stripped (#765)."""
+    from picframe.core.events.dto import OverlayConfigChangedEvent
+
+    subscriber = _FakeEventSubscriber()
+    app = create_app(cors_allowed_origins=["*"], event_subscriber=subscriber)
+
+    captured: list[dict[str, Any]] = []
+
+    async def drive() -> None:
+        incoming: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        await incoming.put({"type": "websocket.connect"})
+
+        async def receive() -> dict[str, Any]:
+            return await incoming.get()
+
+        async def send(message: dict[str, Any]) -> None:
+            if message["type"] == "websocket.accept":
+                # The subscriptions are registered synchronously right after
+                # accept() returns. Defer the trigger to the next loop tick so
+                # the endpoint has progressed past the subscribe() calls (it
+                # reaches `await asyncio.wait(...)` and yields control).
+                loop = asyncio.get_running_loop()
+
+                def trigger() -> None:
+                    cb = subscriber.callbacks[OverlayConfigChangedEvent][-1]
+                    cb(
+                        OverlayConfigChangedEvent(
+                            overlay_config={
+                                "visible_plugins": ["clock", "weather"],
+                                "enabled_plugins": ["clock"],
+                                "enabled": True,
+                                # settings-scope secrets that must not leak
+                                "plugin_config": {"weather": {"api_key": "super-secret"}},
+                                "backend": {"shell": "picframe-shell"},
+                            }
+                        )
+                    )
+
+                loop.call_soon(trigger)
+            elif message["type"] == "websocket.send":
+                captured.append(message)
+                # Now that the (only) outbound message is captured, disconnect so
+                # the receive loop exits and the endpoint unwinds cleanly.
+                await incoming.put({"type": "websocket.disconnect", "code": 1000})
+
+        scope: dict[str, Any] = {
+            "type": "websocket",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "path": "/ws/state",
+            "raw_path": b"/ws/state",
+            "query_string": b"",
+            "headers": [],
+            "subprotocols": [],
+            "root_path": "",
+            "client": ("testclient", 12345),
+            "server": ("testserver", 80),
+            "app": app,
+        }
+        try:
+            await app(scope, receive, send)
+        except WebSocketDisconnect:
+            pass
+
+    asyncio.run(drive())
+
+    assert captured, "expected the filtered overlay config message to be pushed"
+    payload = json.loads(captured[0]["text"])
+    assert payload["type"] == "OverlayConfigChangedEvent"
+    overlay = payload["overlay"]
+    assert overlay["visible_plugins"] == ["clock", "weather"]
+    assert overlay["enabled_plugins"] == ["clock"]
+    assert overlay["enabled"] is True
+    assert "plugin_config" not in overlay
+    assert "backend" not in overlay
+    assert "api_key" not in json.dumps(overlay)
+
+
+def test_overlay_visibility_websocket_message_serializes_on_screen_set() -> None:
+    """The runtime on-screen plugin set is forwarded as an ordered id list under
+    ``on_screen_plugins`` (#766). Unlike the config push there are no
+    settings-scope secrets to strip, so the message is always emitted (even an
+    empty list when every panel is auto-hidden)."""
+    from picframe.api.app import overlay_visibility_websocket_message
+    from picframe.core.events.dto import OverlayVisibilityChangedEvent
+
+    event = OverlayVisibilityChangedEvent(on_screen_plugins=("clock", "weather"))
+    msg = overlay_visibility_websocket_message(event)
+    assert msg is not None
+    payload = json.loads(msg)
+    assert payload["type"] == "OverlayVisibilityChangedEvent"
+    assert payload["on_screen_plugins"] == ["clock", "weather"]
+
+
+def test_overlay_visibility_websocket_message_empty_on_screen_set() -> None:
+    """Every panel auto-hidden → an empty on-screen list, still emitted (#766)."""
+    from picframe.api.app import overlay_visibility_websocket_message
+    from picframe.core.events.dto import OverlayVisibilityChangedEvent
+
+    event = OverlayVisibilityChangedEvent(on_screen_plugins=())
+    msg = overlay_visibility_websocket_message(event)
+    assert msg is not None
+    payload = json.loads(msg)
+    assert payload["type"] == "OverlayVisibilityChangedEvent"
+    assert payload["on_screen_plugins"] == []
+
+
+def test_websocket_state_pushes_overlay_visibility_event() -> None:
+    """Drive the /ws/state ASGI endpoint by hand (httpx has no ws:// support) to
+    verify it subscribes to OverlayVisibilityChangedEvent on accept and that
+    firing the registered callback pushes the on-screen plugin set to the
+    browser (#766)."""
+    from picframe.core.events.dto import OverlayVisibilityChangedEvent
+
+    subscriber = _FakeEventSubscriber()
+    app = create_app(cors_allowed_origins=["*"], event_subscriber=subscriber)
+
+    captured: list[dict[str, Any]] = []
+
+    async def drive() -> None:
+        incoming: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        await incoming.put({"type": "websocket.connect"})
+
+        async def receive() -> dict[str, Any]:
+            return await incoming.get()
+
+        async def send(message: dict[str, Any]) -> None:
+            if message["type"] == "websocket.accept":
+                loop = asyncio.get_running_loop()
+
+                def trigger() -> None:
+                    cb = subscriber.callbacks[OverlayVisibilityChangedEvent][-1]
+                    cb(OverlayVisibilityChangedEvent(on_screen_plugins=("clock", "weather")))
+
+                loop.call_soon(trigger)
+            elif message["type"] == "websocket.send":
+                captured.append(message)
+                await incoming.put({"type": "websocket.disconnect", "code": 1000})
+
+        scope: dict[str, Any] = {
+            "type": "websocket",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "path": "/ws/state",
+            "raw_path": b"/ws/state",
+            "query_string": b"",
+            "headers": [],
+            "subprotocols": [],
+            "root_path": "",
+            "client": ("testclient", 12345),
+            "server": ("testserver", 80),
+            "app": app,
+        }
+        try:
+            await app(scope, receive, send)
+        except WebSocketDisconnect:
+            pass
+
+    asyncio.run(drive())
+
+    assert captured, "expected the overlay visibility message to be pushed"
+    payload = json.loads(captured[0]["text"])
+    assert payload["type"] == "OverlayVisibilityChangedEvent"
+    assert payload["on_screen_plugins"] == ["clock", "weather"]

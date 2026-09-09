@@ -233,6 +233,45 @@ def test_emit_visible_plugins_no_connection_does_not_raise() -> None:
     worker.emit_visible_plugins(())  # must not raise
 
 
+def test_handle_bridge_message_set_on_screen_plugins_emits_event(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """An on-screen (runtime) visibility change is forwarded as an
+    ``OnScreenPluginsChangedEvent`` (#766) — a separate runtime channel from the
+    persisted ``__set_visible_plugins`` config path. Non-string entries are
+    dropped so a malformed bridge payload never emits junk ids."""
+    worker = make_worker()
+    emitted: list[tuple[str, ...]] = []
+    monkeypatch.setattr(worker, "emit_on_screen_plugins", lambda plugins: emitted.append(plugins))
+    worker._handle_bridge_message(
+        {"action": "__set_on_screen_plugins", "plugins": ["clock", "text"]}
+    )
+    worker._handle_bridge_message(
+        {"action": "__set_on_screen_plugins", "plugins": ["clock", 42, None, "meta"]}
+    )
+    worker._handle_bridge_message({"action": "__set_on_screen_plugins"})
+    assert emitted == [("clock", "text"), ("clock", "meta"), ()]
+
+
+def test_emit_on_screen_plugins_sends_event_on_connection() -> None:
+    """The event serializes with its type discriminator + id list (#766)."""
+    worker = make_worker()
+    conn = MagicMock()
+    worker._conn = conn
+    worker.emit_on_screen_plugins(("clock", "text"))
+    conn.send.assert_called_once()
+    sent = conn.send.call_args[0][0]
+    assert '"type": "on_screen_plugins_changed"' in sent
+    assert '"clock"' in sent
+    assert '"text"' in sent
+
+
+def test_emit_on_screen_plugins_no_connection_does_not_raise() -> None:
+    worker = make_worker()
+    worker._conn = None
+    worker.emit_on_screen_plugins(())  # must not raise
+
+
 def test_handle_bridge_message_console_forwarding_routes_levels(
     caplog: pytest.LogCaptureFixture,
 ) -> None:

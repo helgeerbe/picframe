@@ -15,6 +15,7 @@ from picframe.core.events.dto import (
     CurrentMediaChangedEvent,
     DisplayPowerEvent,
     OverlayConfigChangedEvent,
+    OverlayVisibilityChangedEvent,
     RenderCommand,
     SystemErrorEvent,
 )
@@ -31,6 +32,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
+    OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
     ReadyEvent,
     SetConfigCommand,
@@ -256,6 +258,40 @@ def test_handle_visible_plugins_changed_empty_publishes_empty_list(
     assert isinstance(event, CommandEvent)
     assert event.command == Command.SET_CONFIG
     assert event.payload == {"overlay": {"visible_plugins": []}}
+
+
+def test_handle_on_screen_plugins_changed_publishes_visibility_event(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """An on-screen (runtime) visibility change is republished as
+    ``OverlayVisibilityChangedEvent`` (#766) — NOT a persisted
+    ``CommandEvent(SET_CONFIG)``, because auto-hide is a client-side CSS fade
+    that never writes ``config.db3``. The browser mirrors this set so Remote
+    tile highlights mirror the dock icon during auto-hide/wake fades."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(OnScreenPluginsChangedEvent(on_screen_plugins=("clock", "text")))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, OverlayVisibilityChangedEvent)
+    assert event.on_screen_plugins == ("clock", "text")
+
+
+def test_handle_on_screen_plugins_changed_empty_publishes_empty_tuple(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """Every panel auto-hidden publishes an empty on-screen set (#766)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(OnScreenPluginsChangedEvent(on_screen_plugins=()))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, OverlayVisibilityChangedEvent)
+    assert event.on_screen_plugins == ()
 
 
 def test_render_command_promote_sets_opacity_zero(

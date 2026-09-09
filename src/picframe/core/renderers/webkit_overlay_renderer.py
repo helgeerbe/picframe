@@ -42,6 +42,7 @@ from picframe.core.events.dto import (
     CurrentMediaChangedEvent,
     DisplayPowerEvent,
     OverlayConfigChangedEvent,
+    OverlayVisibilityChangedEvent,
     RenderCommand,
     RendererConfigUpdatedEvent,
     SystemErrorEvent,
@@ -60,6 +61,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
+    OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
     OverlayIpcMessage,
     ReadyEvent,
@@ -505,6 +507,19 @@ class WebKitOverlayRenderer(IOverlayController):
                     command=Command.SET_CONFIG,
                     payload={"overlay": {"visible_plugins": list(event.visible_plugins)}},
                 )
+            )
+        elif isinstance(event, OnScreenPluginsChangedEvent):
+            # The on-screen (runtime) visibility of expanded plugins changed
+            # (#766) — an auto-hide fade, wake, media_change re-arm, or toggle.
+            # This is **not** persisted to ``config.db3`` (auto-hide is a
+            # client-side CSS fade), so it does NOT go through
+            # ``CommandEvent(SET_CONFIG)``. Republish it directly as the
+            # ``OverlayVisibilityChangedEvent`` domain event the ``/ws/state``
+            # endpoint forwards to browsers, so the Remote tile highlights
+            # mirror the on-screen state instead of the persisted
+            # ``visible_plugins`` set.
+            self._publisher.publish(
+                OverlayVisibilityChangedEvent(on_screen_plugins=event.on_screen_plugins)
             )
 
     def _send_command(self, cmd: OverlayIpcMessage) -> None:

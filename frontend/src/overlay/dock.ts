@@ -24,6 +24,13 @@ import type {
 export interface DockCallbacks {
   /** Fired when the user changes which plugins are expanded (or collapses all). */
   onVisiblePluginsChange: (pluginIds: string[]) => void
+  /** Fired when the on-screen (runtime) visibility of expanded plugins changes
+   * (#766) — an auto-hide fade, wake, media_change re-arm, or toggle that
+   * mutated which expanded panels are actually shown (not `--idle`). Distinct
+   * from `onVisiblePluginsChange` (the persisted config set): this carries the
+   * transient on-screen set the dock already tracks via the `--active` icon
+   * state, now mirrored to the Remote tab so its tile highlights stay in sync. */
+  onOnScreenPluginsChange: (pluginIds: string[]) => void
   /** Emit a transport or danger-menu action to the worker bridge (#763).
    * The dock calls this for transport buttons (no confirmation) and after the
    * user confirms a danger-menu item (display off / restart / reboot / shutdown). */
@@ -94,6 +101,18 @@ const DANGER_ENTRIES: DangerEntry[] = [
 const DEFAULT_PANEL_WIDTH = 'min(38vw, 480px)'
 const DEFAULT_PANEL_HEIGHT = 'min(46vh, 360px)'
 
+/** Order-independent id-set equality for `emitOnScreen`'s diff guard (#766).
+ * The on-screen set is a set (membership is all that matters), so a wake that
+ * re-adds a plugin in a different dock position must not re-emit. */
+function sameIdSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false
+  const set = new Set(a)
+  for (const id of b) {
+    if (!set.has(id)) return false
+  }
+  return true
+}
+
 export class Dock {
   private plugins: PluginEntry[] = []
   private enabledPlugins: string[] = []
@@ -128,6 +147,12 @@ export class Dock {
   private readonly callbacks: DockCallbacks
   /** Whether the danger dropdown is currently open (#763). */
   private dangerOpen = false
+  /** Last on-screen plugin set emitted via `onOnScreenPluginsChange` (#766).
+   * `null` until the first emission so the dock reports its initial on-screen
+   * state after the first render (already-connected browsers learn it then);
+   * subsequent emissions are diff-guarded so auto-hide/wake fades that return
+   * to the same set do not spam the runtime channel. */
+  private lastEmittedOnScreen: string[] | null = null
   /** Bound outside-click handler for the danger dropdown (kept so it can be
    * detached after close). */
   private boundDangerOutside: ((e: PointerEvent) => void) | null = null
@@ -243,6 +268,12 @@ export class Dock {
     // (not idle). A collapsed plugin has no panel/icon here, so this only
     // governs the auto-hide highlight, not the on/off toggle.
     this.setIconActive(pluginId, !idle)
+    // #766: an auto-hide fade (idle=true) or wake (idle=false) changed the
+    // on-screen set — mirror it to the Remote tab. The dock icon already
+    // reflects this via `setIconActive`; the runtime event keeps the web UI's
+    // tile highlights in sync. `emitOnScreen` diff-guards so a no-op fade
+    // (e.g. re-arming idle on an already-hidden panel) does not spam.
+    this.emitOnScreen()
   }
 
   /** Toggle `pf-dock-icon--active` on the dock icon matching `pluginId`
@@ -275,6 +306,34 @@ export class Dock {
   /** Whether a plugin id is currently enabled (loaded/active). */
   isPluginEnabled(id: string | null | undefined): id is string {
     return !!id && this.enabledPlugins.includes(id)
+  }
+
+  /** The set of expanded plugins currently shown on screen (#766) — i.e. those
+   * in `visiblePlugins` whose panel exists and is **not** auto-hidden
+   * (no `pf-plugin-panel--idle`). Auto-hide is a client-side CSS fade, so this
+   * is the runtime counterpart of the persisted `visiblePlugins` config set.
+   * Order follows `visiblePlugins` for a stable, deterministic emission; the
+   * set itself is unordered (membership is all that matters). */
+  onScreenPluginIds(): string[] {
+    return this.visiblePlugins.filter(id => {
+      const panel = this.root.querySelector<HTMLElement>(`#${CSS.escape(PANEL_ID_PREFIX + id)}`)
+      if (!panel) return false
+      return !panel.classList.contains('pf-plugin-panel--idle')
+    })
+  }
+
+  /** Diff-guarded emission of the on-screen set via
+   * `onOnScreenPluginsChange` (#766). The first call (after boot) always fires
+   * so already-connected browsers learn the initial on-screen state;
+   * subsequent calls only fire when the set actually changed, so a re-render
+   * or a no-op fade that leaves the on-screen set unchanged does not spam the
+   * runtime channel. */
+  private emitOnScreen(): void {
+    const next = this.onScreenPluginIds()
+    const last = this.lastEmittedOnScreen
+    if (last !== null && sameIdSet(last, next)) return
+    this.lastEmittedOnScreen = next
+    this.callbacks.onOnScreenPluginsChange(next)
   }
 
   /**
@@ -370,6 +429,10 @@ export class Dock {
     // `applyPanelLayout`, #767) so an auto-hidden plugin's icon is not
     // highlighted while its panel is faded out.
     this.syncIconStates()
+    // #766: a toggle or config apply may have mounted/removed panels (changing
+    // the on-screen set) — mirror it to the Remote tab. Runs after
+    // `syncIconStates` so the on-screen set reflects the rebuilt panels.
+    this.emitOnScreen()
   }
 
   private renderPanel(plugin: PluginEntry): void {

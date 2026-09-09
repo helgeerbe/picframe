@@ -66,7 +66,14 @@ from picframe.api.models import (
     SystemServiceStatusResponse,
     WebSocketCommandMessage,
 )
-from picframe.core.events.dto import Command, CommandEvent, CurrentMediaChangedEvent, StateEvent
+from picframe.core.events.dto import (
+    Command,
+    CommandEvent,
+    CurrentMediaChangedEvent,
+    OverlayConfigChangedEvent,
+    OverlayVisibilityChangedEvent,
+    StateEvent,
+)
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
 from picframe.core.models.overlay import (
     PluginDescriptor,
@@ -848,6 +855,54 @@ def system_error_websocket_message(event: Any) -> str:
     )
 
 
+def overlay_config_websocket_message(event: Any) -> str | None:
+    """Serialize an OverlayConfigChangedEvent to the public overlay subset for
+    unauthenticated Remote/Appearance browsers (#765).
+
+    The full merged overlay section carried by the event includes settings-scope
+    keys (``plugin_config`` with plugin api_keys, ``plugin_layout``, ``backend``)
+    that must never reach the browser. Only the keys in
+    ``PUBLIC_WORKFLOW_KEYS["overlay"]`` — the same surface as ``GET
+    /workflow-config`` — are forwarded, so the touch-overlay dock's
+    ``visible_plugins``/``enabled_plugins`` toggles live-sync without a reload
+    and without leaking secrets.
+
+    Returns ``None`` when there is no public key to forward (e.g. an event that
+    only touched settings-scope keys); the caller should then send nothing.
+    """
+    overlay = getattr(event, "overlay_config", None) or {}
+    public_overlay = {
+        key: overlay[key] for key in PUBLIC_WORKFLOW_KEYS["overlay"] if key in overlay
+    }
+    if not public_overlay:
+        return None
+    return json.dumps({"type": "OverlayConfigChangedEvent", "overlay": public_overlay})
+
+
+def overlay_visibility_websocket_message(event: Any) -> str:
+    """Serialize an OverlayVisibilityChangedEvent for unauthenticated Remote
+    browsers (#766).
+
+    Carries the transient on-screen (runtime) plugin set — which expanded
+    panels are actually shown (not auto-hidden). Auto-hide is a client-side
+    CSS fade that never persists to ``config.db3``, so this is a separate
+    runtime channel from ``OverlayConfigChangedEvent``'s persisted
+    ``visible_plugins``. The Remote tab mirrors this set so its tile
+    highlights stay in sync with the dock icon during auto-hide/wake fades.
+
+    Unlike :func:`overlay_config_websocket_message` there are no
+    settings-scope secrets to strip — the payload is just the ordered plugin
+    id list — so this always returns a message (an empty list when nothing is
+    on screen, e.g. every panel auto-hidden).
+    """
+    on_screen = getattr(event, "on_screen_plugins", None)
+    if isinstance(on_screen, (list, tuple)):
+        plugins = [str(p) for p in on_screen]
+    else:
+        plugins = []
+    return json.dumps({"type": "OverlayVisibilityChangedEvent", "on_screen_plugins": plugins})
+
+
 def _coerce_media_item_dict(media_item: Any) -> dict[str, Any]:
     """Convert a current-media event payload into a plain mapping."""
     if hasattr(media_item, "to_dict") and callable(media_item.to_dict):
@@ -1309,9 +1364,34 @@ def create_app(
             msg = system_error_websocket_message(event)
             loop.call_soon_threadsafe(send_queue.put_nowait, msg)
 
+        def handle_overlay_config_changed(event: OverlayConfigChangedEvent) -> None:
+            # Push only the public overlay subset (matches GET /workflow-config) so
+            # unauthenticated Remote/Appearance browsers stay live-synced with the
+            # touch-overlay dock (visible_plugins/enabled_plugins toggles) without
+            # leaking settings-scope keys (plugin_config, plugin_layout, backend)
+            # such as plugin api_keys (#765). Without this push the browser config
+            # store stays a REST snapshot until a page reload.
+            msg = overlay_config_websocket_message(event)
+            if msg is None:
+                return
+            # Use call_soon_threadsafe because this callback runs in the event bus thread
+            loop.call_soon_threadsafe(send_queue.put_nowait, msg)
+
+        def handle_overlay_visibility_changed(event: Any) -> None:
+            # Push the transient on-screen (runtime) plugin set so Remote tab
+            # tile highlights mirror the dock icon during auto-hide/wake fades
+            # (#766). Auto-hide never persists to config.db3, so this runtime
+            # channel is distinct from the persisted visible_plugins config push.
+            msg = overlay_visibility_websocket_message(event)
+            loop.call_soon_threadsafe(send_queue.put_nowait, msg)
+
         if event_subscriber:
             event_subscriber.subscribe(CurrentMediaChangedEvent, handle_media_changed)
             event_subscriber.subscribe(StateEvent, handle_state_changed)
+            event_subscriber.subscribe(OverlayConfigChangedEvent, handle_overlay_config_changed)
+            event_subscriber.subscribe(
+                OverlayVisibilityChangedEvent, handle_overlay_visibility_changed
+            )
 
             # Try to subscribe to SystemErrorEvent if it exists
             try:
@@ -1452,6 +1532,12 @@ def create_app(
             if event_subscriber:
                 event_subscriber.unsubscribe(CurrentMediaChangedEvent, handle_media_changed)
                 event_subscriber.unsubscribe(StateEvent, handle_state_changed)
+                event_subscriber.unsubscribe(
+                    OverlayConfigChangedEvent, handle_overlay_config_changed
+                )
+                event_subscriber.unsubscribe(
+                    OverlayVisibilityChangedEvent, handle_overlay_visibility_changed
+                )
                 try:
                     from picframe.core.events.dto import SystemErrorEvent
 

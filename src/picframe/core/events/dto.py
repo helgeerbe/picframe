@@ -286,6 +286,34 @@ class OverlayConfigChangedEvent(Event):
 
 
 @dataclass(frozen=True)
+class OverlayVisibilityChangedEvent(Event):
+    """Published when the on-screen (runtime) visibility of the touch overlay's
+    expanded plugins changes (#766).
+
+    This is the **runtime** counterpart to :class:`OverlayConfigChangedEvent`.
+    Auto-hide is a purely client-side CSS fade (``pf-plugin-panel--idle``) that
+    never persists to ``config.db3``; without this event the Remote tab only
+    sees the persisted ``visible_plugins`` set and its tile highlights stay lit
+    while the dock icon correctly de-activates. The WebKitOverlayRenderer
+    republishes the worker's :class:`OnScreenPluginsChangedEvent` as this
+    domain event, and the ``/ws/state`` endpoint forwards it to browsers so the
+    Remote tile highlights mirror the on-screen state (auto-hide, wake,
+    ``media_change`` re-arm, toggles).
+
+    Attributes:
+        on_screen_plugins: The set of expanded plugins currently shown on
+            screen (visible in ``visible_plugins`` **and** not auto-hidden),
+            unordered — it is a set, so order carries no meaning.
+    """
+
+    on_screen_plugins: tuple[str, ...]
+
+    @property
+    def priority(self) -> int:
+        return 3
+
+
+@dataclass(frozen=True)
 class RenderCommand(Event):
     """
     An instruction for the Presentation Layer to draw a specific image.

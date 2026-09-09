@@ -59,6 +59,55 @@ added for IPC round-trip, worker bridge handler, and renderer event→CommandEve
 Docs updated in `docs/dev/architecture/overlay.md`. All gates green (pytest,
 mypy, ruff, yarn lint/format/build). GitHub issue #765 tracks this.
 
+**#766 — Remote tab mirrors overlay on-screen (auto-hide) visibility (done on
+the working tree):** the touch-overlay auto-hide is a transient client-side
+CSS fade (`pf-plugin-panel--idle`) that never writes `config.db3`, so the
+Remote tab's `visible_plugins`-only tile highlights stayed lit while the dock
+icon de-activated. Added a **runtime** channel parallel to the persisted
+config channel: new `OnScreenPluginsChangedEvent` in `overlay_ipc.py`
+(registered in `_EVENT_TYPES`, `from_dict` list→tuple); the worker handles the
+`__set_on_screen_plugins` bridge action → `emit_on_screen_plugins()`; the
+renderer republishes it as a new `OverlayVisibilityChangedEvent` DTO (priority
+3, **not** `CommandEvent(SET_CONFIG)`, since auto-hide must not persist);
+`/ws/state` forwards it via `overlay_visibility_websocket_message`. Frontend:
+`setOnScreenPlugins()` in `bridge.ts`; `Dock.emitOnScreen()` (hooked at the end
+of `setPluginIdle()` and `render()`, diff-guarded via `sameIdSet`) +
+`onScreenPluginIds()` in `dock.ts`; shell wires `onOnScreenPluginsChange`;
+`config.ts` adds `onScreenPlugins` ref + `applyOverlayVisibility`; `player.ts`
+handles the `OverlayVisibilityChangedEvent` branch; `OverlayPanel.vue`
+`isActive()` replaces `visiblePlugins.includes` for the tile highlight (a faded
+tile de-highlights but still taps to collapse, matching the dock). Tests added
+for IPC round-trip/coercion, worker bridge handler, renderer republish, and WS
+serialization + ASGI subscription. Docs updated in `overlay.md`. All gates
+green. **Known limitation:** fresh browser connect while plugins auto-hidden
+falls back to `visible_plugins` until the next hide/wake event; caching the
+latest on-screen set for `REQUEST_STATE` is out of scope.
+
+**#765 follow-up — dock→browser live-sync (done):** the `/ws/state` WebSocket
+endpoint never subscribed to `OverlayConfigChangedEvent`, so a browser's
+`useConfigStore` stayed a REST snapshot (stale `visible_plugins` /
+`enabled_plugins`) until a page reload when the touch-overlay dock toggled a
+plugin. Fixed end-to-end: `app.py` `websocket_state` now subscribes a
+`handle_overlay_config_changed` handler (and unsubscribes it in the `finally`
+block) that forwards only the `PUBLIC_WORKFLOW_KEYS["overlay"]` subset
+(`enabled`, `idle_hide_seconds`, `enabled_input_types`, `enabled_plugins`,
+`visible_plugins`) — the same surface as `GET /workflow-config` — so
+settings-scope secrets (`plugin_config` api_keys, `plugin_layout`, `backend`)
+never reach an unauthenticated browser. The filtering lives in a pure
+module-level helper `overlay_config_websocket_message(event) -> str | None`
+(mirrors `system_error_websocket_message`). Frontend: `useConfigStore`
+gained `applyOverlayConfig(overlay)` (deep-merges via `mergeConfig` so a
+Settings-authenticated user's existing settings-scope keys are preserved);
+`player.ts` `onmessage` routes `OverlayConfigChangedEvent` →
+`useConfigStore().applyOverlayConfig(data.overlay)`. Tests: three in
+`test/api/test_app.py` — pure filtering (secrets stripped), returns `None`
+when only settings-scope keys changed, and an ASGI-level drive of `/ws/state`
+(httpx has no ws:// support, so the endpoint is driven by hand via
+`app(scope, receive, send)`) asserting the registered callback pushes only the
+public subset. All gates green; on-device verify still pending (toggle a
+plugin via the dock → browser updates without reload; confirm no secrets in
+the WS message).
+
 **#767 — sibling-panel reveal regression fix (done):** toggling one dock
 plugin (e.g. always-visible `clock`) was revealing an unrelated auto-hidden
 plugin (e.g. `text` in `--idle` awaiting a `media_change` wake). Two root

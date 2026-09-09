@@ -23,6 +23,7 @@ import {
   registerApplyMedia,
   registerApplyPluginData,
   sendAction,
+  setOnScreenPlugins,
   setVisiblePlugins
 } from './bridge'
 import { Dock } from './dock'
@@ -107,6 +108,18 @@ export class OverlayShell {
         // timers, briefly revealing them for `idle_hide_seconds`. Touch,
         // keyboard, and pointermove paths still call the full `wake()`.
         this.wake(true, false)
+      },
+      onOnScreenPluginsChange: (pluginIds: string[]) => {
+        // Push the transient on-screen (runtime) plugin set to the worker
+        // (#766). Auto-hide is a client-side CSS fade that never persists, so
+        // this is a separate runtime channel from the persisted
+        // `visible_plugins` config path above. The worker emits an
+        // `OnScreenPluginsChangedEvent` the renderer republishes as
+        // `OverlayVisibilityChangedEvent`, which `/ws/state` forwards to
+        // browsers so the Remote tab's tile highlights mirror the dock icon.
+        // The dock's `emitOnScreen` diff-guards so this only fires when the
+        // on-screen set actually changes.
+        setOnScreenPlugins(pluginIds)
       },
       onAction: (action: InputAction) => {
         // Reset the idle timers on every dock action (transport buttons,

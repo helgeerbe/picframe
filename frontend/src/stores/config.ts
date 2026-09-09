@@ -111,6 +111,16 @@ export const useConfigStore = defineStore('config', () => {
   // those index accesses, so `any` is kept here intentionally.
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const config = ref<Record<string, any>>({})
+  // Transient on-screen (runtime) plugin set pushed over /ws/state
+  // (OverlayVisibilityChangedEvent, #766). Auto-hide is a client-side CSS fade
+  // that never persists to config.db3, so this is a separate runtime channel
+  // from the persisted `overlay.visible_plugins` config. `null` = unknown
+  // (fresh connect before any visibility event); Remote tiles fall back to
+  // `visible_plugins` (assume shown) in that case. A plugin is "active" on a
+  // Remote tile when it is in `visible_plugins` AND (onScreenPlugins is null OR
+  // includes it) — so an auto-hidden (faded) tile de-highlights but still taps
+  // to collapse (remove from config), matching dock behavior.
+  const onScreenPlugins = ref<string[] | null>(null)
   const filterOptions = ref<FilterOptions>({
     subdirectories: [],
     locations: [],
@@ -305,8 +315,27 @@ export const useConfigStore = defineStore('config', () => {
     return response.data
   }
 
+  // Apply a live overlay config update pushed over the /ws/state WebSocket by the
+  // backend (OverlayConfigChangedEvent). Deep-merges into the shared config blob
+  // so settings-scope keys a Settings-authenticated user already has are
+  // preserved, and Remote/Appearance overlay tiles reflect touch-overlay dock
+  // toggles without a page reload (#765).
+  function applyOverlayConfig(overlay: Record<string, unknown>) {
+    config.value = mergeConfig(config.value, { overlay })
+  }
+
+  // Apply a live on-screen (runtime) visibility update pushed over /ws/state
+  // (OverlayVisibilityChangedEvent, #766). Replaces the transient on-screen
+  // plugin set (auto-hide never persists), so Remote tiles de-highlight faded
+  // panels while staying in the persisted `visible_plugins` set — tapping a
+  // faded tile collapses it (removes from config), matching the dock.
+  function applyOverlayVisibility(onScreen: string[]) {
+    onScreenPlugins.value = onScreen
+  }
+
   return {
     config,
+    onScreenPlugins,
     filterOptions,
     selectionCount,
     locales,
@@ -327,7 +356,9 @@ export const useConfigStore = defineStore('config', () => {
     saveConfig,
     savePartialConfig,
     saveWorkflowConfig,
-    saveAuthConfig
+    saveAuthConfig,
+    applyOverlayConfig,
+    applyOverlayVisibility
   }
 })
 

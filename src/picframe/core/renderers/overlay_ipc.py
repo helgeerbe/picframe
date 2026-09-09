@@ -168,6 +168,43 @@ class VisiblePluginsChangedEvent(OverlayIpcMessage):
         return cls(**filtered)
 
 
+@dataclass(frozen=True)
+class OnScreenPluginsChangedEvent(OverlayIpcMessage):
+    """The on-screen (runtime) visibility of expanded plugins changed (#766).
+
+    Distinct from :class:`VisiblePluginsChangedEvent` (the persisted
+    ``visible_plugins`` config set, driven by dock toggles). This carries the
+    **transient** set of plugins currently shown on screen — i.e. expanded
+    plugins whose panel is *not* auto-hidden (no ``pf-plugin-panel--idle``).
+    Auto-hide is purely a client-side fade (CSS opacity) that never writes
+    ``config.db3``; without this event the Remote tab only sees the persisted
+    ``visible_plugins`` and its tile highlights stay lit while the dock icon
+    correctly de-activates. The shell emits it whenever the on-screen set
+    actually changes (auto-hide timeout, wake, media_change re-arm, toggle,
+    config apply) so the renderer republishes a runtime-visibility domain
+    event the browser mirrors.
+    """
+
+    on_screen_plugins: tuple[str, ...]
+    type: str = field(default="on_screen_plugins_changed", init=False)
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> OnScreenPluginsChangedEvent:
+        """Coerce the JSON list back into the declared tuple type.
+
+        JSON has no tuple literal, so ``json.loads`` always produces a list;
+        without this the round-tripped message would hold a list and fail
+        equality against the original (tuple-typed) event.
+        """
+        filtered = {k: v for k, v in data.items() if k != "type"}
+        plugins = filtered.get("on_screen_plugins")
+        if isinstance(plugins, (list, tuple)):
+            filtered["on_screen_plugins"] = tuple(str(p) for p in plugins)
+        else:
+            filtered["on_screen_plugins"] = ()
+        return cls(**filtered)
+
+
 _COMMAND_TYPES: dict[str, type[OverlayIpcMessage]] = {
     "set_opacity": SetOpacityCommand,
     "set_config": SetConfigCommand,
@@ -181,6 +218,7 @@ _EVENT_TYPES: dict[str, type[OverlayIpcMessage]] = {
     "input": InputEvent,
     "error": OverlayErrorEvent,
     "visible_plugins_changed": VisiblePluginsChangedEvent,
+    "on_screen_plugins_changed": OnScreenPluginsChangedEvent,
 }
 
 

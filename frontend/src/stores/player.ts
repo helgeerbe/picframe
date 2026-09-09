@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
+import { useConfigStore } from './config'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline'
 
@@ -113,6 +114,26 @@ export const usePlayerStore = defineStore('player', () => {
               }
             }, 10000)
           }
+        } else if (
+          data.type === 'OverlayConfigChangedEvent' &&
+          data.overlay &&
+          typeof data.overlay === 'object'
+        ) {
+          // Live overlay config update pushed by the backend when the touch-overlay
+          // dock toggles a plugin (visible_plugins/enabled_plugins). Deep-merges into
+          // the shared config store so Remote/Appearance reflect it without a reload.
+          useConfigStore().applyOverlayConfig(data.overlay as Record<string, unknown>)
+        } else if (data.type === 'OverlayVisibilityChangedEvent') {
+          // Live on-screen (runtime) visibility update pushed by the backend when
+          // the touch-overlay auto-hides/wakes a plugin (#766). Auto-hide never
+          // persists, so this replaces the transient on-screen set (not a config
+          // merge) so Remote tiles de-highlight faded panels while staying in the
+          // persisted `visible_plugins` set. `on_screen_plugins` may be missing on
+          // a malformed message — treat absence as "nothing on screen".
+          const onScreen = Array.isArray(data.on_screen_plugins)
+            ? (data.on_screen_plugins as string[]).filter((p): p is string => typeof p === 'string')
+            : []
+          useConfigStore().applyOverlayVisibility(onScreen)
         }
       } catch (e) {
         console.error('Failed to parse WebSocket message', e)

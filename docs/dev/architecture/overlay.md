@@ -130,6 +130,7 @@ Events (Worker → Main):
 | `InputEvent` | `action: str` | `prev`/`next`/`toggle` → translated to `Command` |
 | `OverlayErrorEvent` | `details: str`, `code: str?` | e.g. WebKitGTK init failure |
 | `VisiblePluginsChangedEvent` | `visible_plugins: tuple[str, ...]` | Dock toggle changed the expanded set → renderer republishes as `CommandEvent(SET_CONFIG, {overlay: {visible_plugins}})` (#765) |
+| `OnScreenPluginsChangedEvent` | `on_screen_plugins: tuple[str, ...]` | On-screen (runtime) visibility changed (auto-hide fade/wake/`media_change` re-arm/toggle) → renderer republishes as `OverlayVisibilityChangedEvent` (runtime channel, **not** persisted) so the Remote tab tile highlights mirror the dock icon (#766) |
 
 `parse_overlay_ipc_message()` returns `None` for malformed JSON or unknown
 types so a bad line from the worker never crashes the listener. Input actions
@@ -193,6 +194,39 @@ round-trip — surviving `media_change` and restarts.
   plugin while it remains in `visible_plugins`; collapsing a plugin (now
   persisted) keeps it collapsed across subsequent photo changes until the user
   expands it again — matching the remote-tab semantics.
+
+### On-screen (runtime) visibility — `OverlayVisibilityChangedEvent` (#766)
+
+`overlay.visible_plugins` is the **persisted** expanded set, but auto-hide is
+a **transient** client-side CSS fade (`pf-plugin-panel--idle`) that never
+writes `config.db3`. Without a runtime channel the Remote tab only sees the
+persisted set, so its tile highlights stay lit during an auto-hide fade while
+the dock icon correctly de-activates (#766). A separate runtime event keeps
+them in sync:
+
+- The dock's `emitOnScreen()` (hooked at the end of `setPluginIdle()` and
+  `render()`) computes the on-screen set — expanded plugins whose panel exists
+  and is **not** `--idle` — and diff-guards it (`sameIdSet`, order-independent)
+  so only actual changes fire. The shell's `onOnScreenPluginsChange` callback
+  calls the JS bridge `setOnScreenPlugins(ids)`
+  (`bridge.ts` → `{ action: "__set_on_screen_plugins", plugins: [...] }`).
+- The worker sanitizes the payload (non-string entries dropped; missing/
+  non-list `plugins` → empty tuple) and emits an `OnScreenPluginsChangedEvent`.
+  The renderer republishes it as an `OverlayVisibilityChangedEvent` (priority 3)
+  — **not** a `CommandEvent(SET_CONFIG)`, since auto-hide must not persist.
+- The `/ws/state` endpoint forwards it to browsers as
+  `{ type: "OverlayVisibilityChangedEvent", on_screen_plugins: [...] }`; the
+  player store calls `configStore.applyOverlayVisibility(ids)`, which replaces
+  the transient `onScreenPlugins` ref. `OverlayPanel.vue`'s `isActive()` tile
+  highlight is `visible_plugins.includes(id) && (onScreenPlugins === null ||
+  onScreenPlugins.includes(id))` — so an auto-hidden tile de-highlights while
+  staying in the persisted set, and tapping it still collapses (removes from
+  config), matching the dock.
+
+**Known limitation:** a fresh browser connect while plugins are auto-hidden
+falls back to `visible_plugins` (`onScreenPlugins === null` → assume shown)
+until the next hide/wake event; caching the latest on-screen set for
+`REQUEST_STATE` is out of scope.
 
 ## 6. Plugin manifest & loader
 

@@ -12,6 +12,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
+    OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
     ReadyEvent,
     ReloadCommand,
@@ -53,6 +54,8 @@ def test_events_round_trip_with_type_discriminator() -> None:
         OverlayErrorEvent(details="boom"),
         VisiblePluginsChangedEvent(visible_plugins=("clock", "text")),
         VisiblePluginsChangedEvent(visible_plugins=()),
+        OnScreenPluginsChangedEvent(on_screen_plugins=("clock", "text")),
+        OnScreenPluginsChangedEvent(on_screen_plugins=()),
     ]
     for event in cases:
         again = parse_overlay_ipc_message(event.to_json())
@@ -137,3 +140,44 @@ def test_visible_plugins_changed_event_empty_list() -> None:
     event = parse_overlay_ipc_message(VisiblePluginsChangedEvent(visible_plugins=()).to_json())
     assert isinstance(event, VisiblePluginsChangedEvent)
     assert event.visible_plugins == ()
+
+
+def test_on_screen_plugins_changed_event_carries_list() -> None:
+    """The on-screen (runtime) visibility change round-trips with its id set (#766)."""
+    event = parse_overlay_ipc_message(
+        OnScreenPluginsChangedEvent(on_screen_plugins=("clock", "text")).to_json()
+    )
+    assert isinstance(event, OnScreenPluginsChangedEvent)
+    assert event.on_screen_plugins == ("clock", "text")
+
+
+def test_on_screen_plugins_changed_event_coerces_json_list_to_tuple() -> None:
+    """``json.loads`` yields a list; the round-tripped event must hold a tuple so
+    it equals the original tuple-typed event (#766)."""
+    import json
+
+    raw = json.loads(OnScreenPluginsChangedEvent(on_screen_plugins=("clock",)).to_json())
+    assert isinstance(raw["on_screen_plugins"], list)  # JSON has no tuple literal
+    event = parse_overlay_ipc_message(
+        OnScreenPluginsChangedEvent(on_screen_plugins=("clock",)).to_json()
+    )
+    assert isinstance(event, OnScreenPluginsChangedEvent)
+    assert isinstance(event.on_screen_plugins, tuple)
+    assert event.on_screen_plugins == ("clock",)
+
+
+def test_on_screen_plugins_changed_event_empty_list() -> None:
+    """An empty on-screen set (every panel auto-hidden) round-trips (#766)."""
+    event = parse_overlay_ipc_message(OnScreenPluginsChangedEvent(on_screen_plugins=()).to_json())
+    assert isinstance(event, OnScreenPluginsChangedEvent)
+    assert event.on_screen_plugins == ()
+
+
+def test_on_screen_plugins_changed_event_missing_field_defaults_empty() -> None:
+    """A malformed payload without ``on_screen_plugins`` parses to an empty tuple
+    instead of raising (#766)."""
+    import json
+
+    event = parse_overlay_ipc_message(json.dumps({"type": "on_screen_plugins_changed"}))
+    assert isinstance(event, OnScreenPluginsChangedEvent)
+    assert event.on_screen_plugins == ()
