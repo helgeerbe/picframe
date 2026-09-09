@@ -52,7 +52,6 @@ from picframe.core.models.overlay import PluginDescriptor
 from picframe.core.ports.overlay import IOverlayController
 from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_DISPLAY_OFF,
-    INPUT_ACTION_HIDE,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
     INPUT_ACTION_REBOOT_HOST,
@@ -672,7 +671,7 @@ class WebKitOverlayRenderer(IOverlayController):
 def _command_for_input_action(action: str) -> Command | None:
     """Map an overlay input action to a playback/system Command.
 
-    Navigation actions (prev/next/toggle/hide) map to playback commands; the
+    Navigation actions (prev/next/toggle) map to playback commands; the
     danger-menu actions (#763) map to system commands handled by
     :class:`SystemManager` (reboot/shutdown/restart) and
     :class:`DisplayPowerManager` (display off).
@@ -683,8 +682,6 @@ def _command_for_input_action(action: str) -> Command | None:
         return Command.NEXT
     if action == INPUT_ACTION_TOGGLE:
         return Command.PLAY
-    if action == INPUT_ACTION_HIDE:
-        return Command.STOP
     if action == INPUT_ACTION_DISPLAY_OFF:
         return Command.DISPLAY_OFF
     if action == INPUT_ACTION_RESTART_SERVICE:

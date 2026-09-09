@@ -36,6 +36,10 @@ const PANEL_ID_PREFIX = 'pf-plugin-panel-'
 const DANGER_DROPDOWN_ID = 'pf-danger-dropdown'
 const CONFIRM_BACKDROP_ID = 'pf-confirm-backdrop'
 const CONFIRM_MODAL_ID = 'pf-confirm-modal'
+const TOOLTIP_ID = 'pf-dock-tooltip'
+/** Hover delay (ms) before a dock-icon tooltip appears — long enough that a
+ * quick pass does not flicker, short enough to feel responsive. */
+const TOOLTIP_DELAY_MS = 600
 
 /** Danger-menu entries (#763). Each item shows a confirm modal before firing
  * `onAction` — even display-off (reversible) goes through the dialog for a
@@ -129,6 +133,17 @@ export class Dock {
   private boundDangerOutside: ((e: PointerEvent) => void) | null = null
   /** Bound keydown handler for the open confirm modal (#763). */
   private boundConfirmKey: ((e: KeyboardEvent) => void) | null = null
+  /** Hover-tooltip controller: a single shared label element, shown after a
+   * short delay when the mouse rests on a dock icon (transport buttons,
+   * plugin icons, danger trigger). Mouse-only — touch/keyboard users already
+   * get the icon `aria-label`, so the tooltip is a mouse convenience. */
+  private tooltipEl: HTMLElement | null = null
+  private tooltipTimer: number | null = null
+  private tooltipTarget: HTMLElement | null = null
+  /** Whether delegated pointer listeners have been attached to `#pf-dock`
+   * (done once; the dock element persists across re-renders, so delegation
+   * handles `render()`'s `replaceChildren` without re-wiring per element). */
+  private tooltipDelegated = false
 
   constructor(root: HTMLElement, dockRoot: HTMLElement, callbacks: DockCallbacks) {
     this.root = root
@@ -248,6 +263,9 @@ export class Dock {
     // push never leaves a stale overlay pointing at removed DOM (#763).
     this.closeDangerDropdown()
     this.closeConfirm()
+    // A re-render replaces every dock icon (replaceChildren below); drop any
+    // showing tooltip so it does not float over the rebuilt dock.
+    this.hideTooltip()
 
     let dock = this.dockRoot.querySelector<HTMLElement>(`#${DOCK_ID}`)
     if (!dock) {
@@ -257,15 +275,20 @@ export class Dock {
       this.dockRoot.appendChild(dock)
     }
     this.applyDockPlacement(dock, this.dockLayout)
+    // Attach delegated hover-tooltip listeners once (the dock element persists
+    // across re-renders; delegation picks up the rebuilt children automatically).
+    this.attachTooltipDelegation(dock)
 
     // Dock contents (#763): transport buttons | divider | plugin icons |
     // divider | danger menu. Transport + danger live in the dock so they
     // share its auto-hide + z-order hoist; plugin icons follow when present.
+    // The transport row is prev/toggle/next only — there is no "stop" button:
+    // the dock auto-hides on idle, and tearing down playback / powering down
+    // belongs in the danger menu (⏻ Power dropdown).
     const children: HTMLElement[] = [
       this.buildTransportButton('prev', '⏮', 'Previous'),
       this.buildTransportButton('toggle', '⏯', 'Play / Pause'),
-      this.buildTransportButton('next', '⏭', 'Next'),
-      this.buildTransportButton('hide', '⏹', 'Stop')
+      this.buildTransportButton('next', '⏭', 'Next')
     ]
     if (enabled.length > 0) {
       children.push(this.buildDivider())
@@ -393,6 +416,9 @@ export class Dock {
     btn.className = 'pf-dock-icon'
     if (this.visiblePlugins.includes(plugin.id)) btn.classList.add('pf-dock-icon--active')
     btn.setAttribute('aria-label', plugin.name || plugin.id)
+    // The hover tooltip shows the plugin's display name (same as the
+    // aria-label) so a mouse user can identify an icon-only plugin.
+    btn.setAttribute('data-tooltip', plugin.name || plugin.id)
     // Prefer the plugin's inline SVG (crisp, theme-aware via currentColor,
     // font-independent). Fall back to the emoji `icon` field when no SVG is
     // shipped. Only inline markup that looks like an <svg> root so a stray
@@ -417,6 +443,7 @@ export class Dock {
     btn.type = 'button'
     btn.className = 'pf-dock-icon'
     btn.setAttribute('aria-label', label)
+    btn.setAttribute('data-tooltip', label)
     btn.textContent = icon
     btn.addEventListener('click', e => {
       e.stopPropagation()
@@ -440,6 +467,7 @@ export class Dock {
     btn.type = 'button'
     btn.className = 'pf-dock-icon pf-dock-danger'
     btn.setAttribute('aria-label', 'System')
+    btn.setAttribute('data-tooltip', 'System')
     btn.setAttribute('aria-haspopup', 'menu')
     btn.setAttribute('aria-expanded', String(this.dangerOpen))
     btn.textContent = '⏻'
@@ -607,6 +635,93 @@ export class Dock {
     this.dockRoot.querySelector(`#${CONFIRM_BACKDROP_ID}`)?.remove()
   }
 
+  /** Lazily create the shared tooltip element in the dock root so it sits above
+   * the dock (z-index 24 > dock 20, but below the danger dropdown 25 and the
+   * confirm backdrop/modal 30/31, so it never covers an open menu or dialog). */
+  private ensureTooltip(): HTMLElement {
+    if (this.tooltipEl && this.tooltipEl.isConnected) return this.tooltipEl
+    const el = document.createElement('div')
+    el.id = TOOLTIP_ID
+    el.className = 'pf-dock-tooltip'
+    el.setAttribute('role', 'tooltip')
+    this.dockRoot.appendChild(el)
+    this.tooltipEl = el
+    return el
+  }
+
+  /** Attach delegated pointer listeners to `#pf-dock` once. Delegation handles
+   * dynamically rebuilt dock children (`render()` calls `replaceChildren`)
+   * without re-wiring per element. Mouse-only — touch and keyboard users
+   * already get the icon `aria-label`. */
+  private attachTooltipDelegation(dock: HTMLElement): void {
+    if (this.tooltipDelegated) return
+    this.tooltipDelegated = true
+    dock.addEventListener('pointerover', (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return
+      const icon = (e.target as HTMLElement | null)?.closest<HTMLElement>(
+        '.pf-dock-icon[data-tooltip]'
+      )
+      if (!icon || !dock.contains(icon)) return
+      this.armTooltip(icon)
+    })
+    dock.addEventListener('pointerout', (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') return
+      const icon = (e.target as HTMLElement | null)?.closest<HTMLElement>(
+        '.pf-dock-icon[data-tooltip]'
+      )
+      if (!icon || !dock.contains(icon)) return
+      // Only dismiss when the pointer left the icon entirely (not just moved
+      // between children of the same icon, e.g. an inline SVG).
+      const related = e.relatedTarget as Node | null
+      if (related && icon.contains(related)) return
+      this.hideTooltip()
+    })
+  }
+
+  /** Arm the show timer for an icon. Re-arming to a different icon cancels the
+   * pending show first, so a quick sweep across the dock does not stack or
+   * mis-target tooltips. */
+  private armTooltip(icon: HTMLElement): void {
+    if (this.tooltipTarget === icon) return
+    this.hideTooltip()
+    this.tooltipTarget = icon
+    const label = icon.getAttribute('data-tooltip') ?? ''
+    this.tooltipTimer = window.setTimeout(() => {
+      this.tooltipTimer = null
+      this.showTooltip(icon, label)
+    }, TOOLTIP_DELAY_MS)
+  }
+
+  /** Position the shared label above the icon (flipping below when the dock is
+   * at the top edge so the label stays on screen for any dock anchor). */
+  private showTooltip(icon: HTMLElement, label: string): void {
+    const el = this.ensureTooltip()
+    el.textContent = label
+    el.classList.add('pf-dock-tooltip--visible')
+    // Measure after the visible class applies (the element is always laid
+    // out, so offsetWidth/Height are real even while fading in).
+    const tw = el.offsetWidth
+    const th = el.offsetHeight
+    const rect = icon.getBoundingClientRect()
+    let left = rect.left + rect.width / 2 - tw / 2
+    let top = rect.top - th - 8
+    left = Math.max(8, Math.min(left, window.innerWidth - tw - 8))
+    if (top < 8) top = rect.bottom + 8
+    el.style.left = `${left}px`
+    el.style.top = `${top}px`
+  }
+
+  /** Cancel the pending show timer, clear the armed target, and hide the
+   * label. Called on pointer-leave, dock idle, destroy, and before re-render. */
+  private hideTooltip(): void {
+    if (this.tooltipTimer !== null) {
+      window.clearTimeout(this.tooltipTimer)
+      this.tooltipTimer = null
+    }
+    this.tooltipTarget = null
+    this.tooltipEl?.classList.remove('pf-dock-tooltip--visible')
+  }
+
   /** Close any open dropdown / confirm modal (#763). Called by the shell when
    * the dock enters its idle state (so transient overlays don't outlive the
    * faded dock — the dropdown is a sibling of #pf-dock and the idle CSS only
@@ -614,6 +729,7 @@ export class Dock {
   closeOverlays(): void {
     this.closeDangerDropdown()
     this.closeConfirm()
+    this.hideTooltip()
   }
 
   /** Tear down transient overlays + detach window listeners (#763). Called by

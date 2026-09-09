@@ -77,7 +77,7 @@ export class InputRouter {
   private handlePointer(e: PointerEvent): void {
     if (!this.isPointerEnabled(e.pointerType)) return
     // Tap-zones removed (#763): navigation now lives in the dock transport
-    // buttons (prev/toggle/next/hide). A tap on the veil only wakes the shell
+    // buttons (prev/toggle/next). A tap on the veil only wakes the shell
     // — it resets the idle timers and re-reveals the content but no longer
     // fires prev/next/toggle, so a stray tap never skips a photo.
     this.onActivity()
@@ -98,10 +98,6 @@ export class InputRouter {
       case ' ':
         this.onActivity()
         this.onAction('toggle')
-        break
-      case 'Escape':
-        this.onActivity()
-        this.onAction('hide')
         break
       default:
         return

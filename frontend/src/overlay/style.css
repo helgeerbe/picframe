@@ -187,6 +187,33 @@ body {
   display: block;
 }
 
+/* Hover tooltip: a single shared label shown after a short delay when the
+ * mouse rests on a dock icon (transport buttons, plugin icons, danger
+ * trigger). Mouse-only — touch/keyboard rely on the icon `aria-label`. Sits
+ * above the dock (z-index 24 < danger dropdown 25 < confirm modal 30/31) so it
+ * never covers an open menu or dialog. Always laid out (position: absolute)
+ * so its size can be measured before positioning; opacity drives the fade. */
+.pf-dock-tooltip {
+  position: absolute;
+  z-index: 24;
+  max-width: min(60vw, 260px);
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--pf-dock-bg);
+  backdrop-filter: blur(6px);
+  color: var(--pf-dock-fg);
+  font-size: 13px;
+  line-height: 1.25;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.pf-dock-tooltip.pf-dock-tooltip--visible {
+  opacity: 1;
+}
+
 /* Per-panel idle hide: each auto_hide panel fades on its own idle timer
  * (#752). The shell adds `pf-plugin-panel--idle` to a panel after its
  * `idle_hide_seconds`; persistent panels never receive it. */

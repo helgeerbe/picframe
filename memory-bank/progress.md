@@ -228,7 +228,7 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   implements `IOverlayController` as an IPC client — spawns
   `overlay_worker.py` via `subprocess.Popen` (env `GDK_BACKEND=wayland`),
   AF_UNIX socket IPC, listener thread translating worker `InputEvent` →
-  `CommandEvent` (prev/next/toggle=play/hide=stop), subscribes to
+  `CommandEvent` (prev/next/toggle=play), subscribes to
   `OverlayConfigChangedEvent` (forwards `SetConfig`) and `RenderCommand`
   (PROMOTE_VIDEO_REVEAL → opacity 0, PARK/WAKE → opacity 1), graceful
   degradation probe (`_probe_webkit` → `SystemErrorEvent(code="webkit_unavailable")`,

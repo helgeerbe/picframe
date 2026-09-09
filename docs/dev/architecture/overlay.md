@@ -127,13 +127,13 @@ Events (Worker → Main):
 | Message | Fields | Purpose |
 |---|---|---|
 | `ReadyEvent` | — | Worker finished initializing the surface |
-| `InputEvent` | `action: str` | `prev`/`next`/`toggle`/`hide` → translated to `Command` |
+| `InputEvent` | `action: str` | `prev`/`next`/`toggle` → translated to `Command` |
 | `OverlayErrorEvent` | `details: str`, `code: str?` | e.g. WebKitGTK init failure |
 
 `parse_overlay_ipc_message()` returns `None` for malformed JSON or unknown
 types so a bad line from the worker never crashes the listener. Input actions
 map to playback `Command`s via `_command_for_input_action()`:
-`prev`→`PREV`, `next`→`NEXT`, `toggle`→`PLAY`, `hide`→`STOP`.
+`prev`→`PREV`, `next`→`NEXT`, `toggle`→`PLAY`.
 
 ## 5. Config & plugin storage
 
@@ -240,6 +240,20 @@ the manifest `icon` emoji. Emoji rendering (in the dock fallback *and inside
 plugin content*, e.g. the weather plugin's condition glyphs) requires the system
 color-emoji font `fonts-noto-color-emoji`, which the installer adds alongside
 the WebKitGTK packages — see `docs/user/overlay.md` troubleshooting.
+
+#### Hover tooltips
+
+Each dock icon — transport buttons (Previous / Play-Pause / Next), plugin
+icons, and the danger (power) trigger — carries a `data-tooltip` label. When a
+**mouse** pointer rests on an icon for ~600 ms (`TOOLTIP_DELAY_MS`), the dock
+shows a single shared `.pf-dock-tooltip` label centered above the icon (flipping
+below it when the dock sits at the top edge so the text stays on screen for any
+anchor). The controller uses **event delegation** on `#pf-dock`, so it survives
+`render()`'s `replaceChildren` without re-wiring per element. It is mouse-only:
+touch and keyboard users already get the icon `aria-label`, so the tooltip is a
+mouse convenience, not an accessibility path. The label is hidden on
+pointer-leave, dock idle, destroy, and before each re-render (`hideTooltip`,
+called from `closeOverlays`).
 
 ## 7. API
 

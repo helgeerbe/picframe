@@ -10,7 +10,6 @@ import pytest
 
 from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_DISPLAY_OFF,
-    INPUT_ACTION_HIDE,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
     INPUT_ACTION_REBOOT_HOST,
@@ -163,7 +162,6 @@ def test_handle_bridge_message_emits_input_actions(monkeypatch: pytest.MonkeyPat
         INPUT_ACTION_PREV,
         INPUT_ACTION_NEXT,
         INPUT_ACTION_TOGGLE,
-        INPUT_ACTION_HIDE,
         INPUT_ACTION_DISPLAY_OFF,
         INPUT_ACTION_RESTART_SERVICE,
         INPUT_ACTION_REBOOT_HOST,

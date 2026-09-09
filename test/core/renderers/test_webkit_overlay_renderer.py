@@ -23,7 +23,6 @@ from picframe.core.models.overlay import PluginDescriptor
 from picframe.core.renderers import webkit_overlay_renderer as wor
 from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_DISPLAY_OFF,
-    INPUT_ACTION_HIDE,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
     INPUT_ACTION_REBOOT_HOST,
@@ -174,7 +173,6 @@ def test_handle_input_event_translates_to_command_event(
         INPUT_ACTION_PREV: Command.PREV,
         INPUT_ACTION_NEXT: Command.NEXT,
         INPUT_ACTION_TOGGLE: Command.PLAY,
-        INPUT_ACTION_HIDE: Command.STOP,
     }
     for action, expected in cases.items():
         mock_publisher.reset_mock()
@@ -477,7 +475,6 @@ def test_command_for_input_action_mapping() -> None:
     assert _command_for_input_action(INPUT_ACTION_PREV) == Command.PREV
     assert _command_for_input_action(INPUT_ACTION_NEXT) == Command.NEXT
     assert _command_for_input_action(INPUT_ACTION_TOGGLE) == Command.PLAY
-    assert _command_for_input_action(INPUT_ACTION_HIDE) == Command.STOP
     # Danger-menu actions (#763) map to system/display commands.
     assert _command_for_input_action(INPUT_ACTION_DISPLAY_OFF) == Command.DISPLAY_OFF
     assert _command_for_input_action(INPUT_ACTION_RESTART_SERVICE) == Command.RESTART_SERVICE
