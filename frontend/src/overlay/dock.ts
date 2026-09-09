@@ -607,11 +607,19 @@ export class Dock {
     this.dockRoot.querySelector(`#${CONFIRM_BACKDROP_ID}`)?.remove()
   }
 
+  /** Close any open dropdown / confirm modal (#763). Called by the shell when
+   * the dock enters its idle state (so transient overlays don't outlive the
+   * faded dock — the dropdown is a sibling of #pf-dock and the idle CSS only
+   * hides #pf-dock) and by destroy() for teardown. */
+  closeOverlays(): void {
+    this.closeDangerDropdown()
+    this.closeConfirm()
+  }
+
   /** Tear down transient overlays + detach window listeners (#763). Called by
    * the shell on destroy so a left-open modal never leaks its key handler. */
   destroy(): void {
-    this.closeDangerDropdown()
-    this.closeConfirm()
+    this.closeOverlays()
   }
 
   private buildFrame(plugin: PluginEntry, layout: PluginLayout): HTMLIFrameElement {

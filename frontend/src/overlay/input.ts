@@ -2,9 +2,10 @@
  * Pointer + keyboard input routing for the overlay shell (#739, item 11).
  *
  * The shell installs a transparent full-screen "input veil" that captures
- * `pointerdown` (unified mouse/touch/pen) and `keydown`. The horizontal position
- * selects a zone — left = prev, right = next, center = toggle (play/pause) —
- * and keys map: ArrowLeft/ArrowRight = prev/next, Enter/Space = toggle,
+ * `pointerdown` (unified mouse/touch/pen) and `keydown`. A pointer tap only
+ * wakes the shell (resets the idle timers and re-reveals content); navigation
+ * is provided by the dock transport buttons and keyboard actions (#763).
+ * Keys map: ArrowLeft/ArrowRight = prev/next, Enter/Space = toggle,
  * Escape = hide. Only the input device classes enabled in
  * `overlay.enabled_input_types` are honoured; a pen is treated as touch.
  *

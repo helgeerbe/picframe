@@ -92,6 +92,12 @@ export class OverlayShell {
     this.dock = new Dock(this.content, this.root, {
       onVisiblePluginsChange: () => this.wake(),
       onAction: (action: InputAction) => {
+        // Reset the idle timers on every dock action (transport buttons,
+        // danger-menu confirm) so touch users tapping dock controls don't
+        // see the dock fade mid-interaction — pointer taps on the hoisted
+        // dock never reach the veil's InputRouter, so without this wake()
+        // the dock-idle timer would keep counting down (#763 review).
+        this.wake()
         if (action !== '__request_config') sendAction(action)
       }
     })
@@ -251,6 +257,11 @@ export class OverlayShell {
         () => {
           this.root.classList.add('pf-root--dock-idle')
           this.root.classList.remove('pf-root--cursor')
+          // Close any open dropdown / confirm modal so transient overlays
+          // don't outlive the dock that spawned them — the dropdown is a
+          // sibling of #pf-dock, so the idle-hide CSS (which only targets
+          // #pf-dock) would leave it floating and interactive (#763 review).
+          this.dock.closeOverlays()
         },
         Math.max(0, dockSeconds) * 1000
       )
