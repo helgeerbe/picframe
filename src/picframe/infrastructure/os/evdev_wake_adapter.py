@@ -66,7 +66,14 @@ class EvdevWakeAdapter(IWakeInputListener):
             return False
         if not os.path.isdir(_INPUT_DEVICE_DIR):
             return False
-        for name in os.listdir(_INPUT_DEVICE_DIR):
+        try:
+            names = os.listdir(_INPUT_DEVICE_DIR)
+        except OSError:
+            # Directory vanished or unreadable between the isdir check and
+            # enumeration; treat as "no wake devices available" so the HAL
+            # factory falls back to the mock listener (#762).
+            return False
+        for name in names:
             if not name.startswith("event"):
                 continue
             path = os.path.join(_INPUT_DEVICE_DIR, name)
@@ -88,7 +95,17 @@ class EvdevWakeAdapter(IWakeInputListener):
             return
 
         self._stop_event.clear()
-        for name in os.listdir(_INPUT_DEVICE_DIR):
+        try:
+            names = os.listdir(_INPUT_DEVICE_DIR)
+        except OSError as exc:
+            logger.warning(
+                "EvdevWakeAdapter: Cannot enumerate %s (%s); wake-on-input inactive.",
+                _INPUT_DEVICE_DIR,
+                exc,
+            )
+            self._started = True
+            return
+        for name in names:
             if not name.startswith("event"):
                 continue
             path = os.path.join(_INPUT_DEVICE_DIR, name)

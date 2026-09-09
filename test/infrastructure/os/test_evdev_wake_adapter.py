@@ -125,6 +125,22 @@ def test_is_available_false_when_evdev_missing() -> None:
         assert EvdevWakeAdapter.is_available() is False
 
 
+def test_is_available_false_when_listdir_raises() -> None:
+    # /dev/input exists but enumeration fails (vanished / transient error):
+    # must degrade to "not available" rather than raising (#762).
+    err = OSError("boom")
+
+    def _listdir(_path: str) -> list[str]:
+        raise err
+
+    with (
+        patch.dict("sys.modules", {"evdev": MagicMock()}),
+        patch("os.path.isdir", return_value=True),
+        patch("os.listdir", side_effect=_listdir),
+    ):
+        assert EvdevWakeAdapter.is_available() is False
+
+
 def test_start_open_and_listen_on_wake_device() -> None:
     adapter = EvdevWakeAdapter()
     fake_device = MagicMock()
@@ -196,3 +212,23 @@ def test_start_noop_without_evdev() -> None:
         adapter.start()
     assert adapter._threads == []
     assert adapter._started is False
+
+
+def test_start_inactive_when_listdir_raises() -> None:
+    # /dev/input enumeration fails at start(): must log + go inactive
+    # rather than propagating out of service startup (#762).
+    adapter = EvdevWakeAdapter()
+    err = OSError("boom")
+
+    def _listdir(_path: str) -> list[str]:
+        raise err
+
+    with (
+        patch.dict("sys.modules", {"evdev": MagicMock()}),
+        patch("os.listdir", side_effect=_listdir),
+    ):
+        adapter.start()
+
+    assert adapter._threads == []
+    assert adapter._started is True
+    adapter.stop()
