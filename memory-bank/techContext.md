@@ -11,6 +11,11 @@
 - Stack: Vite, TypeScript, Pinia, Vue Router, vue-i18n, Tailwind CSS, Heroicons, Material Design Icons, Leaflet / Vue Leaflet, axios, native WebSocket.
 - Vite builds directly into `src/picframe/html` so FastAPI can serve the compiled SPA.
 - Primary routes: Remote, Appearance, Settings, Logs.
+- Test framework: **Vitest** (`vitest.config.ts`) with `@vue/test-utils`, `happy-dom`,
+  and `@vitest/coverage-v8`. `globals: false` (explicit imports), no coverage
+  threshold gate. Tests live alongside source as `*.test.ts`. Run with
+  `yarn test` (watch: `yarn test:watch`, coverage: `yarn test:coverage`). CI runs
+  the suite in the `frontend-test` job in `ci.yml`.
 
 ## Runtime Components
 - The installed `picframe` console script points to the next-gen CLI in `picframe.main`.
@@ -40,5 +45,7 @@
   the `dev → main` release.
 - Frontend lint (`yarn lint`) and format (`yarn format:check`) pass clean on
   `dev` after #743 (`no-explicit-any` set to `error`).
+- Frontend unit tests run with `yarn test` (Vitest); 63 tests across 6 files
+  (errors, config, input, bridge, media-url, locales) added in #769.
 - Current tests include Python 3.14 compatibility shims for Starlette/AnyIO
   test hangs and avoid real socket binding in API server unit tests.

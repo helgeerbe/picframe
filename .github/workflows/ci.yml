@@ -115,6 +115,27 @@ jobs:
         run: yarn format:check
         working-directory: frontend
 
+  frontend-test:
+    name: Vitest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: frontend/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+        working-directory: frontend
+
+      - name: Run tests
+        run: yarn test
+        working-directory: frontend
+
   package-build:
     name: Python package build
     runs-on: ubuntu-latest

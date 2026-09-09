@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { useConfigStore } from './config'
+import { normalizeMediaUrls } from '../utils/media-url'
 
 export type ConnectionStatus = 'connecting' | 'connected' | 'reconnecting' | 'offline'
 
@@ -206,33 +207,6 @@ export const usePlayerStore = defineStore('player', () => {
     }
     console.warn('Cannot send command, WebSocket not connected')
     return false
-  }
-
-  function normalizeMediaUrls(media: MediaItem): MediaItem {
-    const normalized = { ...media }
-    normalized.file_path = normalizeMediaUrl(normalized.file_path)
-    if (Array.isArray(normalized.items)) {
-      normalized.items = normalized.items.map(item => normalizeMediaUrls(item))
-    }
-    return normalized
-  }
-
-  function normalizeMediaUrl(path: string) {
-    if (!path || path.startsWith('http') || path.startsWith('/media?path=')) {
-      return path
-    }
-
-    const port = import.meta.env.DEV
-      ? '9000'
-      : window.location.port || (window.location.protocol === 'https:' ? '443' : '80')
-    const host = window.location.hostname
-    const protocol = window.location.protocol
-    const mediaUrl = `/media?path=${encodeURIComponent(path)}`
-
-    if (import.meta.env.DEV) {
-      return `http://${host}:9000${mediaUrl}`
-    }
-    return `${protocol}//${host}${port ? ':' + port : ''}${mediaUrl}`
   }
 
   function play() {

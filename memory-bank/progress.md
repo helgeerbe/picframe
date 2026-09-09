@@ -305,6 +305,19 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
   doc (`overlay.md` §10), `overlay_worker.py` comments, and the memory bank
   were updated.
 
+- **#769 — Vitest frontend test framework:** Vitest + `@vue/test-utils` +
+  `happy-dom` + `@vitest/coverage-v8` added as frontend devDeps.
+  `vitest.config.ts` created (`globals: false`, happy-dom env, no coverage
+  threshold). `package.json` gained `test` / `test:watch` / `test:coverage`
+  scripts; `tsconfig.app.json` excludes `*.test.ts`, `tsconfig.node.json`
+  includes `vitest.config.ts`. `normalizeMediaUrl`/`normalizeMediaUrls`
+  extracted (behavior-preserving) from `player.ts` into
+  `src/utils/media-url.ts` to make env-branchy URL rewriting unit-testable
+  without a live store. 6 test files (63 tests): `errors.test.ts`,
+  `config.test.ts`, `input.test.ts`, `bridge.test.ts`, `media-url.test.ts`,
+  `locales.test.ts`. CI `frontend-test` job added to `ci.yml`. Branch:
+  `feat/769-vitest-frontend-tests`.
+
 ## Next
 - **Real-Wayland integration test** (spawning a live worker on labwc) —
   hardware-blocked, tracked in #739 verification criteria; the only remaining
@@ -332,6 +345,9 @@ GitHub Issues and the GitHub Project board are the authoritative progress tracke
 - Frontend (at merge `6ec7c74`): `yarn build` + `yarn lint` +
   `yarn format:check` + `vue-tsc -b` pass clean; both Vite builds (app +
   overlay page) succeed. #768 was backend-only (no frontend changes).
+- Frontend (post-#769): `yarn test` runs **63 tests** across 6 files
+  (`errors`, `config`, `input`, `bridge`, `media-url`, `locales`), all
+  green; `yarn lint`, `yarn format:check`, `yarn build` clean.
 - The `feat/739-webkit-overlay` and `feat/762-hardware-wake-on-input`
   feature branches were deleted after their squash merges to `dev`.
 - Current `dev` head: `8c2f94a` (PR #768: wake display on mouse/keyboard
