@@ -135,7 +135,7 @@ Events (Worker → Main):
 `parse_overlay_ipc_message()` returns `None` for malformed JSON or unknown
 types so a bad line from the worker never crashes the listener. Input actions
 map to playback `Command`s via `_command_for_input_action()`:
-`prev`→`PREV`, `next`→`NEXT`, `toggle`→`PLAY`.
+`prev`→`PREV`, `next`→`NEXT`, `toggle`→`PLAY`, `stop`→`STOP` (#740).
 
 ## 5. Config & plugin storage
 

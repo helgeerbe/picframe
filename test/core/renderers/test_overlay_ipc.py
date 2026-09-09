@@ -9,6 +9,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_REBOOT_HOST,
     INPUT_ACTION_RESTART_SERVICE,
     INPUT_ACTION_SHUTDOWN_HOST,
+    INPUT_ACTION_STOP,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
@@ -97,6 +98,7 @@ def test_input_event_action_constants() -> None:
         INPUT_ACTION_RESTART_SERVICE,
         INPUT_ACTION_REBOOT_HOST,
         INPUT_ACTION_SHUTDOWN_HOST,
+        INPUT_ACTION_STOP,
     ):
         event = parse_overlay_ipc_message(InputEvent(action=action).to_json())
         assert isinstance(event, InputEvent)

@@ -58,6 +58,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_REBOOT_HOST,
     INPUT_ACTION_RESTART_SERVICE,
     INPUT_ACTION_SHUTDOWN_HOST,
+    INPUT_ACTION_STOP,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
@@ -721,6 +722,8 @@ def _command_for_input_action(action: str) -> Command | None:
         return Command.REBOOT_HOST
     if action == INPUT_ACTION_SHUTDOWN_HOST:
         return Command.SHUTDOWN_HOST
+    if action == INPUT_ACTION_STOP:
+        return Command.STOP
     return None
 
 
