@@ -56,6 +56,15 @@ full opacity; after the idle interval it fades to transparent again. The
 overlay is **always on top and always the input surface** — "transparent" does
 not mean "off", so a tap always brings it back.
 
+> **Waking a powered-off display:** while the screen itself is turned off
+> (display power-off / monitor DPMS), the overlay surface is destroyed, so the
+> in-page listeners above cannot fire. Picframe also runs a backend
+> `evdev`-based input listener that reads `/dev/input/event*` directly and
+> turns the display back on when you move the mouse or press a key — as long
+> as `mouse` and/or `keyboard` are in `overlay.enabled_input_types` (`touch`
+> never wakes the display). This needs the picframe user in the `input` group,
+> which the install script adds automatically.
+
 ### Navigation
 
 The whole overlay area captures input and routes it as playback commands:

@@ -534,7 +534,7 @@ echo "[4/7] Configuring user groups for hardware access..."
 usermod -aG i2c "$ACTUAL_USER"
 usermod -aG video "$ACTUAL_USER"
 usermod -aG render "$ACTUAL_USER" || true # Add to render group for DRM/KMS access if it exists
-usermod -aG input "$ACTUAL_USER" || true # Hardware/event access on some Lite installs
+usermod -aG input "$ACTUAL_USER" || true # /dev/input/event* access: evdev wake-on-input (#762) + some Lite installs
 usermod -aG seat "$ACTUAL_USER" || true # seatd access for kiosk Wayland sessions if present
 
 # 5. Configure sudoers rules for reboot/shutdown and Picframe service restart

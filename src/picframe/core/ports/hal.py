@@ -78,6 +78,40 @@ class IHardwareInput(Protocol):
         ...
 
 
+class IWakeInputListener(Protocol):
+    """
+    Interface for a backend hardware-input listener that wakes the display.
+
+    Unlike ``IHardwareInput`` (which maps user-configured GPIO/PIR inputs to
+    commands), this listener is purpose-built to wake the display from the
+    "off" state on raw mouse-move / keypress events. It reads input devices
+    *independent of any Wayland surface* so it works while the configured
+    output is destroyed by ``wlr-randr --off`` (#762).
+
+    The registered callback receives an input-class string ("mouse" or
+    "keyboard"); the owning service applies gating and debounce and publishes
+    the actual ``CommandEvent``.
+    """
+
+    def register_callback(self, callback: Callable[[str], None]) -> None:
+        """
+        Register a callback invoked when a wake-capable input event occurs.
+
+        Args:
+            callback: A function taking an input-class string
+                      ("mouse" or "keyboard").
+        """
+        ...
+
+    def start(self) -> None:
+        """Start listening for wake-capable input events."""
+        ...
+
+    def stop(self) -> None:
+        """Stop listening and release input-device resources."""
+        ...
+
+
 class ISystemManager(Protocol):
     """
     Interface for executing system-level commands.

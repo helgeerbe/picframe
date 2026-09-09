@@ -34,6 +34,7 @@ from picframe.core.services.resource_paths import (
     repair_legacy_resource_defaults,
 )
 from picframe.core.services.state_tracker import StateTrackerService
+from picframe.core.services.wake_on_input import WakeOnInputService
 from picframe.infrastructure.filesystem.media_monitor import WatchdogMediaMonitor
 from picframe.infrastructure.mqtt import HomeAssistantMqttAdapter
 from picframe.infrastructure.os.hal_factory import HALFactory
@@ -103,6 +104,20 @@ def run_picframe(
         config_repository=_config_repo,
         event_subscriber=event_bus,
     )
+
+    # Wake-on-input service (#762): wakes the display on raw mouse-move /
+    # keypress events while the Wayland output is destroyed by ``wlr-randr
+    # --off``. Only constructed when the HAL factory provided a wake listener;
+    # the mock listener is harmless on dev/non-Linux hosts.
+    wake_on_input_service: WakeOnInputService | None = None
+    if hal_adapters.wake_input is not None:
+        wake_on_input_service = WakeOnInputService(
+            event_publisher=event_bus,
+            wake_adapter=hal_adapters.wake_input,
+            display_power_adapter=hal_adapters.display_power,
+            config_repository=_config_repo,
+            event_subscriber=event_bus,
+        )
 
     # Initialize ImageProcessingService
     cache_dir = os.path.join(data_dir, "cache")
@@ -278,6 +293,8 @@ def run_picframe(
         web_server.stop()
         mqtt_adapter.stop()
         hardware_input_service.stop()
+        if wake_on_input_service is not None:
+            wake_on_input_service.stop()
         logging_service.stop()
         engine.stop()
         media_indexer_service.stop()
@@ -290,6 +307,7 @@ def run_picframe(
         _ = display_power_manager
         _ = system_manager
         _ = hardware_input_service
+        _ = wake_on_input_service
         _ = config_service
         _ = state_tracker
         _ = logging_service
@@ -315,6 +333,10 @@ def run_picframe(
     logger.info("Starting Hardware Input Service...")
     hardware_input_service.start()
 
+    if wake_on_input_service is not None:
+        logger.info("Starting Wake-on-Input Service...")
+        wake_on_input_service.start()
+
     logger.info("Starting Playback Engine...")
     # engine.start() blocks until stopped
     try:
@@ -334,6 +356,8 @@ def run_picframe(
         image_processing_service.shutdown()
         mqtt_adapter.stop()
         hardware_input_service.stop()
+        if wake_on_input_service is not None:
+            wake_on_input_service.stop()
         web_server.stop()
         engine.stop()
         overlay_controller.stop()

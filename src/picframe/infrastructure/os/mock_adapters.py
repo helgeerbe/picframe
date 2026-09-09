@@ -10,7 +10,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-from picframe.core.ports import IDisplayPower, IHardwareInput, ISystemManager
+from picframe.core.ports import IDisplayPower, IHardwareInput, ISystemManager, IWakeInputListener
 
 logger = logging.getLogger(__name__)
 
@@ -102,6 +102,45 @@ class MockHardwareInput(IHardwareInput):
             logger.warning("MockHardwareInput: Cannot simulate event, monitoring is stopped.")
         else:
             logger.warning("MockHardwareInput: Cannot simulate event, no callback registered.")
+
+
+class MockWakeInputListener(IWakeInputListener):
+    """Mock implementation of IWakeInputListener for dev/test environments."""
+
+    def __init__(self) -> None:
+        self._is_running = False
+        self._callback: Callable[[str], None] | None = None
+        logger.info("MockWakeInputListener initialized.")
+
+    def register_callback(self, callback: Callable[[str], None]) -> None:
+        """Register a callback for simulated wake events."""
+        self._callback = callback
+        logger.info("MockWakeInputListener: Callback registered.")
+
+    def start(self) -> None:
+        """Simulate starting wake-input monitoring."""
+        self._is_running = True
+        logger.info("MockWakeInputListener: Monitoring started.")
+
+    def stop(self) -> None:
+        """Simulate stopping wake-input monitoring."""
+        self._is_running = False
+        logger.info("MockWakeInputListener: Monitoring stopped.")
+
+    def simulate_event(self, input_class: str) -> None:
+        """
+        Simulate a wake-capable input event.
+
+        Args:
+            input_class: The input class ("mouse" or "keyboard").
+        """
+        if self._is_running and self._callback:
+            logger.info("MockWakeInputListener: Simulating %s wake event.", input_class)
+            self._callback(input_class)
+        elif not self._is_running:
+            logger.warning("MockWakeInputListener: Cannot simulate, monitoring stopped.")
+        else:
+            logger.warning("MockWakeInputListener: Cannot simulate, no callback registered.")
 
 
 class MockSystemManager(ISystemManager):

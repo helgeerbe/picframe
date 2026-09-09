@@ -11,6 +11,7 @@ from picframe.infrastructure.os.mock_adapters import (
     MockDisplayPower,
     MockHardwareInput,
     MockSystemManager,
+    MockWakeInputListener,
 )
 
 
@@ -22,6 +23,7 @@ def test_hal_factory_darwin() -> None:
         assert isinstance(adapters.display_power, MockDisplayPower)
         assert isinstance(adapters.hardware_input, MockHardwareInput)
         assert isinstance(adapters.system_manager, MockSystemManager)
+        assert isinstance(adapters.wake_input, MockWakeInputListener)
 
 
 def test_hal_factory_win32() -> None:
@@ -32,6 +34,7 @@ def test_hal_factory_win32() -> None:
         assert isinstance(adapters.display_power, MockDisplayPower)
         assert isinstance(adapters.hardware_input, MockHardwareInput)
         assert isinstance(adapters.system_manager, MockSystemManager)
+        assert isinstance(adapters.wake_input, MockWakeInputListener)
 
 
 @patch("picframe.infrastructure.os.hal_factory.HALFactory._is_raspberry_pi", return_value=True)
@@ -53,6 +56,7 @@ def test_hal_factory_rpi_wayland_with_config(
         assert isinstance(adapters.display_power, WaylandDisplayPower)
         assert isinstance(adapters.hardware_input, RPiGPIOAdapter)
         assert isinstance(adapters.system_manager, LinuxSystemManager)
+        assert adapters.wake_input is not None
 
 
 @patch("picframe.infrastructure.os.hal_factory.HALFactory._is_raspberry_pi", return_value=True)
@@ -125,3 +129,36 @@ def test_is_raspberry_pi_detection() -> None:
     # Test file not found (e.g., standard Ubuntu VM)
     with patch("builtins.open", side_effect=FileNotFoundError):
         assert HALFactory._is_raspberry_pi() is False
+
+
+@patch(
+    "picframe.infrastructure.os.evdev_wake_adapter.EvdevWakeAdapter.is_available",
+    return_value=True,
+)
+def test_create_wake_input_listener_uses_evdev_when_available(
+    mock_available: Any,
+) -> None:
+    """On Linux with readable input devices, the factory injects EvdevWakeAdapter."""
+    from picframe.infrastructure.os.evdev_wake_adapter import EvdevWakeAdapter
+
+    with patch.object(sys, "platform", "linux"):
+        listener = HALFactory._create_wake_input_listener()
+        assert isinstance(listener, EvdevWakeAdapter)
+
+
+@patch(
+    "picframe.infrastructure.os.evdev_wake_adapter.EvdevWakeAdapter.is_available",
+    return_value=False,
+)
+def test_create_wake_input_listener_falls_back_to_mock(mock_available: Any) -> None:
+    """On Linux without readable input devices, the factory injects the mock."""
+    with patch.object(sys, "platform", "linux"):
+        listener = HALFactory._create_wake_input_listener()
+        assert isinstance(listener, MockWakeInputListener)
+
+
+def test_create_wake_input_listener_mock_on_non_linux() -> None:
+    """On non-Linux hosts the factory always injects the mock listener."""
+    with patch.object(sys, "platform", "darwin"):
+        listener = HALFactory._create_wake_input_listener()
+        assert isinstance(listener, MockWakeInputListener)
