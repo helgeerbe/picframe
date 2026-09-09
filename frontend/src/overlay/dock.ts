@@ -33,7 +33,8 @@ export interface DockCallbacks {
   onOnScreenPluginsChange: (pluginIds: string[]) => void
   /** Emit a transport or danger-menu action to the worker bridge (#763).
    * The dock calls this for transport buttons (no confirmation) and after the
-   * user confirms a danger-menu item (display off / restart / reboot / shutdown). */
+   * user confirms a danger-menu item (display off / restart / reboot / shutdown /
+   * exit picframe). */
   onAction: (action: InputAction) => void
 }
 
@@ -93,6 +94,14 @@ const DANGER_ENTRIES: DangerEntry[] = [
     severe: true,
     confirmTitle: 'Shut down the host?',
     confirmMessage: 'The system will power off completely.'
+  },
+  {
+    action: 'stop',
+    label: 'Exit Picframe',
+    icon: '⏏',
+    severe: true,
+    confirmTitle: 'Exit Picframe?',
+    confirmMessage: 'Picframe will quit. Restart the service to resume.'
   }
 ]
 

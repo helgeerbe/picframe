@@ -11,8 +11,9 @@
 /** Input actions the shell emits to the worker via the JS bridge. Navigation
  * actions (prev/next/toggle) come from the dock transport buttons and the
  * keyboard router; the danger-menu actions (display_off/restart_service/
- * reboot_host/shutdown_host) are confirmed in the shell before being sent
- * (#763). `__request_config` is the boot handshake. */
+ * reboot_host/shutdown_host/stop) are confirmed in the shell before being
+ * sent (#763, #740). `stop` exits picframe via `Command.STOP`.
+ * `__request_config` is the boot handshake. */
 export type InputAction =
   | 'prev'
   | 'next'
@@ -21,6 +22,7 @@ export type InputAction =
   | 'restart_service'
   | 'reboot_host'
   | 'shutdown_host'
+  | 'stop'
   | '__request_config'
 
 /** Overlay display duration policy. */

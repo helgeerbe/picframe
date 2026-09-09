@@ -37,6 +37,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_REBOOT_HOST,
     INPUT_ACTION_RESTART_SERVICE,
     INPUT_ACTION_SHUTDOWN_HOST,
+    INPUT_ACTION_STOP,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
@@ -360,6 +361,7 @@ class OverlayWorker:
             INPUT_ACTION_RESTART_SERVICE,
             INPUT_ACTION_REBOOT_HOST,
             INPUT_ACTION_SHUTDOWN_HOST,
+            INPUT_ACTION_STOP,
         ):
             self.emit_input(action)
         elif action == "__set_visible_plugins":

@@ -15,6 +15,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_REBOOT_HOST,
     INPUT_ACTION_RESTART_SERVICE,
     INPUT_ACTION_SHUTDOWN_HOST,
+    INPUT_ACTION_STOP,
     INPUT_ACTION_TOGGLE,
     MediaChangedCommand,
     OverlayErrorEvent,
@@ -166,6 +167,7 @@ def test_handle_bridge_message_emits_input_actions(monkeypatch: pytest.MonkeyPat
         INPUT_ACTION_RESTART_SERVICE,
         INPUT_ACTION_REBOOT_HOST,
         INPUT_ACTION_SHUTDOWN_HOST,
+        INPUT_ACTION_STOP,
     )
     for action in actions:
         worker._handle_bridge_message({"action": action})

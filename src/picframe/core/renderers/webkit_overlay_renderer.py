@@ -58,6 +58,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_REBOOT_HOST,
     INPUT_ACTION_RESTART_SERVICE,
     INPUT_ACTION_SHUTDOWN_HOST,
+    INPUT_ACTION_STOP,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
@@ -703,9 +704,12 @@ def _command_for_input_action(action: str) -> Command | None:
     """Map an overlay input action to a playback/system Command.
 
     Navigation actions (prev/next/toggle) map to playback commands; the
-    danger-menu actions (#763) map to system commands handled by
+    danger-menu actions (#763, #740) map to system commands handled by
     :class:`SystemManager` (reboot/shutdown/restart) and
-    :class:`DisplayPowerManager` (display off).
+    :class:`DisplayPowerManager` (display off). The exception is ``stop``
+    (:data:`INPUT_ACTION_STOP`) which maps to :data:`Command.STOP` — a
+    graceful :class:`PlaybackEngine` shutdown that tears down the main
+    loop in ``main.py`` rather than invoking a system manager.
     """
     if action == INPUT_ACTION_PREV:
         return Command.PREV
@@ -721,6 +725,8 @@ def _command_for_input_action(action: str) -> Command | None:
         return Command.REBOOT_HOST
     if action == INPUT_ACTION_SHUTDOWN_HOST:
         return Command.SHUTDOWN_HOST
+    if action == INPUT_ACTION_STOP:
+        return Command.STOP
     return None
 
 

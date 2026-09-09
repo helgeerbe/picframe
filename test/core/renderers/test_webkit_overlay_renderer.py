@@ -29,6 +29,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_REBOOT_HOST,
     INPUT_ACTION_RESTART_SERVICE,
     INPUT_ACTION_SHUTDOWN_HOST,
+    INPUT_ACTION_STOP,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
@@ -554,6 +555,7 @@ def test_command_for_input_action_mapping() -> None:
     assert _command_for_input_action(INPUT_ACTION_RESTART_SERVICE) == Command.RESTART_SERVICE
     assert _command_for_input_action(INPUT_ACTION_REBOOT_HOST) == Command.REBOOT_HOST
     assert _command_for_input_action(INPUT_ACTION_SHUTDOWN_HOST) == Command.SHUTDOWN_HOST
+    assert _command_for_input_action(INPUT_ACTION_STOP) == Command.STOP
     assert _command_for_input_action("??") is None
 
 

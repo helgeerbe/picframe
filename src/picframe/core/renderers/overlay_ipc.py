@@ -24,12 +24,15 @@ T = TypeVar("T", bound="OverlayIpcMessage")
 INPUT_ACTION_PREV = "prev"
 INPUT_ACTION_NEXT = "next"
 INPUT_ACTION_TOGGLE = "toggle"
-# Danger-menu actions (#763): display power, service restart, host reboot/shutdown.
-# These are confirmed in the overlay shell before being emitted to the worker.
+# Danger-menu actions (#763): display power, service restart, host
+# reboot/shutdown, and exit picframe (#740). These are confirmed in the
+# overlay shell before being emitted to the worker. `stop` exits the
+# picframe process via ``Command.STOP`` (graceful shutdown of the engine).
 INPUT_ACTION_DISPLAY_OFF = "display_off"
 INPUT_ACTION_RESTART_SERVICE = "restart_service"
 INPUT_ACTION_REBOOT_HOST = "reboot_host"
 INPUT_ACTION_SHUTDOWN_HOST = "shutdown_host"
+INPUT_ACTION_STOP = "stop"
 
 
 @dataclass(frozen=True)
@@ -115,9 +118,10 @@ class InputEvent(OverlayIpcMessage):
     """An input event captured by the overlay shell (pointer or keyboard).
 
     ``action`` is one of :data:`INPUT_ACTION_PREV`, :data:`INPUT_ACTION_NEXT`,
-    :data:`INPUT_ACTION_TOGGLE`, or a danger-menu
-    action (:data:`INPUT_ACTION_DISPLAY_OFF`, :data:`INPUT_ACTION_RESTART_SERVICE`,
-    :data:`INPUT_ACTION_REBOOT_HOST`, :data:`INPUT_ACTION_SHUTDOWN_HOST`).
+    :data:`INPUT_ACTION_TOGGLE`, or a danger-menu action
+    (:data:`INPUT_ACTION_DISPLAY_OFF`, :data:`INPUT_ACTION_RESTART_SERVICE`,
+    :data:`INPUT_ACTION_REBOOT_HOST`, :data:`INPUT_ACTION_SHUTDOWN_HOST`,
+    :data:`INPUT_ACTION_STOP`).
     """
 
     action: str
