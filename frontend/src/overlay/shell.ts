@@ -221,29 +221,39 @@ export class OverlayShell {
    *   re-armed; the dock is left untouched. Used by `scheduleMediaWake` so a
    *   `media_change` trigger surfaces the text panel without also fading in the
    *   dock (#757).
+   * @param revealPanels When `false`, only the dock is revealed and re-armed;
+   *   auto-hide plugin panels are left in their current state (faded stays
+   *   faded, a running countdown keeps counting down). Used by `onMouseMove`
+   *   so mouse movement reveals navigation chrome (dock + cursor) but does not
+   *   un-fade content panels — they should appear only on intentional
+   *   interaction (touch tap, keyboard, dock icon toggle, media_change) (#763).
    */
-  private wake(revealDock = true): void {
+  private wake(revealDock = true, revealPanels = true): void {
     if (revealDock) {
       this.root.classList.remove('pf-root--dock-idle')
       this.clearDockIdle()
     }
-    this.clearPanelIdle()
+    if (revealPanels) {
+      this.clearPanelIdle()
 
-    // Per-panel idle: clear each panel's --idle class and arm its own timer.
-    for (const id of this.dockVisiblePluginIds()) {
-      const panel = this.content.querySelector<HTMLElement>(`#${CSS.escape(PANEL_ID_PREFIX + id)}`)
-      panel?.classList.remove('pf-plugin-panel--idle')
-      const seconds = this.panelIdleSeconds(id)
-      if (seconds !== null && seconds > 0) {
-        const timer = window.setTimeout(
-          () => {
-            panel?.classList.add('pf-plugin-panel--idle')
-          },
-          Math.max(0, seconds) * 1000
+      // Per-panel idle: clear each panel's --idle class and arm its own timer.
+      for (const id of this.dockVisiblePluginIds()) {
+        const panel = this.content.querySelector<HTMLElement>(
+          `#${CSS.escape(PANEL_ID_PREFIX + id)}`
         )
-        this.panelIdleTimers.set(id, timer)
+        panel?.classList.remove('pf-plugin-panel--idle')
+        const seconds = this.panelIdleSeconds(id)
+        if (seconds !== null && seconds > 0) {
+          const timer = window.setTimeout(
+            () => {
+              panel?.classList.add('pf-plugin-panel--idle')
+            },
+            Math.max(0, seconds) * 1000
+          )
+          this.panelIdleTimers.set(id, timer)
+        }
+        // persistent panels (seconds === null) never fade.
       }
-      // persistent panels (seconds === null) never fade.
     }
 
     if (revealDock) {
@@ -303,16 +313,19 @@ export class OverlayShell {
   }
 
   /**
-   * Bound pointer-move handler: reveal the cursor and reset the idle timers.
-   * Only fires for real mouse input (not touch/pen) and only when `mouse` is an
-   * enabled input class, so touch-only users never see a cursor (#739). Bound as
-   * an arrow-function property so `removeEventListener` in {@link destroy} can
-   * detach the exact same reference.
+   * Bound pointer-move handler: reveal the cursor and reset the dock idle
+   * timer, but leave auto-hide plugin panels in their current state — mouse
+   * movement is ambient activity, not an intentional request to view content,
+   * so panels should appear only on touch/keyboard/dock-icon/media-change
+   * triggers (#763). Only fires for real mouse input (not touch/pen) and only
+   * when `mouse` is an enabled input class, so touch-only users never see a
+   * cursor (#739). Bound as an arrow-function property so
+   * `removeEventListener` in {@link destroy} can detach the exact same ref.
    */
   private readonly onMouseMove = (e: PointerEvent): void => {
     if (e.pointerType !== 'mouse' || !this.enabledTypes.includes('mouse')) return
     this.root.classList.add('pf-root--cursor')
-    this.wake()
+    this.wake(true, false)
   }
 
   private clearPanelIdle(): void {
