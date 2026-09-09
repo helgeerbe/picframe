@@ -46,6 +46,11 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* Z-order hoist (#763): z-index:1 forms a stacking context that confines
+   * every plugin panel (regardless of its inline z_order) below the veil
+   * (z-index:10) and the dock (z-index:20). The dock is hoisted out of
+   * #pf-content into #overlay-root so it stays above the veil. */
+  z-index: 1;
 }
 
 /* Per-plugin panels (#752): one per visible plugin, positioned by a 9-anchor
@@ -182,6 +187,33 @@ body {
   display: block;
 }
 
+/* Hover tooltip: a single shared label shown after a short delay when the
+ * mouse rests on a dock icon (transport buttons, plugin icons, danger
+ * trigger). Mouse-only — touch/keyboard rely on the icon `aria-label`. Sits
+ * above the dock (z-index 24 < danger dropdown 25 < confirm modal 30/31) so it
+ * never covers an open menu or dialog. Always laid out (position: absolute)
+ * so its size can be measured before positioning; opacity drives the fade. */
+.pf-dock-tooltip {
+  position: absolute;
+  z-index: 24;
+  max-width: min(60vw, 260px);
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: var(--pf-dock-bg);
+  backdrop-filter: blur(6px);
+  color: var(--pf-dock-fg);
+  font-size: 13px;
+  line-height: 1.25;
+  text-align: center;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.12s ease;
+}
+
+.pf-dock-tooltip.pf-dock-tooltip--visible {
+  opacity: 1;
+}
+
 /* Per-panel idle hide: each auto_hide panel fades on its own idle timer
  * (#752). The shell adds `pf-plugin-panel--idle` to a panel after its
  * `idle_hide_seconds`; persistent panels never receive it. */
@@ -195,4 +227,149 @@ body {
 #overlay-root.pf-root--dock-idle #pf-dock {
   opacity: 0;
   pointer-events: none;
+}
+
+/* Dock transport buttons + dividers (#763). Transport buttons reuse the
+ * .pf-dock-icon sizing so they sit flush with the plugin icons; the divider
+ * visually separates transport / plugins / danger groups. */
+.pf-dock-divider {
+  flex: 0 0 auto;
+  width: 1px;
+  align-self: center;
+  height: 28px;
+  background: rgba(255, 255, 255, 0.25);
+}
+
+/* Danger-menu trigger (#763): reuses .pf-dock-icon sizing; this modifier
+ * gives the power button a subtle warm tint so it reads as a system control. */
+.pf-dock-icon.pf-dock-danger {
+  color: #ff8a80;
+}
+
+.pf-dock-icon.pf-dock-danger:hover,
+.pf-dock-icon.pf-dock-danger:focus-visible {
+  background: rgba(255, 138, 128, 0.18);
+}
+
+/* Danger dropdown menu (#763): positioned inline (absolute) by the dock
+ * relative to the trigger button. z-index:25 keeps it above the dock (20)
+ * but below the confirm backdrop (30). */
+#pf-danger-dropdown {
+  position: absolute;
+  z-index: 25;
+  display: flex;
+  flex-direction: column;
+  min-width: 200px;
+  padding: 6px;
+  border-radius: 12px;
+  background: var(--pf-dock-bg);
+  backdrop-filter: blur(6px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  pointer-events: auto;
+}
+
+.pf-danger-item {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  color: var(--pf-dock-fg);
+  font-size: 15px;
+  text-align: left;
+  padding: 10px 12px;
+  min-height: 44px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pf-danger-item:hover,
+.pf-danger-item:focus-visible {
+  background: rgba(255, 255, 255, 0.16);
+  outline: none;
+}
+
+.pf-danger-item--severe:hover,
+.pf-danger-item--severe:focus-visible {
+  background: rgba(255, 138, 128, 0.2);
+}
+
+/* Confirm dialog (#763): a full-screen backdrop + centered modal appended to
+ * #overlay-root so they sit above the dock (20). z-index 30/31 > dock (20) >
+ * veil (10) > content (1). */
+#pf-confirm-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  z-index: 30;
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+#pf-confirm-modal {
+  position: relative;
+  z-index: 31;
+  width: min(86vw, 380px);
+  padding: 20px 22px 16px;
+  border-radius: 16px;
+  background: rgba(20, 20, 22, 0.96);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+  color: var(--pf-dock-fg);
+  pointer-events: auto;
+}
+
+#pf-confirm-modal h2 {
+  margin: 0 0 8px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+#pf-confirm-modal p {
+  margin: 0 0 18px;
+  font-size: 14px;
+  line-height: 1.45;
+  opacity: 0.85;
+}
+
+.pf-confirm-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.pf-confirm-btn {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  font-size: 15px;
+  font-weight: 600;
+  min-height: 44px;
+  padding: 0 18px;
+  cursor: pointer;
+}
+
+.pf-confirm-cancel {
+  background: rgba(255, 255, 255, 0.12);
+  color: var(--pf-dock-fg);
+}
+
+.pf-confirm-cancel:hover,
+.pf-confirm-cancel:focus-visible {
+  background: rgba(255, 255, 255, 0.2);
+  outline: none;
+}
+
+.pf-confirm-ok {
+  background: #d93025;
+  color: #fff;
+}
+
+.pf-confirm-ok:hover,
+.pf-confirm-ok:focus-visible {
+  background: #e53935;
+  outline: none;
 }

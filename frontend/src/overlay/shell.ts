@@ -22,7 +22,9 @@ import {
   registerApplyConfig,
   registerApplyMedia,
   registerApplyPluginData,
-  sendAction
+  sendAction,
+  setOnScreenPlugins,
+  setVisiblePlugins
 } from './bridge'
 import { Dock } from './dock'
 import { readEnv } from './env'
@@ -89,8 +91,45 @@ export class OverlayShell {
     this.veil.id = 'pf-veil'
     this.root.appendChild(this.veil)
 
-    this.dock = new Dock(this.content, {
-      onVisiblePluginsChange: () => this.wake()
+    this.dock = new Dock(this.content, this.root, {
+      onVisiblePluginsChange: (pluginIds: string[]) => {
+        // Persist the dock-driven visible-plugin change to `config.db3` via the
+        // same `CommandEvent(SET_CONFIG, {overlay:{visible_plugins}})` path the
+        // Remote/Appearance REST endpoint uses (#765). The dock already updated
+        // optimistically (`togglePlugin`); the config round-trip reconciles it
+        // (and refreshes the remote tab) once ConfigService persists + emits
+        // `OverlayConfigChangedEvent`.
+        setVisiblePlugins(pluginIds)
+        // #767: reveal the dock only — a plugin toggle must not un-hide or
+        // reset the idle timers of unrelated auto-hidden panels. The toggled
+        // plugin's panel is already mounted/removed by `render()`, so no panel
+        // reveal is needed. A full `wake()` here was removing `--idle` from
+        // idle siblings (e.g. a `media_change` text panel) and re-arming their
+        // timers, briefly revealing them for `idle_hide_seconds`. Touch,
+        // keyboard, and pointermove paths still call the full `wake()`.
+        this.wake(true, false)
+      },
+      onOnScreenPluginsChange: (pluginIds: string[]) => {
+        // Push the transient on-screen (runtime) plugin set to the worker
+        // (#766). Auto-hide is a client-side CSS fade that never persists, so
+        // this is a separate runtime channel from the persisted
+        // `visible_plugins` config path above. The worker emits an
+        // `OnScreenPluginsChangedEvent` the renderer republishes as
+        // `OverlayVisibilityChangedEvent`, which `/ws/state` forwards to
+        // browsers so the Remote tab's tile highlights mirror the dock icon.
+        // The dock's `emitOnScreen` diff-guards so this only fires when the
+        // on-screen set actually changes.
+        setOnScreenPlugins(pluginIds)
+      },
+      onAction: (action: InputAction) => {
+        // Reset the idle timers on every dock action (transport buttons,
+        // danger-menu confirm) so touch users tapping dock controls don't
+        // see the dock fade mid-interaction — pointer taps on the hoisted
+        // dock never reach the veil's InputRouter, so without this wake()
+        // the dock-idle timer would keep counting down (#763 review).
+        this.wake()
+        if (action !== '__request_config') sendAction(action)
+      }
     })
 
     this.router = new InputRouter({
@@ -99,7 +138,14 @@ export class OverlayShell {
       onAction: (action: InputAction) => {
         if (action !== '__request_config') sendAction(action)
       },
-      onActivity: () => this.wake()
+      onActivity: (source: InputType) => {
+        // #766: a mouse click is ambient activity (like pointermove), not an
+        // intentional request to view content — wake the dock only, leaving
+        // auto-hide panels in their current state. Touch and keyboard keep the
+        // full wake (reveal + re-arm panel idle timers).
+        if (source === 'mouse') this.wake(true, false)
+        else this.wake()
+      }
     })
   }
 
@@ -108,8 +154,11 @@ export class OverlayShell {
     // Reveal the cursor on mouse movement and reset the idle timers in lockstep
     // with the dock, so the cursor shows only while the mouse is active and
     // hides again after the idle interval — mirroring dock auto-hide. Touch and
-    // keyboard activity never reveal the cursor (#739).
-    this.veil.addEventListener('pointermove', this.onMouseMove)
+    // keyboard activity never reveal the cursor (#739). The listener is on
+    // #overlay-root (not the veil) so mouse moves over the hoisted dock (#763)
+    // also wake the shell — the dock sits above the veil and would otherwise
+    // swallow pointermove without resetting the idle timer.
+    this.root.addEventListener('pointermove', this.onMouseMove)
     registerApplyConfig(config => this.applyConfig(config))
     // The worker pushes current-media payloads over the IPC bridge (the reliable
     // path that replaces the cross-origin `/ws/state` WebSocket from `file://`).
@@ -135,7 +184,8 @@ export class OverlayShell {
   }
 
   destroy(): void {
-    this.veil.removeEventListener('pointermove', this.onMouseMove)
+    this.root.removeEventListener('pointermove', this.onMouseMove)
+    this.dock.destroy()
     this.router.detach()
     this.state?.stop()
     this.clearPanelIdle()
@@ -208,29 +258,39 @@ export class OverlayShell {
    *   re-armed; the dock is left untouched. Used by `scheduleMediaWake` so a
    *   `media_change` trigger surfaces the text panel without also fading in the
    *   dock (#757).
+   * @param revealPanels When `false`, only the dock is revealed and re-armed;
+   *   auto-hide plugin panels are left in their current state (faded stays
+   *   faded, a running countdown keeps counting down). Used by `onMouseMove`
+   *   so mouse movement reveals navigation chrome (dock + cursor) but does not
+   *   un-fade content panels — they should appear only on intentional
+   *   interaction (touch tap, keyboard, dock icon toggle, media_change) (#763).
    */
-  private wake(revealDock = true): void {
+  private wake(revealDock = true, revealPanels = true): void {
     if (revealDock) {
       this.root.classList.remove('pf-root--dock-idle')
       this.clearDockIdle()
     }
-    this.clearPanelIdle()
+    if (revealPanels) {
+      this.clearPanelIdle()
 
-    // Per-panel idle: clear each panel's --idle class and arm its own timer.
-    for (const id of this.dockVisiblePluginIds()) {
-      const panel = this.content.querySelector<HTMLElement>(`#${CSS.escape(PANEL_ID_PREFIX + id)}`)
-      panel?.classList.remove('pf-plugin-panel--idle')
-      const seconds = this.panelIdleSeconds(id)
-      if (seconds !== null && seconds > 0) {
-        const timer = window.setTimeout(
-          () => {
-            panel?.classList.add('pf-plugin-panel--idle')
-          },
-          Math.max(0, seconds) * 1000
-        )
-        this.panelIdleTimers.set(id, timer)
+      // Per-panel idle: clear each panel's --idle class and arm its own timer.
+      // #766: route through `dock.setPluginIdle` so the dock icon's `--active`
+      // state stays in sync with the panel's on-screen state (highlighted when
+      // shown, not when auto-hidden).
+      for (const id of this.dockVisiblePluginIds()) {
+        this.dock.setPluginIdle(id, false)
+        const seconds = this.panelIdleSeconds(id)
+        if (seconds !== null && seconds > 0) {
+          const timer = window.setTimeout(
+            () => {
+              this.dock.setPluginIdle(id, true)
+            },
+            Math.max(0, seconds) * 1000
+          )
+          this.panelIdleTimers.set(id, timer)
+        }
+        // persistent panels (seconds === null) never fade.
       }
-      // persistent panels (seconds === null) never fade.
     }
 
     if (revealDock) {
@@ -244,6 +304,11 @@ export class OverlayShell {
         () => {
           this.root.classList.add('pf-root--dock-idle')
           this.root.classList.remove('pf-root--cursor')
+          // Close any open dropdown / confirm modal so transient overlays
+          // don't outlive the dock that spawned them — the dropdown is a
+          // sibling of #pf-dock, so the idle-hide CSS (which only targets
+          // #pf-dock) would leave it floating and interactive (#763 review).
+          this.dock.closeOverlays()
         },
         Math.max(0, dockSeconds) * 1000
       )
@@ -285,16 +350,19 @@ export class OverlayShell {
   }
 
   /**
-   * Bound pointer-move handler: reveal the cursor and reset the idle timers.
-   * Only fires for real mouse input (not touch/pen) and only when `mouse` is an
-   * enabled input class, so touch-only users never see a cursor (#739). Bound as
-   * an arrow-function property so `removeEventListener` in {@link destroy} can
-   * detach the exact same reference.
+   * Bound pointer-move handler: reveal the cursor and reset the dock idle
+   * timer, but leave auto-hide plugin panels in their current state — mouse
+   * movement is ambient activity, not an intentional request to view content,
+   * so panels should appear only on touch/keyboard/dock-icon/media-change
+   * triggers (#763). Only fires for real mouse input (not touch/pen) and only
+   * when `mouse` is an enabled input class, so touch-only users never see a
+   * cursor (#739). Bound as an arrow-function property so
+   * `removeEventListener` in {@link destroy} can detach the exact same ref.
    */
   private readonly onMouseMove = (e: PointerEvent): void => {
     if (e.pointerType !== 'mouse' || !this.enabledTypes.includes('mouse')) return
     this.root.classList.add('pf-root--cursor')
-    this.wake()
+    this.wake(true, false)
   }
 
   private clearPanelIdle(): void {

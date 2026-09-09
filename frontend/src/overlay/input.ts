@@ -2,9 +2,10 @@
  * Pointer + keyboard input routing for the overlay shell (#739, item 11).
  *
  * The shell installs a transparent full-screen "input veil" that captures
- * `pointerdown` (unified mouse/touch/pen) and `keydown`. The horizontal position
- * selects a zone — left = prev, right = next, center = toggle (play/pause) —
- * and keys map: ArrowLeft/ArrowRight = prev/next, Enter/Space = toggle,
+ * `pointerdown` (unified mouse/touch/pen) and `keydown`. A pointer tap only
+ * wakes the shell (resets the idle timers and re-reveals content); navigation
+ * is provided by the dock transport buttons and keyboard actions (#763).
+ * Keys map: ArrowLeft/ArrowRight = prev/next, Enter/Space = toggle,
  * Escape = hide. Only the input device classes enabled in
  * `overlay.enabled_input_types` are honoured; a pen is treated as touch.
  *
@@ -22,8 +23,10 @@ export interface InputRouterOptions {
   root: HTMLElement
   enabledTypes: InputType[]
   onAction: (action: InputAction) => void
-  /** Called for every enabled event, to reset the idle timer / wake content. */
-  onActivity: () => void
+  /** Called for every enabled event, to reset the idle timer / wake content.
+   * Carries the originating `InputType` so the shell can wake dock-only for
+   * mouse (matching `onMouseMove`) but fully for touch/keyboard (#766). */
+  onActivity: (source: InputType) => void
 }
 
 const POINTER_TYPE_MAP: Record<string, InputType> = {
@@ -36,7 +39,7 @@ export class InputRouter {
   private readonly root: HTMLElement
   private enabledTypes: InputType[]
   private readonly onAction: (action: InputAction) => void
-  private readonly onActivity: () => void
+  private readonly onActivity: (source: InputType) => void
   private boundPointer: (e: PointerEvent) => void
   private boundKey: (e: KeyboardEvent) => void
   private boundContext: (e: Event) => void
@@ -75,39 +78,30 @@ export class InputRouter {
 
   private handlePointer(e: PointerEvent): void {
     if (!this.isPointerEnabled(e.pointerType)) return
-    this.onActivity()
-    const rect = this.root.getBoundingClientRect()
-    const x = (e.clientX - rect.left) / rect.width
-    let action: InputAction
-    if (x < 1 / 3) {
-      action = 'prev'
-    } else if (x > 2 / 3) {
-      action = 'next'
-    } else {
-      action = 'toggle'
-    }
-    this.onAction(action)
+    // Tap-zones removed (#763): navigation now lives in the dock transport
+    // buttons (prev/toggle/next). A tap on the veil only wakes the shell
+    // — it resets the idle timers and re-reveals the content but no longer
+    // fires prev/next/toggle, so a stray tap never skips a photo.
+    // #766: pass the mapped InputType so the shell can wake dock-only for
+    // mouse (ambient activity, like pointermove) but fully for touch.
+    this.onActivity(POINTER_TYPE_MAP[e.pointerType] ?? 'touch')
   }
 
   private handleKey(e: KeyboardEvent): void {
     if (!this.enabledTypes.includes('keyboard')) return
     switch (e.key) {
       case 'ArrowLeft':
-        this.onActivity()
+        this.onActivity('keyboard')
         this.onAction('prev')
         break
       case 'ArrowRight':
-        this.onActivity()
+        this.onActivity('keyboard')
         this.onAction('next')
         break
       case 'Enter':
       case ' ':
-        this.onActivity()
+        this.onActivity('keyboard')
         this.onAction('toggle')
-        break
-      case 'Escape':
-        this.onActivity()
-        this.onAction('hide')
         break
       default:
         return

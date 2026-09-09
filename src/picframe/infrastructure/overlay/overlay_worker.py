@@ -31,12 +31,16 @@ from typing import Any
 
 from picframe.core.models.overlay import PluginDescriptor, effective_plugin_layout
 from picframe.core.renderers.overlay_ipc import (
-    INPUT_ACTION_HIDE,
+    INPUT_ACTION_DISPLAY_OFF,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
+    INPUT_ACTION_REBOOT_HOST,
+    INPUT_ACTION_RESTART_SERVICE,
+    INPUT_ACTION_SHUTDOWN_HOST,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
+    OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
     OverlayIpcMessage,
     ReadyEvent,
@@ -44,6 +48,7 @@ from picframe.core.renderers.overlay_ipc import (
     SetConfigCommand,
     SetOpacityCommand,
     ShutdownCommand,
+    VisiblePluginsChangedEvent,
     parse_overlay_ipc_message,
 )
 from picframe.infrastructure.overlay.plugin_loader import PluginLoader
@@ -351,9 +356,40 @@ class OverlayWorker:
             INPUT_ACTION_PREV,
             INPUT_ACTION_NEXT,
             INPUT_ACTION_TOGGLE,
-            INPUT_ACTION_HIDE,
+            INPUT_ACTION_DISPLAY_OFF,
+            INPUT_ACTION_RESTART_SERVICE,
+            INPUT_ACTION_REBOOT_HOST,
+            INPUT_ACTION_SHUTDOWN_HOST,
         ):
             self.emit_input(action)
+        elif action == "__set_visible_plugins":
+            # The dock toggle changed the expanded plugin set (#765). Forward
+            # the next list to the main process; the renderer republishes it as
+            # ``CommandEvent(SET_CONFIG, {overlay: {visible_plugins}})`` — the
+            # same command the Remote/Appearance REST endpoint publishes — so
+            # both UIs persist + refresh through one source of truth. The list
+            # may be empty (user collapsed every panel). Non-string entries are
+            # dropped so a malformed bridge payload never persists junk ids.
+            raw = data.get("plugins")
+            if isinstance(raw, list):
+                plugins = tuple(str(p) for p in raw if isinstance(p, str))
+            else:
+                plugins = ()
+            self.emit_visible_plugins(plugins)
+        elif action == "__set_on_screen_plugins":
+            # The on-screen (runtime) visibility of expanded plugins changed
+            # (#766) — an auto-hide fade, wake, media_change re-arm, or toggle
+            # that mutated which expanded panels are actually shown. This is
+            # **not** persisted (auto-hide is a client-side CSS fade), so it
+            # takes a separate runtime channel distinct from the persisted
+            # ``__set_visible_plugins`` config path. Non-string entries are
+            # dropped so a malformed bridge payload never emits junk ids.
+            raw = data.get("plugins")
+            if isinstance(raw, list):
+                plugins = tuple(str(p) for p in raw if isinstance(p, str))
+            else:
+                plugins = ()
+            self.emit_on_screen_plugins(plugins)
         elif action == "__request_config":
             # The boot handshake: the shell asks for its initial config. Logging
             # this is the one journal line that proves the JS bridge reached
@@ -494,6 +530,21 @@ class OverlayWorker:
     def emit_input(self, action: str) -> None:
         """Send an input event to the main process."""
         self._send_event(InputEvent(action=action))
+
+    def emit_visible_plugins(self, visible_plugins: tuple[str, ...]) -> None:
+        """Forward a dock-driven visible-plugin change to the main process (#765)."""
+        self._send_event(VisiblePluginsChangedEvent(visible_plugins=visible_plugins))
+
+    def emit_on_screen_plugins(self, on_screen_plugins: tuple[str, ...]) -> None:
+        """Forward an on-screen (runtime) visibility change to the main process (#766).
+
+        Distinct from :meth:`emit_visible_plugins` (the persisted config set):
+        this carries the transient set of expanded plugins currently shown on
+        screen (not auto-hidden). The renderer republishes it as
+        ``OverlayVisibilityChangedEvent`` so the Remote tile highlights mirror
+        the on-screen state instead of the persisted ``visible_plugins`` set.
+        """
+        self._send_event(OnScreenPluginsChangedEvent(on_screen_plugins=on_screen_plugins))
 
     def _send_event(self, event: OverlayIpcMessage) -> None:
         if self._conn is not None:

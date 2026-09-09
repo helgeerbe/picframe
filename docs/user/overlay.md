@@ -63,10 +63,17 @@ The whole overlay area captures input and routes it as playback commands:
 - **Left third** → previous photo/video
 - **Right third** → next photo/video
 - **Center** → play/pause (toggle)
-- **Esc** → hide (toggle playback stop)
 
 Mouse, touch, and pen all go through the same Pointer Events path, so the
 overlay works identically once a touchscreen is connected.
+
+### Dock hover labels
+
+When you use a **mouse**, resting the pointer on a dock icon for a moment shows
+a small label above it — "Previous", "Play / Pause", "Next", the plugin's
+display name (e.g. "Clock", "Weather"), or "System" for the power menu. This is a
+mouse-only convenience; touch and keyboard users get the same text via the
+icon's accessibility label.
 
 ## Built-in plugins
 

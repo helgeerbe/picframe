@@ -15,6 +15,7 @@ from picframe.core.events.dto import (
     CurrentMediaChangedEvent,
     DisplayPowerEvent,
     OverlayConfigChangedEvent,
+    OverlayVisibilityChangedEvent,
     RenderCommand,
     SystemErrorEvent,
 )
@@ -22,15 +23,20 @@ from picframe.core.models.media import DisplayItem, MediaItem, MediaType
 from picframe.core.models.overlay import PluginDescriptor
 from picframe.core.renderers import webkit_overlay_renderer as wor
 from picframe.core.renderers.overlay_ipc import (
-    INPUT_ACTION_HIDE,
+    INPUT_ACTION_DISPLAY_OFF,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
+    INPUT_ACTION_REBOOT_HOST,
+    INPUT_ACTION_RESTART_SERVICE,
+    INPUT_ACTION_SHUTDOWN_HOST,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
+    OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
     ReadyEvent,
     SetConfigCommand,
+    VisiblePluginsChangedEvent,
 )
 from picframe.core.renderers.webkit_overlay_renderer import (
     WebKitOverlayRenderer,
@@ -170,7 +176,6 @@ def test_handle_input_event_translates_to_command_event(
         INPUT_ACTION_PREV: Command.PREV,
         INPUT_ACTION_NEXT: Command.NEXT,
         INPUT_ACTION_TOGGLE: Command.PLAY,
-        INPUT_ACTION_HIDE: Command.STOP,
     }
     for action, expected in cases.items():
         mock_publisher.reset_mock()
@@ -216,6 +221,77 @@ def test_handle_error_event_publishes_system_error(
     assert isinstance(event, SystemErrorEvent)
     assert event.message == "doh"
     assert event.code == "webkit_unavailable"
+
+
+def test_handle_visible_plugins_changed_publishes_set_config(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """A dock-driven visible-plugin change is republished as the exact
+    ``CommandEvent(SET_CONFIG, {overlay: {visible_plugins}})`` the Remote/
+    Appearance REST endpoint publishes, so ConfigService persists it to
+    ``config.db3`` and both UIs refresh through ``OverlayConfigChangedEvent``
+    (#765)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(VisiblePluginsChangedEvent(visible_plugins=("clock", "text")))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, CommandEvent)
+    assert event.command == Command.SET_CONFIG
+    assert event.payload == {"overlay": {"visible_plugins": ["clock", "text"]}}
+
+
+def test_handle_visible_plugins_changed_empty_publishes_empty_list(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """Collapsing every panel persists an empty list (dock-only), not a drop
+    of the key (#765)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(VisiblePluginsChangedEvent(visible_plugins=()))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, CommandEvent)
+    assert event.command == Command.SET_CONFIG
+    assert event.payload == {"overlay": {"visible_plugins": []}}
+
+
+def test_handle_on_screen_plugins_changed_publishes_visibility_event(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """An on-screen (runtime) visibility change is republished as
+    ``OverlayVisibilityChangedEvent`` (#766) — NOT a persisted
+    ``CommandEvent(SET_CONFIG)``, because auto-hide is a client-side CSS fade
+    that never writes ``config.db3``. The browser mirrors this set so Remote
+    tile highlights mirror the dock icon during auto-hide/wake fades."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(OnScreenPluginsChangedEvent(on_screen_plugins=("clock", "text")))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, OverlayVisibilityChangedEvent)
+    assert event.on_screen_plugins == ("clock", "text")
+
+
+def test_handle_on_screen_plugins_changed_empty_publishes_empty_tuple(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """Every panel auto-hidden publishes an empty on-screen set (#766)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(OnScreenPluginsChangedEvent(on_screen_plugins=()))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, OverlayVisibilityChangedEvent)
+    assert event.on_screen_plugins == ()
 
 
 def test_render_command_promote_sets_opacity_zero(
@@ -473,7 +549,11 @@ def test_command_for_input_action_mapping() -> None:
     assert _command_for_input_action(INPUT_ACTION_PREV) == Command.PREV
     assert _command_for_input_action(INPUT_ACTION_NEXT) == Command.NEXT
     assert _command_for_input_action(INPUT_ACTION_TOGGLE) == Command.PLAY
-    assert _command_for_input_action(INPUT_ACTION_HIDE) == Command.STOP
+    # Danger-menu actions (#763) map to system/display commands.
+    assert _command_for_input_action(INPUT_ACTION_DISPLAY_OFF) == Command.DISPLAY_OFF
+    assert _command_for_input_action(INPUT_ACTION_RESTART_SERVICE) == Command.RESTART_SERVICE
+    assert _command_for_input_action(INPUT_ACTION_REBOOT_HOST) == Command.REBOOT_HOST
+    assert _command_for_input_action(INPUT_ACTION_SHUTDOWN_HOST) == Command.SHUTDOWN_HOST
     assert _command_for_input_action("??") is None
 
 

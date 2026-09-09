@@ -42,6 +42,7 @@ from picframe.core.events.dto import (
     CurrentMediaChangedEvent,
     DisplayPowerEvent,
     OverlayConfigChangedEvent,
+    OverlayVisibilityChangedEvent,
     RenderCommand,
     RendererConfigUpdatedEvent,
     SystemErrorEvent,
@@ -51,12 +52,16 @@ from picframe.core.models.media import DisplayItem, MediaItem
 from picframe.core.models.overlay import PluginDescriptor
 from picframe.core.ports.overlay import IOverlayController
 from picframe.core.renderers.overlay_ipc import (
-    INPUT_ACTION_HIDE,
+    INPUT_ACTION_DISPLAY_OFF,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
+    INPUT_ACTION_REBOOT_HOST,
+    INPUT_ACTION_RESTART_SERVICE,
+    INPUT_ACTION_SHUTDOWN_HOST,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
+    OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
     OverlayIpcMessage,
     ReadyEvent,
@@ -64,6 +69,7 @@ from picframe.core.renderers.overlay_ipc import (
     SetConfigCommand,
     SetOpacityCommand,
     ShutdownCommand,
+    VisiblePluginsChangedEvent,
     parse_overlay_ipc_message,
 )
 from picframe.infrastructure.overlay.plugin_loader import PluginLoader
@@ -71,7 +77,9 @@ from picframe.infrastructure.overlay.plugin_loader import PluginLoader
 logger = logging.getLogger(__name__)
 
 _WEBKIT_UNAVAILABLE_CODE = "webkit_unavailable"
-_WORKER_SOCKET_TIMEOUT_SECONDS = float(os.environ.get("PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT", "20"))
+_WORKER_SOCKET_TIMEOUT_SECONDS = float(
+    os.environ.get("PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT", "20")
+)
 _WORKER_SOCKET_POLL_SECONDS = 0.1
 
 # Exif keys mirrored from ``api.app.MEDIA_DTO_EXIF_KEYS`` so the overlay's
@@ -485,6 +493,34 @@ class WebKitOverlayRenderer(IOverlayController):
                     code=event.code,
                 )
             )
+        elif isinstance(event, VisiblePluginsChangedEvent):
+            # The dock toggle changed the expanded plugin set (#765). Republish
+            # it as the exact ``CommandEvent(SET_CONFIG, {overlay:
+            # {visible_plugins}})`` the Remote/Appearance REST endpoint
+            # (``PUT /api/workflow-config``) publishes. ConfigService then
+            # persists it to ``config.db3`` and emits
+            # ``OverlayConfigChangedEvent``, which this renderer forwards back
+            # to the worker/shell — so the dock's optimistic update is
+            # reconciled with the persisted truth and both UIs stay in sync.
+            self._publisher.publish(
+                CommandEvent(
+                    command=Command.SET_CONFIG,
+                    payload={"overlay": {"visible_plugins": list(event.visible_plugins)}},
+                )
+            )
+        elif isinstance(event, OnScreenPluginsChangedEvent):
+            # The on-screen (runtime) visibility of expanded plugins changed
+            # (#766) — an auto-hide fade, wake, media_change re-arm, or toggle.
+            # This is **not** persisted to ``config.db3`` (auto-hide is a
+            # client-side CSS fade), so it does NOT go through
+            # ``CommandEvent(SET_CONFIG)``. Republish it directly as the
+            # ``OverlayVisibilityChangedEvent`` domain event the ``/ws/state``
+            # endpoint forwards to browsers, so the Remote tile highlights
+            # mirror the on-screen state instead of the persisted
+            # ``visible_plugins`` set.
+            self._publisher.publish(
+                OverlayVisibilityChangedEvent(on_screen_plugins=event.on_screen_plugins)
+            )
 
     def _send_command(self, cmd: OverlayIpcMessage) -> None:
         """Send a command to the worker."""
@@ -664,15 +700,27 @@ class WebKitOverlayRenderer(IOverlayController):
 
 
 def _command_for_input_action(action: str) -> Command | None:
-    """Map an overlay input action to a playback Command."""
+    """Map an overlay input action to a playback/system Command.
+
+    Navigation actions (prev/next/toggle) map to playback commands; the
+    danger-menu actions (#763) map to system commands handled by
+    :class:`SystemManager` (reboot/shutdown/restart) and
+    :class:`DisplayPowerManager` (display off).
+    """
     if action == INPUT_ACTION_PREV:
         return Command.PREV
     if action == INPUT_ACTION_NEXT:
         return Command.NEXT
     if action == INPUT_ACTION_TOGGLE:
         return Command.PLAY
-    if action == INPUT_ACTION_HIDE:
-        return Command.STOP
+    if action == INPUT_ACTION_DISPLAY_OFF:
+        return Command.DISPLAY_OFF
+    if action == INPUT_ACTION_RESTART_SERVICE:
+        return Command.RESTART_SERVICE
+    if action == INPUT_ACTION_REBOOT_HOST:
+        return Command.REBOOT_HOST
+    if action == INPUT_ACTION_SHUTDOWN_HOST:
+        return Command.SHUTDOWN_HOST
     return None
 
 

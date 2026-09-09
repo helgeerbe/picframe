@@ -10,7 +10,7 @@ import StatusBanner from '../ui/StatusBanner.vue'
 const { t } = useI18n()
 const overlayStore = useOverlayStore()
 const configStore = useConfigStore()
-const { config } = storeToRefs(configStore)
+const { config, onScreenPlugins } = storeToRefs(configStore)
 const { plugins, isLoading, error: overlayError } = storeToRefs(overlayStore)
 
 const isExpanded = ref(true)
@@ -30,6 +30,18 @@ const visiblePlugins = computed<string[]>(() => {
   const v = config.value?.overlay?.visible_plugins
   return Array.isArray(v) ? [...(v as string[])] : []
 })
+
+// Whether a tile is "active" (highlighted) reflects the on-screen runtime
+// state (#766), not just the persisted `visible_plugins` set. A plugin is
+// active when it is expanded (in `visible_plugins`) AND currently shown on
+// screen (in the transient `onScreenPlugins` set pushed over /ws/state). When
+// `onScreenPlugins` is null (fresh connect before any visibility event) we
+// fall back to `visible_plugins` (assume shown) so tiles start highlighted.
+// A faded (auto-hidden) tile de-highlights but stays in `visible_plugins`, so
+// tapping it still collapses (removes from config) — matching the dock icon.
+const isActive = (pluginId: string): boolean =>
+  visiblePlugins.value.includes(pluginId) &&
+  (onScreenPlugins.value === null || onScreenPlugins.value.includes(pluginId))
 
 // Only plugins the user has activated (via Appearance) appear as tiles.
 const dockPlugins = computed(() => plugins.value.filter(p => enabledPlugins.value.includes(p.id)))
@@ -184,7 +196,7 @@ onMounted(async () => {
                 : t('remote.touchOverlay.expand', { plugin: plugin.name || plugin.id })
             "
             :class="[
-              visiblePlugins.includes(plugin.id)
+              isActive(plugin.id)
                 ? 'border-violet-500 bg-violet-50 ring-2 ring-violet-500/40 dark:bg-violet-500/15 dark:ring-violet-400/40'
                 : 'border-gray-200 bg-white hover:bg-gray-50 dark:border-gray-700 dark:bg-gray-800 dark:hover:bg-gray-700/40',
               'flex min-w-[7rem] flex-col items-center gap-1.5 rounded-xl border px-4 py-3 text-center transition-colors disabled:cursor-not-allowed disabled:opacity-60'

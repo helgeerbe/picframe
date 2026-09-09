@@ -127,13 +127,15 @@ Events (Worker → Main):
 | Message | Fields | Purpose |
 |---|---|---|
 | `ReadyEvent` | — | Worker finished initializing the surface |
-| `InputEvent` | `action: str` | `prev`/`next`/`toggle`/`hide` → translated to `Command` |
+| `InputEvent` | `action: str` | `prev`/`next`/`toggle` → translated to `Command` |
 | `OverlayErrorEvent` | `details: str`, `code: str?` | e.g. WebKitGTK init failure |
+| `VisiblePluginsChangedEvent` | `visible_plugins: tuple[str, ...]` | Dock toggle changed the expanded set → renderer republishes as `CommandEvent(SET_CONFIG, {overlay: {visible_plugins}})` (#765) |
+| `OnScreenPluginsChangedEvent` | `on_screen_plugins: tuple[str, ...]` | On-screen (runtime) visibility changed (auto-hide fade/wake/`media_change` re-arm/toggle) → renderer republishes as `OverlayVisibilityChangedEvent` (runtime channel, **not** persisted) so the Remote tab tile highlights mirror the dock icon (#766) |
 
 `parse_overlay_ipc_message()` returns `None` for malformed JSON or unknown
 types so a bad line from the worker never crashes the listener. Input actions
 map to playback `Command`s via `_command_for_input_action()`:
-`prev`→`PREV`, `next`→`NEXT`, `toggle`→`PLAY`, `hide`→`STOP`.
+`prev`→`PREV`, `next`→`NEXT`, `toggle`→`PLAY`.
 
 ## 5. Config & plugin storage
 
@@ -166,6 +168,65 @@ constant (the pi3d text/clock overlay). **Per-plugin user values persist in
 `config.db3` under `overlay.plugin_config.<id>.*`** (flat dotted keys,
 JSON-encoded), never inside the plugin directory. Effective config = manifest
 defaults ← db overrides.
+
+### Visible-plugins persistence (#765)
+
+`overlay.visible_plugins` (a list of plugin ids expanded on screen; empty =
+dock only) is the **single source of truth** for which panels are expanded,
+shared by the touch overlay dock and the Remote/Appearance web tabs. Both UIs
+write it through the **same** `CommandEvent(SET_CONFIG, {overlay:
+{visible_plugins}})` path, so a toggle from either side persists to
+`config.db3` and both refresh through the resulting `OverlayConfigChangedEvent`
+round-trip — surviving `media_change` and restarts.
+
+- **Web tabs** (`OverlayPanel.vue` / `OverlayAppearanceSection.vue`) call
+  `configStore.saveWorkflowConfig({ overlay: { visible_plugins } })`, which
+  hits `PUT /api/workflow-config` → `ConfigService` → `CommandEvent(SET_CONFIG)`.
+- **Touch overlay dock** (`dock.ts`) toggles optimistically, then the shell's
+  `onVisiblePluginsChange` callback calls the JS bridge `setVisiblePlugins(ids)`
+  (`bridge.ts` → `{ action: "__set_visible_plugins", plugins: [...] }`). The
+  worker sanitizes the payload (non-string entries dropped; missing/non-list
+  `plugins` → empty tuple) and emits a `VisiblePluginsChangedEvent`. The
+  renderer republishes it as the exact `CommandEvent(SET_CONFIG, {overlay:
+  {visible_plugins}})` the REST endpoint publishes, so ConfigService persists
+  it and the `OverlayConfigChangedEvent` reconciles the dock's optimistic update.
+- **`media_change` auto-show** (`dock.ts` `showPluginIdle`) only expands a
+  plugin while it remains in `visible_plugins`; collapsing a plugin (now
+  persisted) keeps it collapsed across subsequent photo changes until the user
+  expands it again — matching the remote-tab semantics.
+
+### On-screen (runtime) visibility — `OverlayVisibilityChangedEvent` (#766)
+
+`overlay.visible_plugins` is the **persisted** expanded set, but auto-hide is
+a **transient** client-side CSS fade (`pf-plugin-panel--idle`) that never
+writes `config.db3`. Without a runtime channel the Remote tab only sees the
+persisted set, so its tile highlights stay lit during an auto-hide fade while
+the dock icon correctly de-activates (#766). A separate runtime event keeps
+them in sync:
+
+- The dock's `emitOnScreen()` (hooked at the end of `setPluginIdle()` and
+  `render()`) computes the on-screen set — expanded plugins whose panel exists
+  and is **not** `--idle` — and diff-guards it (`sameIdSet`, order-independent)
+  so only actual changes fire. The shell's `onOnScreenPluginsChange` callback
+  calls the JS bridge `setOnScreenPlugins(ids)`
+  (`bridge.ts` → `{ action: "__set_on_screen_plugins", plugins: [...] }`).
+- The worker sanitizes the payload (non-string entries dropped; missing/
+  non-list `plugins` → empty tuple) and emits an `OnScreenPluginsChangedEvent`.
+  The renderer republishes it as an `OverlayVisibilityChangedEvent` (priority 3)
+  — **not** a `CommandEvent(SET_CONFIG)`, since auto-hide must not persist.
+- The `/ws/state` endpoint forwards it to browsers as
+  `{ type: "OverlayVisibilityChangedEvent", on_screen_plugins: [...] }`; the
+  player store calls `configStore.applyOverlayVisibility(ids)`, which replaces
+  the transient `onScreenPlugins` ref. `OverlayPanel.vue`'s `isActive()` tile
+  highlight is `visible_plugins.includes(id) && (onScreenPlugins === null ||
+  onScreenPlugins.includes(id))` — so an auto-hidden tile de-highlights while
+  staying in the persisted set, and tapping it still collapses (removes from
+  config), matching the dock.
+
+**Known limitation:** a fresh browser connect while plugins are auto-hidden
+falls back to `visible_plugins` (`onScreenPlugins === null` → assume shown)
+until the next hide/wake event; caching the latest on-screen set for
+`REQUEST_STATE` is out of scope.
 
 ## 6. Plugin manifest & loader
 
@@ -240,6 +301,20 @@ the manifest `icon` emoji. Emoji rendering (in the dock fallback *and inside
 plugin content*, e.g. the weather plugin's condition glyphs) requires the system
 color-emoji font `fonts-noto-color-emoji`, which the installer adds alongside
 the WebKitGTK packages — see `docs/user/overlay.md` troubleshooting.
+
+#### Hover tooltips
+
+Each dock icon — transport buttons (Previous / Play-Pause / Next), plugin
+icons, and the danger (power) trigger — carries a `data-tooltip` label. When a
+**mouse** pointer rests on an icon for ~600 ms (`TOOLTIP_DELAY_MS`), the dock
+shows a single shared `.pf-dock-tooltip` label centered above the icon (flipping
+below it when the dock sits at the top edge so the text stays on screen for any
+anchor). The controller uses **event delegation** on `#pf-dock`, so it survives
+`render()`'s `replaceChildren` without re-wiring per element. It is mouse-only:
+touch and keyboard users already get the icon `aria-label`, so the tooltip is a
+mouse convenience, not an accessibility path. The label is hidden on
+pointer-leave, dock idle, destroy, and before each re-render (`hideTooltip`,
+called from `closeOverlays`).
 
 ## 7. API
 

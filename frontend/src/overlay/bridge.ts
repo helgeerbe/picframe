@@ -18,8 +18,21 @@ type ApplyMediaHandler = (media: CurrentMedia) => void
 /** Per-plugin data push (e.g. clock extra-text file source, #761). */
 type ApplyPluginDataHandler = (pluginId: string, key: string, value: unknown) => void
 
+/**
+ * Payloads the shell posts to the native worker bridge
+ * (`window.webkit.messageHandlers.picframe.postMessage`). Navigation /
+ * danger-menu actions are bare `InputAction`s; the dock-driven
+ * visible-plugin change (#765) carries the next list; the boot handshake is
+ * `__request_config`.
+ */
+type BridgeSendPayload =
+  | InputAction
+  | { action: InputAction }
+  | { action: '__set_visible_plugins'; plugins: string[] }
+  | { action: '__set_on_screen_plugins'; plugins: string[] }
+
 interface PicframeBridge {
-  send: (action: InputAction | { action: InputAction }) => void
+  send: (payload: BridgeSendPayload) => void
   applyConfig?: ApplyConfigHandler
   applyMedia?: ApplyMediaHandler
   applyPluginData?: ApplyPluginDataHandler
@@ -48,6 +61,49 @@ export function sendAction(action: InputAction): void {
     bridge.send({ action })
   } catch (e) {
     console.warn('picframe bridge send failed', e)
+  }
+}
+
+/**
+ * Persist a dock-driven change to the expanded plugin set (#765).
+ *
+ * Sends `{ action: '__set_visible_plugins', plugins: [...] }` to the worker,
+ * which emits a `VisiblePluginsChangedEvent` the renderer republishes as
+ * `CommandEvent(SET_CONFIG, {overlay:{visible_plugins}})` — the same command
+ * the Remote/Appearance REST endpoint publishes — so the dock and the web UI
+ * share one persisted source of truth (`overlay.visible_plugins` in
+ * `config.db3`). The dock updates optimistically; the next config push
+ * reconciles it if the persist fails.
+ */
+export function setVisiblePlugins(pluginIds: string[]): void {
+  const bridge = ensureBridge()
+  try {
+    bridge.send({ action: '__set_visible_plugins', plugins: pluginIds })
+  } catch (e) {
+    console.warn('picframe bridge setVisiblePlugins failed', e)
+  }
+}
+
+/**
+ * Push the transient on-screen (runtime) plugin set to the worker (#766).
+ *
+ * Sends `{ action: '__set_on_screen_plugins', plugins: [...] }` — which
+ * expanded plugins are actually shown on screen (visible in `visible_plugins`
+ * **and** not auto-hidden). Auto-hide is a client-side CSS fade that never
+ * persists, so this is a separate runtime channel from `setVisiblePlugins`
+ * (the persisted config path). The worker emits an `OnScreenPluginsChangedEvent`
+ * the renderer republishes as `OverlayVisibilityChangedEvent`, which the
+ * `/ws/state` endpoint forwards to browsers so the Remote tab's tile
+ * highlights mirror the dock icon during auto-hide/wake fades. The dock's
+ * `emitOnScreen` diff-guards so this only fires when the on-screen set
+ * actually changes.
+ */
+export function setOnScreenPlugins(pluginIds: string[]): void {
+  const bridge = ensureBridge()
+  try {
+    bridge.send({ action: '__set_on_screen_plugins', plugins: pluginIds })
+  } catch (e) {
+    console.warn('picframe bridge setOnScreenPlugins failed', e)
   }
 }
 
