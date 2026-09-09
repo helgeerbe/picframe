@@ -46,6 +46,7 @@ dependencies = [
     "ninepatch>=0.2.0",
     "pi_heif>=0.8.0",
     "gpiozero>=2.0.0",
+    "evdev>=1.6.0; sys_platform == 'linux'",
     "fastapi>=0.100.0",
     "uvicorn>=0.23.0",
     "websockets>=11.0.0",

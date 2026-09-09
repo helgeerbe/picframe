@@ -477,6 +477,49 @@ restart guard, internal and external cycles heal identically. This mirrors
 the worker-isolation non-negotiable: WebKitGTK can crash or leak, so respawn
 rather than fix the live process.
 
+### Wake-on-input while the output is off (#762)
+
+While the Wayland output is destroyed by `wlr-randr --off` (or a compositor
+DPMS blank), the overlay's JS listeners cannot fire — the layer-shell surface
+is gone — so moving the mouse or pressing a key does nothing until picframe
+re-creates the output itself. The **backend wake-on-input path** closes that
+gap: a new `IWakeInputListener` port reads raw `/dev/input/event*` devices
+*independent of any Wayland surface*, so it works in the off state.
+
+`EvdevWakeAdapter` (`infrastructure/os/evdev_wake_adapter.py`) implements the
+port using the `evdev` library (a Linux-only dependency, lazy-imported). It
+listens **passively** (no `grab()`), so the compositor keeps receiving events
+for normal UI while the display is on. It filters to pointer + keyboard
+devices — touch devices are excluded by design (the surface is destroyed
+while off, and touch-on-a-dark-screen is not a wake gesture) — and emits
+`"mouse"` on relative pointer motion and `"keyboard"` on a key
+press/repeat (releases are ignored).
+
+`WakeOnInputService` (`core/services/wake_on_input.py`) turns those raw
+events into `Command.DISPLAY_ON` on the event bus. It is gated by:
+
+- **`overlay.enabled_input_types`** — only `mouse`/`keyboard` are
+  wake-capable; `touch` never wakes (the service enforces this even if a
+  future adapter emitted it). Disabling both classes from the web UI
+  disables wake-on-input live (the service reloads on a `CONFIG_CHANGED`
+  whose `updated_sections` contains `"overlay"`).
+- **The current display state** — it is idempotent: `IDisplayPower.is_on()`
+  is checked first, so an already-on display is never re-woken.
+- **A 1 s cooldown debounce** — a burst of mouse moves while the display is
+  still transitioning on publishes at most one `DISPLAY_ON`.
+
+It deliberately publishes **only `DISPLAY_ON`**; the `PLAY` side-effect is
+owned by `DisplayPowerManager`, keeping the single-owner responsibility
+intact.
+
+The HAL factory injects `EvdevWakeAdapter` on Linux when `evdev` is
+importable and at least one `/dev/input/event*` device is readable;
+otherwise it falls back to `MockWakeInputListener` (dev/CI/headless). The
+picframe user must be in the **`input`** group for `/dev/input/event*`
+access — the install script (`docs/user/install_picframe.sh`) already adds
+this. The adapter degrades gracefully if a device is unreadable: it logs a
+warning and skips that device rather than crashing.
+
 ### Why a worker self-report was attempted and reverted
 
 An earlier Phase-2 design tried to make output loss event-driven: the worker

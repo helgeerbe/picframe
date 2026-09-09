@@ -244,6 +244,17 @@ ticket is in `decisionLog.md` and the linked GitHub Issues.
   reject `WAKE`/`SLEEP` → use `DISPLAY_ON`/`DISPLAY_OFF`, #705); PIR no-motion
   timers in `HardwareInputService` (#635, #703); saving is a replacement not
   merge (#702); display-power commands idempotent (#704).
+- **Wake-on-input (#762):** a purpose-built `IWakeInputListener` port + backend
+  `EvdevWakeAdapter` (lazy `evdev`, passive no-grab `/dev/input/event*` read,
+  mouse+keyboard only, touch excluded) feeds `WakeOnInputService`, which publishes
+  only `Command.DISPLAY_ON` (never `PLAY` — that side-effect stays owned by
+  `DisplayPowerManager`) so the display wakes from the `wlr-randr --off`-destroyed
+  state where the overlay's JS listeners cannot fire. Gated by the existing
+  `overlay.enabled_input_types` (no new config key), idempotent via
+  `IDisplayPower.is_on()`, 1 s cooldown debounce, live-reloads on overlay config
+  change. `evdev>=1.6.0` is a Linux-only marker dependency (`sys_platform ==
+  'linux'`); the installer already adds the `input` group it needs. Additive to,
+  and distinct from, the GPIO/PIR `HardwareInputService`.
 - **Video handoff:** require `gtk4paintablesink`; 99% opacity redraw handshake at
   EOS; no legacy sink fallbacks; final-frame extraction at indexing time, not
   EOS runtime; geometry from `content_rect` sidecar (#691/#698).

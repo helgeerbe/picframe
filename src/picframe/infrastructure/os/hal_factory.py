@@ -13,12 +13,13 @@ from dataclasses import dataclass
 from typing import Any
 
 from picframe.core.events.interfaces import IEventPublisher
-from picframe.core.ports import IDisplayPower, IHardwareInput, ISystemManager
+from picframe.core.ports import IDisplayPower, IHardwareInput, ISystemManager, IWakeInputListener
 from picframe.infrastructure.os.linux_system_manager import LinuxSystemManager
 from picframe.infrastructure.os.mock_adapters import (
     MockDisplayPower,
     MockHardwareInput,
     MockSystemManager,
+    MockWakeInputListener,
 )
 from picframe.infrastructure.os.wayland_power import WaylandDisplayPower
 
@@ -34,6 +35,7 @@ class HALAdapters:
     display_power: IDisplayPower
     hardware_input: IHardwareInput
     system_manager: ISystemManager
+    wake_input: IWakeInputListener | None = None
 
 
 class HALFactory:
@@ -61,6 +63,23 @@ class HALFactory:
     @staticmethod
     def _has_wlr_randr() -> bool:
         return shutil.which("wlr-randr") is not None
+
+    @staticmethod
+    def _create_wake_input_listener() -> IWakeInputListener:
+        """Pick a wake-input listener: evdev on real Linux, mock otherwise (#762)."""
+        if sys.platform.startswith("linux"):
+            from picframe.infrastructure.os.evdev_wake_adapter import EvdevWakeAdapter
+
+            if EvdevWakeAdapter.is_available():
+                logger.info("HALFactory: evdev input devices found. Injecting EvdevWakeAdapter.")
+                return EvdevWakeAdapter()
+            logger.info(
+                "HALFactory: No readable /dev/input devices (or 'evdev' missing). "
+                "Injecting MockWakeInputListener."
+            )
+        else:
+            logger.info("HALFactory: Non-Linux host. Injecting MockWakeInputListener.")
+        return MockWakeInputListener()
 
     @staticmethod
     def create_adapters(
@@ -92,6 +111,7 @@ class HALFactory:
                 display_power=MockDisplayPower(),
                 hardware_input=MockHardwareInput(),
                 system_manager=MockSystemManager(),
+                wake_input=MockWakeInputListener(),
             )
 
         # Linux environment detection
@@ -117,6 +137,7 @@ class HALFactory:
                 display_power=MockDisplayPower(),
                 hardware_input=MockHardwareInput(),
                 system_manager=LinuxSystemManager(),
+                wake_input=MockWakeInputListener(),
             )
 
         # Determine Display Power Adapter
@@ -151,4 +172,5 @@ class HALFactory:
             display_power=display_power,
             hardware_input=hardware_input,
             system_manager=LinuxSystemManager(),
+            wake_input=HALFactory._create_wake_input_listener(),
         )
