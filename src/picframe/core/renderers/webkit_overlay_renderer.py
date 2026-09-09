@@ -71,7 +71,7 @@ from picframe.infrastructure.overlay.plugin_loader import PluginLoader
 logger = logging.getLogger(__name__)
 
 _WEBKIT_UNAVAILABLE_CODE = "webkit_unavailable"
-_WORKER_SOCKET_TIMEOUT_SECONDS = 20.0
+_WORKER_SOCKET_TIMEOUT_SECONDS = float(os.environ.get("PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT", "20"))
 _WORKER_SOCKET_POLL_SECONDS = 0.1
 
 # Exif keys mirrored from ``api.app.MEDIA_DTO_EXIF_KEYS`` so the overlay's

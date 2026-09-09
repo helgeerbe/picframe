@@ -394,3 +394,20 @@ Touch overlay** tile dock.
 - **Video shows through a fully opaque overlay.** That is expected: during
   video playback the overlay fades to opacity 0 so the video is visible, but it
   stays on top and keeps capturing input — tap anywhere to bring it back.
+- **Overlay starts then immediately disables (`webkit_unavailable`) on a slow
+  machine / VM.** The main process gives the WebKitGTK worker a fixed window
+  (20 s) to finish booting and create its IPC socket. On real Raspberry Pi
+  hardware this takes 1–3 s, but under QEMU software emulation (TCG, no
+  `/dev/kvm`) WebKitGTK can take ~2:20 to boot and the 20 s deadline kills the
+  worker before it is ready, so the overlay is reported unavailable. Raise the
+  deadline with the `PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT` environment
+  variable (seconds):
+
+  ```bash
+  PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT=180 picframe run
+  ```
+
+  On real hardware, or a VM with KVM enabled, you do not need this. Enabling
+  KVM in the VM is the better long-term fix. See
+  [Testing picframe on a QEMU VM](../dev/testing-on-vm.md) for the full VM
+  setup (labwc session, `xdg-desktop-portal-wlr`, KVM).

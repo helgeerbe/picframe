@@ -166,6 +166,7 @@ Local documentation is split by audience:
 - [Frontend architecture notes](docs/dev/architecture/frontend.md)
 - [Overlay architecture notes](docs/dev/architecture/overlay.md)
 - [GStreamer hardware discovery notes](docs/dev/architecture/video-gst-hw-discovery.md)
+- [Testing picframe on a QEMU VM](docs/dev/testing-on-vm.md)
 - [Video hardware limits notes](docs/dev/architecture/video-hw-limits.md)
 
 Historical project documentation can also be found at the project's

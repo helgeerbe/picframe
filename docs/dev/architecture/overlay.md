@@ -83,6 +83,28 @@ GTK/WebKit; the in-process `WebKitOverlayRenderer` is a thin IPC client (like
   `window.picframe` JS bridge, GTK-free IPC plumbing (`handle_command`/`_serve`)
   that is unit-tested headless. `main()` is the subprocess entry point.
 
+### Worker socket-connect timeout
+
+After spawning the worker, the renderer waits for the subprocess to create its
+`AF_UNIX` IPC socket file — the point at which `Gtk.init` + WebKitGTK have
+finished booting in the worker. `_WORKER_SOCKET_TIMEOUT_SECONDS` bounds this
+wait; the default is `20.0` seconds, which is ample on real Raspberry Pi
+hardware (WebKitGTK boots in 1–3 s). If the socket does not appear in time
+the renderer raises a `RuntimeError`, publishes a `webkit_unavailable`
+`SystemErrorEvent`, and picframe continues without the overlay.
+
+The deadline is overridable for slow environments via the
+`PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT` environment variable (seconds, float):
+
+```bash
+PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT=180 picframe run
+```
+
+This is needed under **QEMU TCG software emulation** (no `/dev/kvm`), where
+WebKitGTK boot takes ~2:20 instead of a few seconds and the 20 s default kills
+the worker before it finishes initializing. On real hardware, or a VM with KVM
+enabled, the override is unnecessary. See `docs/dev/testing-on-vm.md`.
+
 ## 4. IPC protocol
 
 `src/picframe/core/renderers/overlay_ipc.py` mirrors

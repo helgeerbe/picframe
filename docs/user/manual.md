@@ -271,6 +271,8 @@ The `picframe run` command accepts several parameters to override default paths 
 *   `--media-db`: Path to media database (default: `<dir>/data/media_cache.db3` or `PICFRAME_MEDIA_DB` env var).
 *   `--html-dir`: Path to frontend HTML assets (default: `<dir>/html` or `PICFRAME_HTML_DIR` env var).
 
+*   `PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT`: Seconds the main process waits for the touch-overlay WebKitGTK worker to boot and create its IPC socket (default `20`). Only raise this for very slow machines such as a QEMU VM under software emulation; real Raspberry Pi hardware boots WebKitGTK in 1–3 s. See [Touch overlay & plugins](overlay.md) troubleshooting.
+
 *Note: The webserver port and HTML directory path are strictly managed via CLI arguments and environment variables. They are not editable via the frontend UI to prevent connection loss and synchronization issues.*
 
 ### Web Control Plane
