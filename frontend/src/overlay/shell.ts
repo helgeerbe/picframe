@@ -89,8 +89,11 @@ export class OverlayShell {
     this.veil.id = 'pf-veil'
     this.root.appendChild(this.veil)
 
-    this.dock = new Dock(this.content, {
-      onVisiblePluginsChange: () => this.wake()
+    this.dock = new Dock(this.content, this.root, {
+      onVisiblePluginsChange: () => this.wake(),
+      onAction: (action: InputAction) => {
+        if (action !== '__request_config') sendAction(action)
+      }
     })
 
     this.router = new InputRouter({
@@ -108,8 +111,11 @@ export class OverlayShell {
     // Reveal the cursor on mouse movement and reset the idle timers in lockstep
     // with the dock, so the cursor shows only while the mouse is active and
     // hides again after the idle interval — mirroring dock auto-hide. Touch and
-    // keyboard activity never reveal the cursor (#739).
-    this.veil.addEventListener('pointermove', this.onMouseMove)
+    // keyboard activity never reveal the cursor (#739). The listener is on
+    // #overlay-root (not the veil) so mouse moves over the hoisted dock (#763)
+    // also wake the shell — the dock sits above the veil and would otherwise
+    // swallow pointermove without resetting the idle timer.
+    this.root.addEventListener('pointermove', this.onMouseMove)
     registerApplyConfig(config => this.applyConfig(config))
     // The worker pushes current-media payloads over the IPC bridge (the reliable
     // path that replaces the cross-origin `/ws/state` WebSocket from `file://`).
@@ -135,7 +141,8 @@ export class OverlayShell {
   }
 
   destroy(): void {
-    this.veil.removeEventListener('pointermove', this.onMouseMove)
+    this.root.removeEventListener('pointermove', this.onMouseMove)
+    this.dock.destroy()
     this.router.detach()
     this.state?.stop()
     this.clearPanelIdle()

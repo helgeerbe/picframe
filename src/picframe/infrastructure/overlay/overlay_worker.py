@@ -31,9 +31,13 @@ from typing import Any
 
 from picframe.core.models.overlay import PluginDescriptor, effective_plugin_layout
 from picframe.core.renderers.overlay_ipc import (
+    INPUT_ACTION_DISPLAY_OFF,
     INPUT_ACTION_HIDE,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
+    INPUT_ACTION_REBOOT_HOST,
+    INPUT_ACTION_RESTART_SERVICE,
+    INPUT_ACTION_SHUTDOWN_HOST,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
@@ -352,6 +356,10 @@ class OverlayWorker:
             INPUT_ACTION_NEXT,
             INPUT_ACTION_TOGGLE,
             INPUT_ACTION_HIDE,
+            INPUT_ACTION_DISPLAY_OFF,
+            INPUT_ACTION_RESTART_SERVICE,
+            INPUT_ACTION_REBOOT_HOST,
+            INPUT_ACTION_SHUTDOWN_HOST,
         ):
             self.emit_input(action)
         elif action == "__request_config":

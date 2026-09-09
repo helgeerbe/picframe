@@ -9,9 +9,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from picframe.core.renderers.overlay_ipc import (
+    INPUT_ACTION_DISPLAY_OFF,
     INPUT_ACTION_HIDE,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
+    INPUT_ACTION_REBOOT_HOST,
+    INPUT_ACTION_RESTART_SERVICE,
+    INPUT_ACTION_SHUTDOWN_HOST,
     INPUT_ACTION_TOGGLE,
     MediaChangedCommand,
     OverlayErrorEvent,
@@ -151,13 +155,23 @@ def test_handle_command_unknown_message_returns_true() -> None:
 
 
 def test_handle_bridge_message_emits_input_actions(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Each navigation action is forwarded to ``emit_input``."""
+    """Each navigation + danger-menu action is forwarded to ``emit_input`` (#763)."""
     worker = make_worker()
     emitted: list[str] = []
     monkeypatch.setattr(worker, "emit_input", lambda action: emitted.append(action))
-    for action in (INPUT_ACTION_PREV, INPUT_ACTION_NEXT, INPUT_ACTION_TOGGLE, INPUT_ACTION_HIDE):
+    actions = (
+        INPUT_ACTION_PREV,
+        INPUT_ACTION_NEXT,
+        INPUT_ACTION_TOGGLE,
+        INPUT_ACTION_HIDE,
+        INPUT_ACTION_DISPLAY_OFF,
+        INPUT_ACTION_RESTART_SERVICE,
+        INPUT_ACTION_REBOOT_HOST,
+        INPUT_ACTION_SHUTDOWN_HOST,
+    )
+    for action in actions:
         worker._handle_bridge_message({"action": action})
-    assert emitted == [INPUT_ACTION_PREV, INPUT_ACTION_NEXT, INPUT_ACTION_TOGGLE, INPUT_ACTION_HIDE]
+    assert emitted == list(actions)
 
 
 def test_handle_bridge_message_request_config_pushes_config(

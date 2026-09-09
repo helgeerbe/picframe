@@ -51,9 +51,13 @@ from picframe.core.models.media import DisplayItem, MediaItem
 from picframe.core.models.overlay import PluginDescriptor
 from picframe.core.ports.overlay import IOverlayController
 from picframe.core.renderers.overlay_ipc import (
+    INPUT_ACTION_DISPLAY_OFF,
     INPUT_ACTION_HIDE,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
+    INPUT_ACTION_REBOOT_HOST,
+    INPUT_ACTION_RESTART_SERVICE,
+    INPUT_ACTION_SHUTDOWN_HOST,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
@@ -71,7 +75,9 @@ from picframe.infrastructure.overlay.plugin_loader import PluginLoader
 logger = logging.getLogger(__name__)
 
 _WEBKIT_UNAVAILABLE_CODE = "webkit_unavailable"
-_WORKER_SOCKET_TIMEOUT_SECONDS = float(os.environ.get("PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT", "20"))
+_WORKER_SOCKET_TIMEOUT_SECONDS = float(
+    os.environ.get("PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT", "20")
+)
 _WORKER_SOCKET_POLL_SECONDS = 0.1
 
 # Exif keys mirrored from ``api.app.MEDIA_DTO_EXIF_KEYS`` so the overlay's
@@ -664,7 +670,13 @@ class WebKitOverlayRenderer(IOverlayController):
 
 
 def _command_for_input_action(action: str) -> Command | None:
-    """Map an overlay input action to a playback Command."""
+    """Map an overlay input action to a playback/system Command.
+
+    Navigation actions (prev/next/toggle/hide) map to playback commands; the
+    danger-menu actions (#763) map to system commands handled by
+    :class:`SystemManager` (reboot/shutdown/restart) and
+    :class:`DisplayPowerManager` (display off).
+    """
     if action == INPUT_ACTION_PREV:
         return Command.PREV
     if action == INPUT_ACTION_NEXT:
@@ -673,6 +685,14 @@ def _command_for_input_action(action: str) -> Command | None:
         return Command.PLAY
     if action == INPUT_ACTION_HIDE:
         return Command.STOP
+    if action == INPUT_ACTION_DISPLAY_OFF:
+        return Command.DISPLAY_OFF
+    if action == INPUT_ACTION_RESTART_SERVICE:
+        return Command.RESTART_SERVICE
+    if action == INPUT_ACTION_REBOOT_HOST:
+        return Command.REBOOT_HOST
+    if action == INPUT_ACTION_SHUTDOWN_HOST:
+        return Command.SHUTDOWN_HOST
     return None
 
 

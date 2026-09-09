@@ -8,8 +8,21 @@
  * itself for live media/state.
  */
 
-/** Input actions the shell emits to the worker via the JS bridge. */
-export type InputAction = 'prev' | 'next' | 'toggle' | 'hide' | '__request_config'
+/** Input actions the shell emits to the worker via the JS bridge. Navigation
+ * actions (prev/next/toggle/hide) come from the dock transport buttons and the
+ * keyboard router; the danger-menu actions (display_off/restart_service/
+ * reboot_host/shutdown_host) are confirmed in the shell before being sent
+ * (#763). `__request_config` is the boot handshake. */
+export type InputAction =
+  | 'prev'
+  | 'next'
+  | 'toggle'
+  | 'hide'
+  | 'display_off'
+  | 'restart_service'
+  | 'reboot_host'
+  | 'shutdown_host'
+  | '__request_config'
 
 /** Overlay display duration policy. */
 export type DisplayMode = 'persistent' | 'auto_hide'

@@ -25,6 +25,12 @@ INPUT_ACTION_PREV = "prev"
 INPUT_ACTION_NEXT = "next"
 INPUT_ACTION_TOGGLE = "toggle"
 INPUT_ACTION_HIDE = "hide"
+# Danger-menu actions (#763): display power, service restart, host reboot/shutdown.
+# These are confirmed in the overlay shell before being emitted to the worker.
+INPUT_ACTION_DISPLAY_OFF = "display_off"
+INPUT_ACTION_RESTART_SERVICE = "restart_service"
+INPUT_ACTION_REBOOT_HOST = "reboot_host"
+INPUT_ACTION_SHUTDOWN_HOST = "shutdown_host"
 
 
 @dataclass(frozen=True)
@@ -110,7 +116,9 @@ class InputEvent(OverlayIpcMessage):
     """An input event captured by the overlay shell (pointer or keyboard).
 
     ``action`` is one of :data:`INPUT_ACTION_PREV`, :data:`INPUT_ACTION_NEXT`,
-    :data:`INPUT_ACTION_TOGGLE`, :data:`INPUT_ACTION_HIDE`.
+    :data:`INPUT_ACTION_TOGGLE`, :data:`INPUT_ACTION_HIDE`, or a danger-menu
+    action (:data:`INPUT_ACTION_DISPLAY_OFF`, :data:`INPUT_ACTION_RESTART_SERVICE`,
+    :data:`INPUT_ACTION_REBOOT_HOST`, :data:`INPUT_ACTION_SHUTDOWN_HOST`).
     """
 
     action: str

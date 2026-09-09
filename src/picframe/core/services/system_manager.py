@@ -54,3 +54,6 @@ class SystemManager:
         elif event.command == Command.SHUTDOWN_HOST:
             logger.info("SystemManager: Received SHUTDOWN_HOST command.")
             self._adapter.shutdown()
+        elif event.command == Command.RESTART_SERVICE:
+            logger.info("SystemManager: Received RESTART_SERVICE command.")
+            self._adapter.restart_picframe_service()

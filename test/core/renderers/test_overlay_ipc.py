@@ -3,9 +3,13 @@
 import json
 
 from picframe.core.renderers.overlay_ipc import (
+    INPUT_ACTION_DISPLAY_OFF,
     INPUT_ACTION_HIDE,
     INPUT_ACTION_NEXT,
     INPUT_ACTION_PREV,
+    INPUT_ACTION_REBOOT_HOST,
+    INPUT_ACTION_RESTART_SERVICE,
+    INPUT_ACTION_SHUTDOWN_HOST,
     INPUT_ACTION_TOGGLE,
     InputEvent,
     MediaChangedCommand,
@@ -80,7 +84,16 @@ def test_media_changed_command_carries_media() -> None:
 
 
 def test_input_event_action_constants() -> None:
-    for action in (INPUT_ACTION_PREV, INPUT_ACTION_NEXT, INPUT_ACTION_TOGGLE, INPUT_ACTION_HIDE):
+    for action in (
+        INPUT_ACTION_PREV,
+        INPUT_ACTION_NEXT,
+        INPUT_ACTION_TOGGLE,
+        INPUT_ACTION_HIDE,
+        INPUT_ACTION_DISPLAY_OFF,
+        INPUT_ACTION_RESTART_SERVICE,
+        INPUT_ACTION_REBOOT_HOST,
+        INPUT_ACTION_SHUTDOWN_HOST,
+    ):
         event = parse_overlay_ipc_message(InputEvent(action=action).to_json())
         assert isinstance(event, InputEvent)
         assert event.action == action

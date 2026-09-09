@@ -30,6 +30,7 @@ class Command(Enum):
     PLAY = auto()
     REBOOT_HOST = auto()
     SHUTDOWN_HOST = auto()
+    RESTART_SERVICE = auto()
     SET_VOL = auto()
     DELETE = auto()
     PURGE_FILES = auto()
@@ -100,6 +101,7 @@ class CommandEvent(Event):
             Command.PLAY,
             Command.REBOOT_HOST,
             Command.SHUTDOWN_HOST,
+            Command.RESTART_SERVICE,
             Command.DELETE,
             Command.STOP,
         }

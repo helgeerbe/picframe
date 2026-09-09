@@ -14,6 +14,7 @@ import type {
   ContentOffset,
   CurrentMedia,
   DockLayout,
+  InputAction,
   OverlayAnchor,
   OverlayShellConfig,
   PluginEntry,
@@ -23,11 +24,66 @@ import type {
 export interface DockCallbacks {
   /** Fired when the user changes which plugins are expanded (or collapses all). */
   onVisiblePluginsChange: (pluginIds: string[]) => void
+  /** Emit a transport or danger-menu action to the worker bridge (#763).
+   * The dock calls this for transport buttons (no confirmation) and after the
+   * user confirms a danger-menu item (display off / restart / reboot / shutdown). */
+  onAction: (action: InputAction) => void
 }
 
 const DOCK_ID = 'pf-dock'
 /** Prefix for per-plugin panel element ids: `pf-plugin-panel-<id>`. */
 const PANEL_ID_PREFIX = 'pf-plugin-panel-'
+const DANGER_DROPDOWN_ID = 'pf-danger-dropdown'
+const CONFIRM_BACKDROP_ID = 'pf-confirm-backdrop'
+const CONFIRM_MODAL_ID = 'pf-confirm-modal'
+
+/** Danger-menu entries (#763). Each item shows a confirm modal before firing
+ * `onAction` — even display-off (reversible) goes through the dialog for a
+ * consistent mental model, so a stray tap never powers anything down. */
+interface DangerEntry {
+  action: InputAction
+  label: string
+  icon: string
+  /** `severe` items get the warm hover tint (reboot/shutdown/restart). */
+  severe: boolean
+  confirmTitle: string
+  confirmMessage: string
+}
+
+const DANGER_ENTRIES: DangerEntry[] = [
+  {
+    action: 'display_off',
+    label: 'Display Off',
+    icon: '🌙',
+    severe: false,
+    confirmTitle: 'Turn the display off?',
+    confirmMessage: 'The screen will power off until the next wake tap.'
+  },
+  {
+    action: 'restart_service',
+    label: 'Restart Picframe',
+    icon: '🔄',
+    severe: true,
+    confirmTitle: 'Restart the Picframe service?',
+    confirmMessage: 'Picframe will restart. This takes a few seconds.'
+  },
+  {
+    action: 'reboot_host',
+    label: 'Reboot',
+    icon: '🔁',
+    severe: true,
+    confirmTitle: 'Reboot the host?',
+    confirmMessage: 'The system will reboot. This takes about a minute.'
+  },
+  {
+    action: 'shutdown_host',
+    label: 'Shut Down',
+    icon: '⏻',
+    severe: true,
+    confirmTitle: 'Shut down the host?',
+    confirmMessage: 'The system will power off completely.'
+  }
+]
 
 /** Default panel size when a layout omits width/height (matches the legacy
  * `#pf-plugin-panel` rule: min(38vw,480px) × min(46vh,360px)). */
@@ -60,10 +116,23 @@ export class Dock {
    * receives the latest value on load, mirroring the media provider. */
   private pluginDataProvider: (() => Record<string, Record<string, unknown>> | null) | null = null
   private readonly root: HTMLElement
+  /** Where `#pf-dock` (and the danger dropdown / confirm modal) are appended.
+   * Hoisted out of {@link root} (`#pf-content`) into `#overlay-root` so the
+   * dock sits above the veil and is never shadowed by a plugin panel's inline
+   * z_order (#763). Plugin panels still live in {@link root}. */
+  private readonly dockRoot: HTMLElement
   private readonly callbacks: DockCallbacks
+  /** Whether the danger dropdown is currently open (#763). */
+  private dangerOpen = false
+  /** Bound outside-click handler for the danger dropdown (kept so it can be
+   * detached after close). */
+  private boundDangerOutside: ((e: PointerEvent) => void) | null = null
+  /** Bound keydown handler for the open confirm modal (#763). */
+  private boundConfirmKey: ((e: KeyboardEvent) => void) | null = null
 
-  constructor(root: HTMLElement, callbacks: DockCallbacks) {
+  constructor(root: HTMLElement, dockRoot: HTMLElement, callbacks: DockCallbacks) {
     this.root = root
+    this.dockRoot = dockRoot
     this.callbacks = callbacks
   }
 
@@ -175,15 +244,36 @@ export class Dock {
 
   private render(): void {
     const enabled = this.plugins.filter(p => this.enabledPlugins.includes(p.id))
-    let dock = this.root.querySelector<HTMLElement>(`#${DOCK_ID}`)
+    // Close any open dropdown / confirm modal before re-rendering so a config
+    // push never leaves a stale overlay pointing at removed DOM (#763).
+    this.closeDangerDropdown()
+    this.closeConfirm()
+
+    let dock = this.dockRoot.querySelector<HTMLElement>(`#${DOCK_ID}`)
     if (!dock) {
       dock = document.createElement('div')
       dock.id = DOCK_ID
       dock.className = 'pf-dock'
-      this.root.appendChild(dock)
+      this.dockRoot.appendChild(dock)
     }
     this.applyDockPlacement(dock, this.dockLayout)
-    dock.replaceChildren(...enabled.map(p => this.buildIcon(p)))
+
+    // Dock contents (#763): transport buttons | divider | plugin icons |
+    // divider | danger menu. Transport + danger live in the dock so they
+    // share its auto-hide + z-order hoist; plugin icons follow when present.
+    const children: HTMLElement[] = [
+      this.buildTransportButton('prev', '⏮', 'Previous'),
+      this.buildTransportButton('toggle', '⏯', 'Play / Pause'),
+      this.buildTransportButton('next', '⏭', 'Next'),
+      this.buildTransportButton('hide', '⏹', 'Stop')
+    ]
+    if (enabled.length > 0) {
+      children.push(this.buildDivider())
+      children.push(...enabled.map(p => this.buildIcon(p)))
+    }
+    children.push(this.buildDivider())
+    children.push(this.buildDangerButton())
+    dock.replaceChildren(...children)
 
     // Render one panel per visible plugin, ordered by layout z_order (stable
     // for equal z so manifest/dock order wins), each positioned by its anchor.
@@ -318,6 +408,210 @@ export class Dock {
       this.togglePlugin(plugin.id)
     })
     return btn
+  }
+
+  /** Build a transport button (prev/next/toggle/hide) that emits its action
+   * immediately on click — no confirmation (#763). */
+  private buildTransportButton(action: InputAction, icon: string, label: string): HTMLElement {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'pf-dock-icon'
+    btn.setAttribute('aria-label', label)
+    btn.textContent = icon
+    btn.addEventListener('click', e => {
+      e.stopPropagation()
+      this.callbacks.onAction(action)
+    })
+    return btn
+  }
+
+  /** Build a vertical divider separating dock groups (#763). */
+  private buildDivider(): HTMLElement {
+    const div = document.createElement('span')
+    div.className = 'pf-dock-divider'
+    div.setAttribute('aria-hidden', 'true')
+    return div
+  }
+
+  /** Build the danger-menu trigger button (power icon). Toggles the
+   * dropdown (#763). */
+  private buildDangerButton(): HTMLElement {
+    const btn = document.createElement('button')
+    btn.type = 'button'
+    btn.className = 'pf-dock-icon pf-dock-danger'
+    btn.setAttribute('aria-label', 'System')
+    btn.setAttribute('aria-haspopup', 'menu')
+    btn.setAttribute('aria-expanded', String(this.dangerOpen))
+    btn.textContent = '⏻'
+    btn.addEventListener('click', e => {
+      e.stopPropagation()
+      if (this.dangerOpen) this.closeDangerDropdown()
+      else this.openDangerDropdown(btn)
+    })
+    return btn
+  }
+
+  /** Open the danger dropdown anchored below the trigger button (#763). */
+  private openDangerDropdown(triggerBtn: HTMLElement): void {
+    this.closeDangerDropdown()
+    this.dangerOpen = true
+    triggerBtn.setAttribute('aria-expanded', 'true')
+    const dropdown = document.createElement('div')
+    dropdown.id = DANGER_DROPDOWN_ID
+    dropdown.setAttribute('role', 'menu')
+    for (const entry of DANGER_ENTRIES) {
+      const item = document.createElement('button')
+      item.type = 'button'
+      item.className = 'pf-danger-item' + (entry.severe ? ' pf-danger-item--severe' : '')
+      item.setAttribute('role', 'menuitem')
+      const iconSpan = document.createElement('span')
+      iconSpan.setAttribute('aria-hidden', 'true')
+      iconSpan.textContent = entry.icon
+      const labelSpan = document.createElement('span')
+      labelSpan.textContent = entry.label
+      item.append(iconSpan, labelSpan)
+      item.addEventListener('click', ev => {
+        ev.stopPropagation()
+        this.closeDangerDropdown()
+        this.openConfirm(entry)
+      })
+      dropdown.appendChild(item)
+    }
+    this.dockRoot.appendChild(dropdown)
+    const rect = triggerBtn.getBoundingClientRect()
+    const dw = dropdown.offsetWidth
+    const dh = dropdown.offsetHeight
+    let left = rect.left + rect.width / 2 - dw / 2
+    let top = rect.bottom + 8
+    left = Math.max(8, Math.min(left, window.innerWidth - dw - 8))
+    if (top + dh > window.innerHeight - 8) top = rect.top - dh - 8
+    dropdown.style.left = `${left}px`
+    dropdown.style.top = `${top}px`
+    this.boundDangerOutside = (ev: PointerEvent) => {
+      const target = ev.target as Node | null
+      if (target && !dropdown.contains(target) && target !== triggerBtn) {
+        this.closeDangerDropdown()
+      }
+    }
+    window.setTimeout(() => {
+      if (this.boundDangerOutside) {
+        this.dockRoot.addEventListener('pointerdown', this.boundDangerOutside)
+      }
+    }, 0)
+  }
+
+  /** Close and detach the danger dropdown (#763). */
+  private closeDangerDropdown(): void {
+    if (this.boundDangerOutside) {
+      this.dockRoot.removeEventListener('pointerdown', this.boundDangerOutside)
+      this.boundDangerOutside = null
+    }
+    this.dockRoot.querySelector(`#${DANGER_DROPDOWN_ID}`)?.remove()
+    this.dangerOpen = false
+    const trigger = this.dockRoot.querySelector<HTMLElement>('.pf-dock-danger')
+    trigger?.setAttribute('aria-expanded', 'false')
+  }
+
+  /** Open a confirm modal for a danger entry (#763). Cancel closes the modal;
+   * Confirm fires `onAction` then closes. Escape closes the modal and stops
+   * propagation so the global InputRouter Escape→hide does not also fire. */
+  private openConfirm(entry: DangerEntry): void {
+    this.closeConfirm()
+    const backdrop = document.createElement('div')
+    backdrop.id = CONFIRM_BACKDROP_ID
+    const modal = document.createElement('div')
+    modal.id = CONFIRM_MODAL_ID
+    modal.setAttribute('role', 'alertdialog')
+    modal.setAttribute('aria-modal', 'true')
+    modal.setAttribute('aria-labelledby', 'pf-confirm-title')
+    modal.setAttribute('aria-describedby', 'pf-confirm-msg')
+    const title = document.createElement('h2')
+    title.id = 'pf-confirm-title'
+    title.textContent = entry.confirmTitle
+    const msg = document.createElement('p')
+    msg.id = 'pf-confirm-msg'
+    msg.textContent = entry.confirmMessage
+    const actions = document.createElement('div')
+    actions.className = 'pf-confirm-actions'
+    const cancel = document.createElement('button')
+    cancel.type = 'button'
+    cancel.className = 'pf-confirm-btn pf-confirm-cancel'
+    cancel.textContent = 'Cancel'
+    const ok = document.createElement('button')
+    ok.type = 'button'
+    ok.className = 'pf-confirm-btn pf-confirm-ok'
+    ok.textContent = 'Confirm'
+    actions.append(cancel, ok)
+    modal.append(title, msg, actions)
+    backdrop.appendChild(modal)
+    this.dockRoot.appendChild(backdrop)
+
+    const dismiss = (): void => this.closeConfirm()
+    cancel.addEventListener('click', e => {
+      e.stopPropagation()
+      dismiss()
+    })
+    ok.addEventListener('click', e => {
+      e.stopPropagation()
+      this.closeConfirm()
+      this.callbacks.onAction(entry.action)
+    })
+    backdrop.addEventListener('pointerdown', e => {
+      if (e.target === backdrop) {
+        e.stopPropagation()
+        dismiss()
+      }
+    })
+
+    // Escape closes the modal (stops the global hide handler); Enter activates
+    // the focused button; Tab is trapped between Cancel and Confirm. Focus
+    // Cancel on open so the destructive action is never the default. Capture
+    // phase runs before the window-level InputRouter keydown.
+    this.boundConfirmKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        dismiss()
+        return
+      }
+      if (e.key === 'Enter') {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        if (document.activeElement === ok) {
+          this.closeConfirm()
+          this.callbacks.onAction(entry.action)
+        } else {
+          dismiss()
+        }
+        return
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault()
+        if (e.shiftKey) {
+          ;(document.activeElement === ok ? cancel : ok).focus()
+        } else {
+          ;(document.activeElement === cancel ? ok : cancel).focus()
+        }
+      }
+    }
+    window.addEventListener('keydown', this.boundConfirmKey, true)
+    cancel.focus()
+  }
+
+  /** Remove the confirm modal + detach its capture-phase key handler (#763). */
+  private closeConfirm(): void {
+    if (this.boundConfirmKey) {
+      window.removeEventListener('keydown', this.boundConfirmKey, true)
+      this.boundConfirmKey = null
+    }
+    this.dockRoot.querySelector(`#${CONFIRM_BACKDROP_ID}`)?.remove()
+  }
+
+  /** Tear down transient overlays + detach window listeners (#763). Called by
+   * the shell on destroy so a left-open modal never leaks its key handler. */
+  destroy(): void {
+    this.closeDangerDropdown()
+    this.closeConfirm()
   }
 
   private buildFrame(plugin: PluginEntry, layout: PluginLayout): HTMLIFrameElement {
