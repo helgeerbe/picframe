@@ -709,6 +709,14 @@ class WebKitOverlayRenderer(IOverlayController):
 
     def _cleanup(self) -> None:
         self._running = False
+        # Clear the cached on-screen set so a restarted worker (display power
+        # cycle or recovery) uses the documented ``None`` fallback until it
+        # reports fresh runtime visibility. Otherwise a ``REQUEST_STATE`` from
+        # a freshly-connected browser replays the *previous* worker's stale
+        # set, which can disagree with the new worker's initial boot state
+        # (#771 review).
+        with self._on_screen_lock:
+            self._last_on_screen_plugins = None
         if self._conn:
             try:
                 self._conn.close()

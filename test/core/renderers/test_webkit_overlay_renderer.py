@@ -368,6 +368,30 @@ def test_request_state_ignores_non_request_state_commands(
     mock_publisher.publish.assert_not_called()
 
 
+def test_cleanup_clears_on_screen_cache_so_restart_uses_fallback(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """``_cleanup`` (called by ``stop()`` and the display-power-on respawn)
+    clears the cached on-screen set so a restarted worker replays nothing on
+    the next ``REQUEST_STATE`` until it reports fresh runtime visibility.
+
+    Without this, a browser connecting during the post-restart window — before
+    the new worker emits its first ``OnScreenPluginsChangedEvent`` — would
+    receive the *previous* worker's stale set, which can disagree with the new
+    worker's initial boot state (#771 review)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(OnScreenPluginsChangedEvent(on_screen_plugins=("clock", "text")))
+    assert renderer._last_on_screen_plugins is not None
+    renderer._cleanup()
+    assert renderer._last_on_screen_plugins is None
+    mock_publisher.publish.reset_mock()
+    renderer._on_command_event(CommandEvent(command=Command.REQUEST_STATE))
+    mock_publisher.publish.assert_not_called()
+
+
 def test_render_command_promote_sets_opacity_zero(
     mock_publisher: MagicMock,
     mock_subscriber: MagicMock,
