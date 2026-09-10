@@ -153,7 +153,7 @@
       "description": "Discover and configure the WebKitGTK overlay plugins shown on the frame.",
       "loading": "Loading overlay plugins",
       "empty": "No overlay plugins discovered. Add plugin directories to the configured plugin folder, or enable the overlay in Appearance.",
-      "dockOnly": "Dock only",
+      "hideAllPlugins": "Hide all plugins",
       "saved": "Overlay plugin selection saved.",
       "failed": "Could not save the overlay plugin selection.",
       "collapse": "Collapse",

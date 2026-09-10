@@ -75,8 +75,8 @@ const toggleVisible = async (pluginId: string) => {
   }
 }
 
-// Collapse all panels back to dock-only.
-const setDockOnly = async () => {
+// Hide every expanded plugin panel (collapse all back to nothing shown).
+const hideAllPlugins = async () => {
   if (isSaving.value) return
   isSaving.value = true
   statusMessage.value = ''
@@ -215,9 +215,9 @@ onMounted(async () => {
             type="button"
             :disabled="isSaving"
             class="text-xs font-semibold text-violet-600 transition-colors hover:text-violet-500 disabled:opacity-60 dark:text-violet-400"
-            @click="setDockOnly()"
+            @click="hideAllPlugins()"
           >
-            {{ t('remote.touchOverlay.dockOnly') }}
+            {{ t('remote.touchOverlay.hideAllPlugins') }}
           </button>
         </div>
 

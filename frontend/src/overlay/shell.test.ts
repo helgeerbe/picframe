@@ -163,3 +163,97 @@ describe('OverlayShell.applyConfig — auto-hide sibling reveal (#773)', () => {
     expect(isIdle('b')).toBe(true)
   })
 })
+
+describe('OverlayShell.applyConfig — dock flash on Remote toggle (#775)', () => {
+  /** The dock auto-hide class on the overlay root (drives dock visibility). */
+  function dockIdle(): boolean {
+    return root.classList.contains('pf-root--dock-idle')
+  }
+
+  it('reveals the dock on the boot push, then auto-hides it', () => {
+    const a = makePlugin('a')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+
+    // Boot push reveals the dock (no --dock-idle) and arms its 5 s timer.
+    expect(dockIdle()).toBe(false)
+
+    vi.advanceTimersByTime(4999)
+    expect(dockIdle()).toBe(false)
+    vi.advanceTimersByTime(1)
+    expect(dockIdle()).toBe(true)
+  })
+
+  it('does not reveal the dock or re-arm its timer on a second (Remote) push', () => {
+    const a = makePlugin('a')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+
+    // Boot: dock shown, 5 s timer armed.
+    expect(dockIdle()).toBe(false)
+
+    // Let 3 s pass — 2 s remain on the dock-idle timer.
+    vi.advanceTimersByTime(3000)
+    expect(dockIdle()).toBe(false)
+
+    // Remote toggles something → a second config push. The dock must NOT be
+    // re-revealed and its timer must NOT be cleared/re-armed: if the original
+    // 2 s countdown is left alone, the dock hides 2 s later (not 5 s).
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+
+    expect(dockIdle()).toBe(false)
+
+    // With the regression, the second push reset the timer to 5 s, so 2 s
+    // later the dock would still be shown. With the fix the original timer is
+    // untouched, so exactly 2 s later the dock hides.
+    vi.advanceTimersByTime(2000)
+    expect(dockIdle()).toBe(true)
+
+    // And a further 3 s (which would be t=5 s on a reset timer) does not bring
+    // it back — confirming the timer was not re-armed.
+    vi.advanceTimersByTime(3000)
+    expect(dockIdle()).toBe(true)
+  })
+
+  it('does not touch the dock when it is already hidden on a second push', () => {
+    const a = makePlugin('a')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+
+    // Let the dock fully auto-hide.
+    vi.advanceTimersByTime(5000)
+    expect(dockIdle()).toBe(true)
+
+    // A second (Remote) push must not pop the dock back up.
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+
+    expect(dockIdle()).toBe(true)
+  })
+})

@@ -76,6 +76,12 @@ export class OverlayShell {
   /** Currently enabled input classes; the mouse-move cursor reveal only fires
    * when `mouse` is among them (#739). */
   private enabledTypes: InputType[] = ['touch', 'mouse', 'keyboard']
+  /** Tracks whether `applyConfig` has run at least once. The boot (first) push
+   * reveals the dock — same as a local wake — but subsequent pushes (Remote
+   * toggle, Appearance timing change) must not flash the dock on the frame:
+   * the Remote user cannot interact with it, and the actor/viewer are often
+   * different people in different places (#775). */
+  private configApplied = false
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -210,17 +216,29 @@ export class OverlayShell {
     // And the latest per-plugin data (clock extra-text file, #761).
     this.dock.setPluginDataProvider(() => this.pluginData)
     this.dock.applyConfig(config)
-    // #773: a config push (Remote toggle, Appearance timing change) must not
-    // blanket-reveal auto-hidden siblings. The dock's `togglePlugin` path
-    // already avoided this (#767) via `wake(true, false)`; the config path was
-    // missed and called a full `wake()`, which strips `--idle` from every
-    // visible panel and re-arms its timer — briefly revealing all auto-hidden
-    // plugins for `idle_hide_seconds` on a single Remote toggle. Reveal +
-    // re-arm only panels that are currently shown or freshly mounted (no
-    // `--idle`); panels already faded stay hidden. Boot is unaffected: no
-    // panel is `--idle` on the first push, so every auto-hide panel is armed
-    // exactly as before.
-    this.wake(true, true, false)
+    // #773 + #775: a config push (Remote toggle, Appearance timing change) must
+    // not blanket-reveal auto-hidden sibling panels, and must not flash the
+    // dock up on the frame. The dock's `togglePlugin` path already avoided the
+    // panel side (#767) via `wake(true, false)`; the config path was missed and
+    // called a full `wake()`, which strips `--idle` from every visible panel
+    // and re-arms its timer — briefly revealing all auto-hidden plugins for
+    // `idle_hide_seconds` on a single Remote toggle (#773) — and pops the dock
+    // for `idle_hide_seconds` even though the Remote user can't interact with
+    // it and the actor/viewer are often different people (#775).
+    //
+    // Reveal + re-arm only panels that are currently shown or freshly mounted
+    // (no `--idle`); panels already faded stay hidden. The dock is revealed
+    // only on the boot (first) push: no panel is `--idle` then, so every
+    // auto-hide panel is armed exactly as before, and the dock shows then
+    // auto-hides as today. Subsequent pushes pass `revealDock=false` so the
+    // dock class is untouched and its idle timer is neither cleared nor
+    // re-armed — if hidden it stays hidden, if visible it keeps its existing
+    // countdown (a remote action does not extend the dock-visible window).
+    // All local-input paths (touch, mouse, keyboard, dock tap) still reveal
+    // the dock.
+    const isBoot = !this.configApplied
+    this.configApplied = true
+    this.wake(isBoot, true, false)
   }
 
   /**
