@@ -510,9 +510,11 @@ export class Dock {
     // would wipe `pf-plugin-panel--idle` that shell.ts armed via
     // `showPluginIdle` / the per-panel idle timers — revealing an auto-hidden
     // sibling when an unrelated plugin is toggled. Capture + re-apply so a
-    // re-render never changes a panel's idle state. `applyConfig` is unaffected:
-    // it's followed by a full `wake()` that reconciles idle state (same as
-    // today), and a brand-new panel has no `--idle` class to preserve.
+    // re-render never changes a panel's idle state. `applyConfig` is unaffected
+    // by this preservation: it is followed by `wake(true, true, false)` (#773)
+    // which skips already-`--idle` panels (leaving them hidden) and only
+    // reveals + re-arms panels that are currently shown or freshly mounted,
+    // and a brand-new panel has no `--idle` class to preserve.
     const wasIdle = panel.classList.contains('pf-plugin-panel--idle')
     panel.className = `pf-plugin-panel pf-anchor-${layout.position}`
     if (wasIdle) panel.classList.add('pf-plugin-panel--idle')

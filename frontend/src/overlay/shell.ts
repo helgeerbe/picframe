@@ -210,7 +210,17 @@ export class OverlayShell {
     // And the latest per-plugin data (clock extra-text file, #761).
     this.dock.setPluginDataProvider(() => this.pluginData)
     this.dock.applyConfig(config)
-    this.wake()
+    // #773: a config push (Remote toggle, Appearance timing change) must not
+    // blanket-reveal auto-hidden siblings. The dock's `togglePlugin` path
+    // already avoided this (#767) via `wake(true, false)`; the config path was
+    // missed and called a full `wake()`, which strips `--idle` from every
+    // visible panel and re-arms its timer — briefly revealing all auto-hidden
+    // plugins for `idle_hide_seconds` on a single Remote toggle. Reveal +
+    // re-arm only panels that are currently shown or freshly mounted (no
+    // `--idle`); panels already faded stay hidden. Boot is unaffected: no
+    // panel is `--idle` on the first push, so every auto-hide panel is armed
+    // exactly as before.
+    this.wake(true, true, false)
   }
 
   /**
@@ -264,8 +274,17 @@ export class OverlayShell {
    *   so mouse movement reveals navigation chrome (dock + cursor) but does not
    *   un-fade content panels — they should appear only on intentional
    *   interaction (touch tap, keyboard, dock icon toggle, media_change) (#763).
+   * @param unhidePanels When `false` (with `revealPanels = true`), auto-hidden
+   *   panels (carrying `pf-plugin-panel--idle`) are left faded and are not
+   *   re-armed — only panels currently shown or freshly mounted are revealed
+   *   and get a fresh idle timer. Used by `applyConfig` (#773) so a config
+   *   push (Remote toggle, Appearance timing change) reveals only the
+   *   toggled/new panel, mirroring the dock's `togglePlugin` behavior (#767)
+   *   instead of blanket-un-hiding every auto-hidden sibling. Default `true`
+   *   (boot, touch, keyboard, `media_change`, dock-action wakes still reveal
+   *   all visible panels).
    */
-  private wake(revealDock = true, revealPanels = true): void {
+  private wake(revealDock = true, revealPanels = true, unhidePanels = true): void {
     if (revealDock) {
       this.root.classList.remove('pf-root--dock-idle')
       this.clearDockIdle()
@@ -278,6 +297,17 @@ export class OverlayShell {
       // state stays in sync with the panel's on-screen state (highlighted when
       // shown, not when auto-hidden).
       for (const id of this.dockVisiblePluginIds()) {
+        // #773: skip auto-hidden panels when `unhidePanels` is false so a
+        // config-push wake (Remote/Appearance) does not strip `--idle` from
+        // unrelated siblings — they stay faded and keep no timer (they are
+        // already hidden; a later touch/keyboard/dock wake re-arms them).
+        // Boot is unaffected: no panel carries `--idle` on the first push.
+        if (!unhidePanels) {
+          const panel = this.content.querySelector<HTMLElement>(
+            `#${CSS.escape(PANEL_ID_PREFIX + id)}`
+          )
+          if (panel?.classList.contains('pf-plugin-panel--idle')) continue
+        }
         this.dock.setPluginIdle(id, false)
         const seconds = this.panelIdleSeconds(id)
         if (seconds !== null && seconds > 0) {
