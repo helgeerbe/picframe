@@ -153,7 +153,7 @@
       "description": "WebKitGTK-Overlay-Plugins auf dem Bilderrahmen entdecken und konfigurieren.",
       "loading": "Overlay-Plugins werden geladen",
       "empty": "Keine Overlay-Plugins gefunden. Fügen Sie Plugin-Verzeichnisse zum konfigurierten Plugin-Ordner hinzu oder aktivieren Sie das Overlay in der Darstellung.",
-      "dockOnly": "Nur Dock",
+      "hideAllPlugins": "Alle Plugins ausblenden",
       "saved": "Overlay-Plugin-Auswahl gespeichert.",
       "failed": "Overlay-Plugin-Auswahl konnte nicht gespeichert werden.",
       "collapse": "Einklappen",
