@@ -375,9 +375,9 @@ The overlay shell is a **second Vite multi-page build**
 | `env.ts` | Parses `?ws=<port>&plugins=<uri>` from `location.search` |
 | `bridge.ts` | `window.picframe.send`/`applyConfig` JS bridge to the worker |
 | `state-client.ts` | Best-effort `/ws/state` WebSocket + auto-reconnect |
-| `input.ts` | Keyboard routing from configurable `overlay.key_bindings` (prev/next/toggle); Tab/Enter/Space reserved for native focus/activation, Escape fixed to hide; device-class filtering via `enabled_input_types`; pointer wake; idle timer (#777) |
+| `input.ts` | Keyboard routing from configurable `overlay.key_bindings` (prev/next/toggle); Tab/Enter/Space reserved for native focus/activation, Escape fixed to `onHide`; **any key wakes the dock** (bound keys wake+act, reserved keys wake+passthrough, unbound keys wake only); device-class filtering via `enabled_input_types`; pointer wake; idle timer (#777, #780) |
 | `dock.ts` | Plugin icons + active plugin iframe; `postToActivePlugin()` |
-| `shell.ts` | Orchestrator: DOM veil/content/dock, idle-hide fade, config apply, media forwarding |
+| `shell.ts` | Orchestrator: DOM veil/content/dock, idle-hide fade, config apply, media forwarding; `onHide` toggles the dock via `pf-root--dock-idle` (Escape wake-when-hidden, dismiss-when-shown, dropdown-first) (#780) |
 | `main.ts`, `style.css` | Bootstrap + transparent styling |
 
 The worker loads the shell via `file://…?ws=<port>&plugins=<file uri>`

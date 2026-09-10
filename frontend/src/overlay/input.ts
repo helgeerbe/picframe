@@ -6,15 +6,20 @@
  * wakes the shell (resets the idle timers and re-reveals content); navigation
  * is provided by the dock transport buttons and keyboard actions (#763).
  *
- * Keyboard routing (#777):
- * - `Escape` is **fixed**: it hides the dock (closing an open dropdown first).
- *   It is not user-assignable and fires regardless of `key_bindings`.
- * - `Tab`/`Shift+Tab`, `Enter`, `Space` are **reserved**: the router returns
- *   immediately and never calls `preventDefault`, so the browser handles native
- *   focus movement and `<button>` activation. This removes the old
- *   `Enter`/`Space` → `toggle` collision that shadowed focused dock buttons.
- * - Everything else is looked up in the configurable `key_bindings` map
- *   (`prev`/`next`/`toggle`, each a list of `KeyboardEvent.key` strings).
+ * Keyboard routing (#777; #780 unified wake-then-navigate):
+ * - `Escape` routes to the shell's `onHide`, which **toggles** the dock: it
+ *   wakes (reveals + re-arms) when the dock is idle, and dismisses it when
+ *   shown (closing an open dropdown first). It is not user-assignable and
+ *   fires regardless of `key_bindings`.
+ * - **Any other key wakes the dock** (resets the idle timers + re-reveals
+ *   content), mirroring a touch tap, so an unbound key is no longer a silent
+ *   no-op — the dock appears and the user can learn the shortcuts.
+ * - `Tab`/`Shift+Tab`, `Enter`, `Space` are **reserved**: after waking they
+ *   return without `preventDefault`, so the browser handles native focus
+ *   movement and `<button>` activation. This removes the old `Enter`/`Space`
+ *   → `toggle` collision that shadowed focused dock buttons.
+ * - Bound keys (`prev`/`next`/`toggle`, from the configurable `key_bindings`
+ *   map) wake and then fire their action.
  *
  * Only the input device classes enabled in `overlay.enabled_input_types` are
  * honoured; a pen is treated as touch.
@@ -147,10 +152,10 @@ export class InputRouter {
 
   private handleKey(e: KeyboardEvent): void {
     if (!this.enabledTypes.includes('keyboard')) return
-    // #777: Escape is a fixed, non-configurable "hide" — close an open
-    // dropdown first, else hide the dock. It fires regardless of key_bindings
-    // and is intentionally NOT counted as wake activity (pressing Escape to
-    // dismiss should not reset the idle timers or re-reveal content). When a
+    // #780: Escape routes to the shell's onHide, which toggles the dock —
+    // wake-when-hidden, dismiss-when-shown (closing an open dropdown first).
+    // It is intentionally NOT counted as onActivity here: the shell owns the
+    // wake-vs-dismiss decision based on the current dock-idle state. When a
     // confirm modal is open, its own capture-phase Escape handler stops
     // propagation, so this only runs once the modal is dismissed.
     if (e.key === 'Escape') {
@@ -158,18 +163,23 @@ export class InputRouter {
       e.preventDefault()
       return
     }
-    // #777: Tab/Shift+Tab, Enter, Space are reserved for native focus movement
-    // and <button> activation. Return without preventDefault so the browser
-    // handles them — this is what lets a keyboard-only user Tab to a dock
-    // control and press Enter/Space to activate it (previously the Enter/Space
-    // → toggle binding canceled the click). They can never appear in the
-    // keymap (setKeyBindings skips reserved keys), so this guard is also the
-    // defense-in-depth against a hand-edited config.db3.
+    // #780: any other key wakes the dock + extends visibility (mirrors a
+    // touch tap), so an unbound key reveals the dock instead of being a silent
+    // no-op — the user sees the transport controls and can learn the
+    // shortcuts. Bound keys additionally fire their action below.
+    this.onActivity('keyboard')
+    // Tab/Shift+Tab, Enter, Space are reserved for native focus movement and
+    // <button> activation: return without preventDefault so the browser
+    // handles them (a keyboard-only user can Tab to a dock control and press
+    // Enter/Space to activate it). They can never appear in the keymap
+    // (setKeyBindings skips reserved keys), so this guard is also the
+    // defense-in-depth against a hand-edited config.db3. The wake above still
+    // fires, so Tabbing toward the dock also reveals it.
     if (e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') return
     const action = this.keyToAction.get(normalizeKey(e.key))
-    if (!action) return
-    this.onActivity('keyboard')
-    this.onAction(action)
-    e.preventDefault()
+    if (action) {
+      this.onAction(action)
+      e.preventDefault()
+    }
   }
 }

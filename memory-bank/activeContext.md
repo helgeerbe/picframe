@@ -7,6 +7,42 @@
 shipped via PR #768 (squash-merged to `dev` as `8c2f94a`); issue #762
 closed.** `dev` head is now `8c2f94a`; both feature branches deleted.
 
+**#777 — overlay keyboard navigation + configurable shortcuts (PR #778, open on
+`dev`):** full implementation shipped in `17ec79a` on `feat/777-overlay-keyboard-navigation`
+(config schema, backend models/app/renderer, overlay `input.ts`/`shell.ts`/`dock.ts`,
+Settings `TouchOverlaySettingsSection.vue`, i18n en/de, 24 frontend + backend tests,
+docs). Sourcery flagged one valid `bug_risk`: `saveKeyBindings` dropped a rapid
+trailing edit made while a save was in flight (`if (isSaving.value) return`).
+**Fixed in `290a88e`** via a reusable `useCoalescedSave` composable
+(`frontend/src/composables/useCoalescedSave.ts`) that accepts the component's
+shared `isSaving` ref and re-sends the latest snapshot once the in-flight PUT
+settles — preserving the shared mutual-exclusion guard + "saving" button state.
+Unit-tested (5 cases); `yarn test` (85)/`lint`/`format`/`build` (vue-tsc) green.
+Replied to the Sourcery thread. Note: the identical inherited guard in
+`OverlayAppearanceSection.vue` (plugin-toggle auto-save) was left out of scope —
+candidate for a separate consistency ticket.
+
+**#779 + #780 — follow-ups on `feat/777-overlay-keyboard-navigation` (PR #778):**
+- **#779 (EXCLUSIVE keyboard mode):** `ON_DEMAND` (#754) only delivers keyboard
+  events while the compositor considers the surface focused, and labwc does not
+  retain that focus across key actions — so #777 routing worked once then went
+  dead. Fixed in `overlay_worker.py` by switching the layer-shell keyboard mode
+  to `EXCLUSIVE` (keyboard input only; pointer/touch + opacity/video-reveal
+  path unchanged). Right mode for a kiosk frame with no competing Wayland app.
+- **#780 (unified keyboard wake):** any key now wakes the dock (mirrors a touch
+  tap), unifying keyboard with the touch reveal-then-navigate model. `input.ts`
+  `handleKey` calls `onActivity('keyboard')` before bound-key routing; Escape
+  still routes only to `onHide`. `shell.ts` `onHide` now **toggles** the dock
+  from the `pf-root--dock-idle` state — wake (reveal + re-arm) when hidden,
+  dismiss (close an open dropdown first, else hide the dock chrome) when shown.
+  Bound keys wake + fire their action immediately; reserved keys (Tab/Enter/
+  Space) wake but keep native behavior; unbound keys wake only (was a no-op).
+  Frontend-only; no config/schema impact. Tests: `input.test.ts` (+unmapped/
+  F5 wake, reserved-key `onActivity` asserts) and a new `shell.test.ts`
+  Escape-toggle block. Gates: `yarn test` (89)/`lint`/`format`/`build`,
+  `pytest` (1127)/`mypy`/`ruff` all green. `decisionLog.md` + `overlay.md`
+  updated.
+
 **What shipped:**
 - Out-of-process WebKitGTK overlay worker (`infrastructure/overlay/overlay_worker.py`)
   using `wlr-layer-shell` via the guarded `gtk4-layer-shell` typelib (falls back

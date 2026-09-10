@@ -257,3 +257,76 @@ describe('OverlayShell.applyConfig — dock flash on Remote toggle (#775)', () =
     expect(dockIdle()).toBe(true)
   })
 })
+
+describe('OverlayShell — Escape toggles the dock (#780)', () => {
+  /** Dock auto-hide class on the overlay root (drives dock visibility). */
+  function dockIdle(): boolean {
+    return root.classList.contains('pf-root--dock-idle')
+  }
+
+  function escape(): void {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  }
+
+  function key(key: string): void {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  }
+
+  it('hides the dock when shown, then reveals it when hidden (symmetric toggle)', () => {
+    const a = makePlugin('a')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+    // The boot push wakes the dock (no --dock-idle right away).
+    expect(dockIdle()).toBe(false)
+
+    // 1st Escape (dock shown) -> hide.
+    escape()
+    expect(dockIdle()).toBe(true)
+    // 2nd Escape (dock hidden) -> wake.
+    escape()
+    expect(dockIdle()).toBe(false)
+    // 3rd Escape (dock shown again) -> hide — toggle is symmetric.
+    escape()
+    expect(dockIdle()).toBe(true)
+  })
+
+  it('reveals the dock on an unmapped key instead of doing nothing', () => {
+    const a = makePlugin('a')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+    // Let the dock auto-hide.
+    vi.advanceTimersByTime(5000)
+    expect(dockIdle()).toBe(true)
+
+    // An unmapped key now wakes the dock (reveals it) — was a no-op before #780.
+    key('x')
+    expect(dockIdle()).toBe(false)
+  })
+
+  it('wakes the dock on a reserved key while preserving native behavior', () => {
+    const a = makePlugin('a')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+    vi.advanceTimersByTime(5000)
+    expect(dockIdle()).toBe(true)
+
+    // Tab is reserved (no preventDefault) but still wakes the dock.
+    key('Tab')
+    expect(dockIdle()).toBe(false)
+  })
+})

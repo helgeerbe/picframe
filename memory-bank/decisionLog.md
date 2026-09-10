@@ -237,5 +237,35 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   (behavior-preserving) into `src/utils/media-url.ts`; the store re-imports
   from there. CI gained a `frontend-test` job running `yarn test --run`.
 
+- **Overlay keyboard navigation (#777) + unified wake (#780):**
+  - `overlay.key_bindings` (`prev`/`next`/`toggle`, each a list of
+    `KeyboardEvent.key` strings; defaults `ArrowLeft`/`ArrowRight`/`p`) is the
+    only freely-assignable shortcut surface, edited from Settings → Touch
+    overlay with a multi-key capture control. `Tab`/`Enter`/`Space`/`Escape`
+    are **reserved and non-configurable** — enforced in `setKeyBindings`
+    (frontend) and `OverlayKeyBindings` (backend) so a hand-edited
+    `config.db3` can't silently break native focus/activation.
+  - **Default `toggle` moved off Enter/Space → `p`** so native `<button>`
+    activation (Tab + Enter/Space) always wins on the dock; the old
+    InputRouter `preventDefault` shadowed focused buttons.
+  - **Escape is a wake key too and toggles the dock (#780):** the
+    InputRouter routes Escape to the shell's `onHide`, which decides
+    wake-vs-dismiss from the current `pf-root--dock-idle` state — wake
+    (reveal + re-arm) when hidden, dismiss (close an open dropdown first,
+    else hide the dock chrome) when shown. **Any other key wakes the dock**
+    (mirrors a touch tap): bound keys wake then fire their action
+    immediately (no extra keystroke), reserved keys (Tab/Enter/Space) wake
+    but return without `preventDefault`, unbound keys wake only (was a
+    silent no-op). This unifies keyboard with the touch reveal-then-
+    navigate mental model. Escape is intentionally not counted as
+    `onActivity` at the router; the shell owns the wake-vs-dismiss decision.
+  - **EXCLUSIVE keyboard mode (#779):** the layer-shell overlay uses
+    `Gtk4LayerShell.KeyboardMode.EXCLUSIVE` (not `ON_DEMAND`). labwc does
+    not retain on-demand keyboard focus across key actions, so #777
+    routing worked once then went dead. EXCLUSIVE governs keyboard input
+    only; pointer/touch and the opacity/video-reveal path are unchanged.
+    Right mode for a kiosk frame with no competing Wayland app; SSH/TTY
+    admin is a separate session.
+
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

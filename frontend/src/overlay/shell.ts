@@ -418,15 +418,25 @@ export class OverlayShell {
     this.wake(true, false)
   }
 
-  /** Escape→hide handler wired into the {@link InputRouter} (#777). The first
-   * Escape closes an open danger dropdown (and any tooltip); if nothing was
-   * open, it hides the dock chrome — mirroring the dock idle state (add
+  /** Escape→toggle handler wired into the {@link InputRouter} (#777; #780
+   * unified wake). The first Escape closes an open danger dropdown (and any
+   * tooltip). With nothing open, Escape **toggles** the dock: when the dock is
+   * idle (hidden) it wakes (reveal + re-arm, like a touch tap); when shown it
+   * hides the dock chrome — mirroring the dock idle state (add
    * `pf-root--dock-idle`, drop the cursor, cancel the re-arm timer) so the dock
    * stays hidden until the next wake. Plugin panels keep their own auto-hide
    * timers and are not touched. Bound as an arrow-function property so the
    * router holds a stable ref. */
   private readonly onHide = (): void => {
     if (this.dock.closeMenuIfOpen()) return
+    // #780: Escape is a wake key too — when the dock is already hidden, Escape
+    // reveals it (full wake: dock + panels + re-armed idle timer) instead of
+    // being a no-op, matching the unified "any input wakes" model. When the
+    // dock is shown, Escape dismisses it as before.
+    if (this.root.classList.contains('pf-root--dock-idle')) {
+      this.wake()
+      return
+    }
     this.hideDock()
   }
 

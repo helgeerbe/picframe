@@ -112,12 +112,21 @@ describe('InputRouter — keyboard events (default key bindings, #777)', () => {
     router.detach()
   })
 
-  it('ignores an unmapped key', () => {
+  it('wakes the dock on an unmapped key but fires no action (#780)', () => {
     const router = makeRouter(['keyboard'])
     router.attach()
     dispatchKey('a')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
     expect(onAction).not.toHaveBeenCalled()
-    expect(onActivity).not.toHaveBeenCalled()
+    router.detach()
+  })
+
+  it('wakes the dock on an unmapped named key, e.g. F5 (#780)', () => {
+    const router = makeRouter(['keyboard'])
+    router.attach()
+    dispatchKey('F5')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
+    expect(onAction).not.toHaveBeenCalled()
     router.detach()
   })
 
@@ -130,29 +139,32 @@ describe('InputRouter — keyboard events (default key bindings, #777)', () => {
   })
 })
 
-describe('InputRouter — reserved keys (#777)', () => {
-  it('does not bind Enter to any action (native <button> activation wins)', () => {
+describe('InputRouter — reserved keys (#777, #780)', () => {
+  it('wakes on Enter but lets native <button> activation win (#780)', () => {
     const router = makeRouter(['keyboard'])
     router.attach()
     dispatchKey('Enter')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
     expect(onAction).not.toHaveBeenCalled()
     expect(onHide).not.toHaveBeenCalled()
     router.detach()
   })
 
-  it('does not bind Space to any action (native <button> activation wins)', () => {
+  it('wakes on Space but lets native <button> activation win (#780)', () => {
     const router = makeRouter(['keyboard'])
     router.attach()
     dispatchKey(' ')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
     expect(onAction).not.toHaveBeenCalled()
     expect(onHide).not.toHaveBeenCalled()
     router.detach()
   })
 
-  it('does not bind Tab to any action (native focus movement wins)', () => {
+  it('wakes on Tab but lets native focus movement win (#780)', () => {
     const router = makeRouter(['keyboard'])
     router.attach()
     dispatchKey('Tab')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
     expect(onAction).not.toHaveBeenCalled()
     expect(onHide).not.toHaveBeenCalled()
     router.detach()
@@ -170,13 +182,15 @@ describe('InputRouter — reserved keys (#777)', () => {
     dispatchKey('Enter')
     dispatchKey('Tab')
     dispatchKey(' ')
+    // Reserved keys still wake the dock (3 key actions) but never fire actions.
+    expect(onActivity).toHaveBeenCalledTimes(3)
     expect(onAction).not.toHaveBeenCalled()
     expect(onHide).not.toHaveBeenCalled()
     router.detach()
   })
 })
 
-describe('InputRouter — Escape -> hide (#777)', () => {
+describe('InputRouter — Escape -> onHide (#777, #780)', () => {
   it('fires onHide for Escape and does not count it as wake activity', () => {
     const router = makeRouter(['keyboard'])
     router.attach()
