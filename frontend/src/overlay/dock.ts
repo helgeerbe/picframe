@@ -865,6 +865,17 @@ export class Dock {
     this.tooltipEl?.classList.remove('pf-dock-tooltip--visible')
   }
 
+  /** Close an open danger dropdown (#777). Returns `true` when a dropdown was
+   * open and got closed, so the shell's Escape→hide handler can stop — the
+   * first Escape closes the menu, a second one hides the dock. The confirm
+   * modal has its own capture-phase Escape handler (with stopPropagation) so it
+   * never reaches this path while open. */
+  closeMenuIfOpen(): boolean {
+    const wasOpen = this.dangerOpen
+    this.closeDangerDropdown()
+    return wasOpen
+  }
+
   /** Close any open dropdown / confirm modal (#763). Called by the shell when
    * the dock enters its idle state (so transient overlays don't outlive the
    * faded dock — the dropdown is a sibling of #pf-dock and the idle CSS only

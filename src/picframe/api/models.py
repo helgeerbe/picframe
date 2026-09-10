@@ -432,6 +432,24 @@ class OverlayDockLayoutUpdateResponse(StatusMessageResponse):
     )
 
 
+class OverlayKeyBindings(BaseModel):
+    """Configurable keyboard shortcuts for the on-frame overlay dock (#777).
+
+    Only the three freely-assignable transport actions live here. ``Tab``,
+    ``Enter``, ``Space`` and ``Escape`` are reserved (focus navigation, button
+    activation, dismiss) and enforced by the shell's ``InputRouter`` regardless
+    of this config, so a hand-edited ``config.db3`` that lists them is ignored.
+    ``Escape`` always hides the dock (closing an open dropdown first) and is
+    not user-assignable. Each value is a list of ``KeyboardEvent.key`` strings
+    so a single action can be bound to several keys; matching is case-insensitive
+    for single letters and verbatim for named keys (e.g. ``ArrowLeft``).
+    """
+
+    prev: list[str] = Field(default_factory=lambda: ["ArrowLeft"])
+    next: list[str] = Field(default_factory=lambda: ["ArrowRight"])
+    toggle: list[str] = Field(default_factory=lambda: ["p"])
+
+
 class OverlayConfig(BaseModel):
     """Pydantic model for the ``overlay`` config section (#739, #752).
 
@@ -457,6 +475,7 @@ class OverlayConfig(BaseModel):
     enabled_plugins: list[str] = Field(default_factory=lambda: ["clock", "meta"])
     visible_plugins: list[str] = Field(default_factory=lambda: ["clock"])
     enabled_input_types: list[str] = Field(default_factory=lambda: ["touch", "mouse", "keyboard"])
+    key_bindings: OverlayKeyBindings = Field(default_factory=OverlayKeyBindings)
     idle_hide_seconds: float = 5.0
     plugin_config: dict[str, dict[str, Any]] = Field(default_factory=dict)
     plugin_layout: dict[str, PluginLayout] = Field(default_factory=dict)

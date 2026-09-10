@@ -155,6 +155,10 @@ overlay:
   visible_plugin: clock          # null = dock only
   display_mode: auto_hide        # persistent | auto_hide
   enabled_input_types: [touch, mouse, keyboard]
+  key_bindings:                   # configurable shortcuts (#777); Esc is fixed
+    prev: [ArrowLeft]
+    next: [ArrowRight]
+    toggle: [p]                    # moved off Enter/Space so native <button> activation wins
   idle_hide_seconds: 5.0
   transparent: true
   plugin_config: {}              # overlay.plugin_config.<id>.* per plugin
@@ -371,7 +375,7 @@ The overlay shell is a **second Vite multi-page build**
 | `env.ts` | Parses `?ws=<port>&plugins=<uri>` from `location.search` |
 | `bridge.ts` | `window.picframe.send`/`applyConfig` JS bridge to the worker |
 | `state-client.ts` | Best-effort `/ws/state` WebSocket + auto-reconnect |
-| `input.ts` | Pointer zone routing (left=prev, right=next, center=toggle, Esc=hide); device-class filtering via `enabled_input_types`; idle timer |
+| `input.ts` | Keyboard routing from configurable `overlay.key_bindings` (prev/next/toggle); Tab/Enter/Space reserved for native focus/activation, Escape fixed to hide; device-class filtering via `enabled_input_types`; pointer wake; idle timer (#777) |
 | `dock.ts` | Plugin icons + active plugin iframe; `postToActivePlugin()` |
 | `shell.ts` | Orchestrator: DOM veil/content/dock, idle-hide fade, config apply, media forwarding |
 | `main.ts`, `style.css` | Bootstrap + transparent styling |

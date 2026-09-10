@@ -4,20 +4,27 @@ import { InputRouter } from './input'
 let root: HTMLElement
 let onAction: ReturnType<typeof vi.fn>
 let onActivity: ReturnType<typeof vi.fn>
+let onHide: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   root = document.createElement('div')
   document.body.appendChild(root)
   onAction = vi.fn()
   onActivity = vi.fn()
+  onHide = vi.fn()
 })
 
 afterEach(() => {
   root.remove()
 })
 
-function makeRouter(enabledTypes: Array<'touch' | 'mouse' | 'keyboard'>): InputRouter {
-  return new InputRouter({ root, enabledTypes, onAction, onActivity })
+function makeRouter(
+  enabledTypes: Array<'touch' | 'mouse' | 'keyboard'>,
+  keyBindings?: Parameters<InputRouter['setKeyBindings']>[0]
+): InputRouter {
+  const router = new InputRouter({ root, enabledTypes, onAction, onHide, onActivity })
+  if (keyBindings) router.setKeyBindings(keyBindings)
+  return router
 }
 
 function dispatchPointer(pointerType: string): void {
@@ -71,7 +78,7 @@ describe('InputRouter — pointer events', () => {
   })
 })
 
-describe('InputRouter — keyboard events', () => {
+describe('InputRouter — keyboard events (default key bindings, #777)', () => {
   it('maps ArrowLeft to prev', () => {
     const router = makeRouter(['keyboard'])
     router.attach()
@@ -89,18 +96,18 @@ describe('InputRouter — keyboard events', () => {
     router.detach()
   })
 
-  it('maps Enter to toggle', () => {
+  it('maps p (default) to toggle', () => {
     const router = makeRouter(['keyboard'])
     router.attach()
-    dispatchKey('Enter')
+    dispatchKey('p')
     expect(onAction).toHaveBeenCalledWith('toggle')
     router.detach()
   })
 
-  it('maps Space to toggle', () => {
+  it('matches single letters case-insensitively', () => {
     const router = makeRouter(['keyboard'])
     router.attach()
-    dispatchKey(' ')
+    dispatchKey('P')
     expect(onAction).toHaveBeenCalledWith('toggle')
     router.detach()
   })
@@ -119,6 +126,127 @@ describe('InputRouter — keyboard events', () => {
     router.attach()
     dispatchKey('ArrowLeft')
     expect(onAction).not.toHaveBeenCalled()
+    router.detach()
+  })
+})
+
+describe('InputRouter — reserved keys (#777)', () => {
+  it('does not bind Enter to any action (native <button> activation wins)', () => {
+    const router = makeRouter(['keyboard'])
+    router.attach()
+    dispatchKey('Enter')
+    expect(onAction).not.toHaveBeenCalled()
+    expect(onHide).not.toHaveBeenCalled()
+    router.detach()
+  })
+
+  it('does not bind Space to any action (native <button> activation wins)', () => {
+    const router = makeRouter(['keyboard'])
+    router.attach()
+    dispatchKey(' ')
+    expect(onAction).not.toHaveBeenCalled()
+    expect(onHide).not.toHaveBeenCalled()
+    router.detach()
+  })
+
+  it('does not bind Tab to any action (native focus movement wins)', () => {
+    const router = makeRouter(['keyboard'])
+    router.attach()
+    dispatchKey('Tab')
+    expect(onAction).not.toHaveBeenCalled()
+    expect(onHide).not.toHaveBeenCalled()
+    router.detach()
+  })
+
+  it('ignores reserved keys even when a hand-edited config lists them', () => {
+    // Defense in depth: a config.db3 that puts Enter/Tab/Escape in key_bindings
+    // is ignored by setKeyBindings, so native activation/navigation still works.
+    const router = makeRouter(['keyboard'], {
+      prev: ['Enter'],
+      next: ['Tab'],
+      toggle: [' ', 'Escape']
+    })
+    router.attach()
+    dispatchKey('Enter')
+    dispatchKey('Tab')
+    dispatchKey(' ')
+    expect(onAction).not.toHaveBeenCalled()
+    expect(onHide).not.toHaveBeenCalled()
+    router.detach()
+  })
+})
+
+describe('InputRouter — Escape -> hide (#777)', () => {
+  it('fires onHide for Escape and does not count it as wake activity', () => {
+    const router = makeRouter(['keyboard'])
+    router.attach()
+    dispatchKey('Escape')
+    expect(onHide).toHaveBeenCalledTimes(1)
+    expect(onActivity).not.toHaveBeenCalled()
+    expect(onAction).not.toHaveBeenCalled()
+    router.detach()
+  })
+
+  it('fires onHide for Escape regardless of key_bindings', () => {
+    const router = makeRouter(['keyboard'], { toggle: ['x'] })
+    router.attach()
+    dispatchKey('Escape')
+    expect(onHide).toHaveBeenCalledTimes(1)
+    router.detach()
+  })
+
+  it('does nothing on Escape when keyboard is not enabled', () => {
+    const router = makeRouter(['mouse', 'touch'])
+    router.attach()
+    dispatchKey('Escape')
+    expect(onHide).not.toHaveBeenCalled()
+    router.detach()
+  })
+})
+
+describe('InputRouter — configurable key bindings (#777)', () => {
+  it('uses a custom key for an action', () => {
+    const router = makeRouter(['keyboard'], { prev: ['q'], next: ['w'], toggle: ['e'] })
+    router.attach()
+    dispatchKey('q')
+    expect(onAction).toHaveBeenCalledWith('prev')
+    dispatchKey('w')
+    expect(onAction).toHaveBeenCalledWith('next')
+    dispatchKey('e')
+    expect(onAction).toHaveBeenCalledWith('toggle')
+    router.detach()
+  })
+
+  it('binds several keys to one action', () => {
+    const router = makeRouter(['keyboard'], { toggle: ['p', 't'] })
+    router.attach()
+    dispatchKey('p')
+    dispatchKey('t')
+    expect(onAction).toHaveBeenCalledWith('toggle')
+    expect(onAction).toHaveBeenCalledTimes(2)
+    router.detach()
+  })
+
+  it('live-updates via setKeyBindings', () => {
+    const router = makeRouter(['keyboard'])
+    router.attach()
+    dispatchKey('p')
+    expect(onAction).toHaveBeenCalledWith('toggle')
+    router.setKeyBindings({ toggle: ['x'] })
+    dispatchKey('p')
+    expect(onAction).toHaveBeenCalledTimes(1) // no new toggle from old key
+    dispatchKey('x')
+    expect(onAction).toHaveBeenLastCalledWith('toggle')
+    router.detach()
+  })
+
+  it('falls back to defaults when key_bindings is empty', () => {
+    const router = makeRouter(['keyboard'], {})
+    router.attach()
+    dispatchKey('ArrowLeft')
+    expect(onAction).toHaveBeenCalledWith('prev')
+    dispatchKey('p')
+    expect(onAction).toHaveBeenCalledWith('toggle')
     router.detach()
   })
 })
@@ -144,7 +272,9 @@ describe('InputRouter — dynamic config and detach', () => {
     router.detach()
     dispatchPointer('mouse')
     dispatchKey('ArrowLeft')
+    dispatchKey('Escape')
     expect(onActivity).not.toHaveBeenCalled()
     expect(onAction).not.toHaveBeenCalled()
+    expect(onHide).not.toHaveBeenCalled()
   })
 })

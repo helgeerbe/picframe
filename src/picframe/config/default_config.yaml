@@ -212,6 +212,22 @@ overlay:
   - touch
   - mouse
   - keyboard
+  # Configurable keyboard shortcuts for the on-frame overlay dock (#777). Each
+  # action maps to a list of KeyboardEvent.key values (case-insensitive for
+  # single letters; named keys verbatim, e.g. "ArrowLeft"). Tab/Enter/Space and
+  # Escape are reserved (navigation, activation, dismiss) and enforced by the
+  # InputRouter regardless of this config, so a hand-edited config.db3 that
+  # puts them here is ignored. Escape always hides the dock (closing an open
+  # dropdown first) and is not user-assignable. Defaults: prev=ArrowLeft,
+  # next=ArrowRight, toggle=p (moved off Enter/Space so native <button>
+  # activation always wins).
+  key_bindings:
+    prev:
+    - ArrowLeft
+    next:
+    - ArrowRight
+    toggle:
+    - p
   # Seconds idle before fading to opacity 0 (wake on any input); photos too.
   # Per-plugin idle_hide_seconds may override this (null = inherit this value).
   idle_hide_seconds: 5.0

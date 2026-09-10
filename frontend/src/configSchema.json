@@ -349,6 +349,29 @@
       "items": {
         "type": "string"
       }
+    },
+    "key_bindings": {
+      "type": "object",
+      "properties": {
+        "prev": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "next": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "toggle": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
     }
   }
 }

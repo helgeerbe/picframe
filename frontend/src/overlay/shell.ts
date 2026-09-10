@@ -144,6 +144,7 @@ export class OverlayShell {
       onAction: (action: InputAction) => {
         if (action !== '__request_config') sendAction(action)
       },
+      onHide: this.onHide,
       onActivity: (source: InputType) => {
         // #766: a mouse click is ambient activity (like pointermove), not an
         // intentional request to view content — wake the dock only, leaving
@@ -211,6 +212,10 @@ export class OverlayShell {
     ]) as InputType[]
     this.enabledTypes = enabledTypes
     this.router.setEnabledTypes(enabledTypes)
+    // #777: live-apply configurable keyboard shortcuts. Reserved keys
+    // (Tab/Enter/Space/Escape) are enforced by the router regardless of this
+    // config; Escape is a fixed hide and never appears in the map.
+    this.router.setKeyBindings(config.key_bindings ?? {})
     // Let newly-loaded plugin iframes receive the current photo (#757).
     this.dock.setMediaProvider(() => this.latestMedia)
     // And the latest per-plugin data (clock extra-text file, #761).
@@ -411,6 +416,28 @@ export class OverlayShell {
     if (e.pointerType !== 'mouse' || !this.enabledTypes.includes('mouse')) return
     this.root.classList.add('pf-root--cursor')
     this.wake(true, false)
+  }
+
+  /** Escape→hide handler wired into the {@link InputRouter} (#777). The first
+   * Escape closes an open danger dropdown (and any tooltip); if nothing was
+   * open, it hides the dock chrome — mirroring the dock idle state (add
+   * `pf-root--dock-idle`, drop the cursor, cancel the re-arm timer) so the dock
+   * stays hidden until the next wake. Plugin panels keep their own auto-hide
+   * timers and are not touched. Bound as an arrow-function property so the
+   * router holds a stable ref. */
+  private readonly onHide = (): void => {
+    if (this.dock.closeMenuIfOpen()) return
+    this.hideDock()
+  }
+
+  /** Hide the dock chrome immediately (#777): the same end state the dock idle
+   * timer reaches, but without re-arming a timer — the dock stays hidden until
+   * the next enabled input event wakes it. */
+  private hideDock(): void {
+    this.dock.closeOverlays()
+    this.root.classList.add('pf-root--dock-idle')
+    this.root.classList.remove('pf-root--cursor')
+    this.clearDockIdle()
   }
 
   private clearPanelIdle(): void {

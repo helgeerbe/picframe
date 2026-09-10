@@ -223,6 +223,7 @@ PUBLIC_WORKFLOW_KEYS = {
         "enabled_input_types",
         "enabled_plugins",
         "visible_plugins",
+        "key_bindings",
     },
 }
 

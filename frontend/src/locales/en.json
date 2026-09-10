@@ -410,6 +410,26 @@
       "inputTouch": "Touch",
       "inputMouse": "Mouse",
       "inputKeyboard": "Keyboard",
+      "keys": {
+        "label": "Keyboard shortcuts",
+        "help": "Customize the on-frame overlay dock shortcuts. Tab, Enter, Space and Escape are reserved for keyboard navigation and dismissal and can't be reassigned.",
+        "addKey": "Add key",
+        "listening": "Press a key…",
+        "remove": "Remove key",
+        "saved": "Keyboard shortcuts saved.",
+        "failed": "Could not save the keyboard shortcuts.",
+        "reservedRejected": "This key is reserved for navigation and can't be reassigned.",
+        "actions": {
+          "prev": "Previous",
+          "next": "Next",
+          "toggle": "Toggle"
+        },
+        "reserved": {
+          "tab": "Navigate",
+          "activate": "Activate",
+          "hide": "Hide"
+        }
+      },
       "displayMode": {
         "persistent": "Until turned off",
         "autoHide": "Auto-hide"
