@@ -43,6 +43,41 @@ candidate for a separate consistency ticket.
   `pytest` (1127)/`mypy`/`ruff` all green. `decisionLog.md` + `overlay.md`
   updated.
 
+**#780 follow-up — three keyboard-navigation bug fixes (issue #780, on
+`feat/777-overlay-keyboard-navigation`):** reported after #779/#780 —
+(1) arrow keys advanced photos even when the dock was hidden, (2) Tab
+stopped cycling at the end of the dock, (3) the dock "lost keyboard focus"
+when the text overlay appeared on a media change. Root causes + fixes:
+- **Two-step wake-then-navigate:** `input.ts` added an optional
+  `dockIdle: () => boolean` predicate (default "never idle"); `handleKey`
+  captures `dockWasIdle` *before* the wake and, for a bound action, returns
+  early (wake-only) when the dock was hidden — the action fires on the next
+  press once visible. `shell.ts` passes `dockIdle: () =>
+  this.root.classList.contains('pf-root--dock-idle')`.
+- **Plugin iframes `tabindex="-1"`** (`dock.ts` `buildFrame`): removes
+  iframes from the tab sequence (defense-in-depth). **The actual Tab-wrap is
+  a delegated focus trap** (`dock.ts` `attachTabTrap`): a single `keydown`
+  listener on the persistent `#pf-dock` intercepts Tab on the last
+  `.pf-dock-icon` (wraps to first) and Shift+Tab on the first (wraps to
+  last); middle buttons move natively. Native Tab follows document order
+  and never wraps within a subtree, so `tabindex="-1"` alone did not cycle
+  — focus escaped past the dock's last button out of the overlay window,
+  stranding focus and silencing the window-level `keydown` (InputRouter).
+  Additionally `render()` snapshots the focused dock button's identity
+  (`data-plugin-id` / `data-dock-role`) before its `replaceChildren`
+  rebuild and restores focus to the rebuilt equivalent, so a config push
+  or dock toggle no longer drops focus to `<body>`.
+Frontend-only; tests in a new `dock.test.ts` (Tab wrap forward/backward,
+middle-button no-op, focus restoration across re-render, focus never leaves
+`#pf-dock`, danger dropdown open/Tab-wrap/Arrow-cycle/Escape-refocus). Gates:
+`yarn test` (110)/`lint`/`format`/`build` (vue-tsc) green; backend untouched.
+`decisionLog.md` + `overlay.md` updated. The danger dropdown is now a
+self-contained focus scope (modal-style: open focuses first item, Tab/Arrows
+trapped within, Escape closes + refocuses the trigger), mirroring the confirm
+modal. The dock Tab trap is guarded by `dangerOpen` so Tab flows natively from
+the trigger into an open menu. Out of scope: a mouse click into an iframe can
+still strand focus.
+
 **What shipped:**
 - Out-of-process WebKitGTK overlay worker (`infrastructure/overlay/overlay_worker.py`)
   using `wlr-layer-shell` via the guarded `gtk4-layer-shell` typelib (falls back

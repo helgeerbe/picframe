@@ -253,12 +253,43 @@ This is a compact index of durable project decisions. Detailed rationale lives i
     wake-vs-dismiss from the current `pf-root--dock-idle` state — wake
     (reveal + re-arm) when hidden, dismiss (close an open dropdown first,
     else hide the dock chrome) when shown. **Any other key wakes the dock**
-    (mirrors a touch tap): bound keys wake then fire their action
-    immediately (no extra keystroke), reserved keys (Tab/Enter/Space) wake
-    but return without `preventDefault`, unbound keys wake only (was a
+    (mirrors a touch tap). Bound keys follow a **two-step wake-then-navigate
+    model**: the first press on a hidden dock only wakes it (no action); the
+    action fires on the next press once visible (#780 follow-up — the
+    earlier one-press "wake+act immediately" behaviour skipped a photo on
+    the same key that revealed the dock). Reserved keys (Tab/Enter/Space)
+    wake but return without `preventDefault`, unbound keys wake only (was a
     silent no-op). This unifies keyboard with the touch reveal-then-
     navigate mental model. Escape is intentionally not counted as
     `onActivity` at the router; the shell owns the wake-vs-dismiss decision.
+  - **Dock Tab-wrap focus trap + `tabindex="-1"` (#780, re-fixed #777):**
+    `tabindex="-1"` on plugin iframes alone only removed them from the tab
+    sequence — native Tab follows document order and never wraps within a
+    subtree, so focus still escaped past the dock's last button out of the
+    overlay window, stranding focus and silencing the window-level
+    `keydown` (InputRouter). The actual wrap is a delegated focus trap
+    (`dock.ts` `attachTabTrap`): a single `keydown` listener on the
+    persistent `#pf-dock` calls `preventDefault` + `.focus()` to wrap Tab
+    (last→first) and Shift+Tab (first→last); middle buttons move natively;
+    the listener survives `render()`'s `replaceChildren` via delegation.
+    `render()` also snapshots the focused dock button's identity
+    (`data-plugin-id` / `data-dock-role`) and restores focus to the rebuilt
+    equivalent so a config push/dock toggle can't drop focus to `<body>`.
+    `tabindex="-1"` stays as defense-in-depth (a mouse click can still
+    focus an iframe, but the keyboard path no longer strands there).
+  - **Danger dropdown focus scope (#777):** the dropdown is a sibling of
+    `#pf-dock` (not a child), so the dock's Tab trap can't reach it — Tab on
+    the trigger (the last dock icon) wrapped back to the first dock button
+    instead of entering the menu. Fix mirrors the confirm modal: on open,
+    focus jumps to the first `.pf-danger-item` and a capture-phase `keydown`
+    on `window` traps Tab within the menu (wraps at edges), cycles items with
+    ArrowUp/Down/Home/End (consuming bound arrows via
+    `stopImmediatePropagation` so the menu stays open), and closes on Escape
+    (refocusing the trigger). The dock trap gains a `dangerOpen` guard so Tab
+    from the trigger flows natively into the menu. `closeDangerDropdown`
+    refocuses the trigger only when the menu was actually open (not when
+    `render()` calls it defensively), preserving the focus-restoration
+    snapshot.
   - **EXCLUSIVE keyboard mode (#779):** the layer-shell overlay uses
     `Gtk4LayerShell.KeyboardMode.EXCLUSIVE` (not `ON_DEMAND`). labwc does
     not retain on-demand keyboard focus across key actions, so #777

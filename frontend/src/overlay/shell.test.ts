@@ -330,3 +330,61 @@ describe('OverlayShell — Escape toggles the dock (#780)', () => {
     expect(dockIdle()).toBe(false)
   })
 })
+
+describe('OverlayShell — two-step wake-then-navigate (#780)', () => {
+  /** Dock auto-hide class on the overlay root (drives dock visibility). */
+  function dockIdle(): boolean {
+    return root.classList.contains('pf-root--dock-idle')
+  }
+
+  function key(key: string): void {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  }
+
+  it('a bound key on a hidden dock only wakes; it navigates on the next press', () => {
+    const a = makePlugin('a')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+    // Spy on the worker bridge to observe dispatched actions. The shell
+    // already created window.picframe.send (no-op) during boot.
+    const send = vi.fn()
+    expect(window.picframe).toBeDefined()
+    window.picframe!.send = send
+
+    // Let the dock auto-hide.
+    vi.advanceTimersByTime(5000)
+    expect(dockIdle()).toBe(true)
+
+    // First ArrowRight on a hidden dock: wakes only — no action dispatched.
+    key('ArrowRight')
+    expect(dockIdle()).toBe(false)
+    expect(send).not.toHaveBeenCalledWith({ action: 'next' })
+
+    // Second ArrowRight (dock now visible): the action fires over the bridge.
+    key('ArrowRight')
+    expect(send).toHaveBeenCalledWith({ action: 'next' })
+  })
+
+  it('a bound key navigates in one press when the dock is already visible', () => {
+    const a = makePlugin('a')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+    const send = vi.fn()
+    window.picframe!.send = send
+    // Dock is awake right after the boot push.
+    expect(dockIdle()).toBe(false)
+
+    key('ArrowLeft')
+    expect(send).toHaveBeenCalledWith({ action: 'prev' })
+  })
+})

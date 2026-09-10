@@ -152,7 +152,12 @@ export class OverlayShell {
         // full wake (reveal + re-arm panel idle timers).
         if (source === 'mouse') this.wake(true, false)
         else this.wake()
-      }
+      },
+      // #780: two-step wake-then-navigate — a bound key's first press on a
+      // hidden dock only reveals it (does not skip the photo); the action
+      // fires on the next press once visible. The class is toggled on
+      // #overlay-root (not the veil) by wake()/showPluginIdle().
+      dockIdle: () => this.root.classList.contains('pf-root--dock-idle')
     })
   }
 

@@ -19,7 +19,12 @@
  *   movement and `<button>` activation. This removes the old `Enter`/`Space`
  *   → `toggle` collision that shadowed focused dock buttons.
  * - Bound keys (`prev`/`next`/`toggle`, from the configurable `key_bindings`
- *   map) wake and then fire their action.
+ *   map) follow a **two-step** wake-then-navigate model (#780): when the dock
+ *   is idle (hidden), the first press only wakes it (reveals + re-arms) and
+ *   does NOT fire the action, so a single arrow no longer both reveals the
+ *   dock and skips a photo. The action fires on the next press once the dock
+ *   is visible. `dockIdle` defaults to "never idle" so callers/tests that omit
+ *   it keep the one-press behaviour.
  *
  * Only the input device classes enabled in `overlay.enabled_input_types` are
  * honoured; a pen is treated as touch.
@@ -46,6 +51,12 @@ export interface InputRouterOptions {
    * Carries the originating `InputType` so the shell can wake dock-only for
    * mouse (matching `onMouseMove`) but fully for touch/keyboard (#766). */
   onActivity: (source: InputType) => void
+  /** Predicate reporting whether the dock is currently idle/hidden, so a bound
+   * key's first press on a hidden dock only wakes (two-step wake-then-navigate,
+   * #780) instead of also firing its action. Defaults to "never idle" so the
+   * action fires in one press when the caller doesn't care about dock state
+   * (and so existing InputRouter tests stay green). */
+  dockIdle?: () => boolean
 }
 
 const POINTER_TYPE_MAP: Record<string, InputType> = {
@@ -81,6 +92,9 @@ export class InputRouter {
   private readonly onAction: (action: InputAction) => void
   private readonly onHide: () => void
   private readonly onActivity: (source: InputType) => void
+  /** Reports whether the dock is currently idle/hidden (#780), so a bound key
+   * only wakes (no action) on the first press while hidden. */
+  private readonly dockIdle: () => boolean
   /** Reverse lookup: normalized key -> action. Rebuilt on `setKeyBindings`. */
   private keyToAction = new Map<string, InputAction>()
   private boundPointer: (e: PointerEvent) => void
@@ -93,6 +107,9 @@ export class InputRouter {
     this.onAction = opts.onAction
     this.onHide = opts.onHide
     this.onActivity = opts.onActivity
+    // #780: default "never idle" keeps the one-press action behaviour for
+    // callers/tests that don't supply a dock-state predicate.
+    this.dockIdle = opts.dockIdle ?? (() => false)
     this.setKeyBindings({})
     this.boundPointer = this.handlePointer.bind(this)
     this.boundKey = this.handleKey.bind(this)
@@ -166,7 +183,12 @@ export class InputRouter {
     // #780: any other key wakes the dock + extends visibility (mirrors a
     // touch tap), so an unbound key reveals the dock instead of being a silent
     // no-op — the user sees the transport controls and can learn the
-    // shortcuts. Bound keys additionally fire their action below.
+    // shortcuts. Bound keys additionally fire their action below — but only
+    // once the dock is already visible (#780 two-step wake-then-navigate):
+    // capture the idle state BEFORE the wake (the wake removes the dock-idle
+    // class), so the first press on a hidden dock reveals it without also
+    // skipping the photo; the action then fires on the next press.
+    const dockWasIdle = this.dockIdle()
     this.onActivity('keyboard')
     // Tab/Shift+Tab, Enter, Space are reserved for native focus movement and
     // <button> activation: return without preventDefault so the browser
@@ -178,6 +200,9 @@ export class InputRouter {
     if (e.key === 'Tab' || e.key === 'Enter' || e.key === ' ') return
     const action = this.keyToAction.get(normalizeKey(e.key))
     if (action) {
+      // #780: while the dock was hidden, this first press only wakes it —
+      // don't fire the action yet. The next press (dock now visible) navigates.
+      if (dockWasIdle) return
       this.onAction(action)
       e.preventDefault()
     }

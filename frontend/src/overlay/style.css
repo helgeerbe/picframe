@@ -167,10 +167,17 @@ body {
     transform 0.15s ease;
 }
 
-.pf-dock-icon:hover,
-.pf-dock-icon:focus-visible {
+.pf-dock-icon:hover {
   background: rgba(255, 255, 255, 0.16);
-  outline: none;
+}
+
+/* #777: Focus uses an outline ring (not a fill) so it stays visible even when
+ * the icon is also --active (which owns the fill + scale channel). The two
+ * channels are independent: a focused active icon shows both the ring and the
+ * stronger fill/scale, so keyboard users can always see where focus is. */
+.pf-dock-icon:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
 }
 
 .pf-dock-icon--active {
@@ -284,15 +291,24 @@ body {
   gap: 10px;
 }
 
-.pf-danger-item:hover,
-.pf-danger-item:focus-visible {
+.pf-danger-item:hover {
   background: rgba(255, 255, 255, 0.16);
-  outline: none;
 }
 
-.pf-danger-item--severe:hover,
-.pf-danger-item--severe:focus-visible {
+/* #777: Focus ring (outline, not fill) so the keyboard cursor stays visible
+ * while Arrow-cycling the menu. Mirrors the dock icon focus channel. */
+.pf-danger-item:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.pf-danger-item--severe:hover {
   background: rgba(255, 138, 128, 0.2);
+}
+
+.pf-danger-item--severe:focus-visible {
+  outline: 2px solid rgba(255, 138, 128, 0.8);
+  outline-offset: 2px;
 }
 
 /* Confirm dialog (#763): a full-screen backdrop + centered modal appended to

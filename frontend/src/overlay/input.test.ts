@@ -20,9 +20,17 @@ afterEach(() => {
 
 function makeRouter(
   enabledTypes: Array<'touch' | 'mouse' | 'keyboard'>,
-  keyBindings?: Parameters<InputRouter['setKeyBindings']>[0]
+  keyBindings?: Parameters<InputRouter['setKeyBindings']>[0],
+  dockIdle?: () => boolean
 ): InputRouter {
-  const router = new InputRouter({ root, enabledTypes, onAction, onHide, onActivity })
+  const router = new InputRouter({
+    root,
+    enabledTypes,
+    onAction,
+    onHide,
+    onActivity,
+    dockIdle
+  })
   if (keyBindings) router.setKeyBindings(keyBindings)
   return router
 }
@@ -134,6 +142,52 @@ describe('InputRouter — keyboard events (default key bindings, #777)', () => {
     const router = makeRouter(['mouse', 'touch'])
     router.attach()
     dispatchKey('ArrowLeft')
+    expect(onAction).not.toHaveBeenCalled()
+    router.detach()
+  })
+})
+
+describe('InputRouter — two-step wake-then-navigate (#780)', () => {
+  it('only wakes (no action) on a bound key while the dock is idle', () => {
+    const router = makeRouter(['keyboard'], undefined, () => true)
+    router.attach()
+    dispatchKey('ArrowRight')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
+    expect(onAction).not.toHaveBeenCalled()
+    router.detach()
+  })
+
+  it('fires the action once the dock is visible (dockIdle false)', () => {
+    const router = makeRouter(['keyboard'], undefined, () => false)
+    router.attach()
+    dispatchKey('ArrowRight')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
+    expect(onAction).toHaveBeenCalledWith('next')
+    router.detach()
+  })
+
+  it('wakes-then-navigates across two presses as the dock becomes visible', () => {
+    let idle = true
+    const router = makeRouter(['keyboard'], undefined, () => idle)
+    router.attach()
+    // First press on a hidden dock: wake only.
+    dispatchKey('ArrowLeft')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
+    expect(onAction).not.toHaveBeenCalled()
+    // The wake reveals the dock; the shell flips the idle flag off.
+    idle = false
+    // Second press (dock now visible): the action fires.
+    dispatchKey('ArrowLeft')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
+    expect(onAction).toHaveBeenCalledWith('prev')
+    router.detach()
+  })
+
+  it('still only wakes for an unmapped key regardless of dock state', () => {
+    const router = makeRouter(['keyboard'], undefined, () => true)
+    router.attach()
+    dispatchKey('a')
+    expect(onActivity).toHaveBeenCalledWith('keyboard')
     expect(onAction).not.toHaveBeenCalled()
     router.detach()
   })
