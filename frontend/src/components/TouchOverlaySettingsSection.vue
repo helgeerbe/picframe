@@ -16,6 +16,7 @@ import SegmentedControl from './settings/SegmentedControl.vue'
 import SettingsSection from './settings/SettingsSection.vue'
 import StatusBanner from './ui/StatusBanner.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import { useCoalescedSave } from '../composables/useCoalescedSave'
 
 // The Settings-tab-owned overlay working copy (passed via v-model) covers only
 // the schema-driven fields persisted by the global Settings Save: `enabled` and
@@ -162,10 +163,13 @@ function removeKey(action: KeyBindingAction, key: string): void {
   void saveKeyBindings()
 }
 
-/** Auto-save the overlay key bindings through `savePartialConfig` (#777). */
-const saveKeyBindings = async () => {
-  if (isSaving.value) return
-  isSaving.value = true
+/** Auto-save the overlay key bindings through `savePartialConfig` (#777).
+ *  Uses `useCoalescedSave` with the shared `isSaving` flag so a rapid
+ *  add/remove during a save in flight is re-sent with the latest snapshot
+ *  instead of dropped (which would leave the UI ahead of the backend until
+ *  the next refresh reverted it), while still serializing against the other
+ *  saves and driving the shared "saving" button state. */
+const { run: runSaveKeyBindings } = useCoalescedSave(async () => {
   statusMessage.value = ''
   try {
     await configStore.savePartialConfig({
@@ -182,9 +186,10 @@ const saveKeyBindings = async () => {
     console.error(e)
     showStatus('danger', t('settings.touchOverlay.keys.failed'))
     syncFromConfig()
-  } finally {
-    isSaving.value = false
   }
+}, isSaving)
+const saveKeyBindings = (): void => {
+  void runSaveKeyBindings()
 }
 
 /** Nine anchors for the position select. */
