@@ -285,6 +285,14 @@ class WebKitOverlayRenderer(IOverlayController):
         # check-and-set of ``_restarting``; ``_restarting`` prevents re-entrancy.
         self._restart_lock = threading.Lock()
         self._restarting = False
+        # Last on-screen (runtime) plugin set reported by the worker (#766).
+        # Cached so a fresh browser connect (``CommandEvent(REQUEST_STATE)``)
+        # can replay the current on-screen visibility — otherwise the Remote
+        # tab falls back to the persisted ``visible_plugins`` set and its tile
+        # highlights stay lit while the dock icon correctly de-activates during
+        # auto-hide. ``None`` = no on-screen event seen yet this run.
+        self._last_on_screen_plugins: tuple[str, ...] | None = None
+        self._on_screen_lock = threading.Lock()
 
     # --- IOverlayController ---
 
@@ -518,7 +526,12 @@ class WebKitOverlayRenderer(IOverlayController):
             # ``OverlayVisibilityChangedEvent`` domain event the ``/ws/state``
             # endpoint forwards to browsers, so the Remote tile highlights
             # mirror the on-screen state instead of the persisted
-            # ``visible_plugins`` set.
+            # ``visible_plugins`` set. Cache the set so a fresh browser connect
+            # (``CommandEvent(REQUEST_STATE)``) can replay the current on-screen
+            # state instead of falling back to ``visible_plugins`` (assume shown)
+            # while a panel is auto-hidden.
+            with self._on_screen_lock:
+                self._last_on_screen_plugins = event.on_screen_plugins
             self._publisher.publish(
                 OverlayVisibilityChangedEvent(on_screen_plugins=event.on_screen_plugins)
             )
@@ -539,6 +552,27 @@ class WebKitOverlayRenderer(IOverlayController):
                 getattr(cmd, "type", type(cmd).__name__),
             )
 
+    def _on_command_event(self, event: CommandEvent) -> None:
+        """Replay the cached on-screen overlay visibility on a state request.
+
+        A fresh browser connect publishes ``CommandEvent(REQUEST_STATE)`` so
+        the playback engine republishes its state/media. The overlay's
+        on-screen visibility has no "engine" to republish it, so this handler
+        replays the last on-screen set cached from the worker
+        (``OnScreenPluginsChangedEvent``). Without this the Remote tab's
+        ``onScreenPlugins`` stays ``null`` and its tile highlights fall back to
+        the persisted ``visible_plugins`` set (assume shown) while the dock
+        icon correctly de-activates during auto-hide (#766). Republishing to all
+        subscribers is idempotent for already-connected browsers (they re-apply
+        the same set).
+        """
+        if event.command != Command.REQUEST_STATE:
+            return
+        with self._on_screen_lock:
+            cached = self._last_on_screen_plugins
+        if cached is not None:
+            self._publisher.publish(OverlayVisibilityChangedEvent(on_screen_plugins=cached))
+
     # --- Event subscriptions ---
 
     def _subscribe_events(self) -> None:
@@ -547,6 +581,7 @@ class WebKitOverlayRenderer(IOverlayController):
         self._subscriber.subscribe(DisplayPowerEvent, self._on_display_power_event)
         self._subscriber.subscribe(RendererConfigUpdatedEvent, self._on_renderer_config_updated)
         self._subscriber.subscribe(CurrentMediaChangedEvent, self._on_media_changed)
+        self._subscriber.subscribe(CommandEvent, self._on_command_event)
         self._subscribed = True
 
     def _unsubscribe_events(self) -> None:
@@ -558,6 +593,7 @@ class WebKitOverlayRenderer(IOverlayController):
                 RendererConfigUpdatedEvent, self._on_renderer_config_updated
             )
             self._subscriber.unsubscribe(CurrentMediaChangedEvent, self._on_media_changed)
+            self._subscriber.unsubscribe(CommandEvent, self._on_command_event)
             self._subscribed = False
 
     def _on_overlay_config_changed(self, event: OverlayConfigChangedEvent) -> None:
@@ -673,6 +709,14 @@ class WebKitOverlayRenderer(IOverlayController):
 
     def _cleanup(self) -> None:
         self._running = False
+        # Clear the cached on-screen set so a restarted worker (display power
+        # cycle or recovery) uses the documented ``None`` fallback until it
+        # reports fresh runtime visibility. Otherwise a ``REQUEST_STATE`` from
+        # a freshly-connected browser replays the *previous* worker's stale
+        # set, which can disagree with the new worker's initial boot state
+        # (#771 review).
+        with self._on_screen_lock:
+            self._last_on_screen_plugins = None
         if self._conn:
             try:
                 self._conn.close()

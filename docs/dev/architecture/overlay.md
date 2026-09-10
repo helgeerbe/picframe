@@ -223,10 +223,14 @@ them in sync:
   staying in the persisted set, and tapping it still collapses (removes from
   config), matching the dock.
 
-**Known limitation:** a fresh browser connect while plugins are auto-hidden
-falls back to `visible_plugins` (`onScreenPlugins === null` → assume shown)
-until the next hide/wake event; caching the latest on-screen set for
-`REQUEST_STATE` is out of scope.
+**Fresh-connect replay:** the `WebKitOverlayRenderer` caches the last
+`OnScreenPluginsChangedEvent` on-screen set (lock-guarded). On
+`CommandEvent(REQUEST_STATE)` — published by `/ws/state` on every fresh
+browser connect — it replays the cached set as `OverlayVisibilityChangedEvent`
+so the Remote tab's `onScreenPlugins` is seeded with the real (possibly
+auto-hidden) state instead of falling back to `visible_plugins` (assume shown).
+Before this a fresh connect while a panel was auto-hidden left its tile
+highlighted until the next hide/wake event.
 
 ## 6. Plugin manifest & loader
 

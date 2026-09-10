@@ -80,9 +80,13 @@ handles the `OverlayVisibilityChangedEvent` branch; `OverlayPanel.vue`
 tile de-highlights but still taps to collapse, matching the dock). Tests added
 for IPC round-trip/coercion, worker bridge handler, renderer republish, and WS
 serialization + ASGI subscription. Docs updated in `overlay.md`. All gates
-green. **Known limitation:** fresh browser connect while plugins auto-hidden
-falls back to `visible_plugins` until the next hide/wake event; caching the
-latest on-screen set for `REQUEST_STATE` is out of scope.
+green. **#766 fresh-connect replay (done):** the renderer caches the last
+`OnScreenPluginsChangedEvent` on-screen set and, on
+`CommandEvent(REQUEST_STATE)` (fresh browser connect), replays it as
+`OverlayVisibilityChangedEvent` so the Remote tab's `onScreenPlugins` is
+seeded with the real (possibly auto-hidden) state instead of falling back to
+`visible_plugins`. Previously a fresh connect while a panel was auto-hidden
+showed its tile highlighted until the next hide/wake event.
 
 **#765 follow-up — dock→browser live-sync (done):** the `/ws/state` WebSocket
 endpoint never subscribed to `OverlayConfigChangedEvent`, so a browser's
