@@ -118,6 +118,7 @@ def test_start_spawns_worker_and_applies_initial_config(
     assert OverlayConfigChangedEvent in subscribed_types
     assert RenderCommand in subscribed_types
     assert CurrentMediaChangedEvent in subscribed_types
+    assert CommandEvent in subscribed_types
     sent = mock_client.return_value.send.call_args_list[-1][0][0]
     assert '"type": "set_config"' in sent
 
@@ -293,6 +294,78 @@ def test_handle_on_screen_plugins_changed_empty_publishes_empty_tuple(
     event = mock_publisher.publish.call_args[0][0]
     assert isinstance(event, OverlayVisibilityChangedEvent)
     assert event.on_screen_plugins == ()
+
+
+def test_request_state_replays_cached_on_screen_visibility(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """A fresh browser connect publishes ``CommandEvent(REQUEST_STATE)``; the
+    renderer replays the last on-screen set cached from the worker so the
+    Remote tab's ``onScreenPlugins`` is seeded with the real (possibly
+    auto-hidden) state instead of falling back to ``visible_plugins``
+    (assume shown) (#766)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    # Worker reports the text panel auto-hidden (only clock on screen).
+    renderer._handle_event(OnScreenPluginsChangedEvent(on_screen_plugins=("clock",)))
+    mock_publisher.publish.reset_mock()
+    # A browser connects -> /ws/state publishes REQUEST_STATE.
+    renderer._on_command_event(CommandEvent(command=Command.REQUEST_STATE))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, OverlayVisibilityChangedEvent)
+    assert event.on_screen_plugins == ("clock",)
+
+
+def test_request_state_replays_empty_on_screen_set(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """When every expanded plugin is auto-hidden the worker reports an empty
+    on-screen set; REQUEST_STATE must replay that empty set (not skip it) so
+    the Remote tab de-highlights all tiles instead of falling back to
+    ``visible_plugins``."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(OnScreenPluginsChangedEvent(on_screen_plugins=()))
+    mock_publisher.publish.reset_mock()
+    renderer._on_command_event(CommandEvent(command=Command.REQUEST_STATE))
+    mock_publisher.publish.assert_called_once()
+    event = mock_publisher.publish.call_args[0][0]
+    assert isinstance(event, OverlayVisibilityChangedEvent)
+    assert event.on_screen_plugins == ()
+
+
+def test_request_state_without_cache_publishes_nothing(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """Before the worker has reported any on-screen change (e.g. overlay just
+    started) the cache is ``None``; REQUEST_STATE replays nothing so the Remote
+    tab keeps its ``null`` -> ``visible_plugins`` fallback."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._on_command_event(CommandEvent(command=Command.REQUEST_STATE))
+    mock_publisher.publish.assert_not_called()
+
+
+def test_request_state_ignores_non_request_state_commands(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """Only ``REQUEST_STATE`` triggers a replay; other commands (NEXT, PREV,
+    SET_CONFIG, ...) must not republish visibility noise on every keystroke."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._handle_event(OnScreenPluginsChangedEvent(on_screen_plugins=("clock",)))
+    mock_publisher.publish.reset_mock()
+    renderer._on_command_event(CommandEvent(command=Command.NEXT))
+    mock_publisher.publish.assert_not_called()
 
 
 def test_render_command_promote_sets_opacity_zero(
