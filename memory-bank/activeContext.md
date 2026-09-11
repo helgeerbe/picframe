@@ -23,9 +23,12 @@ pause. Fix + full sync shipped:
   can't dismiss while pinned); restores normal auto-hide on resume. Only
   `PAUSED` pins — `IDLE`/`ERROR` flip the icon but don't pin.
 - **Center-text gating:** `playback.py` `_overlay_active()` reads
-  `overlay.enabled`; when on, the pi3d center "PAUSED" text is suppressed
-  (dock is the indicator). The GTK video "PAUSED" label always emits. Kept as
-  fallback when overlay off / no config repo (backward-compat).
+  `overlay.enabled`; when on, the legacy pi3d center "PAUSED" text **and** the
+  GTK video "PAUSED" label are both suppressed (the overlay dock stacks above
+  the GTK4 video host, so the pinned dock is the sole, unified pause
+  indicator). When the overlay is off (or no config repo is wired) both remain
+  as fallback. Per the ticket, this is transitional — #753 will retire the
+  center-text path entirely (and now also the GTK video "PAUSED" label).
 Tests: backend (renderer/worker/ipc/playback) + frontend (dock/shell) — all
 green; `pytest` (662 in touched dirs)/`mypy`/`ruff`; `yarn test` (140)/
 `lint`/`format`/`build` (vue-tsc). Transitional per ticket: #753 retires the

@@ -402,12 +402,14 @@ class PlaybackEngine:
     def _overlay_active(self) -> bool:
         """Whether the on-screen HTML overlay is enabled (#783).
 
-        When active, the overlay dock is the pause indicator (a pinned dock
-        with a two-state Play/Pause icon), so the legacy pi3d center "PAUSED"
-        text is suppressed to avoid a double indicator. When the overlay is
-        off (or no config repository is wired) the center text remains the
-        fallback indicator. Read fresh on each pause so a runtime overlay
-        toggle takes effect without an engine restart.
+        When active, the overlay dock (which stacks above the GTK4 video host)
+        is the sole pause indicator — a pinned dock with a two-state
+        Play/Pause icon — so both the legacy pi3d center "PAUSED" text and the
+        GTK video "PAUSED" label are suppressed to avoid double indicators and
+        keep a unified look and feel. When the overlay is off (or no config
+        repository is wired) both in-scene indicators remain the fallback.
+        Read fresh on each pause so a runtime overlay toggle takes effect
+        without an engine restart.
         """
         if self._config_repository is None:
             return False
@@ -417,18 +419,25 @@ class PlaybackEngine:
         self._paused_from_state = self._state
         active_video = self._has_active_video_playback()
         pending_video = self._has_pending_video_playback_started()
+        overlay_active = self._overlay_active()
         if self._video_player and (active_video or pending_video):
             self._video_player.pause()
-            self._set_video_pause_overlay(True, PAUSED_STATUS_TEXT)
+            # The overlay dock stacks above the GTK4 video host, so when the
+            # overlay is active the pinned dock is the sole pause indicator —
+            # suppress the GTK video "PAUSED" label to avoid a double
+            # indicator and keep a unified look and feel. When the overlay is
+            # off (or no config repository is wired) the GTK label remains the
+            # fallback indicator (the only one visible over a paused video).
+            if overlay_active:
+                self._set_video_pause_overlay(False, "")
+            else:
+                self._set_video_pause_overlay(True, PAUSED_STATUS_TEXT)
         render_action = RENDER_UPDATE_OVERLAY if active_video else RENDER_PAUSE_PLAYBACK
         # When the on-screen HTML overlay is active it is the pause indicator
         # (a pinned dock with a two-state Play/Pause icon, #783), so suppress
         # the legacy pi3d center "PAUSED" text to avoid a double indicator.
-        # When the overlay is off the center text remains the fallback. The
-        # GTK video "PAUSED" label (above) is always emitted — it renders on
-        # top of the video surface, not the dock, and is the only indicator
-        # visible while a video is paused.
-        status_text = "" if self._overlay_active() else PAUSED_STATUS_TEXT
+        # When the overlay is off the center text remains the fallback.
+        status_text = "" if overlay_active else PAUSED_STATUS_TEXT
         self._send_status_overlay(status_text, render_action=render_action)
         self._change_state(State.PAUSED)
 

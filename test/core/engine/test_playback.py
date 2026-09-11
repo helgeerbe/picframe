@@ -970,18 +970,20 @@ def test_engine_pause_keeps_center_paused_text_without_config_repo(
     assert command.overlay.status_text == "PAUSED"
 
 
-def test_engine_pause_video_keeps_gtk_label_when_overlay_active(
+def _make_video_pause_engine(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,
     mock_playlist_manager: MagicMock,
     mock_renderer: MagicMock,
     config: dict[str, Any],
-) -> None:
-    """The GTK video "PAUSED" label is always emitted (it renders above the
-    video surface, not the dock) even when the overlay suppresses the pi3d
-    center text (#783)."""
-    repo = MagicMock()
-    repo.get_app_config_bool.return_value = True
+    overlay_enabled: bool | None,
+) -> tuple[PlaybackEngine, MagicMock]:
+    """Build an engine paused from an in-progress (PREPARING_VIDEO) video.
+
+    ``overlay_enabled`` controls the config repository's ``overlay.enabled``
+    value; ``None`` means no repository is wired (overlay treated as off).
+    Returns the engine and the mock video player for assertions.
+    """
     mock_video_player = MagicMock()
     media_item = MediaItem(
         id=3,
@@ -993,21 +995,98 @@ def test_engine_pause_video_keeps_gtk_label_when_overlay_active(
         last_modified=1234567890.0,
         duration=10.0,
     )
-    engine = PlaybackEngine(
+    if overlay_enabled is None:
+        engine = PlaybackEngine(
+            mock_event_publisher,
+            mock_event_subscriber,
+            mock_playlist_manager,
+            mock_renderer,
+            config,
+            video_player=mock_video_player,
+        )
+    else:
+        repo = MagicMock()
+        repo.get_app_config_bool.return_value = overlay_enabled
+        engine = PlaybackEngine(
+            mock_event_publisher,
+            mock_event_subscriber,
+            mock_playlist_manager,
+            mock_renderer,
+            config,
+            config_repository=repo,
+            video_player=mock_video_player,
+        )
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = media_item
+    engine._pending_video_playback_started = True
+    return engine, mock_video_player
+
+
+def test_engine_pause_video_suppresses_gtk_label_when_overlay_active(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """With the overlay active the dock stacks above the GTK4 video host and is
+    the sole pause indicator, so the GTK video "PAUSED" label is suppressed
+    (shown hidden) to keep a unified look and feel (#783)."""
+    engine, mock_video_player = _make_video_pause_engine(
         mock_event_publisher,
         mock_event_subscriber,
         mock_playlist_manager,
         mock_renderer,
         config,
-        config_repository=repo,
-        video_player=mock_video_player,
+        overlay_enabled=True,
     )
-    engine._state = State.PREPARING_VIDEO
-    engine._pending_video_media = media_item
-    engine._pending_video_playback_started = True
-
     engine._handle_command(CommandEvent(command=Command.PAUSE))
+    mock_video_player.pause.assert_called_once_with()
+    mock_video_player.set_pause_overlay.assert_called_once_with(False, "")
+    assert engine._state == State.PAUSED
 
+
+def test_engine_pause_video_keeps_gtk_label_when_overlay_inactive(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """With the overlay disabled the GTK video "PAUSED" label remains the
+    fallback indicator over a paused video (#783)."""
+    engine, mock_video_player = _make_video_pause_engine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        overlay_enabled=False,
+    )
+    engine._handle_command(CommandEvent(command=Command.PAUSE))
+    mock_video_player.set_pause_overlay.assert_called_once_with(True, "PAUSED")
+    assert engine._state == State.PAUSED
+
+
+def test_engine_pause_video_keeps_gtk_label_without_config_repo(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """No config repository wired -> overlay treated as off -> the GTK video
+    "PAUSED" label remains the fallback indicator (backward compatibility for
+    engines constructed without a repo)."""
+    engine, mock_video_player = _make_video_pause_engine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        overlay_enabled=None,
+    )
+    engine._handle_command(CommandEvent(command=Command.PAUSE))
     mock_video_player.set_pause_overlay.assert_called_once_with(True, "PAUSED")
     assert engine._state == State.PAUSED
 
