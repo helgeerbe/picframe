@@ -853,6 +853,28 @@ export class Dock {
     ok.textContent = 'Confirm'
     actions.append(cancel, ok)
     modal.append(title, msg, actions)
+    // #781: Leading modal sentinel — same native-Shift+Tab root cause as the
+    // dock/dropdown sentinels. The modal's first focusable is Cancel; backward
+    // Shift+Tab from Cancel would escape out of the modal to whatever precedes
+    // the backdrop in the DOM. The sentinel is the modal's first child so
+    // backward Shift+Tab lands on it (still inside the modal); its focusin
+    // handler wraps Cancel→Confirm. The keydown Tab branch below stays as
+    // jsdom-only redundancy. NOT display:none — must stay focusable.
+    const sentinel = document.createElement('div')
+    sentinel.className = 'pf-modal-sentinel'
+    sentinel.setAttribute('tabindex', '0')
+    sentinel.setAttribute('aria-hidden', 'true')
+    sentinel.addEventListener('focusin', (e: FocusEvent) => {
+      const btns = Array.from(modal.querySelectorAll<HTMLButtonElement>('.pf-confirm-btn'))
+      if (btns.length === 0) return
+      const first = btns[0]
+      const last = btns[btns.length - 1]
+      // Backward Shift+Tab from the first button (Cancel) lands here — wrap to
+      // the last (Confirm). Any other entry goes to the first (Cancel).
+      if (e.relatedTarget === first) last.focus()
+      else first.focus()
+    })
+    modal.insertBefore(sentinel, modal.firstChild)
     backdrop.appendChild(modal)
     this.dockRoot.appendChild(backdrop)
 

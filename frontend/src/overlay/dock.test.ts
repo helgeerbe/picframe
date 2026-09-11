@@ -359,3 +359,73 @@ describe('Danger dropdown keyboard navigation (#777)', () => {
     expect(dockRoot.querySelector('.pf-dropdown-sentinel')).toBeNull()
   })
 })
+
+describe('Confirm modal backward-Shift+Tab sentinel (#781)', () => {
+  /** Open the danger dropdown then click the first item to bring up the confirm
+   *  modal. Returns the Cancel/Confirm buttons inside the open modal. */
+  function openConfirmModal(): { cancel: HTMLButtonElement; ok: HTMLButtonElement } {
+    const trigger = dockEl().querySelector<HTMLButtonElement>('.pf-dock-danger')!
+    trigger.click()
+    const items = Array.from(dockRoot.querySelectorAll<HTMLButtonElement>('.pf-danger-item'))
+    items[0].click()
+    const cancel = dockRoot.querySelector<HTMLButtonElement>('.pf-confirm-cancel')!
+    const ok = dockRoot.querySelector<HTMLButtonElement>('.pf-confirm-ok')!
+    return { cancel, ok }
+  }
+
+  it('inserts a leading sentinel as the first modal child (#781)', () => {
+    apply()
+    openConfirmModal()
+    const modal = dockRoot.querySelector('#pf-confirm-modal')!
+    expect(modal.firstElementChild).toBeTruthy()
+    expect(modal.firstElementChild!.classList.contains('pf-modal-sentinel')).toBe(true)
+    expect(modal.firstElementChild!.getAttribute('tabindex')).toBe('0')
+  })
+
+  it('wraps to Confirm when backward Shift+Tab lands on the sentinel', () => {
+    apply()
+    const { cancel, ok } = openConfirmModal()
+    cancel.focus()
+    // Backward Shift+Tab from Cancel (the first focusable) lands on the sentinel
+    // (the previous DOM focusable) instead of escaping the modal to whatever
+    // precedes the backdrop; the sentinel redirects to Confirm (the last).
+    const sentinel = dockRoot.querySelector<HTMLElement>('.pf-modal-sentinel')!
+    sentinel.dispatchEvent(new FocusEvent('focusin', { bubbles: true, relatedTarget: cancel }))
+    expect(document.activeElement).toBe(ok)
+  })
+
+  it('focuses Cancel on forward entry to the sentinel', () => {
+    apply()
+    const { cancel, ok } = openConfirmModal()
+    // Focus arriving at the sentinel from outside the modal (forward entry) goes
+    // to Cancel (the first button), not Confirm (the last).
+    const sentinel = dockRoot.querySelector<HTMLElement>('.pf-modal-sentinel')!
+    sentinel.dispatchEvent(new FocusEvent('focusin', { bubbles: true, relatedTarget: null }))
+    expect(document.activeElement).toBe(cancel)
+    expect(document.activeElement).not.toBe(ok)
+  })
+
+  it('is a no-op when the modal has no buttons (no throw)', () => {
+    apply()
+    openConfirmModal()
+    const sentinel = dockRoot.querySelector<HTMLElement>('.pf-modal-sentinel')!
+    // Strip the action buttons so the handler's empty-guard is exercised; the
+    // sentinel must not throw or strand focus on itself.
+    dockRoot.querySelectorAll('.pf-confirm-btn').forEach(el => el.remove())
+    expect(() =>
+      sentinel.dispatchEvent(new FocusEvent('focusin', { bubbles: true, relatedTarget: null }))
+    ).not.toThrow()
+  })
+
+  it('sentinel is removed when the modal closes', () => {
+    apply()
+    openConfirmModal()
+    expect(dockRoot.querySelector('.pf-modal-sentinel')).not.toBeNull()
+    // Escape on the focused Cancel button closes the modal.
+    const cancel = dockRoot.querySelector<HTMLButtonElement>('.pf-confirm-cancel')!
+    cancel.focus()
+    cancel.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    expect(dockRoot.querySelector('.pf-modal-sentinel')).toBeNull()
+    expect(dockRoot.querySelector('#pf-confirm-backdrop')).toBeNull()
+  })
+})

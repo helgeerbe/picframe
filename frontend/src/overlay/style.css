@@ -278,6 +278,20 @@ body {
   pointer-events: none;
 }
 
+/* #781: Leading confirm-modal sentinel — same native-Shift+Tab root cause as
+ * the dock/dropdown sentinels, applied to the open alertdialog. Inserted as
+ * the first child of #pf-confirm-modal so backward Shift+Tab from the first
+ * button (Cancel) lands on the sentinel (still inside the modal) instead of
+ * escaping to whatever precedes the backdrop. Identical invisible-but-focusable
+ * properties. NOT display:none — must stay focusable. */
+.pf-modal-sentinel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Danger-menu trigger (#763): reuses .pf-dock-icon sizing; this modifier
  * gives the power button a subtle warm tint so it reads as a system control. */
 .pf-dock-icon.pf-dock-danger {

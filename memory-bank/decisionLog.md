@@ -314,9 +314,13 @@ This is a compact index of durable project decisions. Detailed rationale lives i
     (`tabindex=0`, zero-size, `opacity=0`) as the first child of
     `#pf-danger-dropdown` whose `focusin` handler wraps first→last (the
     keydown Shift+Tab branch stays as jsdom-only redundancy). The confirm
-    modal (`openConfirm`) uses the same `preventDefault()`+focus-swap Tab
-    trap and likely has the same on-device backward-Shift+Tab escape;
-    not yet reported/fixed — a follow-up if confirmed on-device.
+    modal (`openConfirm`) had the same on-device backward-Shift+Tab escape
+    (Cancel is the modal's first focusable; backward Shift+Tab from it
+    escaped to whatever precedes the backdrop) and is fixed the same way —
+    `openConfirm` inserts a leading `.pf-modal-sentinel` (`tabindex=0`,
+    zero-size, `opacity=0`) as the first child of `#pf-confirm-modal` whose
+    `focusin` handler wraps Cancel→Confirm (the keydown Shift+Tab branch
+    stays as jsdom-only redundancy).
   - **Danger dropdown focus scope (#777):** the dropdown is a sibling of
     `#pf-dock` (not a child), so the dock's Tab trap can't reach it — Tab on
     the trigger (the last dock icon) wrapped back to the first dock button
