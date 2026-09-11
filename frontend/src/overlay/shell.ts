@@ -21,6 +21,7 @@
 import {
   registerApplyConfig,
   registerApplyMedia,
+  registerApplyPlaybackState,
   registerApplyPluginData,
   sendAction,
   setOnScreenPlugins,
@@ -82,6 +83,13 @@ export class OverlayShell {
    * the Remote user cannot interact with it, and the actor/viewer are often
    * different people in different places (#775). */
   private configApplied = false
+  /** Whether playback is currently paused (#783). While paused the dock is
+   * pinned visible (its auto-hide timer is suppressed) so it stays on screen
+   * as the pause indicator — the legacy pi3d center "PAUSED" text is
+   * suppressed by the backend while the overlay is active. Driven by the IPC
+   * playback-state bridge (primary) and the best-effort `/ws/state` `onState`
+   * callback (secondary), both feeding {@link applyPlaybackState}. */
+  private isPaused = false
 
   constructor(root: HTMLElement) {
     this.root = root
@@ -178,6 +186,10 @@ export class OverlayShell {
     // contents) over the same IPC bridge (#761); forwarded to the matching
     // plugin iframe and cached for freshly-loaded panels.
     registerApplyPluginData((pluginId, key, value) => this.applyPluginData(pluginId, key, value))
+    // The worker pushes the live playback state over the IPC bridge (#783) so
+    // the dock's Play/Pause icon + pause-pin stay in sync without the
+    // cross-origin `/ws/state` WebSocket.
+    registerApplyPlaybackState(state => this.applyPlaybackState(state))
 
     const env = readEnv()
     if (env.wsPort) {
@@ -185,7 +197,10 @@ export class OverlayShell {
         // Best-effort fallback: when the cross-origin WS *does* connect it is a
         // harmless secondary media path. Both the bridge and the WS feed the
         // shared `applyMedia` so plugins see identical payloads (#757).
-        onMedia: media => this.applyMedia(media)
+        onMedia: media => this.applyMedia(media),
+        // Secondary playback-state path (#783): a WS reconnect reconciles the
+        // dock's Play/Pause icon + pause-pin if the bridge push was missed.
+        onState: state => this.applyPlaybackState(state)
       })
       this.state.connect()
     }
@@ -285,6 +300,39 @@ export class OverlayShell {
   }
 
   /**
+   * Apply a live playback-state push from the IPC bridge or the `/ws/state`
+   * client (#783). Both paths feed this shared method so the dock's Play/Pause
+   * icon and the pause-pin stay in sync regardless of which transport
+   * delivered the state. While paused the dock is pinned visible (its
+   * auto-hide timer is suppressed) so it remains on screen as the pause
+   * indicator; on resume the normal auto-hide behavior is restored. Plugin
+   * panel auto-hide is untouched — only the dock chrome is pinned.
+   */
+  private applyPlaybackState(state: string): void {
+    const playing = this.dock.setPlaybackState(state)
+    // The pin is specific to PAUSED (#783): IDLE/ERROR/etc. flip the icon to
+    // Play (matching the UI Remote tab's `isPlaying`) but must NOT pin the dock
+    // — only an actual pause keeps the dock on screen as the indicator. Signal
+    // states (CONFIG_CHANGED/STATS_UPDATED) are filtered out by the renderer
+    // and never reach here.
+    const paused = state === 'PAUSED'
+    void playing // icon already applied via dock.setPlaybackState
+    if (paused === this.isPaused) return
+    this.isPaused = paused
+    if (this.isPaused) {
+      // Pin the dock: reveal it and suppress its auto-hide timer so it stays
+      // on screen as the pause indicator. Panels keep their own timers.
+      this.root.classList.remove('pf-root--dock-idle')
+      this.clearDockIdle()
+    } else {
+      // Resumed: restore normal dock auto-hide (reveal + arm the timer). The
+      // dock shows briefly then auto-hides after the idle interval, matching
+      // any other wake. Panels are untouched.
+      this.wake(true, false)
+    }
+  }
+
+  /**
    * Reset the dock + per-panel idle timers and reveal everything. Each visible
    * plugin panel fades only in its own `auto_hide` mode; `persistent` panels
    * never get an idle timer. The dock timer always runs (the dock is chrome
@@ -352,11 +400,17 @@ export class OverlayShell {
     }
 
     if (revealDock) {
-      // Dock: always auto-hides. The dock layout may override the idle delay
-      // (#758); otherwise reuse `idle_hide_seconds`, or the fallback when it
-      // is 0. The cursor hides together with the dock so the two stay in sync:
-      // removing `pf-root--cursor` reverts the root to the inherited
-      // `cursor: none` (#739).
+      // Dock: always auto-hides — unless playback is paused (#783). While
+      // paused the dock is pinned visible as the pause indicator, so its
+      // auto-hide timer is suppressed (the reveal above already removed
+      // `pf-root--dock-idle`); any input wake while paused keeps the dock
+      // shown instead of re-arming a countdown that would hide it. The dock
+      // layout may override the idle delay (#758); otherwise reuse
+      // `idle_hide_seconds`, or the fallback when it is 0. The cursor hides
+      // together with the dock so the two stay in sync: removing
+      // `pf-root--cursor` reverts the root to the inherited `cursor: none`
+      // (#739).
+      if (this.isPaused) return
       const dockSeconds = this.dockIdleSeconds()
       this.dockIdleTimer = window.setTimeout(
         () => {
@@ -444,6 +498,12 @@ export class OverlayShell {
       this.wake(true, false)
       return
     }
+    // #783: while playback is paused the dock is pinned as the pause
+    // indicator (the legacy center "PAUSED" text is suppressed while the
+    // overlay is active), so Escape must not dismiss it — otherwise a paused
+    // state would have no on-screen indicator. Closing an open menu above
+    // still proceeds; only the dock-dismiss is suppressed.
+    if (this.isPaused) return
     this.hideDock()
   }
 

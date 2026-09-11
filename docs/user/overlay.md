@@ -352,11 +352,13 @@ Touch overlay** tile dock.
   The renderer probes the GTK4 typelib (`WebKit 6.0`) first, then the GTK3
   fallback (`WebKit2 4.1`). If WebKitGTK is absent, picframe logs a
   `webkit_unavailable` system error and continues without the overlay.
-- **Dock icons render as "tofu" boxes.** The dock icons use crisp inline SVG
-  (`icon.svg` per plugin, colored with `currentColor`) so they do not need an
-  emoji font. If a plugin ships no `icon.svg`, the dock falls back to the
-  manifest `icon` emoji — install `fonts-noto-color-emoji` (pulled in by the
-  installer) so those render in color:
+- **Dock icons render as "tofu" boxes.** All dock icons — the transport
+  buttons (prev/play/pause/next), the danger menu (power), and the per-plugin
+  icons — are crisp inline SVG colored with `currentColor`, so they do not need
+  an emoji or symbol font and render identically on the Pi and an Ubuntu VM.
+  The only font-dependent fallback is a plugin that ships no `icon.svg`: the
+  dock then uses the manifest `icon` emoji, which needs `fonts-noto-color-emoji`
+  (pulled in by the installer) to render in color:
 
   ```bash
   sudo apt install fonts-noto-color-emoji

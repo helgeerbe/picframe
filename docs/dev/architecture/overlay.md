@@ -304,6 +304,13 @@ to the shell as `PluginEntry.icon_svg`; `dock.ts` inlines the markup via
 The SVG must use `stroke="currentColor"` (or `fill="currentColor"`) and a `24x24`
 viewBox; the shell sizes it with `.pf-dock-icon svg { width: 1.5em; height: 1.5em }`.
 
+The transport buttons (Previous / Play-Pause / Next) and the danger-menu trigger
++ items use the same inline-SVG approach via constants in `dock.ts` (e.g.
+`SVG_PAUSE`, `SVG_PLAY`, `SVG_POWER`), so every dock icon is font-independent
+and renders identically on the Pi and an Ubuntu VM. The danger-menu items are
+sized with `.pf-danger-item svg { width: 20px; height: 20px }` (the menu row uses
+a smaller font than the dock).
+
 When a plugin ships no `icon.svg`, `icon_svg` is `""` and the dock falls back to
 the manifest `icon` emoji. Emoji rendering (in the dock fallback *and inside
 plugin content*, e.g. the weather plugin's condition glyphs) requires the system

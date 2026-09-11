@@ -97,6 +97,23 @@ class MediaChangedCommand(OverlayIpcMessage):
 
 
 @dataclass(frozen=True)
+class PlaybackStateChangedCommand(OverlayIpcMessage):
+    """Push the current playback state to the overlay shell (#783).
+
+    The renderer forwards ``StateEvent`` payloads (the same events ``/ws/state``
+    broadcasts to browsers) to the worker over the IPC bridge so the dock's
+    toggle button can show a two-state Play/Pause icon and pin itself visible
+    while paused — without relying on the cross-origin ``/ws/state`` WebSocket
+    from the ``file://`` overlay surface. ``state`` is the ``State`` enum name
+    (e.g. ``"PLAYING"``, ``"PAUSED"``); the shell treats anything outside the
+    playing family as paused.
+    """
+
+    state: str
+    type: str = field(default="playback_state_changed", init=False)
+
+
+@dataclass(frozen=True)
 class ShutdownCommand(OverlayIpcMessage):
     """Ask the worker to shut down cleanly."""
 
@@ -214,6 +231,7 @@ _COMMAND_TYPES: dict[str, type[OverlayIpcMessage]] = {
     "set_config": SetConfigCommand,
     "reload": ReloadCommand,
     "media_changed": MediaChangedCommand,
+    "playback_state_changed": PlaybackStateChangedCommand,
     "shutdown": ShutdownCommand,
 }
 

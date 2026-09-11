@@ -429,3 +429,70 @@ describe('Confirm modal backward-Shift+Tab sentinel (#781)', () => {
     expect(dockRoot.querySelector('#pf-confirm-backdrop')).toBeNull()
   })
 })
+
+describe('Dock two-state Play/Pause toggle (#783)', () => {
+  function toggle(): HTMLButtonElement {
+    return dockEl().querySelector<HTMLButtonElement>('.pf-dock-icon[data-dock-role="toggle"]')!
+  }
+
+  /** The toggle icon is now an inline SVG (font-independent, `currentColor`),
+   * so the assertions check the SVG shape (`<rect>` = pause, `<polygon>` =
+   * play) rather than a bare Unicode glyph, plus the `aria-label` for the
+   * semantic state. This proves both the visual icon and the label flip. */
+  function expectPause(btn: HTMLButtonElement): void {
+    expect(btn.querySelector('svg')).not.toBeNull()
+    expect(btn.innerHTML).toContain('<rect')
+    expect(btn.getAttribute('aria-label')).toBe('Pause')
+  }
+
+  function expectPlay(btn: HTMLButtonElement): void {
+    expect(btn.querySelector('svg')).not.toBeNull()
+    expect(btn.innerHTML).toContain('<polygon')
+    expect(btn.getAttribute('aria-label')).toBe('Play')
+  }
+
+  it('shows the Pause icon while playing (default)', () => {
+    apply()
+    expectPause(toggle())
+  })
+
+  it('flips to the Play icon when paused', () => {
+    apply()
+    dock.setPlaybackState('PAUSED')
+    expectPlay(toggle())
+  })
+
+  it('reverts to the Pause icon on resume', () => {
+    apply()
+    dock.setPlaybackState('PAUSED')
+    dock.setPlaybackState('PLAYING')
+    expectPause(toggle())
+  })
+
+  it('treats transitioning/preparing-video as playing', () => {
+    apply()
+    dock.setPlaybackState('TRANSITIONING')
+    expectPause(toggle())
+    dock.setPlaybackState('PREPARING_VIDEO')
+    expectPause(toggle())
+  })
+
+  it('is a no-op when the state does not change', () => {
+    apply()
+    const before = toggle()
+    // Same playing family -> no DOM change.
+    dock.setPlaybackState('PLAYING')
+    const after = toggle()
+    expect(after).toBe(before)
+    expectPause(after)
+  })
+
+  it('reflects the paused icon in the initial render after a state push', () => {
+    apply()
+    dock.setPlaybackState('PAUSED')
+    // A subsequent config push rebuilds the dock; the rebuilt toggle must
+    // reflect the paused state, not the default.
+    apply()
+    expectPlay(toggle())
+  })
+})

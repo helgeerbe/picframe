@@ -44,6 +44,7 @@ from picframe.core.renderers.overlay_ipc import (
     OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
     OverlayIpcMessage,
+    PlaybackStateChangedCommand,
     ReadyEvent,
     ReloadCommand,
     SetConfigCommand,
@@ -220,6 +221,8 @@ class OverlayWorker:
             self._apply_config()
         elif isinstance(command, MediaChangedCommand):
             self._push_media_to_shell(command.media)
+        elif isinstance(command, PlaybackStateChangedCommand):
+            self._push_playback_state_to_shell(command.state)
         elif isinstance(command, ShutdownCommand):
             return False
         return True
@@ -512,6 +515,33 @@ class OverlayWorker:
         js = (
             "if(window.picframe&&window.picframe.applyMedia)"
             f"{{window.picframe.applyMedia({payload});}}"
+        )
+        self._push_to_shell(js)
+
+    def _push_playback_state_to_shell(self, state: str) -> None:
+        """Push the current playback state to the shell (no-op in headless mode).
+
+        Mirrors :meth:`_push_media_to_shell`: the renderer forwards
+        ``StateEvent`` payloads (the same events ``/ws/state`` broadcasts to
+        browsers) over IPC, and the worker injects the state name into the
+        shell via ``window.picframe.applyPlaybackState`` — the same
+        ``evaluate_javascript`` bridge used for config/media. This is the
+        reliable playback-state path that bypasses the cross-origin
+        ``/ws/state`` WebSocket from the ``file://`` overlay surface, so the
+        dock's Play/Pause icon and pause-pin stay in sync (#783).
+        """
+        if self._web_view is None or not WEBKIT_AVAILABLE:
+            logger.debug(
+                "Overlay push playback state skipped (no surface in headless mode): %s", state
+            )
+            return
+        logger.debug("Overlay push playback state: %s", state)
+        payload = json.dumps(state)
+        # Guard against the shell not having registered applyPlaybackState yet
+        # (a race between an early state event and the page finishing boot).
+        js = (
+            "if(window.picframe&&window.picframe.applyPlaybackState)"
+            f"{{window.picframe.applyPlaybackState({payload});}}"
         )
         self._push_to_shell(js)
 

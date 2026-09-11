@@ -15,6 +15,7 @@ from picframe.core.renderers.overlay_ipc import (
     MediaChangedCommand,
     OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
+    PlaybackStateChangedCommand,
     ReadyEvent,
     ReloadCommand,
     SetConfigCommand,
@@ -31,6 +32,7 @@ def test_commands_round_trip_with_type_discriminator() -> None:
         (SetConfigCommand(config={"enabled": True}), {"enabled": True}),
         (ReloadCommand(), None),
         (MediaChangedCommand(media={"file_path": "a.jpg", "exif": {}}), None),
+        (PlaybackStateChangedCommand(state="PAUSED"), None),
         (ShutdownCommand(), None),
     ]
     for cmd, _ in cases:
@@ -40,6 +42,7 @@ def test_commands_round_trip_with_type_discriminator() -> None:
             "set_config",
             "reload",
             "media_changed",
+            "playback_state_changed",
             "shutdown",
         }
         again = parse_overlay_ipc_message(cmd.to_json())
@@ -87,6 +90,12 @@ def test_media_changed_command_carries_media() -> None:
     assert isinstance(cmd, MediaChangedCommand)
     assert cmd.media == payload
     assert cmd.media["file_path"] == "x.jpg"
+
+
+def test_playback_state_changed_command_carries_state() -> None:
+    cmd = parse_overlay_ipc_message(PlaybackStateChangedCommand(state="PAUSED").to_json())
+    assert isinstance(cmd, PlaybackStateChangedCommand)
+    assert cmd.state == "PAUSED"
 
 
 def test_input_event_action_constants() -> None:

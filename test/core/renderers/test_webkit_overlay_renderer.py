@@ -17,6 +17,8 @@ from picframe.core.events.dto import (
     OverlayConfigChangedEvent,
     OverlayVisibilityChangedEvent,
     RenderCommand,
+    State,
+    StateEvent,
     SystemErrorEvent,
 )
 from picframe.core.models.media import DisplayItem, MediaItem, MediaType
@@ -35,6 +37,7 @@ from picframe.core.renderers.overlay_ipc import (
     MediaChangedCommand,
     OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
+    PlaybackStateChangedCommand,
     ReadyEvent,
     SetConfigCommand,
     VisiblePluginsChangedEvent,
@@ -118,6 +121,7 @@ def test_start_spawns_worker_and_applies_initial_config(
     assert OverlayConfigChangedEvent in subscribed_types
     assert RenderCommand in subscribed_types
     assert CurrentMediaChangedEvent in subscribed_types
+    assert StateEvent in subscribed_types  # #783: playback-state bridge
     assert CommandEvent in subscribed_types
     sent = mock_client.return_value.send.call_args_list[-1][0][0]
     assert '"type": "set_config"' in sent
@@ -177,7 +181,10 @@ def test_handle_input_event_translates_to_command_event(
     cases = {
         INPUT_ACTION_PREV: Command.PREV,
         INPUT_ACTION_NEXT: Command.NEXT,
-        INPUT_ACTION_TOGGLE: Command.PLAY,
+        # #783: the dock/keyboard toggle now maps to Command.PAUSE (the real
+        # backend toggle) instead of Command.PLAY (resume-only), so the dock
+        # and the `p` key can actually pause an image or video.
+        INPUT_ACTION_TOGGLE: Command.PAUSE,
     }
     for action, expected in cases.items():
         mock_publisher.reset_mock()
@@ -223,6 +230,114 @@ def test_handle_error_event_publishes_system_error(
     assert isinstance(event, SystemErrorEvent)
     assert event.message == "doh"
     assert event.code == "webkit_unavailable"
+
+
+def test_state_event_forwards_playback_state_to_worker_and_caches(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """A StateEvent is forwarded to the worker as PlaybackStateChangedCommand
+    and cached for a later REQUEST_STATE replay (#783)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_state_event(StateEvent(state=State.PAUSED))
+    mock_send.assert_called_once()
+    cmd = mock_send.call_args[0][0]
+    assert isinstance(cmd, PlaybackStateChangedCommand)
+    assert cmd.state == "PAUSED"
+    assert renderer._last_playback_state == "PAUSED"
+
+
+def test_state_event_skips_send_when_worker_not_running(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """The state is still cached when the worker is down so a later start /
+    reconnect can replay it, but no IPC send is attempted (#783)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = False
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_state_event(StateEvent(state=State.PAUSED))
+    mock_send.assert_not_called()
+    assert renderer._last_playback_state == "PAUSED"
+
+
+def test_state_event_ignores_config_changed_signal(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """CONFIG_CHANGED is a ConfigService signal, not the engine's playback
+    state, so it must NOT be forwarded to the dock — otherwise every config
+    change (e.g. a dock plugin toggle) would flip the Play/Pause icon while
+    playback is still PLAYING (#783)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_state_event(StateEvent(state=State.CONFIG_CHANGED))
+    mock_send.assert_not_called()
+    assert renderer._last_playback_state is None
+
+
+def test_state_event_forwards_idle_and_error(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """IDLE and ERROR are genuine playback states (published by
+    ``_change_state``) and are forwarded so the dock icon matches the UI
+    Remote tab's `isPlaying` (Play icon when not playing) — but neither pins
+    the dock (only PAUSED pins, enforced in the shell) (#783)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_state_event(StateEvent(state=State.IDLE))
+        renderer._on_state_event(StateEvent(state=State.ERROR))
+    assert mock_send.call_count == 2
+    assert mock_send.call_args_list[0][0][0].state == "IDLE"
+    assert mock_send.call_args_list[1][0][0].state == "ERROR"
+
+
+def test_request_state_replays_cached_playback_state(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """A REQUEST_STATE replays the last cached playback state to the worker so
+    a respawned/reconnected overlay picks up the current Play/Pause icon +
+    pause-pin instead of resetting to the default (#783)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True
+    renderer._last_playback_state = "PAUSED"
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_command_event(CommandEvent(command=Command.REQUEST_STATE))
+    sent = [c for c in mock_send.call_args_list if isinstance(c[0][0], PlaybackStateChangedCommand)]
+    assert len(sent) == 1
+    assert sent[0][0][0].state == "PAUSED"
+
+
+def test_request_state_does_not_replay_without_cached_playback_state(
+    mock_publisher: MagicMock,
+    mock_subscriber: MagicMock,
+    plugin_loader: PluginLoader,
+    tmp_path,
+) -> None:
+    """No playback state has been seen yet -> REQUEST_STATE sends no
+    PlaybackStateChangedCommand (the dock keeps its default playing icon)."""
+    renderer = make_renderer(mock_publisher, mock_subscriber, plugin_loader, tmp_path)
+    renderer._running = True
+    with patch.object(renderer, "_send_command") as mock_send:
+        renderer._on_command_event(CommandEvent(command=Command.REQUEST_STATE))
+    sent = [c for c in mock_send.call_args_list if isinstance(c[0][0], PlaybackStateChangedCommand)]
+    assert sent == []
 
 
 def test_handle_visible_plugins_changed_publishes_set_config(
@@ -655,6 +770,7 @@ def test_stop_unsubscribes_and_sends_shutdown_and_terminates(
     assert OverlayConfigChangedEvent in unsubscribed_types
     assert RenderCommand in unsubscribed_types
     assert CurrentMediaChangedEvent in unsubscribed_types
+    assert StateEvent in unsubscribed_types  # #783: playback-state bridge
     sent = conn.send.call_args_list[-1][0][0]
     assert '"type": "shutdown"' in sent
     mock_popen.return_value.terminate.assert_called_once()
@@ -663,7 +779,8 @@ def test_stop_unsubscribes_and_sends_shutdown_and_terminates(
 def test_command_for_input_action_mapping() -> None:
     assert _command_for_input_action(INPUT_ACTION_PREV) == Command.PREV
     assert _command_for_input_action(INPUT_ACTION_NEXT) == Command.NEXT
-    assert _command_for_input_action(INPUT_ACTION_TOGGLE) == Command.PLAY
+    # #783: toggle maps to Command.PAUSE (the real toggle), not Command.PLAY.
+    assert _command_for_input_action(INPUT_ACTION_TOGGLE) == Command.PAUSE
     # Danger-menu actions (#763) map to system/display commands.
     assert _command_for_input_action(INPUT_ACTION_DISPLAY_OFF) == Command.DISPLAY_OFF
     assert _command_for_input_action(INPUT_ACTION_RESTART_SERVICE) == Command.RESTART_SERVICE

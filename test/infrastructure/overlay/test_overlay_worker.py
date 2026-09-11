@@ -19,6 +19,7 @@ from picframe.core.renderers.overlay_ipc import (
     INPUT_ACTION_TOGGLE,
     MediaChangedCommand,
     OverlayErrorEvent,
+    PlaybackStateChangedCommand,
     ReadyEvent,
     ReloadCommand,
     SetConfigCommand,
@@ -534,6 +535,44 @@ def test_push_media_to_shell_noop_without_surface() -> None:
     worker = make_worker()
     worker._web_view = None
     worker._push_media_to_shell({"file_path": "a.jpg"})  # must not raise
+
+
+def test_handle_playback_state_changed_pushes_to_shell(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A ``PlaybackStateChangedCommand`` is forwarded to
+    ``_push_playback_state_to_shell`` (#783)."""
+    worker = make_worker()
+    pushed: list[str] = []
+    monkeypatch.setattr(worker, "_push_playback_state_to_shell", lambda state: pushed.append(state))
+    assert worker.handle_command(PlaybackStateChangedCommand(state="PAUSED")) is True
+    assert pushed == ["PAUSED"]
+
+
+def test_push_playback_state_to_shell_injects_apply_playback_state(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The playback-state push injects
+    ``window.picframe.applyPlaybackState(<json>)`` via the same ``_push_to_shell``
+    bridge used for config/media (#783)."""
+    import picframe.infrastructure.overlay.overlay_worker as mod
+
+    monkeypatch.setattr(mod, "WEBKIT_AVAILABLE", True)
+    worker = make_worker()
+    worker._web_view = MagicMock()
+    pushed: list[str] = []
+    monkeypatch.setattr(worker, "_push_to_shell", lambda js: pushed.append(js))
+    worker._push_playback_state_to_shell("PAUSED")
+    assert len(pushed) == 1
+    assert "window.picframe.applyPlaybackState(" in pushed[0]
+    assert '"PAUSED"' in pushed[0]
+
+
+def test_push_playback_state_to_shell_noop_without_surface() -> None:
+    """Headless (no WebView) playback-state push is a no-op, never raises."""
+    worker = make_worker()
+    worker._web_view = None
+    worker._push_playback_state_to_shell("PAUSED")  # must not raise
 
 
 # --- Clock extra-text file source (#761) ---

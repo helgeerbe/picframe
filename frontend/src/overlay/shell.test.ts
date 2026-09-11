@@ -471,3 +471,111 @@ describe('OverlayShell — all inputs wake the dock only (#766/#780)', () => {
     expect(isIdle('b')).toBe(true)
   })
 })
+
+describe('OverlayShell — pause pins the dock (#783)', () => {
+  function dockIdle(): boolean {
+    return root.classList.contains('pf-root--dock-idle')
+  }
+
+  function toggleButton(): HTMLButtonElement | null {
+    return document.querySelector<HTMLButtonElement>('.pf-dock-icon[data-dock-role="toggle"]')
+  }
+
+  /** Push a playback state through the worker JS bridge (the path
+   * `overlay_worker.py` uses via `window.picframe.applyPlaybackState`). */
+  function applyPlaybackState(state: string): void {
+    expect(window.picframe?.applyPlaybackState).toBeDefined()
+    window.picframe!.applyPlaybackState!(state)
+  }
+
+  function bootPlugin(): void {
+    const a = makePlugin('a')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a'],
+      visible_plugins: ['a'],
+      idle_hide_seconds: 5,
+      _plugins: [a]
+    })
+  }
+
+  function escape(): void {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  }
+
+  it('flips the toggle icon to Play when paused and back to Pause on resume', () => {
+    bootPlugin()
+    // The toggle icon is an inline SVG (font-independent): pause = <rect>,
+    // play = <polygon>. Assert the SVG shape + aria-label rather than a glyph.
+    const pauseIcon = toggleButton()!
+    expect(pauseIcon.querySelector('svg')).not.toBeNull()
+    expect(pauseIcon.innerHTML).toContain('<rect')
+    expect(pauseIcon.getAttribute('aria-label')).toBe('Pause')
+    applyPlaybackState('PAUSED')
+    const playIcon = toggleButton()!
+    expect(playIcon.innerHTML).toContain('<polygon')
+    expect(playIcon.getAttribute('aria-label')).toBe('Play')
+    applyPlaybackState('PLAYING')
+    expect(toggleButton()!.innerHTML).toContain('<rect')
+    expect(toggleButton()!.getAttribute('aria-label')).toBe('Pause')
+  })
+
+  it('pins the dock visible while paused (idle-hide is suppressed)', () => {
+    bootPlugin()
+    applyPlaybackState('PAUSED')
+    expect(dockIdle()).toBe(false)
+    // The idle-hide timer must NOT be armed while paused — advancing well past
+    // the idle interval leaves the dock visible.
+    vi.advanceTimersByTime(60000)
+    expect(dockIdle()).toBe(false)
+  })
+
+  it('restores normal dock auto-hide on resume', () => {
+    bootPlugin()
+    applyPlaybackState('PAUSED')
+    expect(dockIdle()).toBe(false)
+    applyPlaybackState('PLAYING')
+    // Resumed: the dock auto-hides again after the idle interval.
+    expect(dockIdle()).toBe(false)
+    vi.advanceTimersByTime(5000)
+    expect(dockIdle()).toBe(true)
+  })
+
+  it('reveals a hidden dock when it becomes paused', () => {
+    bootPlugin()
+    // Let the dock auto-hide first.
+    vi.advanceTimersByTime(5000)
+    expect(dockIdle()).toBe(true)
+    applyPlaybackState('PAUSED')
+    expect(dockIdle()).toBe(false)
+  })
+
+  it('does not dismiss the dock with Escape while paused', () => {
+    bootPlugin()
+    applyPlaybackState('PAUSED')
+    expect(dockIdle()).toBe(false)
+    // Escape normally dismisses the dock; while paused the pin wins so the
+    // paused state keeps an on-screen indicator.
+    escape()
+    expect(dockIdle()).toBe(false)
+  })
+
+  it('lets Escape dismiss the dock again after resume', () => {
+    bootPlugin()
+    applyPlaybackState('PAUSED')
+    applyPlaybackState('PLAYING')
+    escape()
+    expect(dockIdle()).toBe(true)
+  })
+
+  it('does not pin the dock for an already-paused repeat state', () => {
+    bootPlugin()
+    applyPlaybackState('PAUSED')
+    vi.advanceTimersByTime(60000)
+    expect(dockIdle()).toBe(false)
+    // A duplicate PAUSED push must not re-arm a hide timer.
+    applyPlaybackState('PAUSED')
+    vi.advanceTimersByTime(60000)
+    expect(dockIdle()).toBe(false)
+  })
+})

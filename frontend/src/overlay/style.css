@@ -194,6 +194,17 @@ body {
   display: block;
 }
 
+/* Danger-dropdown menu icons (#783 follow-up): the transport + danger-trigger
+ * icons are now inline SVG (font-independent) like the plugin icons. The menu
+ * row uses a smaller font-size than the dock, so the glyph is sized fixed (px)
+ * rather than em to keep it visually consistent with the dock trigger and
+ * crisp at the menu scale. `flex: 0 0 auto` keeps it from shrinking in the row. */
+.pf-danger-item svg {
+  width: 20px;
+  height: 20px;
+  flex: 0 0 auto;
+}
+
 /* Hover tooltip: a single shared label shown after a short delay when the
  * mouse rests on a dock icon (transport buttons, plugin icons, danger
  * trigger). Mouse-only — touch/keyboard rely on the icon `aria-label`. Sits
