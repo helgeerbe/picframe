@@ -860,6 +860,158 @@ def test_engine_pause_shows_pi3d_paused_status_overlay(
     assert command.overlay.status_text == "PAUSED"
 
 
+def _make_image_pause_engine(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+    overlay_enabled: bool | None,
+) -> PlaybackEngine:
+    """Build an engine paused from a playing image, with a config repository
+    that reports ``overlay.enabled`` (``None`` = no repository wired)."""
+    media_item = MediaItem(
+        id=2,
+        filepath="/path/to/image.jpg",
+        media_type=MediaType.IMAGE,
+        filename="image.jpg",
+        directory_id=1,
+        file_size=1024,
+        last_modified=1234567890.0,
+    )
+    mock_playlist_manager.get_current.return_value = media_item
+    if overlay_enabled is None:
+        engine = PlaybackEngine(
+            mock_event_publisher,
+            mock_event_subscriber,
+            mock_playlist_manager,
+            mock_renderer,
+            config,
+        )
+    else:
+        repo = MagicMock()
+        repo.get_app_config_bool.return_value = overlay_enabled
+        engine = PlaybackEngine(
+            mock_event_publisher,
+            mock_event_subscriber,
+            mock_playlist_manager,
+            mock_renderer,
+            config,
+            config_repository=repo,
+        )
+    engine._state = State.PLAYING
+    return engine
+
+
+def test_engine_pause_suppresses_center_paused_text_when_overlay_active(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """With the on-screen overlay enabled the dock is the pause indicator, so
+    the legacy pi3d center "PAUSED" text is suppressed (#783)."""
+    engine = _make_image_pause_engine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        overlay_enabled=True,
+    )
+    engine._handle_command(CommandEvent(command=Command.PAUSE))
+    command = mock_renderer.execute.call_args.args[0]
+    assert command.render_action == RENDER_PAUSE_PLAYBACK
+    assert command.overlay.status_text == ""
+
+
+def test_engine_pause_keeps_center_paused_text_when_overlay_inactive(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """With the overlay disabled the legacy pi3d center "PAUSED" text remains
+    the fallback indicator (#783)."""
+    engine = _make_image_pause_engine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        overlay_enabled=False,
+    )
+    engine._handle_command(CommandEvent(command=Command.PAUSE))
+    command = mock_renderer.execute.call_args.args[0]
+    assert command.overlay.status_text == "PAUSED"
+
+
+def test_engine_pause_keeps_center_paused_text_without_config_repo(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """No config repository wired -> overlay treated as off -> center text kept
+    (backward compatibility for engines constructed without a repo)."""
+    engine = _make_image_pause_engine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        overlay_enabled=None,
+    )
+    engine._handle_command(CommandEvent(command=Command.PAUSE))
+    command = mock_renderer.execute.call_args.args[0]
+    assert command.overlay.status_text == "PAUSED"
+
+
+def test_engine_pause_video_keeps_gtk_label_when_overlay_active(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """The GTK video "PAUSED" label is always emitted (it renders above the
+    video surface, not the dock) even when the overlay suppresses the pi3d
+    center text (#783)."""
+    repo = MagicMock()
+    repo.get_app_config_bool.return_value = True
+    mock_video_player = MagicMock()
+    media_item = MediaItem(
+        id=3,
+        filepath="/path/to/video.mp4",
+        media_type=MediaType.VIDEO,
+        filename="video.mp4",
+        directory_id=1,
+        file_size=2048,
+        last_modified=1234567890.0,
+        duration=10.0,
+    )
+    engine = PlaybackEngine(
+        mock_event_publisher,
+        mock_event_subscriber,
+        mock_playlist_manager,
+        mock_renderer,
+        config,
+        config_repository=repo,
+        video_player=mock_video_player,
+    )
+    engine._state = State.PREPARING_VIDEO
+    engine._pending_video_media = media_item
+    engine._pending_video_playback_started = True
+
+    engine._handle_command(CommandEvent(command=Command.PAUSE))
+
+    mock_video_player.set_pause_overlay.assert_called_once_with(True, "PAUSED")
+    assert engine._state == State.PAUSED
+
+
 def test_engine_play_clears_pi3d_paused_status_overlay(
     mock_event_publisher: MagicMock,
     mock_event_subscriber: MagicMock,

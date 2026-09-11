@@ -17,6 +17,10 @@ type ApplyConfigHandler = (config: OverlayShellConfig) => void
 type ApplyMediaHandler = (media: CurrentMedia) => void
 /** Per-plugin data push (e.g. clock extra-text file source, #761). */
 type ApplyPluginDataHandler = (pluginId: string, key: string, value: unknown) => void
+/** Playback state push (#783): the worker forwards the live `State` enum name
+ * (e.g. "PLAYING"/"PAUSED") over the IPC bridge so the dock's Play/Pause icon
+ * and pause-pin stay in sync without the cross-origin `/ws/state` WebSocket. */
+type ApplyPlaybackStateHandler = (state: string) => void
 
 /**
  * Payloads the shell posts to the native worker bridge
@@ -36,6 +40,7 @@ interface PicframeBridge {
   applyConfig?: ApplyConfigHandler
   applyMedia?: ApplyMediaHandler
   applyPluginData?: ApplyPluginDataHandler
+  applyPlaybackState?: ApplyPlaybackStateHandler
 }
 
 declare global {
@@ -137,4 +142,18 @@ export function registerApplyMedia(handler: ApplyMediaHandler): void {
  */
 export function registerApplyPluginData(handler: ApplyPluginDataHandler): void {
   ensureBridge().applyPluginData = handler
+}
+
+/**
+ * Register the handler the worker calls to push the live playback state (#783).
+ *
+ * The renderer forwards `StateEvent` payloads over the IPC bridge (the
+ * reliable path that replaces the cross-origin `/ws/state` WebSocket from the
+ * `file://` overlay surface). The shell drives the dock's two-state Play/Pause
+ * icon and pins the dock visible while paused. The best-effort `/ws/state`
+ * `onState` callback feeds the same handler so a WS reconnect reconciles the
+ * dock even if the bridge push was missed.
+ */
+export function registerApplyPlaybackState(handler: ApplyPlaybackStateHandler): void {
+  ensureBridge().applyPlaybackState = handler
 }

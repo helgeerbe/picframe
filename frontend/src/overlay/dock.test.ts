@@ -429,3 +429,62 @@ describe('Confirm modal backward-Shift+Tab sentinel (#781)', () => {
     expect(dockRoot.querySelector('#pf-confirm-backdrop')).toBeNull()
   })
 })
+
+describe('Dock two-state Play/Pause toggle (#783)', () => {
+  function toggle(): HTMLButtonElement {
+    return dockEl().querySelector<HTMLButtonElement>('.pf-dock-icon[data-dock-role="toggle"]')!
+  }
+
+  it('shows the Pause icon while playing (default)', () => {
+    apply()
+    const btn = toggle()
+    expect(btn.textContent).toBe('⏸')
+    expect(btn.getAttribute('aria-label')).toBe('Pause')
+  })
+
+  it('flips to the Play icon when paused', () => {
+    apply()
+    dock.setPlaybackState('PAUSED')
+    const btn = toggle()
+    expect(btn.textContent).toBe('▶')
+    expect(btn.getAttribute('aria-label')).toBe('Play')
+  })
+
+  it('reverts to the Pause icon on resume', () => {
+    apply()
+    dock.setPlaybackState('PAUSED')
+    dock.setPlaybackState('PLAYING')
+    const btn = toggle()
+    expect(btn.textContent).toBe('⏸')
+    expect(btn.getAttribute('aria-label')).toBe('Pause')
+  })
+
+  it('treats transitioning/preparing-video as playing', () => {
+    apply()
+    dock.setPlaybackState('TRANSITIONING')
+    expect(toggle().textContent).toBe('⏸')
+    dock.setPlaybackState('PREPARING_VIDEO')
+    expect(toggle().textContent).toBe('⏸')
+  })
+
+  it('is a no-op when the state does not change', () => {
+    apply()
+    const before = toggle()
+    // Same playing family -> no DOM change.
+    dock.setPlaybackState('PLAYING')
+    const after = toggle()
+    expect(after).toBe(before)
+    expect(after.textContent).toBe('⏸')
+  })
+
+  it('reflects the paused icon in the initial render after a state push', () => {
+    apply()
+    dock.setPlaybackState('PAUSED')
+    // A subsequent config push rebuilds the dock; the rebuilt toggle must
+    // reflect the paused state, not the default.
+    apply()
+    const btn = toggle()
+    expect(btn.textContent).toBe('▶')
+    expect(btn.getAttribute('aria-label')).toBe('Play')
+  })
+})

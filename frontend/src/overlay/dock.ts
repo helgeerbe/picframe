@@ -110,6 +110,10 @@ const DANGER_ENTRIES: DangerEntry[] = [
 const DEFAULT_PANEL_WIDTH = 'min(38vw, 480px)'
 const DEFAULT_PANEL_HEIGHT = 'min(46vh, 360px)'
 
+/** Engine `State` names the dock treats as "playing" for the two-state
+ * Play/Pause toggle (#783). Matches the UI Remote tab's `isPlaying` set. */
+const PLAYING_STATES = new Set(['PLAYING', 'TRANSITIONING', 'PREPARING_VIDEO'])
+
 /** Order-independent id-set equality for `emitOnScreen`'s diff guard (#766).
  * The on-screen set is a set (membership is all that matters), so a wake that
  * re-adds a plugin in a different dock position must not re-emit. */
@@ -194,6 +198,13 @@ export class Dock {
    * re-inserts the same node via `replaceChildren`), so its `focusin` handler
    * is attached a single time. See {@link ensureDockSentinel}. */
   private _dockSentinel: HTMLElement | null = null
+  /** Current playback state (#783): `true` while the engine reports a
+   * playing-family state (PLAYING/TRANSITIONING/PREPARING_VIDEO). Drives the
+   * two-state Play/Pause toggle button — `⏸`/`Pause` while playing,
+   * `▶`/`Play` while paused — so the dock reflects the same state as the UI
+   * Remote tab. Defaults to playing so the icon is correct before the first
+   * state push. */
+  private playbackPlaying = true
 
   constructor(root: HTMLElement, dockRoot: HTMLElement, callbacks: DockCallbacks) {
     this.root = root
@@ -211,6 +222,40 @@ export class Dock {
    * plugin iframes receive the latest pushed values on load (#761). */
   setPluginDataProvider(provider: () => Record<string, Record<string, unknown>> | null): void {
     this.pluginDataProvider = provider
+  }
+
+  /** Apply a live playback state push (#783). The shell forwards the engine's
+   * `State` enum name (e.g. "PLAYING"/"PAUSED") over the IPC bridge (and the
+   * best-effort `/ws/state` `onState` path). The dock flips its toggle button
+   * to the matching Play/Pause icon + label in place — without a full
+   * `render()` rebuild — so the icon updates instantly and focus/timers are
+   * not disturbed. Anything outside the playing family is treated as paused.
+   * Returns the resolved boolean so the shell can react to play/pause
+   * transitions (e.g. pinning the dock while paused). */
+  setPlaybackState(state: string): boolean {
+    const playing = PLAYING_STATES.has(state)
+    if (playing === this.playbackPlaying) return playing
+    this.playbackPlaying = playing
+    this.updateToggleButton()
+    return playing
+  }
+
+  /** Re-render the toggle button in place to match {@link playbackPlaying},
+   * without a full `render()` rebuild (preserves focus + the dock-idle timer). */
+  private updateToggleButton(): void {
+    const btn = this.dockRoot.querySelector<HTMLButtonElement>(
+      '.pf-dock-icon[data-dock-role="toggle"]'
+    )
+    if (!btn) return
+    const { icon, label } = this.toggleAppearance()
+    btn.textContent = icon
+    btn.setAttribute('aria-label', label)
+    btn.setAttribute('data-tooltip', label)
+  }
+
+  /** The Play/Pause icon + label for the current {@link playbackPlaying}. */
+  private toggleAppearance(): { icon: string; label: string } {
+    return this.playbackPlaying ? { icon: '⏸', label: 'Pause' } : { icon: '▶', label: 'Play' }
   }
 
   /** Forward a `postMessage` to a single plugin's iframe (#761). Used to push
@@ -424,7 +469,11 @@ export class Dock {
     // belongs in the danger menu (⏻ Power dropdown).
     const children: HTMLElement[] = [
       this.buildTransportButton('prev', '⏮', 'Previous'),
-      this.buildTransportButton('toggle', '⏯', 'Play / Pause'),
+      this.buildTransportButton(
+        'toggle',
+        this.toggleAppearance().icon,
+        this.toggleAppearance().label
+      ),
       this.buildTransportButton('next', '⏭', 'Next')
     ]
     if (enabled.length > 0) {

@@ -45,6 +45,8 @@ from picframe.core.events.dto import (
     OverlayVisibilityChangedEvent,
     RenderCommand,
     RendererConfigUpdatedEvent,
+    State,
+    StateEvent,
     SystemErrorEvent,
 )
 from picframe.core.events.interfaces import IEventPublisher, IEventSubscriber
@@ -65,6 +67,7 @@ from picframe.core.renderers.overlay_ipc import (
     OnScreenPluginsChangedEvent,
     OverlayErrorEvent,
     OverlayIpcMessage,
+    PlaybackStateChangedCommand,
     ReadyEvent,
     ReloadCommand,
     SetConfigCommand,
@@ -82,6 +85,23 @@ _WORKER_SOCKET_TIMEOUT_SECONDS = float(
     os.environ.get("PICFRAME_OVERLAY_WORKER_SOCKET_TIMEOUT", "20")
 )
 _WORKER_SOCKET_POLL_SECONDS = 0.1
+
+# Genuine playback states published by the engine's ``_change_state`` (#783).
+# ``CONFIG_CHANGED`` (ConfigService) and ``STATS_UPDATED``/``SLEEPING`` (system
+# services) are *signal* events, not the engine's playback state, so they are
+# NOT forwarded to the dock — forwarding them would flip the Play/Pause icon
+# (and risk a false pause-pin) on every config change while playback is still
+# ``PLAYING``.
+_PLAYBACK_STATES = frozenset(
+    {
+        State.IDLE,
+        State.PLAYING,
+        State.PAUSED,
+        State.TRANSITIONING,
+        State.PREPARING_VIDEO,
+        State.ERROR,
+    }
+)
 
 # Exif keys mirrored from ``api.app.MEDIA_DTO_EXIF_KEYS`` so the overlay's
 # ``CurrentMedia.exif`` blob is identical to the ``/ws/state`` payload shape.
@@ -293,6 +313,12 @@ class WebKitOverlayRenderer(IOverlayController):
         # auto-hide. ``None`` = no on-screen event seen yet this run.
         self._last_on_screen_plugins: tuple[str, ...] | None = None
         self._on_screen_lock = threading.Lock()
+        # Last playback state forwarded to the worker (#783). Cached so a fresh
+        # browser connect (``CommandEvent(REQUEST_STATE)``) replays the dock's
+        # Play/Pause icon + pause-pin state — otherwise the dock would reset to
+        # its default (playing) until the next state change. ``None`` = no state
+        # event seen yet this run.
+        self._last_playback_state: str | None = None
 
     # --- IOverlayController ---
 
@@ -572,6 +598,40 @@ class WebKitOverlayRenderer(IOverlayController):
             cached = self._last_on_screen_plugins
         if cached is not None:
             self._publisher.publish(OverlayVisibilityChangedEvent(on_screen_plugins=cached))
+        # Replay the cached playback state so a freshly-(re)connected overlay
+        # worker picks up the current Play/Pause icon + pause-pin state
+        # instead of resetting to the default (playing) until the next state
+        # change (#783). Idempotent for an already-current worker.
+        cached_state = self._last_playback_state
+        if cached_state is not None:
+            self._send_command(PlaybackStateChangedCommand(state=cached_state))
+
+    def _on_state_event(self, event: StateEvent) -> None:
+        """Forward playback state to the worker so the dock stays in sync (#783).
+
+        The controller publishes ``StateEvent`` on every playback state change
+        (playing / paused / transitioning / ...). The overlay shell cannot rely
+        on the cross-origin ``/ws/state`` WebSocket from its ``file://``
+        surface, so the renderer forwards the same state name over the IPC
+        bridge — the reliable path already used for media changes. The shell
+        uses it to drive the two-state Play/Pause dock icon and pin the dock
+        visible while paused. Caching it lets a worker respawn / browser
+        reconnect replay the current state (see ``_on_command_event``).
+
+        Only genuine playback states are forwarded: ``CONFIG_CHANGED`` and
+        ``STATS_UPDATED`` are *signal* events published by services
+        (ConfigService, stats) rather than the engine's playback state, so
+        forwarding them would falsely flip the dock icon (and, before the
+        PAUSED-only pin guard, falsely pin the dock) on every config change —
+        e.g. a dock plugin toggle publishes ``CONFIG_CHANGED`` while playback
+        is still ``PLAYING``.
+        """
+        if event.state not in _PLAYBACK_STATES:
+            return
+        state_name = event.state.name
+        self._last_playback_state = state_name
+        if self._running:
+            self._send_command(PlaybackStateChangedCommand(state=state_name))
 
     # --- Event subscriptions ---
 
@@ -581,6 +641,7 @@ class WebKitOverlayRenderer(IOverlayController):
         self._subscriber.subscribe(DisplayPowerEvent, self._on_display_power_event)
         self._subscriber.subscribe(RendererConfigUpdatedEvent, self._on_renderer_config_updated)
         self._subscriber.subscribe(CurrentMediaChangedEvent, self._on_media_changed)
+        self._subscriber.subscribe(StateEvent, self._on_state_event)
         self._subscriber.subscribe(CommandEvent, self._on_command_event)
         self._subscribed = True
 
@@ -593,6 +654,7 @@ class WebKitOverlayRenderer(IOverlayController):
                 RendererConfigUpdatedEvent, self._on_renderer_config_updated
             )
             self._subscriber.unsubscribe(CurrentMediaChangedEvent, self._on_media_changed)
+            self._subscriber.unsubscribe(StateEvent, self._on_state_event)
             self._subscriber.unsubscribe(CommandEvent, self._on_command_event)
             self._subscribed = False
 
@@ -747,20 +809,27 @@ class WebKitOverlayRenderer(IOverlayController):
 def _command_for_input_action(action: str) -> Command | None:
     """Map an overlay input action to a playback/system Command.
 
-    Navigation actions (prev/next/toggle) map to playback commands; the
+    Navigation actions (prev/next) map to playback commands; the
     danger-menu actions (#763, #740) map to system commands handled by
     :class:`SystemManager` (reboot/shutdown/restart) and
     :class:`DisplayPowerManager` (display off). The exception is ``stop``
     (:data:`INPUT_ACTION_STOP`) which maps to :data:`Command.STOP` — a
     graceful :class:`PlaybackEngine` shutdown that tears down the main
     loop in ``main.py`` rather than invoking a system manager.
+
+    The dock/keyboard **toggle** action maps to :data:`Command.PAUSE` (#783),
+    *not* :data:`Command.PLAY`: ``Command.PAUSE`` is the real toggle in the
+    playback engine (``PAUSED`` -> resume, ``PLAYING``/``TRANSITIONING``/
+    ``PREPARING_VIDEO`` -> pause), while ``Command.PLAY`` only resumes and
+    can therefore never pause — so the dock and the ``p`` key were stuck in
+    play-only and could not pause an image or video.
     """
     if action == INPUT_ACTION_PREV:
         return Command.PREV
     if action == INPUT_ACTION_NEXT:
         return Command.NEXT
     if action == INPUT_ACTION_TOGGLE:
-        return Command.PLAY
+        return Command.PAUSE
     if action == INPUT_ACTION_DISPLAY_OFF:
         return Command.DISPLAY_OFF
     if action == INPUT_ACTION_RESTART_SERVICE:
