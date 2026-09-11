@@ -1,8 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useI18n } from 'vue-i18n'
-import { Cog6ToothIcon, CheckIcon, Square2StackIcon } from '@heroicons/vue/24/outline'
+import {
+  Cog6ToothIcon,
+  CheckIcon,
+  LockClosedIcon,
+  Square2StackIcon
+} from '@heroicons/vue/24/outline'
 import { useOverlayStore, type OverlayPlugin } from '../stores/overlay'
 import { useConfigStore } from '../stores/config'
 import FieldRow from './settings/FieldRow.vue'
@@ -11,6 +16,7 @@ import SegmentedControl from './settings/SegmentedControl.vue'
 import SettingsSection from './settings/SettingsSection.vue'
 import StatusBanner from './ui/StatusBanner.vue'
 import ToggleSwitch from './settings/ToggleSwitch.vue'
+import { useCoalescedSave } from '../composables/useCoalescedSave'
 
 // The Settings-tab-owned overlay working copy (passed via v-model) covers only
 // the schema-driven fields persisted by the global Settings Save: `enabled` and
@@ -83,6 +89,108 @@ const dockLayout = reactive({
   margin: 16,
   idle_hide_seconds: 0
 })
+
+/** Configurable overlay keyboard shortcuts (#777). Auto-saves via
+ *  `savePartialConfig`; not part of the schema-driven working copy. Each
+ *  action binds to a list of `KeyboardEvent.key` strings. Reserved keys
+ *  (Tab/Enter/Space/Escape) are rejected at capture time and also enforced by
+ *  the shell's InputRouter regardless of config. */
+type KeyBindingAction = 'prev' | 'next' | 'toggle'
+const keyBindings = reactive<Record<KeyBindingAction, string[]>>({
+  prev: [],
+  next: [],
+  toggle: []
+})
+const KEY_BINDING_ACTIONS: KeyBindingAction[] = ['prev', 'next', 'toggle']
+
+/** Reserved keys the router never rebinds (#777) — rendered as read-only rows
+ *  so the key-bindings panel doubles as a built-in manual. Escape is a fixed
+ *  hide and is not user-assignable. */
+const RESERVED_KEYS: { keys: string[]; labelKey: string }[] = [
+  { keys: ['Tab', 'Shift+Tab'], labelKey: 'settings.touchOverlay.keys.reserved.tab' },
+  { keys: ['Enter', 'Space'], labelKey: 'settings.touchOverlay.keys.reserved.activate' },
+  { keys: ['Escape'], labelKey: 'settings.touchOverlay.keys.reserved.hide' }
+]
+const RESERVED_KEY_SET = new Set(['Tab', 'Enter', ' ', 'Escape'])
+
+/** Action currently being captured for (one at a time), or null. */
+const capturingAction = ref<KeyBindingAction | null>(null)
+let captureHandler: ((e: KeyboardEvent) => void) | null = null
+
+/** Display a `KeyboardEvent.key` value as a friendly chip label. */
+function formatKey(key: string): string {
+  if (key === ' ') return 'Space'
+  if (key === 'Escape') return 'Esc'
+  return key
+}
+
+/** Enter capture mode for an action: the next non-modifier key pressed is
+ *  added to that action's binding. Reserved keys are rejected with a toast
+ *  (belt-and-suspenders — the router also ignores them). */
+function startCapture(action: KeyBindingAction): void {
+  if (capturingAction.value) stopCapture()
+  capturingAction.value = action
+  captureHandler = (e: KeyboardEvent) => {
+    e.preventDefault()
+    e.stopImmediatePropagation()
+    // Ignore bare modifier presses; wait for the actual key.
+    if (['Shift', 'Control', 'Alt', 'Meta'].includes(e.key)) return
+    const key = e.key.length === 1 ? e.key.toLowerCase() : e.key
+    if (RESERVED_KEY_SET.has(key)) {
+      showStatus('danger', t('settings.touchOverlay.keys.reservedRejected'))
+      stopCapture()
+      return
+    }
+    if (!keyBindings[action].includes(key)) {
+      keyBindings[action] = [...keyBindings[action], key]
+      void saveKeyBindings()
+    }
+    stopCapture()
+  }
+  window.addEventListener('keydown', captureHandler, true)
+}
+
+function stopCapture(): void {
+  if (captureHandler) {
+    window.removeEventListener('keydown', captureHandler, true)
+    captureHandler = null
+  }
+  capturingAction.value = null
+}
+
+function removeKey(action: KeyBindingAction, key: string): void {
+  keyBindings[action] = keyBindings[action].filter(k => k !== key)
+  void saveKeyBindings()
+}
+
+/** Auto-save the overlay key bindings through `savePartialConfig` (#777).
+ *  Uses `useCoalescedSave` with the shared `isSaving` flag so a rapid
+ *  add/remove during a save in flight is re-sent with the latest snapshot
+ *  instead of dropped (which would leave the UI ahead of the backend until
+ *  the next refresh reverted it), while still serializing against the other
+ *  saves and driving the shared "saving" button state. */
+const { run: runSaveKeyBindings } = useCoalescedSave(async () => {
+  statusMessage.value = ''
+  try {
+    await configStore.savePartialConfig({
+      overlay: {
+        key_bindings: {
+          prev: [...keyBindings.prev],
+          next: [...keyBindings.next],
+          toggle: [...keyBindings.toggle]
+        }
+      }
+    })
+    showStatus('success', t('settings.touchOverlay.keys.saved'))
+  } catch (e) {
+    console.error(e)
+    showStatus('danger', t('settings.touchOverlay.keys.failed'))
+    syncFromConfig()
+  }
+}, isSaving)
+const saveKeyBindings = (): void => {
+  void runSaveKeyBindings()
+}
 
 /** Nine anchors for the position select. */
 const ANCHORS = [
@@ -219,6 +327,12 @@ const syncFromConfig = () => {
   // 0 in the editor means "inherit the global idle fade" (sent as null).
   dockLayout.idle_hide_seconds =
     dl && dl.idle_hide_seconds != null ? asNumber(dl.idle_hide_seconds, 0) : 0
+  // #777: keyboard shortcuts. Fall back to the defaults when absent so a
+  // pre-#777 config (or a partial save that omitted them) still renders.
+  const kb = ov.key_bindings
+  keyBindings.prev = Array.isArray(kb?.prev) ? [...kb.prev] : ['ArrowLeft']
+  keyBindings.next = Array.isArray(kb?.next) ? [...kb.next] : ['ArrowRight']
+  keyBindings.toggle = Array.isArray(kb?.toggle) ? [...kb.toggle] : ['p']
 }
 
 /** Auto-save the global idle fade through `savePartialConfig` (#754). */
@@ -387,12 +501,15 @@ watch(
   () => [
     config.value?.overlay?.idle_hide_seconds,
     config.value?.overlay?.content_offset,
-    config.value?.overlay?.dock_layout
+    config.value?.overlay?.dock_layout,
+    config.value?.overlay?.key_bindings
   ],
   () => {
     if (!isSaving.value) syncFromConfig()
   }
 )
+
+onBeforeUnmount(stopCapture)
 </script>
 <template>
   <div class="space-y-8">
@@ -438,6 +555,78 @@ watch(
             />
             {{ inputTypeLabel(type) }}
           </label>
+        </div>
+      </FieldRow>
+
+      <FieldRow
+        :label="t('settings.touchOverlay.keys.label')"
+        :help="t('settings.touchOverlay.keys.help')"
+      >
+        <div class="space-y-3">
+          <div
+            v-for="action in KEY_BINDING_ACTIONS"
+            :key="action"
+            class="flex flex-wrap items-center gap-2"
+          >
+            <span class="w-20 text-sm font-medium text-gray-700 dark:text-gray-300">
+              {{ t(`settings.touchOverlay.keys.actions.${action}`) }}
+            </span>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <span
+                v-for="key in keyBindings[action]"
+                :key="key"
+                class="inline-flex items-center gap-1 rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-800 dark:bg-gray-700 dark:text-gray-200"
+              >
+                {{ formatKey(key) }}
+                <button
+                  type="button"
+                  class="text-gray-400 hover:text-red-500"
+                  :aria-label="t('settings.touchOverlay.keys.remove')"
+                  @click="removeKey(action, key)"
+                >
+                  ×
+                </button>
+              </span>
+              <button
+                type="button"
+                :class="[
+                  capturingAction === action
+                    ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-2 ring-indigo-500 dark:border-indigo-400 dark:bg-indigo-950 dark:text-indigo-200'
+                    : 'border-gray-300 bg-white text-gray-600 hover:bg-gray-50 dark:border-gray-600 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600',
+                  'inline-flex items-center rounded-md border px-2 py-0.5 text-xs font-medium transition-colors'
+                ]"
+                @click="capturingAction === action ? stopCapture() : startCapture(action)"
+              >
+                {{
+                  capturingAction === action
+                    ? t('settings.touchOverlay.keys.listening')
+                    : t('settings.touchOverlay.keys.addKey')
+                }}
+              </button>
+            </div>
+          </div>
+
+          <div class="mt-2 border-t border-gray-100 pt-3 dark:border-gray-700">
+            <div
+              v-for="row in RESERVED_KEYS"
+              :key="row.labelKey"
+              class="flex flex-wrap items-center gap-2"
+            >
+              <LockClosedIcon class="h-3.5 w-3.5 text-gray-400" />
+              <span class="w-20 text-sm font-medium text-gray-500 dark:text-gray-400">
+                {{ t(row.labelKey) }}
+              </span>
+              <div class="flex flex-wrap items-center gap-1.5">
+                <span
+                  v-for="key in row.keys"
+                  :key="key"
+                  class="inline-flex items-center rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs text-gray-500 dark:bg-gray-700 dark:text-gray-400"
+                >
+                  {{ formatKey(key) }}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
       </FieldRow>
 

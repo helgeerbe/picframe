@@ -167,6 +167,11 @@ export class Dock {
   private boundDangerOutside: ((e: PointerEvent) => void) | null = null
   /** Bound keydown handler for the open confirm modal (#763). */
   private boundConfirmKey: ((e: KeyboardEvent) => void) | null = null
+  /** Bound capture-phase keydown handler for the open danger dropdown (#777):
+   *  Escape closes + refocuses the trigger; Tab wraps within the menu; Arrow
+   *  keys cycle items (consuming any bound prev/next arrow so the menu stays
+   *  open while navigating). Mirrors the confirm modal's `boundConfirmKey`. */
+  private boundDangerKey: ((e: KeyboardEvent) => void) | null = null
   /** Hover-tooltip controller: a single shared label element, shown after a
    * short delay when the mouse rests on a dock icon (transport buttons,
    * plugin icons, danger trigger). Mouse-only — touch/keyboard users already
@@ -178,6 +183,17 @@ export class Dock {
    * (done once; the dock element persists across re-renders, so delegation
    * handles `render()`'s `replaceChildren` without re-wiring per element). */
   private tooltipDelegated = false
+  /** Whether the delegated Tab-wrap focus trap has been attached to `#pf-dock`
+   * (#777). Attached once like the tooltip delegation; the persistent dock
+   * element means a single listener handles every rebuilt child set. */
+  private tabTrapDelegated = false
+  /** #781: leading dock sentinel — a hidden-but-focusable element inserted as
+   * the first child of `#pf-dock` so backward Shift+Tab from the first dock
+   * icon lands on the sentinel (still inside the webview) instead of escaping
+   * to a native GTK widget. Built once and reused across re-renders (`render()`
+   * re-inserts the same node via `replaceChildren`), so its `focusin` handler
+   * is attached a single time. See {@link ensureDockSentinel}. */
+  private _dockSentinel: HTMLElement | null = null
 
   constructor(root: HTMLElement, dockRoot: HTMLElement, callbacks: DockCallbacks) {
     this.root = root
@@ -396,6 +412,9 @@ export class Dock {
     // Attach delegated hover-tooltip listeners once (the dock element persists
     // across re-renders; delegation picks up the rebuilt children automatically).
     this.attachTooltipDelegation(dock)
+    // #777: attach the delegated Tab-wrap focus trap once (same persistence
+    // rationale as the tooltip delegation).
+    this.attachTabTrap(dock)
 
     // Dock contents (#763): transport buttons | divider | plugin icons |
     // divider | danger menu. Transport + danger live in the dock so they
@@ -414,6 +433,16 @@ export class Dock {
     }
     children.push(this.buildDivider())
     children.push(this.buildDangerButton())
+    // #777: snapshot the focused dock button's identity before the rebuild so
+    // focus can be restored to the rebuilt equivalent (replaceChildren drops
+    // the old node and focus would otherwise fall to <body>, silencing the
+    // window-level InputRouter shortcuts).
+    const focusIdentity = this.captureDockFocus(dock)
+    // #781: insert the leading sentinel as the first dock child so backward
+    // Shift+Tab from the first icon lands inside the webview (on the sentinel)
+    // instead of escaping to a native GTK widget; the sentinel redirects to
+    // the last icon. Built once and reused across re-renders.
+    children.unshift(this.ensureDockSentinel())
     dock.replaceChildren(...children)
 
     // Render one panel per visible plugin, ordered by layout z_order (stable
@@ -442,6 +471,10 @@ export class Dock {
     // the on-screen set) — mirror it to the Remote tab. Runs after
     // `syncIconStates` so the on-screen set reflects the rebuilt panels.
     this.emitOnScreen()
+    // #777: restore focus to the rebuilt button matching the pre-render
+    // identity so a config push (Remote/Appearance) or dock toggle does not
+    // strand focus on a removed node.
+    this.restoreDockFocus(dock, focusIdentity)
   }
 
   private renderPanel(plugin: PluginEntry): void {
@@ -585,6 +618,10 @@ export class Dock {
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = 'pf-dock-icon'
+    // #777: tag the transport button with its action so `restoreDockFocus` can
+    // relocate the rebuilt equivalent after a re-render (plugin icons use
+    // `data-plugin-id`; transport buttons have no plugin id).
+    btn.setAttribute('data-dock-role', String(action))
     btn.setAttribute('aria-label', label)
     btn.setAttribute('data-tooltip', label)
     btn.textContent = icon
@@ -609,6 +646,7 @@ export class Dock {
     const btn = document.createElement('button')
     btn.type = 'button'
     btn.className = 'pf-dock-icon pf-dock-danger'
+    btn.setAttribute('data-dock-role', 'danger')
     btn.setAttribute('aria-label', 'System')
     btn.setAttribute('data-tooltip', 'System')
     btn.setAttribute('aria-haspopup', 'menu')
@@ -622,7 +660,10 @@ export class Dock {
     return btn
   }
 
-  /** Open the danger dropdown anchored below the trigger button (#763). */
+  /** Open the danger dropdown anchored below the trigger button (#763). On
+   * open, focus jumps to the first menu item and a capture-phase key handler
+   * traps Tab/Arrows within the menu and closes on Escape (#777), mirroring the
+   * confirm modal. */
   private openDangerDropdown(triggerBtn: HTMLElement): void {
     this.closeDangerDropdown()
     this.dangerOpen = true
@@ -648,6 +689,32 @@ export class Dock {
       })
       dropdown.appendChild(item)
     }
+    // #781: Leading dropdown sentinel — same root cause as the dock sentinel.
+    // WebKitGTK's backward Shift+Tab is a native GTK focus traversal that runs
+    // after the DOM keydown handlers and is not cancelable by preventDefault().
+    // The previous DOM focusable before the dropdown's first item is the danger
+    // trigger button (the last #pf-dock child preceding the dropdown), so the
+    // native move escapes the menu to the trigger (menu stays open, focus
+    // stranded). The sentinel is the dropdown's first child so backward
+    // Shift+Tab lands on it (still inside the menu); its focusin handler wraps
+    // to the last item. The keydown Shift+Tab branch below stays as jsdom-only
+    // redundancy. NOT display:none — must stay focusable.
+    const sentinel = document.createElement('div')
+    sentinel.className = 'pf-dropdown-sentinel'
+    sentinel.setAttribute('tabindex', '0')
+    sentinel.setAttribute('aria-hidden', 'true')
+    sentinel.addEventListener('focusin', (e: FocusEvent) => {
+      const items = Array.from(dropdown.querySelectorAll<HTMLButtonElement>('.pf-danger-item'))
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      // Backward Shift+Tab from the first item lands here (the sentinel is the
+      // previous DOM focusable) — wrap to the last. Any other entry (forward
+      // from the trigger, or a stray programmatic focus) goes to the first.
+      if (e.relatedTarget === first) last.focus()
+      else first.focus()
+    })
+    dropdown.insertBefore(sentinel, dropdown.firstChild)
     this.dockRoot.appendChild(dropdown)
     const rect = triggerBtn.getBoundingClientRect()
     const dw = dropdown.offsetWidth
@@ -669,10 +736,77 @@ export class Dock {
         this.dockRoot.addEventListener('pointerdown', this.boundDangerOutside)
       }
     }, 0)
+
+    // #777: Modal-style focus scope — focus the first item on open (keyboard
+    // lands in the menu immediately, like the confirm modal's Cancel button)
+    // and attach a capture-phase key handler that traps Tab within the menu,
+    // cycles items with Arrow keys, and closes on Escape. The dropdown is a
+    // sibling of #pf-dock (not a child), so the dock's Tab trap can't reach it.
+    const items = Array.from(dropdown.querySelectorAll<HTMLButtonElement>('.pf-danger-item'))
+    this.boundDangerKey = (e: KeyboardEvent) => {
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      const active = document.activeElement
+      if (e.key === 'Escape') {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        this.closeDangerDropdown()
+        return
+      }
+      if (e.key === 'Tab') {
+        // Wrap at the edges only; middle items move natively to the next item.
+        if (e.shiftKey) {
+          if (active === first) {
+            e.preventDefault()
+            last.focus()
+          }
+        } else if (active === last) {
+          e.preventDefault()
+          first.focus()
+        }
+        return
+      }
+      if (e.key === 'ArrowDown') {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        const idx = items.indexOf(active as HTMLButtonElement)
+        items[idx === -1 ? 0 : (idx + 1) % items.length].focus()
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        const idx = items.indexOf(active as HTMLButtonElement)
+        items[idx === -1 ? items.length - 1 : (idx - 1 + items.length) % items.length].focus()
+        return
+      }
+      if (e.key === 'Home') {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        first.focus()
+        return
+      }
+      if (e.key === 'End') {
+        e.stopImmediatePropagation()
+        e.preventDefault()
+        last.focus()
+        return
+      }
+    }
+    window.addEventListener('keydown', this.boundDangerKey, true)
+    items[0]?.focus()
   }
 
-  /** Close and detach the danger dropdown (#763). */
+  /** Close and detach the danger dropdown (#763). Removes the capture-phase key
+   * handler and refocuses the trigger so the keyboard user isn't stranded on
+   * `<body>` after the focused menu item is removed from the DOM (#777). */
   private closeDangerDropdown(): void {
+    const wasOpen = this.dangerOpen
+    if (this.boundDangerKey) {
+      window.removeEventListener('keydown', this.boundDangerKey, true)
+      this.boundDangerKey = null
+    }
     if (this.boundDangerOutside) {
       this.dockRoot.removeEventListener('pointerdown', this.boundDangerOutside)
       this.boundDangerOutside = null
@@ -681,6 +815,11 @@ export class Dock {
     this.dangerOpen = false
     const trigger = this.dockRoot.querySelector<HTMLElement>('.pf-dock-danger')
     trigger?.setAttribute('aria-expanded', 'false')
+    // #777: Only refocus when the dropdown was actually open — render() calls
+    // this defensively (the menu may not be open) and an unconditional focus
+    // here would steal focus from the dock button the user had focused,
+    // breaking the focus-restoration snapshot taken right after.
+    if (wasOpen) trigger?.focus()
   }
 
   /** Open a confirm modal for a danger entry (#763). Cancel closes the modal;
@@ -821,6 +960,114 @@ export class Dock {
     })
   }
 
+  /** Attach a delegated Tab-wrap focus trap to `#pf-dock` once (#777). The
+   * dock element persists across re-renders, so a single listener handles
+   * every rebuilt child set. Tab on the last `.pf-dock-icon` wraps to the
+   * first; Shift+Tab on the first wraps to the last; middle buttons move
+   * natively. This keeps focus inside the dock so Tab never escapes into a
+   * plugin iframe or out of the overlay window (which would strand focus and
+   * silence the window-level InputRouter shortcuts). The iframes already carry
+   * `tabindex="-1"` (#780) as defense-in-depth; this trap is the actual wrap
+   * mechanism since native Tab follows document order and never wraps.
+   *
+   * On WebKitGTK the backward Shift+Tab move is a native GTK focus traversal
+   * that runs after DOM handlers and is not cancelable by `preventDefault()`
+   * in any phase, so the keydown trap's backward branch alone cannot keep focus
+   * in the webview. The leading dock sentinel (#781, {@link ensureDockSentinel})
+   * catches that native move and redirects it; this keydown trap still owns the
+   * forward wrap (last→first) and the jsdom-tested backward path. */
+  private attachTabTrap(dock: HTMLElement): void {
+    if (this.tabTrapDelegated) return
+    this.tabTrapDelegated = true
+    dock.addEventListener('keydown', (e: KeyboardEvent) => {
+      if (e.key !== 'Tab') return
+      // #777: When the danger dropdown is open, let Tab flow natively so it
+      // can enter the menu from the trigger (the dropdown's own capture-phase
+      // handler takes over once focus is inside). Without this guard the trap
+      // would wrap the trigger's Tab back to the first dock button.
+      if (this.dangerOpen) return
+      const buttons = Array.from(dock.querySelectorAll<HTMLButtonElement>('.pf-dock-icon'))
+      if (buttons.length === 0) return
+      const first = buttons[0]
+      const last = buttons[buttons.length - 1]
+      const active = document.activeElement
+      if (e.shiftKey) {
+        if (active === first) {
+          e.preventDefault()
+          last.focus()
+        }
+      } else if (active === last) {
+        e.preventDefault()
+        first.focus()
+      }
+    })
+  }
+
+  /** #781: Build (once) and return the leading dock sentinel — a
+   * hidden-but-focusable element inserted as the first child of `#pf-dock` so
+   * that backward Shift+Tab from the first dock icon lands on the sentinel
+   * (still inside the webview) instead of escaping to a native GTK widget.
+   *
+   * Root cause: WebKitGTK's backward Shift+Tab is a native GTK focus traversal
+   * that runs *after* the DOM `keydown` handlers and is *not* cancelable by
+   * `preventDefault()` in any phase. When the first dock icon is the overlay's
+   * first focusable, the native move has no previous DOM focusable and escapes
+   * out of the webview to a GTK widget — and once focus leaves the webview, JS
+   * `.focus()` cannot reclaim it (the keyboard then goes dead until a pointer
+   * click re-focuses an icon). A reactive `focusout` "safety net" cannot fix
+   * this: it fires after the escape, and `.focus()` can't cross back into the
+   * webview. The sentinel instead *prevents* the escape by giving the native
+   * move a safe in-webview previous focusable to land on; its `focusin` handler
+   * then redirects to the last dock icon (backward wrap). Forward entry from
+   * `<body>` also lands on the sentinel and is redirected to the first icon.
+   *
+   * Created once and reused across re-renders (`render()` re-inserts the same
+   * node via `replaceChildren`), so the handler is attached a single time. */
+  private ensureDockSentinel(): HTMLElement {
+    if (this._dockSentinel) return this._dockSentinel
+    const sentinel = document.createElement('div')
+    sentinel.className = 'pf-dock-sentinel'
+    sentinel.setAttribute('tabindex', '0')
+    sentinel.setAttribute('aria-hidden', 'true')
+    sentinel.addEventListener('focusin', (e: FocusEvent) => {
+      const dock = document.getElementById(DOCK_ID)
+      if (!dock) return
+      const buttons = Array.from(dock.querySelectorAll<HTMLButtonElement>('.pf-dock-icon'))
+      if (buttons.length === 0) return
+      const first = buttons[0]
+      const last = buttons[buttons.length - 1]
+      // Backward Shift+Tab from the first icon lands here (the sentinel is the
+      // previous DOM focusable) — wrap to the last. Any other entry (forward
+      // from <body>, or a stray programmatic focus) goes to the first.
+      if (e.relatedTarget === first) last.focus()
+      else first.focus()
+    })
+    this._dockSentinel = sentinel
+    return sentinel
+  }
+
+  /** Snapshot the currently-focused dock button's identity before a re-render
+   * so focus can be restored to the rebuilt equivalent (#777). Returns `null`
+   * when focus is not on a `.pf-dock-icon` within the dock. Identity is the
+   * `data-plugin-id` (plugin icons) or `data-dock-role` (transport/danger). */
+  private captureDockFocus(dock: HTMLElement): string | null {
+    const active = document.activeElement
+    if (!(active instanceof HTMLElement) || !dock.contains(active)) return null
+    if (!active.classList.contains('pf-dock-icon')) return null
+    return active.getAttribute('data-plugin-id') ?? active.getAttribute('data-dock-role') ?? null
+  }
+
+  /** Refocus the rebuilt dock button matching a pre-render identity (#777).
+   * No-op when the identity is absent or the matching button no longer exists
+   * (e.g. the plugin was disabled by the config push). */
+  private restoreDockFocus(dock: HTMLElement, identity: string | null): void {
+    if (!identity) return
+    const sel =
+      `.pf-dock-icon[data-plugin-id="${CSS.escape(identity)}"],` +
+      `.pf-dock-icon[data-dock-role="${CSS.escape(identity)}"]`
+    dock.querySelector<HTMLElement>(sel)?.focus()
+  }
+
   /** Arm the show timer for an icon. Re-arming to a different icon cancels the
    * pending show first, so a quick sweep across the dock does not stack or
    * mis-target tooltips. */
@@ -865,6 +1112,17 @@ export class Dock {
     this.tooltipEl?.classList.remove('pf-dock-tooltip--visible')
   }
 
+  /** Close an open danger dropdown (#777). Returns `true` when a dropdown was
+   * open and got closed, so the shell's Escape→hide handler can stop — the
+   * first Escape closes the menu, a second one hides the dock. The confirm
+   * modal has its own capture-phase Escape handler (with stopPropagation) so it
+   * never reaches this path while open. */
+  closeMenuIfOpen(): boolean {
+    const wasOpen = this.dangerOpen
+    this.closeDangerDropdown()
+    return wasOpen
+  }
+
   /** Close any open dropdown / confirm modal (#763). Called by the shell when
    * the dock enters its idle state (so transient overlays don't outlive the
    * faded dock — the dropdown is a sibling of #pf-dock and the idle CSS only
@@ -887,6 +1145,15 @@ export class Dock {
     frame.src = plugin.entry_uri
     frame.className = 'pf-plugin-frame'
     frame.setAttribute('sandbox', 'allow-scripts allow-same-origin')
+    // #780: keep plugin iframes out of the tab sequence. The dock transport
+    // <button>s are the only persistent Tab stops, so Tab cycles the dock and
+    // wraps last<->first instead of escaping into a plugin iframe (where the
+    // iframe's own document would own the keyboard and the parent `keydown`
+    // listener — InputRouter — would stop firing, killing all overlay
+    // shortcuts). A mouse click can still focus an iframe, but the keyboard
+    // path no longer strands focus there. Plugins that want internal focus
+    // manage it themselves within their sandbox.
+    frame.setAttribute('tabindex', '-1')
     // Forward the effective per-plugin config into the iframe via postMessage
     // once it loads; plugins opt in by listening for { type: 'picframe:config' }.
     const cfg = { ...(this.pluginConfig[plugin.id] ?? {}) }

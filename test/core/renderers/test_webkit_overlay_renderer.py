@@ -445,7 +445,15 @@ def test_overlay_config_changed_forwards_set_config(
     with patch.object(renderer, "_send_command") as mock_send:
         renderer._on_overlay_config_changed(
             OverlayConfigChangedEvent(
-                overlay_config={"enabled_plugins": ["clock"]}, updated_plugin_id=None
+                overlay_config={
+                    "enabled_plugins": ["clock"],
+                    "key_bindings": {
+                        "prev": ["ArrowLeft"],
+                        "next": ["ArrowRight"],
+                        "toggle": ["p"],
+                    },
+                },
+                updated_plugin_id=None,
             )
         )
         mock_send.assert_called_once()
@@ -454,8 +462,17 @@ def test_overlay_config_changed_forwards_set_config(
         # #757: the renderer injects the live blend time (time_fade) into the
         # worker config so the shell's media_change wake-after-blend driver
         # waits for the image crossfade.
-        assert cmd.config == {"enabled_plugins": ["clock"], "time_fade": 2.0}
-        assert renderer._overlay_config == {"enabled_plugins": ["clock"]}
+        # #777: key_bindings passes through unchanged so the shell's
+        # InputRouter live-applies configurable shortcuts.
+        assert cmd.config == {
+            "enabled_plugins": ["clock"],
+            "key_bindings": {"prev": ["ArrowLeft"], "next": ["ArrowRight"], "toggle": ["p"]},
+            "time_fade": 2.0,
+        }
+        assert renderer._overlay_config == {
+            "enabled_plugins": ["clock"],
+            "key_bindings": {"prev": ["ArrowLeft"], "next": ["ArrowRight"], "toggle": ["p"]},
+        }
         assert renderer._time_fade == 2.0
 
 

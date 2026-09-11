@@ -905,6 +905,9 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
         "overlay.enabled_input_types": ["touch", "mouse"],
         "overlay.enabled_plugins": ["clock", "weather"],
         "overlay.visible_plugins": ["clock"],
+        "overlay.key_bindings.prev": ["ArrowLeft"],
+        "overlay.key_bindings.next": ["ArrowRight"],
+        "overlay.key_bindings.toggle": ["p"],
     }
     mock_publisher = MagicMock()
     app = create_app(
@@ -925,6 +928,13 @@ def test_workflow_config_is_public_and_allowlisted() -> None:
     assert data["overlay"]["enabled"] is True
     assert "display_mode" not in data["overlay"]
     assert data["overlay"]["enabled_input_types"] == ["touch", "mouse"]
+    # #777: key_bindings is a public workflow key (non-sensitive) so the
+    # Settings key-bindings table and the live /ws/state sync see it.
+    assert data["overlay"]["key_bindings"] == {
+        "prev": ["ArrowLeft"],
+        "next": ["ArrowRight"],
+        "toggle": ["p"],
+    }
     # Overlay plugin activation/visibility are public workflow controls so the
     # Remote dock and Appearance catalog work without auth (#756).
     assert data["overlay"]["enabled_plugins"] == ["clock", "weather"]
@@ -2429,6 +2439,7 @@ def test_overlay_config_websocket_message_strips_settings_scope_keys() -> None:
             "enabled_input_types": ["touch"],
             "enabled_plugins": ["clock"],
             "visible_plugins": ["clock", "weather"],
+            "key_bindings": {"prev": ["ArrowLeft"], "next": ["ArrowRight"], "toggle": ["p"]},
             # settings-scope keys that must never reach the browser
             "plugin_config": {"weather": {"api_key": "super-secret-key"}},
             "plugin_layout": {"weather": {"position": "top-right"}},
@@ -2448,6 +2459,12 @@ def test_overlay_config_websocket_message_strips_settings_scope_keys() -> None:
     assert overlay["enabled"] is True
     assert overlay["idle_hide_seconds"] == 5.0
     assert overlay["enabled_input_types"] == ["touch"]
+    # #777: key_bindings is public (non-sensitive) so it live-syncs to browsers.
+    assert overlay["key_bindings"] == {
+        "prev": ["ArrowLeft"],
+        "next": ["ArrowRight"],
+        "toggle": ["p"],
+    }
     # settings-scope keys stripped — no secret leakage
     assert "plugin_config" not in overlay
     assert "plugin_layout" not in overlay

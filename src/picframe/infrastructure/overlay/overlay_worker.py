@@ -699,9 +699,15 @@ class OverlayWorker:
                 Gtk4LayerShell.set_anchor(window, edge, True)
             # -1 = do not reserve exclusive space; the overlay floats on top.
             Gtk4LayerShell.set_exclusive_zone(window, -1)
-            # Receive keyboard when the surface has focus without globally stealing
-            # it (Escape/arrows still work after a tap focuses the surface).
-            Gtk4LayerShell.set_keyboard_mode(window, Gtk4LayerShell.KeyboardMode.ON_DEMAND)
+            # EXCLUSIVE retains keyboard focus for navigation (#779). ON_DEMAND
+            # (#754, chosen for the touch overlay) only delivers keyboard events
+            # while the compositor considers the surface focused, and labwc does
+            # not retain that focus across key actions -- so #777 keyboard routing
+            # (prev/next/toggle) worked once then went dead. EXCLUSIVE governs
+            # keyboard input only; pointer/touch and the opacity/video-reveal path
+            # are unchanged. For a kiosk frame with no competing Wayland app this is
+            # the right mode; SSH/TTY admin is a separate session.
+            Gtk4LayerShell.set_keyboard_mode(window, Gtk4LayerShell.KeyboardMode.EXCLUSIVE)
         except Exception as exc:  # noqa: BLE001 - graceful degrade, see docstring
             global LAYER_SHELL_AVAILABLE
             LAYER_SHELL_AVAILABLE = False

@@ -155,6 +155,10 @@ overlay:
   visible_plugin: clock          # null = dock only
   display_mode: auto_hide        # persistent | auto_hide
   enabled_input_types: [touch, mouse, keyboard]
+  key_bindings:                   # configurable shortcuts (#777); Esc is fixed
+    prev: [ArrowLeft]
+    next: [ArrowRight]
+    toggle: [p]                    # moved off Enter/Space so native <button> activation wins
   idle_hide_seconds: 5.0
   transparent: true
   plugin_config: {}              # overlay.plugin_config.<id>.* per plugin
@@ -371,9 +375,9 @@ The overlay shell is a **second Vite multi-page build**
 | `env.ts` | Parses `?ws=<port>&plugins=<uri>` from `location.search` |
 | `bridge.ts` | `window.picframe.send`/`applyConfig` JS bridge to the worker |
 | `state-client.ts` | Best-effort `/ws/state` WebSocket + auto-reconnect |
-| `input.ts` | Pointer zone routing (left=prev, right=next, center=toggle, Esc=hide); device-class filtering via `enabled_input_types`; idle timer |
-| `dock.ts` | Plugin icons + active plugin iframe; `postToActivePlugin()` |
-| `shell.ts` | Orchestrator: DOM veil/content/dock, idle-hide fade, config apply, media forwarding |
+| `input.ts` | Keyboard routing from configurable `overlay.key_bindings` (prev/next/toggle); Tab/Enter/Space reserved for native focus/activation, Escape fixed to `onHide`; **any key wakes the dock** — bound keys follow a **two-step wake-then-navigate** model (first press on a hidden dock only wakes; the action fires on the next press once visible), reserved keys wake+passthrough, unbound keys wake only; device-class filtering via `enabled_input_types`; pointer wake; idle timer (#777, #780). **All inputs (mouse move/click, keyboard, touch tap, Escape-wake) wake the dock only** — auto-hide panels stay in their current state and appear solely via the dock-icon toggle or a `media_change` trigger (#766, #780) |
+| `dock.ts` | Plugin icons + active plugin iframe; `postToActivePlugin()`; plugin iframes carry `tabindex="-1"` (defense-in-depth) **and** a delegated Tab-wrap focus trap on `#pf-dock` (Tab on the last `.pf-dock-icon` wraps to the first, Shift+Tab on the first wraps to the last; middle buttons move natively) keeps focus inside the dock so Tab can't escape into an iframe or out of the overlay window; the trap is guarded by `dangerOpen` so Tab flows natively from the trigger into an open danger menu; `render()` snapshots + restores the focused dock button across its `replaceChildren` rebuild; the danger dropdown is a self-contained focus scope (open focuses the first item, Tab/Arrows trapped within, Escape closes + refocuses the trigger), mirroring the confirm modal (#777, #780) |
+| `shell.ts` | Orchestrator: DOM veil/content/dock, idle-hide fade, config apply, media forwarding; `onHide` toggles the dock via `pf-root--dock-idle` (Escape wake-when-hidden, dismiss-when-shown, dropdown-first) (#780) |
 | `main.ts`, `style.css` | Bootstrap + transparent styling |
 
 The worker loads the shell via `file://…?ws=<port>&plugins=<file uri>`
@@ -392,6 +396,17 @@ device class (e.g. touch on a kiosk); activity tracking counts any enabled
 event. This lets the overlay be developed/tested with mouse + keyboard on
 hardware with no touchscreen, then work identically once a touchscreen is
 connected.
+
+**Wake model (#766, #780):** every ambient input — mouse move, mouse click,
+keyboard key, touch tap, and Escape-wake — calls `wake(true, false)`: it
+reveals and re-arms the **dock only** (navigation chrome), leaving auto-hide
+plugin panels in their current state (faded stays faded, a running countdown
+keeps counting down). Content panels appear solely via the dock-icon toggle
+(`togglePlugin`) or a `media_change` trigger (`scheduleMediaWake`, which calls
+`wake(false)` to reveal panels without the dock). A full `wake()` (dock +
+panels) now runs only on boot (`applyConfig`), `media_change`, and dock-action
+wakes (transport buttons / danger-menu confirm). Touch and keyboard are no
+longer special-cased as "intentional" full-wake inputs.
 
 ## 10. Video + overlay stacking (Z-order & opacity)
 

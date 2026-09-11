@@ -32,6 +32,19 @@ export type DisplayMode = 'persistent' | 'auto_hide'
 export type InputType = 'touch' | 'mouse' | 'keyboard'
 
 /**
+ * Configurable keyboard shortcuts for the on-frame overlay dock (#777). Only
+ * the three freely-assignable transport actions are here. Each value is a list
+ * of `KeyboardEvent.key` strings so one action can bind several keys. Match is
+ * case-insensitive for single letters and verbatim for named keys. `Escape`
+ * (hide) is hardcoded in the `InputRouter` and is not part of this map.
+ */
+export interface KeyBindings {
+  prev?: string[]
+  next?: string[]
+  toggle?: string[]
+}
+
+/**
  * A discovered overlay plugin, slimmed to what the shell needs to render the
  * dock and load the plugin entry. The worker builds this from
  * `PluginDescriptor` (it knows the plugin_dir on disk).
@@ -118,6 +131,12 @@ export interface OverlayShellConfig {
    * `PluginEntry.layout` supersedes it. Kept as a fallback. */
   display_mode?: DisplayMode
   enabled_input_types?: InputType[]
+  /** Configurable keyboard shortcuts for the on-frame overlay dock (#777).
+   * Only `prev`/`next`/`toggle` are user-assignable; Tab/Enter/Space/Escape are
+   * reserved and enforced by the `InputRouter` regardless of this config.
+   * `Escape` is hardcoded to "hide" and is not part of this map. Each value is
+   * a list of `KeyboardEvent.key` strings so one action can bind several keys. */
+  key_bindings?: KeyBindings
   idle_hide_seconds?: number
   transparent?: boolean
   /** Image blend time in seconds (#757): the shell waits this long after a

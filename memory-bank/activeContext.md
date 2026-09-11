@@ -7,6 +7,77 @@
 shipped via PR #768 (squash-merged to `dev` as `8c2f94a`); issue #762
 closed.** `dev` head is now `8c2f94a`; both feature branches deleted.
 
+**#777 — overlay keyboard navigation + configurable shortcuts (PR #778, open on
+`dev`):** full implementation shipped in `17ec79a` on `feat/777-overlay-keyboard-navigation`
+(config schema, backend models/app/renderer, overlay `input.ts`/`shell.ts`/`dock.ts`,
+Settings `TouchOverlaySettingsSection.vue`, i18n en/de, 24 frontend + backend tests,
+docs). Sourcery flagged one valid `bug_risk`: `saveKeyBindings` dropped a rapid
+trailing edit made while a save was in flight (`if (isSaving.value) return`).
+**Fixed in `290a88e`** via a reusable `useCoalescedSave` composable
+(`frontend/src/composables/useCoalescedSave.ts`) that accepts the component's
+shared `isSaving` ref and re-sends the latest snapshot once the in-flight PUT
+settles — preserving the shared mutual-exclusion guard + "saving" button state.
+Unit-tested (5 cases); `yarn test` (85)/`lint`/`format`/`build` (vue-tsc) green.
+Replied to the Sourcery thread. Note: the identical inherited guard in
+`OverlayAppearanceSection.vue` (plugin-toggle auto-save) was left out of scope —
+candidate for a separate consistency ticket.
+
+**#779 + #780 — follow-ups on `feat/777-overlay-keyboard-navigation` (PR #778):**
+- **#779 (EXCLUSIVE keyboard mode):** `ON_DEMAND` (#754) only delivers keyboard
+  events while the compositor considers the surface focused, and labwc does not
+  retain that focus across key actions — so #777 routing worked once then went
+  dead. Fixed in `overlay_worker.py` by switching the layer-shell keyboard mode
+  to `EXCLUSIVE` (keyboard input only; pointer/touch + opacity/video-reveal
+  path unchanged). Right mode for a kiosk frame with no competing Wayland app.
+- **#780 (unified keyboard wake):** any key now wakes the dock (mirrors a touch
+  tap), unifying keyboard with the touch reveal-then-navigate model. `input.ts`
+  `handleKey` calls `onActivity('keyboard')` before bound-key routing; Escape
+  still routes only to `onHide`. `shell.ts` `onHide` now **toggles** the dock
+  from the `pf-root--dock-idle` state — wake (reveal + re-arm) when hidden,
+  dismiss (close an open dropdown first, else hide the dock chrome) when shown.
+  Bound keys wake + fire their action immediately; reserved keys (Tab/Enter/
+  Space) wake but keep native behavior; unbound keys wake only (was a no-op).
+  Frontend-only; no config/schema impact. Tests: `input.test.ts` (+unmapped/
+  F5 wake, reserved-key `onActivity` asserts) and a new `shell.test.ts`
+  Escape-toggle block. Gates: `yarn test` (89)/`lint`/`format`/`build`,
+  `pytest` (1127)/`mypy`/`ruff` all green. `decisionLog.md` + `overlay.md`
+  updated.
+
+**#780 follow-up — three keyboard-navigation bug fixes (issue #780, on
+`feat/777-overlay-keyboard-navigation`):** reported after #779/#780 —
+(1) arrow keys advanced photos even when the dock was hidden, (2) Tab
+stopped cycling at the end of the dock, (3) the dock "lost keyboard focus"
+when the text overlay appeared on a media change. Root causes + fixes:
+- **Two-step wake-then-navigate:** `input.ts` added an optional
+  `dockIdle: () => boolean` predicate (default "never idle"); `handleKey`
+  captures `dockWasIdle` *before* the wake and, for a bound action, returns
+  early (wake-only) when the dock was hidden — the action fires on the next
+  press once visible. `shell.ts` passes `dockIdle: () =>
+  this.root.classList.contains('pf-root--dock-idle')`.
+- **Plugin iframes `tabindex="-1"`** (`dock.ts` `buildFrame`): removes
+  iframes from the tab sequence (defense-in-depth). **The actual Tab-wrap is
+  a delegated focus trap** (`dock.ts` `attachTabTrap`): a single `keydown`
+  listener on the persistent `#pf-dock` intercepts Tab on the last
+  `.pf-dock-icon` (wraps to first) and Shift+Tab on the first (wraps to
+  last); middle buttons move natively. Native Tab follows document order
+  and never wraps within a subtree, so `tabindex="-1"` alone did not cycle
+  — focus escaped past the dock's last button out of the overlay window,
+  stranding focus and silencing the window-level `keydown` (InputRouter).
+  Additionally `render()` snapshots the focused dock button's identity
+  (`data-plugin-id` / `data-dock-role`) before its `replaceChildren`
+  rebuild and restores focus to the rebuilt equivalent, so a config push
+  or dock toggle no longer drops focus to `<body>`.
+Frontend-only; tests in a new `dock.test.ts` (Tab wrap forward/backward,
+middle-button no-op, focus restoration across re-render, focus never leaves
+`#pf-dock`, danger dropdown open/Tab-wrap/Arrow-cycle/Escape-refocus). Gates:
+`yarn test` (110)/`lint`/`format`/`build` (vue-tsc) green; backend untouched.
+`decisionLog.md` + `overlay.md` updated. The danger dropdown is now a
+self-contained focus scope (modal-style: open focuses first item, Tab/Arrows
+trapped within, Escape closes + refocuses the trigger), mirroring the confirm
+modal. The dock Tab trap is guarded by `dangerOpen` so Tab flows natively from
+the trigger into an open menu. Out of scope: a mouse click into an iframe can
+still strand focus.
+
 **What shipped:**
 - Out-of-process WebKitGTK overlay worker (`infrastructure/overlay/overlay_worker.py`)
   using `wlr-layer-shell` via the guarded `gtk4-layer-shell` typelib (falls back
@@ -145,16 +216,50 @@ hidden; (b) toggle `clock` back on → `clock` reappears without disturbing
 `text`; (c) `media_change` still wakes only opted-in `text`; (d) touch the
 screen → auto-hidden panels still reveal (full `wake()` path intact).
 
+**#781 follow-up — backward Shift+Tab sentinel (on
+`feat/777-overlay-keyboard-navigation`, supersedes the failed focusout
+heuristic):** the #777/#780 `attachTabTrap` keydown wrap works on-device for
+forward Tab (last→first: no next focusable, so GTK's native move is a no-op and
+the programmatic `.focus()` sticks) but *failed* for backward Shift+Tab on
+WebKitGTK. Root cause: WebKitGTK's backward Shift+Tab is a native GTK focus
+traversal that runs *after* the DOM `keydown` handlers and is *not* cancelable
+by `preventDefault()` in any phase. When the first dock icon is the overlay's
+first focusable, the native move has no previous DOM focusable and escapes out
+of the webview to a GTK widget — once focus leaves the webview, JS `.focus()`
+cannot reclaim it (keyboard dies until a pointer click re-focuses an icon).
+The prior `focusout` "safety net" (commits `45a2031`/`992dfb7`) fired *after*
+the escape and could not pull focus back into the webview, so it failed
+on-device (all frontend gates green but useless). Fix is a leading dock
+sentinel (`dock.ts` `ensureDockSentinel`): a hidden-but-focusable (`tabindex=0`,
+zero-size, `opacity:0`) `<div>` inserted as the first child of `#pf-dock`, so
+backward Shift+Tab lands on the sentinel (still inside the webview) instead of
+escaping. Its `focusin` handler redirects — `relatedTarget === first icon` →
+last icon (backward wrap); else → first icon (forward entry from `<body>`). The
+keydown trap stays (owns forward wrap + the jsdom-tested backward path); the
+focusout net was removed. CSS `.pf-dock-sentinel` is absolutely positioned out
+of the flex flow (no gap impact), and stays focusable (no `display:none`).
+Tests: `dock.test.ts` "backward-Shift+Tab sentinel" block (4 cases) replaces
+the focusout block. Gates: `yarn test` (118)/`lint`/`format`/`build` green.
+**On-device verification pending.** The danger dropdown had the same
+backward-Shift+Tab escape (focus went to the danger trigger, menu stayed open);
+fixed the same way — `openDangerDropdown` inserts a leading
+`.pf-dropdown-sentinel` (`tabindex=0`, zero-size, `opacity:0`) as the first
+child of `#pf-danger-dropdown` whose `focusin` handler wraps first→last. 4 new
+danger-sentinel tests; `yarn test` (122) green.
+
 **#766 — mouse-click reveals all plugins + dock icon stays highlighted when
 auto-hidden (done):** two related regressions, both distinct from #767. (1) A
 mouse click on the photo was revealing every auto-hidden plugin:
 `InputRouter.handlePointer` fired `onActivity()` for any `pointerdown`, and the
 shell's `onActivity` called the full `wake()` (`revealPanels=true`), stripping
-`--idle` from every panel — correct for touch (tap-to-reveal) but inconsistent
-with `onMouseMove`, which already does `wake(true, false)`. Fix: `onActivity`
-is now pointer-type-aware (signature `(source: InputType) => void`); the shell
-calls `wake(true, false)` for mouse (matching pointermove) and the full
-`wake()` for touch/keyboard. Keyboard handlers pass `'keyboard'`. (2) A
+`--idle` from every panel. Fix: `onActivity` is now pointer-type-aware
+(signature `(source: InputType) => void`). **Follow-up #781 unified the wake
+model — all ambient inputs (mouse move/click, keyboard, touch tap, Escape-wake)
+now call `wake(true, false)` (dock-only), matching `onMouseMove`; auto-hide
+panels appear solely via the dock-icon toggle or a `media_change` trigger.**
+Touch and keyboard are no longer special-cased as "intentional" full-wake
+inputs; a full `wake()` (dock + panels) now runs only on boot, `media_change`,
+and dock-action wakes. (2) A
 plugin's dock icon stayed highlighted while its panel was auto-hidden:
 `buildIcon` set `pf-dock-icon--active` from `visiblePlugins` (the toggled-on
 config set), which never changes on auto-hide. Fix: the dock now owns idle
@@ -170,10 +275,11 @@ plugin; clicking it still toggles `visiblePlugins` config off. If confusing,
 a distinct dimmed "idle" look is a small CSS follow-up. Gates: yarn build
 (vue-tsc + vite), yarn lint 0 errors, yarn format:check. Manual device
 verification pending: (a) mouse-click photo → dock reveals, auto-hidden panels
-stay hidden; (b) touch photo → all panels reveal (unchanged); (c) let photo
-info auto-hide → icon loses highlight; (d) `media_change` → photo info wakes +
-icon re-highlights; (e) keyboard arrows → full wake; (f) dock transport
-buttons → full wake.
+stay hidden; (b) touch photo → dock reveals, auto-hidden panels stay hidden
+(#781); (c) let photo info auto-hide → icon loses highlight; (d)
+`media_change` → photo info wakes + icon re-highlights; (e) keyboard arrows →
+dock reveals, auto-hidden panels stay hidden (#781); (f) dock transport
+buttons → full wake (action wake path, unchanged).
 
 **Commit-message convention** codified in `decisionLog.md`: use the `(#NNN)`
 trailer form (e.g. `fix(overlay): ... (#755)`); bare ` #NNN` tolerated, not

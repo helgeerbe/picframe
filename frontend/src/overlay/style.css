@@ -167,10 +167,17 @@ body {
     transform 0.15s ease;
 }
 
-.pf-dock-icon:hover,
-.pf-dock-icon:focus-visible {
+.pf-dock-icon:hover {
   background: rgba(255, 255, 255, 0.16);
-  outline: none;
+}
+
+/* #777: Focus uses an outline ring (not a fill) so it stays visible even when
+ * the icon is also --active (which owns the fill + scale channel). The two
+ * channels are independent: a focused active icon shows both the ring and the
+ * stronger fill/scale, so keyboard users can always see where focus is. */
+.pf-dock-icon:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
 }
 
 .pf-dock-icon--active {
@@ -240,6 +247,37 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* #781: Leading dock sentinel — a zero-size, invisible, focusable element
+ * inserted as the first child of #pf-dock so backward Shift+Tab from the first
+ * dock icon lands on the sentinel (still inside the webview) instead of
+ * escaping to a native GTK widget (WebKitGTK's backward Shift+Tab is a native
+ * focus traversal not cancelable by preventDefault). Absolutely positioned out
+ * of the flex flow so it adds no gap/space to the dock row. NOT display:none /
+ * visibility:hidden — either would remove it from the tab order and defeat
+ * its purpose; it must remain focusable. */
+.pf-dock-sentinel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* #781: Leading danger-dropdown sentinel — same native-Shift+Tab root cause as
+ * the dock sentinel, applied to the open role="menu". Inserted as the first
+ * child of #pf-danger-dropdown so backward Shift+Tab from the first menu item
+ * lands on the sentinel (still inside the menu) instead of escaping to the
+ * danger trigger button (the previous DOM focusable). Identical invisible-but-
+ * focusable properties; absolutely positioned so it adds no menu height.
+ * NOT display:none — must stay focusable. */
+.pf-dropdown-sentinel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Danger-menu trigger (#763): reuses .pf-dock-icon sizing; this modifier
  * gives the power button a subtle warm tint so it reads as a system control. */
 .pf-dock-icon.pf-dock-danger {
@@ -284,15 +322,24 @@ body {
   gap: 10px;
 }
 
-.pf-danger-item:hover,
-.pf-danger-item:focus-visible {
+.pf-danger-item:hover {
   background: rgba(255, 255, 255, 0.16);
-  outline: none;
 }
 
-.pf-danger-item--severe:hover,
-.pf-danger-item--severe:focus-visible {
+/* #777: Focus ring (outline, not fill) so the keyboard cursor stays visible
+ * while Arrow-cycling the menu. Mirrors the dock icon focus channel. */
+.pf-danger-item:focus-visible {
+  outline: 2px solid rgba(255, 255, 255, 0.8);
+  outline-offset: 2px;
+}
+
+.pf-danger-item--severe:hover {
   background: rgba(255, 138, 128, 0.2);
+}
+
+.pf-danger-item--severe:focus-visible {
+  outline: 2px solid rgba(255, 138, 128, 0.8);
+  outline-offset: 2px;
 }
 
 /* Confirm dialog (#763): a full-screen backdrop + centered modal appended to

@@ -867,7 +867,8 @@ def test_setup_layer_shell_configures_fullscreen_overlay(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """wlr-layer-shell wiring: overlay layer, anchored to all edges, no exclusive
-    zone, on-demand keyboard (#739 task 8). GTK-free except the typelib calls."""
+    zone, EXCLUSIVE keyboard mode so #777 navigation retains focus across
+    repeated key actions (#779). GTK-free except the typelib calls."""
     import picframe.infrastructure.overlay.overlay_worker as mod
 
     fake = MagicMock()
@@ -886,7 +887,7 @@ def test_setup_layer_shell_configures_fullscreen_overlay(
         assert anchor_arg is True
     # -1 = float on top without reserving space.
     fake.set_exclusive_zone.assert_called_once_with(window, -1)
-    fake.set_keyboard_mode.assert_called_once_with(window, fake.KeyboardMode.ON_DEMAND)
+    fake.set_keyboard_mode.assert_called_once_with(window, fake.KeyboardMode.EXCLUSIVE)
 
 
 def test_setup_layer_shell_degrades_when_shared_library_missing(

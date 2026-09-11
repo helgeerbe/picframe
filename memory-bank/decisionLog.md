@@ -237,5 +237,106 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   (behavior-preserving) into `src/utils/media-url.ts`; the store re-imports
   from there. CI gained a `frontend-test` job running `yarn test --run`.
 
+- **Overlay keyboard navigation (#777) + unified wake (#780):**
+  - `overlay.key_bindings` (`prev`/`next`/`toggle`, each a list of
+    `KeyboardEvent.key` strings; defaults `ArrowLeft`/`ArrowRight`/`p`) is the
+    only freely-assignable shortcut surface, edited from Settings → Touch
+    overlay with a multi-key capture control. `Tab`/`Enter`/`Space`/`Escape`
+    are **reserved and non-configurable** — enforced in `setKeyBindings`
+    (frontend) and `OverlayKeyBindings` (backend) so a hand-edited
+    `config.db3` can't silently break native focus/activation.
+  - **Default `toggle` moved off Enter/Space → `p`** so native `<button>`
+    activation (Tab + Enter/Space) always wins on the dock; the old
+    InputRouter `preventDefault` shadowed focused buttons.
+  - **Escape is a wake key too and toggles the dock (#780):** the
+    InputRouter routes Escape to the shell's `onHide`, which decides
+    wake-vs-dismiss from the current `pf-root--dock-idle` state — wake
+    (dock-only, like every other input) when hidden, dismiss (close an open
+    dropdown first, else hide the dock chrome) when shown. **Any other key
+    wakes the dock** (dock-only). Bound keys follow a **two-step wake-then-
+    navigate model**: the first press on a hidden dock only wakes it (no
+    action); the action fires on the next press once visible (#780 follow-up
+    — the earlier one-press "wake+act immediately" behaviour skipped a photo
+    on the same key that revealed the dock). Reserved keys (Tab/Enter/Space)
+    wake but return without `preventDefault`, unbound keys wake only (was a
+    silent no-op). This unifies keyboard with the touch reveal-then-navigate
+    mental model. Escape is intentionally not counted as `onActivity` at the
+    router; the shell owns the wake-vs-dismiss decision. **#781 follow-up:
+    all ambient inputs (mouse move/click, keyboard, touch tap, Escape-wake)
+    now wake the dock only (`wake(true, false)`)** — auto-hide panels stay in
+    their current state and appear solely via the dock-icon toggle or a
+    `media_change` trigger; touch/keyboard are no longer special-cased as
+    "intentional" full-wake inputs (a full `wake()` runs only on boot,
+    `media_change`, and dock-action wakes).
+  - **Dock Tab-wrap focus trap + `tabindex="-1"` (#780, re-fixed #777):**
+    `tabindex="-1"` on plugin iframes alone only removed them from the tab
+    sequence — native Tab follows document order and never wraps within a
+    subtree, so focus still escaped past the dock's last button out of the
+    overlay window, stranding focus and silencing the window-level
+    `keydown` (InputRouter). The actual wrap is a delegated focus trap
+    (`dock.ts` `attachTabTrap`): a single `keydown` listener on the
+    persistent `#pf-dock` calls `preventDefault` + `.focus()` to wrap Tab
+    (last→first) and Shift+Tab (first→last); middle buttons move natively;
+    the listener survives `render()`'s `replaceChildren` via delegation.
+    `render()` also snapshots the focused dock button's identity
+    (`data-plugin-id` / `data-dock-role`) and restores focus to the rebuilt
+    equivalent so a config push/dock toggle can't drop focus to `<body>`.
+    `tabindex="-1"` stays as defense-in-depth (a mouse click can still
+    focus an iframe, but the keyboard path no longer strands there).
+  - **Dock backward-Shift+Tab sentinel (#781):** the #777 keydown Tab-wrap
+    trap (`attachTabTrap`) works on-device for forward Tab (last→first: no
+    next focusable exists, so GTK's native move is a no-op and the
+    programmatic `.focus()` to the first icon sticks) but *failed* for
+    backward Shift+Tab on WebKitGTK. Root cause: WebKitGTK's backward
+    Shift+Tab is a native GTK focus traversal that runs *after* the DOM
+    `keydown` handlers and is *not* cancelable by `preventDefault()` in any
+    phase. When the first dock icon is the overlay's first focusable, the
+    native move has no previous DOM focusable and escapes out of the
+    webview to a GTK widget — and once focus leaves the webview, JS
+    `.focus()` cannot reclaim it (keyboard then dies until a pointer click
+    re-focuses an icon). A reactive `focusout` "safety net" (commits
+    `45a2031`/`992dfb7`, a stateless boundary heuristic on `relatedTarget`)
+    could not fix this: it fires *after* the escape and `.focus()` can't
+    cross back into the webview — green in jsdom but dead on-device. The
+    real fix is a leading dock sentinel (`ensureDockSentinel`): a
+    hidden-but-focusable (`tabindex=0`, zero-size, `opacity:0`) `<div>`
+    inserted as the first child of `#pf-dock` (CSS `.pf-dock-sentinel`,
+    absolutely positioned out of the flex flow), so backward Shift+Tab lands
+    on the sentinel (still inside the webview) instead of escaping. Its
+    `focusin` handler redirects: `relatedTarget === first icon` → last icon
+    (backward wrap); anything else → first icon (forward entry from
+    `<body>`). Built once and reused across re-renders (`render()`
+    re-inserts the same node). The keydown trap stays (owns forward wrap +
+    the jsdom-tested backward path); the focusout net was removed.
+    Danger-dropdown backward wrap had the same on-device escape (focus went
+    to the danger trigger, menu stayed open) and is now fixed the same way —
+    `openDangerDropdown` inserts a leading `.pf-dropdown-sentinel`
+    (`tabindex=0`, zero-size, `opacity=0`) as the first child of
+    `#pf-danger-dropdown` whose `focusin` handler wraps first→last (the
+    keydown Shift+Tab branch stays as jsdom-only redundancy). The confirm
+    modal (`openConfirm`) uses the same `preventDefault()`+focus-swap Tab
+    trap and likely has the same on-device backward-Shift+Tab escape;
+    not yet reported/fixed — a follow-up if confirmed on-device.
+  - **Danger dropdown focus scope (#777):** the dropdown is a sibling of
+    `#pf-dock` (not a child), so the dock's Tab trap can't reach it — Tab on
+    the trigger (the last dock icon) wrapped back to the first dock button
+    instead of entering the menu. Fix mirrors the confirm modal: on open,
+    focus jumps to the first `.pf-danger-item` and a capture-phase `keydown`
+    on `window` traps Tab within the menu (wraps at edges), cycles items with
+    ArrowUp/Down/Home/End (consuming bound arrows via
+    `stopImmediatePropagation` so the menu stays open), and closes on Escape
+    (refocusing the trigger). The dock trap gains a `dangerOpen` guard so Tab
+    from the trigger flows natively into the menu. `closeDangerDropdown`
+    refocuses the trigger only when the menu was actually open (not when
+    `render()` calls it defensively), preserving the focus-restoration
+    snapshot.
+  - **EXCLUSIVE keyboard mode (#779):** the layer-shell overlay uses
+    `Gtk4LayerShell.KeyboardMode.EXCLUSIVE` (not `ON_DEMAND`). labwc does
+    not retain on-demand keyboard focus across key actions, so #777
+    routing worked once then went dead. EXCLUSIVE governs keyboard input
+    only; pointer/touch and the opacity/video-reveal path are unchanged.
+    Right mode for a kiosk frame with no competing Wayland app; SSH/TTY
+    admin is a separate session.
+
 ## Maintenance Decision
 - Memory Bank files should stay concise and current. Do not append full chronological task logs here; summarize the current working state and link back to source docs/issues.

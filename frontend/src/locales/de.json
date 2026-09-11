@@ -410,6 +410,26 @@
       "inputTouch": "Touch",
       "inputMouse": "Maus",
       "inputKeyboard": "Tastatur",
+      "keys": {
+        "label": "Tastaturkürzel",
+        "help": "Tastenkürzel für das Overlay-Dock anpassen. Tab, Enter, Leertaste und Escape sind für die Tastaturnavigation und zum Schließen reserviert und können nicht neu zugewiesen werden.",
+        "addKey": "Taste hinzufügen",
+        "listening": "Taste drücken…",
+        "remove": "Taste entfernen",
+        "saved": "Tastaturkürzel gespeichert.",
+        "failed": "Tastaturkürzel konnten nicht gespeichert werden.",
+        "reservedRejected": "Diese Taste ist für die Navigation reserviert und kann nicht neu zugewiesen werden.",
+        "actions": {
+          "prev": "Zurück",
+          "next": "Weiter",
+          "toggle": "Umschalten"
+        },
+        "reserved": {
+          "tab": "Navigieren",
+          "activate": "Aktivieren",
+          "hide": "Ausblenden"
+        }
+      },
       "displayMode": {
         "persistent": "Bis ausgeschaltet",
         "autoHide": "Auto-Ausblenden"
