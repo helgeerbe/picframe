@@ -111,8 +111,8 @@ export class OverlayShell {
         // plugin's panel is already mounted/removed by `render()`, so no panel
         // reveal is needed. A full `wake()` here was removing `--idle` from
         // idle siblings (e.g. a `media_change` text panel) and re-arming their
-        // timers, briefly revealing them for `idle_hide_seconds`. Touch,
-        // keyboard, and pointermove paths still call the full `wake()`.
+        // timers, briefly revealing them for `idle_hide_seconds`. Every input
+        // (mouse, keyboard, touch, pointermove) now wakes dock-only (#780).
         this.wake(true, false)
       },
       onOnScreenPluginsChange: (pluginIds: string[]) => {
@@ -145,13 +145,12 @@ export class OverlayShell {
         if (action !== '__request_config') sendAction(action)
       },
       onHide: this.onHide,
-      onActivity: (source: InputType) => {
-        // #766: a mouse click is ambient activity (like pointermove), not an
-        // intentional request to view content — wake the dock only, leaving
-        // auto-hide panels in their current state. Touch and keyboard keep the
-        // full wake (reveal + re-arm panel idle timers).
-        if (source === 'mouse') this.wake(true, false)
-        else this.wake()
+      onActivity: (_source: InputType) => {
+        // #766/#780: all inputs (mouse, keyboard, touch) are ambient/chrome
+        // activity — wake the dock only, leaving auto-hide panels in their
+        // current state (matching onMouseMove). Panels are revealed solely via
+        // the dock-icon toggle or a media_change trigger, not ambient input.
+        this.wake(true, false)
       },
       // #780: two-step wake-then-navigate — a bound key's first press on a
       // hidden dock only reveals it (does not skip the photo); the action
@@ -299,9 +298,10 @@ export class OverlayShell {
    * @param revealPanels When `false`, only the dock is revealed and re-armed;
    *   auto-hide plugin panels are left in their current state (faded stays
    *   faded, a running countdown keeps counting down). Used by `onMouseMove`
-   *   so mouse movement reveals navigation chrome (dock + cursor) but does not
-   *   un-fade content panels — they should appear only on intentional
-   *   interaction (touch tap, keyboard, dock icon toggle, media_change) (#763).
+   *   and `onActivity`/`onHide` so any ambient input (mouse move, mouse click,
+   *   keyboard key, touch tap, Escape-wake) reveals navigation chrome (dock +
+   *   cursor) but does not un-fade content panels — they appear only via the
+   *   dock-icon toggle or a `media_change` trigger (#763, #766, #780).
    * @param unhidePanels When `false` (with `revealPanels = true`), auto-hidden
    *   panels (carrying `pf-plugin-panel--idle`) are left faded and are not
    *   re-armed — only panels currently shown or freshly mounted are revealed
@@ -309,8 +309,8 @@ export class OverlayShell {
    *   push (Remote toggle, Appearance timing change) reveals only the
    *   toggled/new panel, mirroring the dock's `togglePlugin` behavior (#767)
    *   instead of blanket-un-hiding every auto-hidden sibling. Default `true`
-   *   (boot, touch, keyboard, `media_change`, dock-action wakes still reveal
-   *   all visible panels).
+   *   (boot, `media_change`, dock-action wakes still reveal all visible
+   *   panels).
    */
   private wake(revealDock = true, revealPanels = true, unhidePanels = true): void {
     if (revealDock) {
@@ -411,11 +411,12 @@ export class OverlayShell {
    * Bound pointer-move handler: reveal the cursor and reset the dock idle
    * timer, but leave auto-hide plugin panels in their current state — mouse
    * movement is ambient activity, not an intentional request to view content,
-   * so panels should appear only on touch/keyboard/dock-icon/media-change
-   * triggers (#763). Only fires for real mouse input (not touch/pen) and only
-   * when `mouse` is an enabled input class, so touch-only users never see a
-   * cursor (#739). Bound as an arrow-function property so
-   * `removeEventListener` in {@link destroy} can detach the exact same ref.
+   * so panels should appear only via the dock-icon toggle or a media_change
+   * trigger (#763, #766, #780 — all inputs now wake dock-only). Only fires for
+   * real mouse input (not touch/pen) and only when `mouse` is an enabled input
+   * class, so touch-only users never see a cursor (#739). Bound as an
+   * arrow-function property so `removeEventListener` in {@link destroy} can
+   * detach the exact same ref.
    */
   private readonly onMouseMove = (e: PointerEvent): void => {
     if (e.pointerType !== 'mouse' || !this.enabledTypes.includes('mouse')) return
@@ -426,7 +427,7 @@ export class OverlayShell {
   /** Escape→toggle handler wired into the {@link InputRouter} (#777; #780
    * unified wake). The first Escape closes an open danger dropdown (and any
    * tooltip). With nothing open, Escape **toggles** the dock: when the dock is
-   * idle (hidden) it wakes (reveal + re-arm, like a touch tap); when shown it
+   * idle (hidden) it wakes (dock-only, like every other input); when shown it
    * hides the dock chrome — mirroring the dock idle state (add
    * `pf-root--dock-idle`, drop the cursor, cancel the re-arm timer) so the dock
    * stays hidden until the next wake. Plugin panels keep their own auto-hide
@@ -435,11 +436,12 @@ export class OverlayShell {
   private readonly onHide = (): void => {
     if (this.dock.closeMenuIfOpen()) return
     // #780: Escape is a wake key too — when the dock is already hidden, Escape
-    // reveals it (full wake: dock + panels + re-armed idle timer) instead of
-    // being a no-op, matching the unified "any input wakes" model. When the
-    // dock is shown, Escape dismisses it as before.
+    // reveals it (dock-only wake, matching the onActivity routing for all other
+    // inputs) instead of being a no-op. When the dock is shown, Escape
+    // dismisses it as before. Auto-hide panels keep their own timers and are
+    // not touched.
     if (this.root.classList.contains('pf-root--dock-idle')) {
-      this.wake()
+      this.wake(true, false)
       return
     }
     this.hideDock()

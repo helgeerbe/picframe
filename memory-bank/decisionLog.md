@@ -251,17 +251,23 @@ This is a compact index of durable project decisions. Detailed rationale lives i
   - **Escape is a wake key too and toggles the dock (#780):** the
     InputRouter routes Escape to the shell's `onHide`, which decides
     wake-vs-dismiss from the current `pf-root--dock-idle` state — wake
-    (reveal + re-arm) when hidden, dismiss (close an open dropdown first,
-    else hide the dock chrome) when shown. **Any other key wakes the dock**
-    (mirrors a touch tap). Bound keys follow a **two-step wake-then-navigate
-    model**: the first press on a hidden dock only wakes it (no action); the
-    action fires on the next press once visible (#780 follow-up — the
-    earlier one-press "wake+act immediately" behaviour skipped a photo on
-    the same key that revealed the dock). Reserved keys (Tab/Enter/Space)
+    (dock-only, like every other input) when hidden, dismiss (close an open
+    dropdown first, else hide the dock chrome) when shown. **Any other key
+    wakes the dock** (dock-only). Bound keys follow a **two-step wake-then-
+    navigate model**: the first press on a hidden dock only wakes it (no
+    action); the action fires on the next press once visible (#780 follow-up
+    — the earlier one-press "wake+act immediately" behaviour skipped a photo
+    on the same key that revealed the dock). Reserved keys (Tab/Enter/Space)
     wake but return without `preventDefault`, unbound keys wake only (was a
-    silent no-op). This unifies keyboard with the touch reveal-then-
-    navigate mental model. Escape is intentionally not counted as
-    `onActivity` at the router; the shell owns the wake-vs-dismiss decision.
+    silent no-op). This unifies keyboard with the touch reveal-then-navigate
+    mental model. Escape is intentionally not counted as `onActivity` at the
+    router; the shell owns the wake-vs-dismiss decision. **#781 follow-up:
+    all ambient inputs (mouse move/click, keyboard, touch tap, Escape-wake)
+    now wake the dock only (`wake(true, false)`)** — auto-hide panels stay in
+    their current state and appear solely via the dock-icon toggle or a
+    `media_change` trigger; touch/keyboard are no longer special-cased as
+    "intentional" full-wake inputs (a full `wake()` runs only on boot,
+    `media_change`, and dock-action wakes).
   - **Dock Tab-wrap focus trap + `tabindex="-1"` (#780, re-fixed #777):**
     `tabindex="-1"` on plugin iframes alone only removed them from the tab
     sequence — native Tab follows document order and never wraps within a

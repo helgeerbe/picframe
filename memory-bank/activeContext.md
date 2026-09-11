@@ -221,11 +221,14 @@ auto-hidden (done):** two related regressions, both distinct from #767. (1) A
 mouse click on the photo was revealing every auto-hidden plugin:
 `InputRouter.handlePointer` fired `onActivity()` for any `pointerdown`, and the
 shell's `onActivity` called the full `wake()` (`revealPanels=true`), stripping
-`--idle` from every panel — correct for touch (tap-to-reveal) but inconsistent
-with `onMouseMove`, which already does `wake(true, false)`. Fix: `onActivity`
-is now pointer-type-aware (signature `(source: InputType) => void`); the shell
-calls `wake(true, false)` for mouse (matching pointermove) and the full
-`wake()` for touch/keyboard. Keyboard handlers pass `'keyboard'`. (2) A
+`--idle` from every panel. Fix: `onActivity` is now pointer-type-aware
+(signature `(source: InputType) => void`). **Follow-up #781 unified the wake
+model — all ambient inputs (mouse move/click, keyboard, touch tap, Escape-wake)
+now call `wake(true, false)` (dock-only), matching `onMouseMove`; auto-hide
+panels appear solely via the dock-icon toggle or a `media_change` trigger.**
+Touch and keyboard are no longer special-cased as "intentional" full-wake
+inputs; a full `wake()` (dock + panels) now runs only on boot, `media_change`,
+and dock-action wakes. (2) A
 plugin's dock icon stayed highlighted while its panel was auto-hidden:
 `buildIcon` set `pf-dock-icon--active` from `visiblePlugins` (the toggled-on
 config set), which never changes on auto-hide. Fix: the dock now owns idle
@@ -241,10 +244,11 @@ plugin; clicking it still toggles `visiblePlugins` config off. If confusing,
 a distinct dimmed "idle" look is a small CSS follow-up. Gates: yarn build
 (vue-tsc + vite), yarn lint 0 errors, yarn format:check. Manual device
 verification pending: (a) mouse-click photo → dock reveals, auto-hidden panels
-stay hidden; (b) touch photo → all panels reveal (unchanged); (c) let photo
-info auto-hide → icon loses highlight; (d) `media_change` → photo info wakes +
-icon re-highlights; (e) keyboard arrows → full wake; (f) dock transport
-buttons → full wake.
+stay hidden; (b) touch photo → dock reveals, auto-hidden panels stay hidden
+(#781); (c) let photo info auto-hide → icon loses highlight; (d)
+`media_change` → photo info wakes + icon re-highlights; (e) keyboard arrows →
+dock reveals, auto-hidden panels stay hidden (#781); (f) dock transport
+buttons → full wake (action wake path, unchanged).
 
 **Commit-message convention** codified in `decisionLog.md`: use the `(#NNN)`
 trailer form (e.g. `fix(overlay): ... (#755)`); bare ` #NNN` tolerated, not

@@ -11,9 +11,10 @@
  *   wakes (reveals + re-arms) when the dock is idle, and dismisses it when
  *   shown (closing an open dropdown first). It is not user-assignable and
  *   fires regardless of `key_bindings`.
- * - **Any other key wakes the dock** (resets the idle timers + re-reveals
- *   content), mirroring a touch tap, so an unbound key is no longer a silent
- *   no-op — the dock appears and the user can learn the shortcuts.
+ * - **Any other key wakes the dock** (resets the idle timer + re-reveals the
+ *   dock chrome, dock-only like every other input), so an unbound key is no
+ *   longer a silent no-op — the dock appears and the user can learn the
+ *   shortcuts.
  * - `Tab`/`Shift+Tab`, `Enter`, `Space` are **reserved**: after waking they
  *   return without `preventDefault`, so the browser handles native focus
  *   movement and `<button>` activation. This removes the old `Enter`/`Space`
@@ -48,8 +49,9 @@ export interface InputRouterOptions {
    * `key_bindings`. */
   onHide: () => void
   /** Called for every enabled event, to reset the idle timer / wake content.
-   * Carries the originating `InputType` so the shell can wake dock-only for
-   * mouse (matching `onMouseMove`) but fully for touch/keyboard (#766). */
+   * Carries the originating `InputType` for diagnostics; the shell wakes
+   * dock-only for every input (mouse, keyboard, touch), matching
+   * `onMouseMove` — auto-hide panels stay in their current state (#766, #780). */
   onActivity: (source: InputType) => void
   /** Predicate reporting whether the dock is currently idle/hidden, so a bound
    * key's first press on a hidden dock only wakes (two-step wake-then-navigate,
@@ -162,8 +164,9 @@ export class InputRouter {
     // buttons (prev/toggle/next). A tap on the veil only wakes the shell
     // — it resets the idle timers and re-reveals the content but no longer
     // fires prev/next/toggle, so a stray tap never skips a photo.
-    // #766: pass the mapped InputType so the shell can wake dock-only for
-    // mouse (ambient activity, like pointermove) but fully for touch.
+    // #766/#780: pass the mapped InputType; the shell wakes dock-only for
+    // every pointer type (ambient activity, like pointermove) — touch no
+    // longer does a full wake.
     this.onActivity(POINTER_TYPE_MAP[e.pointerType] ?? 'touch')
   }
 
@@ -180,14 +183,14 @@ export class InputRouter {
       e.preventDefault()
       return
     }
-    // #780: any other key wakes the dock + extends visibility (mirrors a
-    // touch tap), so an unbound key reveals the dock instead of being a silent
-    // no-op — the user sees the transport controls and can learn the
-    // shortcuts. Bound keys additionally fire their action below — but only
-    // once the dock is already visible (#780 two-step wake-then-navigate):
-    // capture the idle state BEFORE the wake (the wake removes the dock-idle
-    // class), so the first press on a hidden dock reveals it without also
-    // skipping the photo; the action then fires on the next press.
+    // #780: any other key wakes the dock + extends visibility (dock-only,
+    // matching every other input), so an unbound key reveals the dock instead
+    // of being a silent no-op — the user sees the transport controls and can
+    // learn the shortcuts. Bound keys additionally fire their action below —
+    // but only once the dock is already visible (#780 two-step wake-then-
+    // navigate): capture the idle state BEFORE the wake (the wake removes the
+    // dock-idle class), so the first press on a hidden dock reveals it without
+    // also skipping the photo; the action then fires on the next press.
     const dockWasIdle = this.dockIdle()
     this.onActivity('keyboard')
     // Tab/Shift+Tab, Enter, Space are reserved for native focus movement and

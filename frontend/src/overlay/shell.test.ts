@@ -388,3 +388,86 @@ describe('OverlayShell — two-step wake-then-navigate (#780)', () => {
     expect(send).toHaveBeenCalledWith({ action: 'prev' })
   })
 })
+
+describe('OverlayShell — all inputs wake the dock only (#766/#780)', () => {
+  /** Dock auto-hide class on the overlay root (drives dock visibility). */
+  function dockIdle(): boolean {
+    return root.classList.contains('pf-root--dock-idle')
+  }
+
+  /** The veil captures pointerdown (the InputRouter root). */
+  function veil(): HTMLElement {
+    return document.getElementById('pf-veil')!
+  }
+
+  function key(key: string): void {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key, bubbles: true }))
+  }
+
+  function escape(): void {
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  }
+
+  /** A pointer tap on the veil (the path a touch/mouse click takes). */
+  function tap(pointerType: string): void {
+    veil().dispatchEvent(new PointerEvent('pointerdown', { pointerType, bubbles: true }))
+  }
+
+  function setupTwoAutoHidePlugins() {
+    const a = makePlugin('a')
+    const b = makePlugin('b')
+    applyConfig({
+      enabled: true,
+      enabled_plugins: ['a', 'b'],
+      visible_plugins: ['a', 'b'],
+      idle_hide_seconds: 5,
+      _plugins: [a, b]
+    })
+    // Let both panels + the dock auto-hide.
+    vi.advanceTimersByTime(5000)
+    expect(dockIdle()).toBe(true)
+    expect(isIdle('a')).toBe(true)
+    expect(isIdle('b')).toBe(true)
+  }
+
+  it('a keyboard key on a hidden dock wakes the dock but leaves auto-hidden panels hidden', () => {
+    setupTwoAutoHidePlugins()
+
+    // A keyboard key wakes the dock only — panels stay auto-hidden.
+    key('x')
+    expect(dockIdle()).toBe(false)
+    expect(isIdle('a')).toBe(true)
+    expect(isIdle('b')).toBe(true)
+  })
+
+  it('a touch tap on a hidden dock wakes the dock but leaves auto-hidden panels hidden', () => {
+    setupTwoAutoHidePlugins()
+
+    // A touch tap wakes the dock only — panels stay auto-hidden. Touch no
+    // longer does a full wake (#780): it now matches mouse/keyboard.
+    tap('touch')
+    expect(dockIdle()).toBe(false)
+    expect(isIdle('a')).toBe(true)
+    expect(isIdle('b')).toBe(true)
+  })
+
+  it('a mouse click on a hidden dock wakes the dock but leaves auto-hidden panels hidden', () => {
+    setupTwoAutoHidePlugins()
+
+    // A mouse click (pointerdown) wakes the dock only — panels stay hidden.
+    tap('mouse')
+    expect(dockIdle()).toBe(false)
+    expect(isIdle('a')).toBe(true)
+    expect(isIdle('b')).toBe(true)
+  })
+
+  it('Escape on a hidden dock wakes the dock only, leaving auto-hidden panels hidden', () => {
+    setupTwoAutoHidePlugins()
+
+    // Escape on a hidden dock wakes the dock only (was a full wake()).
+    escape()
+    expect(dockIdle()).toBe(false)
+    expect(isIdle('a')).toBe(true)
+    expect(isIdle('b')).toBe(true)
+  })
+})
