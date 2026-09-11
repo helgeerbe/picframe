@@ -245,7 +245,13 @@ backward-Shift+Tab escape (focus went to the danger trigger, menu stayed open);
 fixed the same way — `openDangerDropdown` inserts a leading
 `.pf-dropdown-sentinel` (`tabindex=0`, zero-size, `opacity:0`) as the first
 child of `#pf-danger-dropdown` whose `focusin` handler wraps first→last. 4 new
-danger-sentinel tests; `yarn test` (122) green.
+danger-sentinel tests; `yarn test` (122) green. The confirm modal
+(`openConfirm`) had the same backward-Shift+Tab escape (Cancel is the modal's
+first focusable; backward Shift+Tab escaped to whatever precedes the
+backdrop); fixed the same way — `openConfirm` inserts a leading
+`.pf-modal-sentinel` (`tabindex=0`, zero-size, `opacity:0`) as the first child
+of `#pf-confirm-modal` whose `focusin` handler wraps Cancel→Confirm. 5 new
+modal-sentinel tests; `yarn test` (127)/`lint`/`format`/`vue-tsc`/`build` green.
 
 **#766 — mouse-click reveals all plugins + dock icon stays highlighted when
 auto-hidden (done):** two related regressions, both distinct from #767. (1) A
