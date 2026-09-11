@@ -49,6 +49,51 @@ const TOOLTIP_ID = 'pf-dock-tooltip'
  * quick pass does not flicker, short enough to feel responsive. */
 const TOOLTIP_DELAY_MS = 600
 
+/** Inline-SVG dock icons (transport + danger). Single-color, `stroke="currentColor"`,
+ * sized in em by `.pf-dock-icon svg` / `.pf-danger-item svg` so they inherit the
+ * dock/menu text color and render identically across platforms without an emoji
+ * or symbol font (#783 follow-up). The plugin icons already do this via
+ * `icon.svg`; these constants extend the same approach to the transport and
+ * danger buttons, which previously used bare Unicode glyphs (⏮ ⏸ ▶ ⏭ ⏻ …) whose
+ * rendering varied by platform font availability (color emoji on the Pi,
+ * monochrome shapes on an Ubuntu VM). Mirrors the plugin `icon.svg` shell so
+ * the existing `.pf-dock-icon svg` CSS rule sizes them. */
+function svgIcon(inner: string): string {
+  return (
+    '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" ' +
+    'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" ' +
+    'stroke-linejoin="round">' +
+    inner +
+    '</svg>'
+  )
+}
+
+const SVG_PREV = svgIcon(
+  '<polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/>'
+)
+const SVG_PAUSE = svgIcon(
+  '<rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/>'
+)
+const SVG_PLAY = svgIcon('<polygon points="5 3 19 12 5 21 5 3"/>')
+const SVG_NEXT = svgIcon(
+  '<polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/>'
+)
+const SVG_POWER = svgIcon(
+  '<path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>'
+)
+const SVG_MOON = svgIcon('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>')
+const SVG_REFRESH = svgIcon(
+  '<polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/>' +
+    '<path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"/><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"/>'
+)
+const SVG_ROTATE = svgIcon(
+  '<polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/>'
+)
+const SVG_LOGOUT = svgIcon(
+  '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/>' +
+    '<line x1="21" y1="12" x2="9" y2="12"/>'
+)
+
 /** Danger-menu entries (#763). Each item shows a confirm modal before firing
  * `onAction` — even display-off (reversible) goes through the dialog for a
  * consistent mental model, so a stray tap never powers anything down. */
@@ -66,7 +111,7 @@ const DANGER_ENTRIES: DangerEntry[] = [
   {
     action: 'display_off',
     label: 'Display Off',
-    icon: '🌙',
+    icon: SVG_MOON,
     severe: false,
     confirmTitle: 'Turn the display off?',
     confirmMessage: 'The screen will power off until the next wake tap.'
@@ -74,7 +119,7 @@ const DANGER_ENTRIES: DangerEntry[] = [
   {
     action: 'restart_service',
     label: 'Restart Picframe',
-    icon: '🔄',
+    icon: SVG_REFRESH,
     severe: true,
     confirmTitle: 'Restart the Picframe service?',
     confirmMessage: 'Picframe will restart. This takes a few seconds.'
@@ -82,7 +127,7 @@ const DANGER_ENTRIES: DangerEntry[] = [
   {
     action: 'reboot_host',
     label: 'Reboot',
-    icon: '🔁',
+    icon: SVG_ROTATE,
     severe: true,
     confirmTitle: 'Reboot the host?',
     confirmMessage: 'The system will reboot. This takes about a minute.'
@@ -90,7 +135,7 @@ const DANGER_ENTRIES: DangerEntry[] = [
   {
     action: 'shutdown_host',
     label: 'Shut Down',
-    icon: '⏻',
+    icon: SVG_POWER,
     severe: true,
     confirmTitle: 'Shut down the host?',
     confirmMessage: 'The system will power off completely.'
@@ -98,7 +143,7 @@ const DANGER_ENTRIES: DangerEntry[] = [
   {
     action: 'stop',
     label: 'Exit Picframe',
-    icon: '⏏',
+    icon: SVG_LOGOUT,
     severe: true,
     confirmTitle: 'Exit Picframe?',
     confirmMessage: 'Picframe will quit. Restart the service to resume.'
@@ -200,8 +245,8 @@ export class Dock {
   private _dockSentinel: HTMLElement | null = null
   /** Current playback state (#783): `true` while the engine reports a
    * playing-family state (PLAYING/TRANSITIONING/PREPARING_VIDEO). Drives the
-   * two-state Play/Pause toggle button — `⏸`/`Pause` while playing,
-   * `▶`/`Play` while paused — so the dock reflects the same state as the UI
+   * two-state Play/Pause toggle button — the Pause SVG while playing, the Play
+   * SVG while paused — so the dock reflects the same state as the UI
    * Remote tab. Defaults to playing so the icon is correct before the first
    * state push. */
   private playbackPlaying = true
@@ -241,21 +286,28 @@ export class Dock {
   }
 
   /** Re-render the toggle button in place to match {@link playbackPlaying},
-   * without a full `render()` rebuild (preserves focus + the dock-idle timer). */
+   * without a full `render()` rebuild (preserves focus + the dock-idle timer).
+   * The icon is an inline SVG string, so it is set via `innerHTML` (replacing the
+   * previous SVG) rather than `textContent`. */
   private updateToggleButton(): void {
     const btn = this.dockRoot.querySelector<HTMLButtonElement>(
       '.pf-dock-icon[data-dock-role="toggle"]'
     )
     if (!btn) return
     const { icon, label } = this.toggleAppearance()
-    btn.textContent = icon
+    btn.innerHTML = icon
     btn.setAttribute('aria-label', label)
     btn.setAttribute('data-tooltip', label)
   }
 
-  /** The Play/Pause icon + label for the current {@link playbackPlaying}. */
+  /** The Play/Pause icon (inline SVG) + label for the current
+   * {@link playbackPlaying}. The SVGs are font-independent (single-color,
+   * `stroke="currentColor"`) so the toggle renders identically on the Pi and an
+   * Ubuntu VM, unlike the previous bare `⏸`/`▶` glyphs. */
   private toggleAppearance(): { icon: string; label: string } {
-    return this.playbackPlaying ? { icon: '⏸', label: 'Pause' } : { icon: '▶', label: 'Play' }
+    return this.playbackPlaying
+      ? { icon: SVG_PAUSE, label: 'Pause' }
+      : { icon: SVG_PLAY, label: 'Play' }
   }
 
   /** Forward a `postMessage` to a single plugin's iframe (#761). Used to push
@@ -466,15 +518,15 @@ export class Dock {
     // share its auto-hide + z-order hoist; plugin icons follow when present.
     // The transport row is prev/toggle/next only — there is no "stop" button:
     // the dock auto-hides on idle, and tearing down playback / powering down
-    // belongs in the danger menu (⏻ Power dropdown).
+    // belongs in the danger menu (Power dropdown).
     const children: HTMLElement[] = [
-      this.buildTransportButton('prev', '⏮', 'Previous'),
+      this.buildTransportButton('prev', SVG_PREV, 'Previous'),
       this.buildTransportButton(
         'toggle',
         this.toggleAppearance().icon,
         this.toggleAppearance().label
       ),
-      this.buildTransportButton('next', '⏭', 'Next')
+      this.buildTransportButton('next', SVG_NEXT, 'Next')
     ]
     if (enabled.length > 0) {
       children.push(this.buildDivider())
@@ -673,7 +725,14 @@ export class Dock {
     btn.setAttribute('data-dock-role', String(action))
     btn.setAttribute('aria-label', label)
     btn.setAttribute('data-tooltip', label)
-    btn.textContent = icon
+    // Inline SVG (font-independent, theme-aware via currentColor) like the
+    // plugin icons; fall back to `textContent` for any non-SVG icon string so
+    // future text glyphs still work.
+    if (icon.startsWith('<svg')) {
+      btn.innerHTML = icon
+    } else {
+      btn.textContent = icon
+    }
     btn.addEventListener('click', e => {
       e.stopPropagation()
       this.callbacks.onAction(action)
@@ -700,7 +759,7 @@ export class Dock {
     btn.setAttribute('data-tooltip', 'System')
     btn.setAttribute('aria-haspopup', 'menu')
     btn.setAttribute('aria-expanded', String(this.dangerOpen))
-    btn.textContent = '⏻'
+    btn.innerHTML = SVG_POWER
     btn.addEventListener('click', e => {
       e.stopPropagation()
       if (this.dangerOpen) this.closeDangerDropdown()
@@ -727,7 +786,7 @@ export class Dock {
       item.setAttribute('role', 'menuitem')
       const iconSpan = document.createElement('span')
       iconSpan.setAttribute('aria-hidden', 'true')
-      iconSpan.textContent = entry.icon
+      iconSpan.innerHTML = entry.icon
       const labelSpan = document.createElement('span')
       labelSpan.textContent = entry.label
       item.append(iconSpan, labelSpan)

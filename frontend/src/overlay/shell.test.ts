@@ -505,11 +505,19 @@ describe('OverlayShell — pause pins the dock (#783)', () => {
 
   it('flips the toggle icon to Play when paused and back to Pause on resume', () => {
     bootPlugin()
-    expect(toggleButton()?.textContent).toBe('⏸')
+    // The toggle icon is an inline SVG (font-independent): pause = <rect>,
+    // play = <polygon>. Assert the SVG shape + aria-label rather than a glyph.
+    const pauseIcon = toggleButton()!
+    expect(pauseIcon.querySelector('svg')).not.toBeNull()
+    expect(pauseIcon.innerHTML).toContain('<rect')
+    expect(pauseIcon.getAttribute('aria-label')).toBe('Pause')
     applyPlaybackState('PAUSED')
-    expect(toggleButton()?.textContent).toBe('▶')
+    const playIcon = toggleButton()!
+    expect(playIcon.innerHTML).toContain('<polygon')
+    expect(playIcon.getAttribute('aria-label')).toBe('Play')
     applyPlaybackState('PLAYING')
-    expect(toggleButton()?.textContent).toBe('⏸')
+    expect(toggleButton()!.innerHTML).toContain('<rect')
+    expect(toggleButton()!.getAttribute('aria-label')).toBe('Pause')
   })
 
   it('pins the dock visible while paused (idle-hide is suppressed)', () => {
