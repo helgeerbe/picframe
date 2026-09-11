@@ -283,6 +283,40 @@ This is a compact index of durable project decisions. Detailed rationale lives i
     equivalent so a config push/dock toggle can't drop focus to `<body>`.
     `tabindex="-1"` stays as defense-in-depth (a mouse click can still
     focus an iframe, but the keyboard path no longer strands there).
+  - **Dock backward-Shift+Tab sentinel (#781):** the #777 keydown Tab-wrap
+    trap (`attachTabTrap`) works on-device for forward Tab (last→first: no
+    next focusable exists, so GTK's native move is a no-op and the
+    programmatic `.focus()` to the first icon sticks) but *failed* for
+    backward Shift+Tab on WebKitGTK. Root cause: WebKitGTK's backward
+    Shift+Tab is a native GTK focus traversal that runs *after* the DOM
+    `keydown` handlers and is *not* cancelable by `preventDefault()` in any
+    phase. When the first dock icon is the overlay's first focusable, the
+    native move has no previous DOM focusable and escapes out of the
+    webview to a GTK widget — and once focus leaves the webview, JS
+    `.focus()` cannot reclaim it (keyboard then dies until a pointer click
+    re-focuses an icon). A reactive `focusout` "safety net" (commits
+    `45a2031`/`992dfb7`, a stateless boundary heuristic on `relatedTarget`)
+    could not fix this: it fires *after* the escape and `.focus()` can't
+    cross back into the webview — green in jsdom but dead on-device. The
+    real fix is a leading dock sentinel (`ensureDockSentinel`): a
+    hidden-but-focusable (`tabindex=0`, zero-size, `opacity:0`) `<div>`
+    inserted as the first child of `#pf-dock` (CSS `.pf-dock-sentinel`,
+    absolutely positioned out of the flex flow), so backward Shift+Tab lands
+    on the sentinel (still inside the webview) instead of escaping. Its
+    `focusin` handler redirects: `relatedTarget === first icon` → last icon
+    (backward wrap); anything else → first icon (forward entry from
+    `<body>`). Built once and reused across re-renders (`render()`
+    re-inserts the same node). The keydown trap stays (owns forward wrap +
+    the jsdom-tested backward path); the focusout net was removed.
+    Danger-dropdown backward wrap had the same on-device escape (focus went
+    to the danger trigger, menu stayed open) and is now fixed the same way —
+    `openDangerDropdown` inserts a leading `.pf-dropdown-sentinel`
+    (`tabindex=0`, zero-size, `opacity=0`) as the first child of
+    `#pf-danger-dropdown` whose `focusin` handler wraps first→last (the
+    keydown Shift+Tab branch stays as jsdom-only redundancy). The confirm
+    modal (`openConfirm`) uses the same `preventDefault()`+focus-swap Tab
+    trap and likely has the same on-device backward-Shift+Tab escape;
+    not yet reported/fixed — a follow-up if confirmed on-device.
   - **Danger dropdown focus scope (#777):** the dropdown is a sibling of
     `#pf-dock` (not a child), so the dock's Tab trap can't reach it — Tab on
     the trigger (the last dock icon) wrapped back to the first dock button

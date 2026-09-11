@@ -216,6 +216,37 @@ hidden; (b) toggle `clock` back on → `clock` reappears without disturbing
 `text`; (c) `media_change` still wakes only opted-in `text`; (d) touch the
 screen → auto-hidden panels still reveal (full `wake()` path intact).
 
+**#781 follow-up — backward Shift+Tab sentinel (on
+`feat/777-overlay-keyboard-navigation`, supersedes the failed focusout
+heuristic):** the #777/#780 `attachTabTrap` keydown wrap works on-device for
+forward Tab (last→first: no next focusable, so GTK's native move is a no-op and
+the programmatic `.focus()` sticks) but *failed* for backward Shift+Tab on
+WebKitGTK. Root cause: WebKitGTK's backward Shift+Tab is a native GTK focus
+traversal that runs *after* the DOM `keydown` handlers and is *not* cancelable
+by `preventDefault()` in any phase. When the first dock icon is the overlay's
+first focusable, the native move has no previous DOM focusable and escapes out
+of the webview to a GTK widget — once focus leaves the webview, JS `.focus()`
+cannot reclaim it (keyboard dies until a pointer click re-focuses an icon).
+The prior `focusout` "safety net" (commits `45a2031`/`992dfb7`) fired *after*
+the escape and could not pull focus back into the webview, so it failed
+on-device (all frontend gates green but useless). Fix is a leading dock
+sentinel (`dock.ts` `ensureDockSentinel`): a hidden-but-focusable (`tabindex=0`,
+zero-size, `opacity:0`) `<div>` inserted as the first child of `#pf-dock`, so
+backward Shift+Tab lands on the sentinel (still inside the webview) instead of
+escaping. Its `focusin` handler redirects — `relatedTarget === first icon` →
+last icon (backward wrap); else → first icon (forward entry from `<body>`). The
+keydown trap stays (owns forward wrap + the jsdom-tested backward path); the
+focusout net was removed. CSS `.pf-dock-sentinel` is absolutely positioned out
+of the flex flow (no gap impact), and stays focusable (no `display:none`).
+Tests: `dock.test.ts` "backward-Shift+Tab sentinel" block (4 cases) replaces
+the focusout block. Gates: `yarn test` (118)/`lint`/`format`/`build` green.
+**On-device verification pending.** The danger dropdown had the same
+backward-Shift+Tab escape (focus went to the danger trigger, menu stayed open);
+fixed the same way — `openDangerDropdown` inserts a leading
+`.pf-dropdown-sentinel` (`tabindex=0`, zero-size, `opacity:0`) as the first
+child of `#pf-danger-dropdown` whose `focusin` handler wraps first→last. 4 new
+danger-sentinel tests; `yarn test` (122) green.
+
 **#766 — mouse-click reveals all plugins + dock icon stays highlighted when
 auto-hidden (done):** two related regressions, both distinct from #767. (1) A
 mouse click on the photo was revealing every auto-hidden plugin:

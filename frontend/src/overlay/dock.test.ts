@@ -170,92 +170,55 @@ describe('Dock focus restoration across re-render (#777)', () => {
     expect(document.activeElement).toBe(document.body)
   })
 })
-describe('Dock focusout safety net (#781)', () => {
-  /** A focusable element appended to <body> (outside `#pf-dock`) standing in
-   *  for GTK4 moving focus out of the webview despite the keydown trap's
-   *  preventDefault. happy-dom does not fire `focusout` on programmatic
-   *  `focus()`, so the escape is simulated by dispatching a `FocusEvent` with
-   *  this element as `relatedTarget`. */
-  function outsideButton(): HTMLButtonElement {
-    const el = document.createElement('button')
-    el.id = 'pf-test-outside'
-    document.body.appendChild(el)
-    return el
+describe('Dock backward-Shift+Tab sentinel (#781)', () => {
+  /** Dispatch a `focusin` on the dock sentinel with `related` as the element
+   *  that lost focus: the first dock icon for a backward Shift+Tab wrap, or
+   *  `null` for a forward entry from outside the webview. `bubbles: true` so it
+   *  reaches the sentinel's listener. */
+  function sentinelFocusin(related: EventTarget | null): void {
+    const sentinel = dockEl().querySelector<HTMLElement>('.pf-dock-sentinel')!
+    sentinel.dispatchEvent(new FocusEvent('focusin', { bubbles: true, relatedTarget: related }))
   }
 
-  /** Dispatch a `focusout` on `el` with `related` as the focus destination.
-   *  `bubbles: true` so it reaches the dock's delegated listener. */
-  function focusout(el: HTMLElement, related: EventTarget | null): void {
-    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: related }))
-  }
-
-  /** A middle dock button (toggle) used to arm the Tab-direction flag without
-   *  the keydown trap pre-wrapping in happy-dom: `tab()` on a middle button
-   *  runs `setTabDirection` but, being neither first nor last, calls no
-   *  `focus()`, so the safety net's wrap is observable — focus actually moves
-   *  from the middle button to the wrap target. */
-  function middleButton(): HTMLButtonElement {
-    return icons()[1]
-  }
-
-  it('wraps focus back to the last icon when Shift+Tab escapes the dock', () => {
+  it('wraps to the last icon when backward Shift+Tab lands on the sentinel', () => {
     apply()
     const btns = icons()
-    const middle = middleButton()
-    middle.focus()
-    tab(true) // arms 'backward' (middle button → trap does not pre-wrap)
-    const outside = outsideButton()
-    focusout(middle, outside) // GTK4 moved focus out despite preventDefault
+    btns[0].focus()
+    // Backward Shift+Tab from the first icon lands on the sentinel (the
+    // previous DOM focusable) instead of escaping the webview; the sentinel
+    // redirects to the last icon.
+    sentinelFocusin(btns[0])
     expect(document.activeElement).toBe(btns[btns.length - 1])
-    outside.remove()
   })
 
-  it('wraps focus back to the first icon when Tab escapes the dock', () => {
+  it('focuses the first icon on forward entry from outside the webview', () => {
     apply()
     const btns = icons()
-    const middle = middleButton()
-    middle.focus()
-    tab(false) // arms 'forward'
-    const outside = outsideButton()
-    focusout(middle, outside)
+    // Focus arriving at the sentinel from <body>/null (forward entry) goes to
+    // the first dock icon, not the last.
+    sentinelFocusin(null)
     expect(document.activeElement).toBe(btns[0])
-    outside.remove()
   })
 
-  it('does not wrap for an intra-dock focus move (relatedTarget inside dock)', () => {
+  it('is a no-op when the dock has no focusable icons (no throw)', () => {
     apply()
+    const sentinel = dockEl().querySelector<HTMLElement>('.pf-dock-sentinel')!
+    // Strip every dock icon so the handler's empty-guard is exercised; the
+    // sentinel must not throw or strand focus on itself.
+    dockEl()
+      .querySelectorAll('.pf-dock-icon')
+      .forEach(el => el.remove())
+    expect(() => sentinel.dispatchEvent(new FocusEvent('focusin', { bubbles: true }))).not.toThrow()
+    expect(document.activeElement).not.toBe(sentinel)
+  })
+
+  it('survives a re-render: the sentinel still wraps after replaceChildren', () => {
+    apply()
+    apply() // force a rebuild (new #pf-dock children, same sentinel node)
     const btns = icons()
-    const middle = middleButton()
-    middle.focus()
-    tab(true) // arms 'backward'
-    // The new target is still inside the dock (the trap's own wrap, or native
-    // Tab between dock buttons) → the safety net must not interfere.
-    focusout(middle, btns[0])
-    expect(document.activeElement).toBe(middle)
-  })
-
-  it('does not wrap when no Tab preceded the focus escape', () => {
-    apply()
-    const middle = middleButton()
-    middle.focus()
-    // No tab() → direction flag is null → safety net stays idle.
-    const outside = outsideButton()
-    focusout(middle, outside)
-    expect(document.activeElement).toBe(middle)
-    outside.remove()
-  })
-
-  it('resets the Tab direction after the macrotask so a later escape does not wrap', async () => {
-    apply()
-    const middle = middleButton()
-    middle.focus()
-    tab(true) // arms 'backward'
-    // Flush the setTimeout(0) reset so the direction flag is cleared.
-    await new Promise<void>(r => setTimeout(r, 0))
-    const outside = outsideButton()
-    focusout(middle, outside) // flag is null now → no wrap
-    expect(document.activeElement).toBe(middle)
-    outside.remove()
+    btns[0].focus()
+    sentinelFocusin(btns[0])
+    expect(document.activeElement).toBe(btns[btns.length - 1])
   })
 })
 
@@ -353,5 +316,46 @@ describe('Danger dropdown keyboard navigation (#777)', () => {
     trigger.focus()
     keydown('Tab')
     expect(document.activeElement).not.toBe(btns[0])
+  })
+
+  it('inserts a leading sentinel as the first dropdown child (#781)', () => {
+    apply()
+    openDanger()
+    const dropdown = dockRoot.querySelector('#pf-danger-dropdown')!
+    expect(dropdown.firstElementChild).toBeTruthy()
+    expect(dropdown.firstElementChild!.classList.contains('pf-dropdown-sentinel')).toBe(true)
+    expect(dropdown.firstElementChild!.getAttribute('tabindex')).toBe('0')
+  })
+
+  it('wraps to the last item when backward Shift+Tab lands on the sentinel', () => {
+    apply()
+    openDanger()
+    const items = dangerItems()
+    items[0].focus()
+    // Backward Shift+Tab from the first item lands on the sentinel (the
+    // previous DOM focusable) instead of escaping to the danger trigger; the
+    // sentinel redirects to the last item.
+    const sentinel = dockRoot.querySelector<HTMLElement>('.pf-dropdown-sentinel')!
+    sentinel.dispatchEvent(new FocusEvent('focusin', { bubbles: true, relatedTarget: items[0] }))
+    expect(document.activeElement).toBe(items[items.length - 1])
+  })
+
+  it('focuses the first item on forward entry to the sentinel', () => {
+    apply()
+    openDanger()
+    const items = dangerItems()
+    // Focus arriving at the sentinel from the trigger/null (forward entry) goes
+    // to the first menu item, not the last.
+    const sentinel = dockRoot.querySelector<HTMLElement>('.pf-dropdown-sentinel')!
+    sentinel.dispatchEvent(new FocusEvent('focusin', { bubbles: true, relatedTarget: null }))
+    expect(document.activeElement).toBe(items[0])
+  })
+
+  it('sentinel is removed when the dropdown closes', () => {
+    apply()
+    openDanger()
+    expect(dockRoot.querySelector('.pf-dropdown-sentinel')).not.toBeNull()
+    keydown('Escape')
+    expect(dockRoot.querySelector('.pf-dropdown-sentinel')).toBeNull()
   })
 })

@@ -187,18 +187,13 @@ export class Dock {
    * (#777). Attached once like the tooltip delegation; the persistent dock
    * element means a single listener handles every rebuilt child set. */
   private tabTrapDelegated = false
-  /** #781: direction of the most recent Tab/Shift+Tab the keydown trap
-   * intercepted, read by the `focusout` safety net to wrap escaping focus back
-   * into the dock. `'forward'` (Tab) / `'backward'` (Shift+Tab) / `null` (no
-   * recent Tab). Reset to `null` on the next macrotask so a stale flag never
-   * wraps an unrelated focus move (mouse click, programmatic focus). */
-  private lastTabDirection: 'forward' | 'backward' | null = null
-  /** Timer id for the `lastTabDirection` macrotask reset (#781); tracked so
-   * `destroy()` can clear it and avoid a post-teardown callback. */
-  private tabResetTimer: number | null = null
-  /** Whether the `focusout` safety-net listener has been attached to
-   * `#pf-dock` (#781). Attached once like the other delegated listeners. */
-  private focusOutDelegated = false
+  /** #781: leading dock sentinel — a hidden-but-focusable element inserted as
+   * the first child of `#pf-dock` so backward Shift+Tab from the first dock
+   * icon lands on the sentinel (still inside the webview) instead of escaping
+   * to a native GTK widget. Built once and reused across re-renders (`render()`
+   * re-inserts the same node via `replaceChildren`), so its `focusin` handler
+   * is attached a single time. See {@link ensureDockSentinel}. */
+  private _dockSentinel: HTMLElement | null = null
 
   constructor(root: HTMLElement, dockRoot: HTMLElement, callbacks: DockCallbacks) {
     this.root = root
@@ -420,10 +415,6 @@ export class Dock {
     // #777: attach the delegated Tab-wrap focus trap once (same persistence
     // rationale as the tooltip delegation).
     this.attachTabTrap(dock)
-    // #781: attach the focusout safety net once — catches focus escaping the
-    // dock when GTK4's native Tab navigation overrides the keydown trap's
-    // preventDefault (WebKitGTK + KeyboardMode.EXCLUSIVE).
-    this.attachFocusOutTrap(dock)
 
     // Dock contents (#763): transport buttons | divider | plugin icons |
     // divider | danger menu. Transport + danger live in the dock so they
@@ -447,6 +438,11 @@ export class Dock {
     // the old node and focus would otherwise fall to <body>, silencing the
     // window-level InputRouter shortcuts).
     const focusIdentity = this.captureDockFocus(dock)
+    // #781: insert the leading sentinel as the first dock child so backward
+    // Shift+Tab from the first icon lands inside the webview (on the sentinel)
+    // instead of escaping to a native GTK widget; the sentinel redirects to
+    // the last icon. Built once and reused across re-renders.
+    children.unshift(this.ensureDockSentinel())
     dock.replaceChildren(...children)
 
     // Render one panel per visible plugin, ordered by layout z_order (stable
@@ -693,6 +689,32 @@ export class Dock {
       })
       dropdown.appendChild(item)
     }
+    // #781: Leading dropdown sentinel — same root cause as the dock sentinel.
+    // WebKitGTK's backward Shift+Tab is a native GTK focus traversal that runs
+    // after the DOM keydown handlers and is not cancelable by preventDefault().
+    // The previous DOM focusable before the dropdown's first item is the danger
+    // trigger button (the last #pf-dock child preceding the dropdown), so the
+    // native move escapes the menu to the trigger (menu stays open, focus
+    // stranded). The sentinel is the dropdown's first child so backward
+    // Shift+Tab lands on it (still inside the menu); its focusin handler wraps
+    // to the last item. The keydown Shift+Tab branch below stays as jsdom-only
+    // redundancy. NOT display:none — must stay focusable.
+    const sentinel = document.createElement('div')
+    sentinel.className = 'pf-dropdown-sentinel'
+    sentinel.setAttribute('tabindex', '0')
+    sentinel.setAttribute('aria-hidden', 'true')
+    sentinel.addEventListener('focusin', (e: FocusEvent) => {
+      const items = Array.from(dropdown.querySelectorAll<HTMLButtonElement>('.pf-danger-item'))
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      // Backward Shift+Tab from the first item lands here (the sentinel is the
+      // previous DOM focusable) — wrap to the last. Any other entry (forward
+      // from the trigger, or a stray programmatic focus) goes to the first.
+      if (e.relatedTarget === first) last.focus()
+      else first.focus()
+    })
+    dropdown.insertBefore(sentinel, dropdown.firstChild)
     this.dockRoot.appendChild(dropdown)
     const rect = triggerBtn.getBoundingClientRect()
     const dw = dropdown.offsetWidth
@@ -946,7 +968,14 @@ export class Dock {
    * plugin iframe or out of the overlay window (which would strand focus and
    * silence the window-level InputRouter shortcuts). The iframes already carry
    * `tabindex="-1"` (#780) as defense-in-depth; this trap is the actual wrap
-   * mechanism since native Tab follows document order and never wraps. */
+   * mechanism since native Tab follows document order and never wraps.
+   *
+   * On WebKitGTK the backward Shift+Tab move is a native GTK focus traversal
+   * that runs after DOM handlers and is not cancelable by `preventDefault()`
+   * in any phase, so the keydown trap's backward branch alone cannot keep focus
+   * in the webview. The leading dock sentinel (#781, {@link ensureDockSentinel})
+   * catches that native move and redirects it; this keydown trap still owns the
+   * forward wrap (last→first) and the jsdom-tested backward path. */
   private attachTabTrap(dock: HTMLElement): void {
     if (this.tabTrapDelegated) return
     this.tabTrapDelegated = true
@@ -955,20 +984,13 @@ export class Dock {
       // #777: When the danger dropdown is open, let Tab flow natively so it
       // can enter the menu from the trigger (the dropdown's own capture-phase
       // handler takes over once focus is inside). Without this guard the trap
-      // would wrap the trigger's Tab back to the first dock button. The guard
-      // also keeps the #781 direction flag unset so the focusout safety net
-      // does not pull the menu-entering Tab back into the dock.
+      // would wrap the trigger's Tab back to the first dock button.
       if (this.dangerOpen) return
       const buttons = Array.from(dock.querySelectorAll<HTMLButtonElement>('.pf-dock-icon'))
       if (buttons.length === 0) return
       const first = buttons[0]
       const last = buttons[buttons.length - 1]
       const active = document.activeElement
-      // #781: record the Tab direction so the focusout safety net can pull
-      // escaping focus back into the dock when GTK4's native focus navigation
-      // (KeyboardMode.EXCLUSIVE) moves it out despite preventDefault. Reset on
-      // the next macrotask so a later unrelated focus move is not miswrapped.
-      this.setTabDirection(e.shiftKey ? 'backward' : 'forward')
       if (e.shiftKey) {
         if (active === first) {
           e.preventDefault()
@@ -981,49 +1003,47 @@ export class Dock {
     })
   }
 
-  /** Record the direction of the Tab/Shift+Tab the keydown trap just saw and
-   * arm a macrotask reset (#781). The flag is read by the `focusout` safety
-   * net; clearing it on the next macrotask means only a focus escape caused by
-   * the immediately-preceding Tab is wrapped. Re-arming cancels any pending
-   * reset first so rapid Tabs keep the latest direction. */
-  private setTabDirection(dir: 'forward' | 'backward'): void {
-    this.lastTabDirection = dir
-    if (this.tabResetTimer !== null) window.clearTimeout(this.tabResetTimer)
-    this.tabResetTimer = window.setTimeout(() => {
-      this.lastTabDirection = null
-      this.tabResetTimer = null
-    }, 0)
-  }
-
-  /** #781: focusout safety net. WebKitGTK + Gtk4LayerShell
-   * `KeyboardMode.EXCLUSIVE` lets GTK4's native focus-chain navigation move
-   * focus out of the webview on Shift+Tab past the first focusable, overriding
-   * the JS `preventDefault()`/`focus()` the keydown trap issues. This listener
-   * catches that escape: when focus leaves `#pf-dock` right after a Tab the
-   * trap handled (direction flag set) and the new target is outside the dock
-   * (or null — focus left the webview entirely for a GTK widget), it pulls
-   * focus back to the opposite end — Tab wraps to the first icon, Shift+Tab to
-   * the last. Intra-dock moves (native Tab between middle buttons, or the
-   * trap's own `focus()` whose relatedTarget is still inside the dock) are left
-   * alone. */
-  private attachFocusOutTrap(dock: HTMLElement): void {
-    if (this.focusOutDelegated) return
-    this.focusOutDelegated = true
-    dock.addEventListener('focusout', (e: FocusEvent) => {
-      const dir = this.lastTabDirection
-      if (dir === null) return
-      const related = e.relatedTarget
-      // Focus is staying inside the dock — native navigation between dock
-      // buttons, or the trap's own wrap focus() (relatedTarget is the newly
-      // focused dock button). Let it through; no wrap.
-      if (related instanceof Node && dock.contains(related)) return
-      // Focus escaped the dock right after a Tab the trap handled. GTK4 moved
-      // it out despite preventDefault; pull it back to the opposite end.
+  /** #781: Build (once) and return the leading dock sentinel — a
+   * hidden-but-focusable element inserted as the first child of `#pf-dock` so
+   * that backward Shift+Tab from the first dock icon lands on the sentinel
+   * (still inside the webview) instead of escaping to a native GTK widget.
+   *
+   * Root cause: WebKitGTK's backward Shift+Tab is a native GTK focus traversal
+   * that runs *after* the DOM `keydown` handlers and is *not* cancelable by
+   * `preventDefault()` in any phase. When the first dock icon is the overlay's
+   * first focusable, the native move has no previous DOM focusable and escapes
+   * out of the webview to a GTK widget — and once focus leaves the webview, JS
+   * `.focus()` cannot reclaim it (the keyboard then goes dead until a pointer
+   * click re-focuses an icon). A reactive `focusout` "safety net" cannot fix
+   * this: it fires after the escape, and `.focus()` can't cross back into the
+   * webview. The sentinel instead *prevents* the escape by giving the native
+   * move a safe in-webview previous focusable to land on; its `focusin` handler
+   * then redirects to the last dock icon (backward wrap). Forward entry from
+   * `<body>` also lands on the sentinel and is redirected to the first icon.
+   *
+   * Created once and reused across re-renders (`render()` re-inserts the same
+   * node via `replaceChildren`), so the handler is attached a single time. */
+  private ensureDockSentinel(): HTMLElement {
+    if (this._dockSentinel) return this._dockSentinel
+    const sentinel = document.createElement('div')
+    sentinel.className = 'pf-dock-sentinel'
+    sentinel.setAttribute('tabindex', '0')
+    sentinel.setAttribute('aria-hidden', 'true')
+    sentinel.addEventListener('focusin', (e: FocusEvent) => {
+      const dock = document.getElementById(DOCK_ID)
+      if (!dock) return
       const buttons = Array.from(dock.querySelectorAll<HTMLButtonElement>('.pf-dock-icon'))
       if (buttons.length === 0) return
-      const target = dir === 'forward' ? buttons[0] : buttons[buttons.length - 1]
-      target.focus()
+      const first = buttons[0]
+      const last = buttons[buttons.length - 1]
+      // Backward Shift+Tab from the first icon lands here (the sentinel is the
+      // previous DOM focusable) — wrap to the last. Any other entry (forward
+      // from <body>, or a stray programmatic focus) goes to the first.
+      if (e.relatedTarget === first) last.focus()
+      else first.focus()
     })
+    this._dockSentinel = sentinel
+    return sentinel
   }
 
   /** Snapshot the currently-focused dock button's identity before a re-render
@@ -1117,13 +1137,6 @@ export class Dock {
    * the shell on destroy so a left-open modal never leaks its key handler. */
   destroy(): void {
     this.closeOverlays()
-    // #781: clear the pending Tab-direction reset so no timer fires after
-    // teardown and no stale flag wraps a future focus move.
-    if (this.tabResetTimer !== null) {
-      window.clearTimeout(this.tabResetTimer)
-      this.tabResetTimer = null
-    }
-    this.lastTabDirection = null
   }
 
   private buildFrame(plugin: PluginEntry, layout: PluginLayout): HTMLIFrameElement {

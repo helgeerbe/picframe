@@ -247,6 +247,37 @@ body {
   background: rgba(255, 255, 255, 0.25);
 }
 
+/* #781: Leading dock sentinel — a zero-size, invisible, focusable element
+ * inserted as the first child of #pf-dock so backward Shift+Tab from the first
+ * dock icon lands on the sentinel (still inside the webview) instead of
+ * escaping to a native GTK widget (WebKitGTK's backward Shift+Tab is a native
+ * focus traversal not cancelable by preventDefault). Absolutely positioned out
+ * of the flex flow so it adds no gap/space to the dock row. NOT display:none /
+ * visibility:hidden — either would remove it from the tab order and defeat
+ * its purpose; it must remain focusable. */
+.pf-dock-sentinel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* #781: Leading danger-dropdown sentinel — same native-Shift+Tab root cause as
+ * the dock sentinel, applied to the open role="menu". Inserted as the first
+ * child of #pf-danger-dropdown so backward Shift+Tab from the first menu item
+ * lands on the sentinel (still inside the menu) instead of escaping to the
+ * danger trigger button (the previous DOM focusable). Identical invisible-but-
+ * focusable properties; absolutely positioned so it adds no menu height.
+ * NOT display:none — must stay focusable. */
+.pf-dropdown-sentinel {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 /* Danger-menu trigger (#763): reuses .pf-dock-icon sizing; this modifier
  * gives the power button a subtle warm tint so it reads as a system control. */
 .pf-dock-icon.pf-dock-danger {
