@@ -170,6 +170,94 @@ describe('Dock focus restoration across re-render (#777)', () => {
     expect(document.activeElement).toBe(document.body)
   })
 })
+describe('Dock focusout safety net (#781)', () => {
+  /** A focusable element appended to <body> (outside `#pf-dock`) standing in
+   *  for GTK4 moving focus out of the webview despite the keydown trap's
+   *  preventDefault. happy-dom does not fire `focusout` on programmatic
+   *  `focus()`, so the escape is simulated by dispatching a `FocusEvent` with
+   *  this element as `relatedTarget`. */
+  function outsideButton(): HTMLButtonElement {
+    const el = document.createElement('button')
+    el.id = 'pf-test-outside'
+    document.body.appendChild(el)
+    return el
+  }
+
+  /** Dispatch a `focusout` on `el` with `related` as the focus destination.
+   *  `bubbles: true` so it reaches the dock's delegated listener. */
+  function focusout(el: HTMLElement, related: EventTarget | null): void {
+    el.dispatchEvent(new FocusEvent('focusout', { bubbles: true, relatedTarget: related }))
+  }
+
+  /** A middle dock button (toggle) used to arm the Tab-direction flag without
+   *  the keydown trap pre-wrapping in happy-dom: `tab()` on a middle button
+   *  runs `setTabDirection` but, being neither first nor last, calls no
+   *  `focus()`, so the safety net's wrap is observable — focus actually moves
+   *  from the middle button to the wrap target. */
+  function middleButton(): HTMLButtonElement {
+    return icons()[1]
+  }
+
+  it('wraps focus back to the last icon when Shift+Tab escapes the dock', () => {
+    apply()
+    const btns = icons()
+    const middle = middleButton()
+    middle.focus()
+    tab(true) // arms 'backward' (middle button → trap does not pre-wrap)
+    const outside = outsideButton()
+    focusout(middle, outside) // GTK4 moved focus out despite preventDefault
+    expect(document.activeElement).toBe(btns[btns.length - 1])
+    outside.remove()
+  })
+
+  it('wraps focus back to the first icon when Tab escapes the dock', () => {
+    apply()
+    const btns = icons()
+    const middle = middleButton()
+    middle.focus()
+    tab(false) // arms 'forward'
+    const outside = outsideButton()
+    focusout(middle, outside)
+    expect(document.activeElement).toBe(btns[0])
+    outside.remove()
+  })
+
+  it('does not wrap for an intra-dock focus move (relatedTarget inside dock)', () => {
+    apply()
+    const btns = icons()
+    const middle = middleButton()
+    middle.focus()
+    tab(true) // arms 'backward'
+    // The new target is still inside the dock (the trap's own wrap, or native
+    // Tab between dock buttons) → the safety net must not interfere.
+    focusout(middle, btns[0])
+    expect(document.activeElement).toBe(middle)
+  })
+
+  it('does not wrap when no Tab preceded the focus escape', () => {
+    apply()
+    const middle = middleButton()
+    middle.focus()
+    // No tab() → direction flag is null → safety net stays idle.
+    const outside = outsideButton()
+    focusout(middle, outside)
+    expect(document.activeElement).toBe(middle)
+    outside.remove()
+  })
+
+  it('resets the Tab direction after the macrotask so a later escape does not wrap', async () => {
+    apply()
+    const middle = middleButton()
+    middle.focus()
+    tab(true) // arms 'backward'
+    // Flush the setTimeout(0) reset so the direction flag is cleared.
+    await new Promise<void>(r => setTimeout(r, 0))
+    const outside = outsideButton()
+    focusout(middle, outside) // flag is null now → no wrap
+    expect(document.activeElement).toBe(middle)
+    outside.remove()
+  })
+})
 
 describe('Danger dropdown keyboard navigation (#777)', () => {
   /** Click the danger (power) trigger to open the dropdown. */

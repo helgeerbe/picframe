@@ -187,6 +187,18 @@ export class Dock {
    * (#777). Attached once like the tooltip delegation; the persistent dock
    * element means a single listener handles every rebuilt child set. */
   private tabTrapDelegated = false
+  /** #781: direction of the most recent Tab/Shift+Tab the keydown trap
+   * intercepted, read by the `focusout` safety net to wrap escaping focus back
+   * into the dock. `'forward'` (Tab) / `'backward'` (Shift+Tab) / `null` (no
+   * recent Tab). Reset to `null` on the next macrotask so a stale flag never
+   * wraps an unrelated focus move (mouse click, programmatic focus). */
+  private lastTabDirection: 'forward' | 'backward' | null = null
+  /** Timer id for the `lastTabDirection` macrotask reset (#781); tracked so
+   * `destroy()` can clear it and avoid a post-teardown callback. */
+  private tabResetTimer: number | null = null
+  /** Whether the `focusout` safety-net listener has been attached to
+   * `#pf-dock` (#781). Attached once like the other delegated listeners. */
+  private focusOutDelegated = false
 
   constructor(root: HTMLElement, dockRoot: HTMLElement, callbacks: DockCallbacks) {
     this.root = root
@@ -408,6 +420,10 @@ export class Dock {
     // #777: attach the delegated Tab-wrap focus trap once (same persistence
     // rationale as the tooltip delegation).
     this.attachTabTrap(dock)
+    // #781: attach the focusout safety net once — catches focus escaping the
+    // dock when GTK4's native Tab navigation overrides the keydown trap's
+    // preventDefault (WebKitGTK + KeyboardMode.EXCLUSIVE).
+    this.attachFocusOutTrap(dock)
 
     // Dock contents (#763): transport buttons | divider | plugin icons |
     // divider | danger menu. Transport + danger live in the dock so they
@@ -939,13 +955,20 @@ export class Dock {
       // #777: When the danger dropdown is open, let Tab flow natively so it
       // can enter the menu from the trigger (the dropdown's own capture-phase
       // handler takes over once focus is inside). Without this guard the trap
-      // would wrap the trigger's Tab back to the first dock button.
+      // would wrap the trigger's Tab back to the first dock button. The guard
+      // also keeps the #781 direction flag unset so the focusout safety net
+      // does not pull the menu-entering Tab back into the dock.
       if (this.dangerOpen) return
       const buttons = Array.from(dock.querySelectorAll<HTMLButtonElement>('.pf-dock-icon'))
       if (buttons.length === 0) return
       const first = buttons[0]
       const last = buttons[buttons.length - 1]
       const active = document.activeElement
+      // #781: record the Tab direction so the focusout safety net can pull
+      // escaping focus back into the dock when GTK4's native focus navigation
+      // (KeyboardMode.EXCLUSIVE) moves it out despite preventDefault. Reset on
+      // the next macrotask so a later unrelated focus move is not miswrapped.
+      this.setTabDirection(e.shiftKey ? 'backward' : 'forward')
       if (e.shiftKey) {
         if (active === first) {
           e.preventDefault()
@@ -955,6 +978,51 @@ export class Dock {
         e.preventDefault()
         first.focus()
       }
+    })
+  }
+
+  /** Record the direction of the Tab/Shift+Tab the keydown trap just saw and
+   * arm a macrotask reset (#781). The flag is read by the `focusout` safety
+   * net; clearing it on the next macrotask means only a focus escape caused by
+   * the immediately-preceding Tab is wrapped. Re-arming cancels any pending
+   * reset first so rapid Tabs keep the latest direction. */
+  private setTabDirection(dir: 'forward' | 'backward'): void {
+    this.lastTabDirection = dir
+    if (this.tabResetTimer !== null) window.clearTimeout(this.tabResetTimer)
+    this.tabResetTimer = window.setTimeout(() => {
+      this.lastTabDirection = null
+      this.tabResetTimer = null
+    }, 0)
+  }
+
+  /** #781: focusout safety net. WebKitGTK + Gtk4LayerShell
+   * `KeyboardMode.EXCLUSIVE` lets GTK4's native focus-chain navigation move
+   * focus out of the webview on Shift+Tab past the first focusable, overriding
+   * the JS `preventDefault()`/`focus()` the keydown trap issues. This listener
+   * catches that escape: when focus leaves `#pf-dock` right after a Tab the
+   * trap handled (direction flag set) and the new target is outside the dock
+   * (or null — focus left the webview entirely for a GTK widget), it pulls
+   * focus back to the opposite end — Tab wraps to the first icon, Shift+Tab to
+   * the last. Intra-dock moves (native Tab between middle buttons, or the
+   * trap's own `focus()` whose relatedTarget is still inside the dock) are left
+   * alone. */
+  private attachFocusOutTrap(dock: HTMLElement): void {
+    if (this.focusOutDelegated) return
+    this.focusOutDelegated = true
+    dock.addEventListener('focusout', (e: FocusEvent) => {
+      const dir = this.lastTabDirection
+      if (dir === null) return
+      const related = e.relatedTarget
+      // Focus is staying inside the dock — native navigation between dock
+      // buttons, or the trap's own wrap focus() (relatedTarget is the newly
+      // focused dock button). Let it through; no wrap.
+      if (related instanceof Node && dock.contains(related)) return
+      // Focus escaped the dock right after a Tab the trap handled. GTK4 moved
+      // it out despite preventDefault; pull it back to the opposite end.
+      const buttons = Array.from(dock.querySelectorAll<HTMLButtonElement>('.pf-dock-icon'))
+      if (buttons.length === 0) return
+      const target = dir === 'forward' ? buttons[0] : buttons[buttons.length - 1]
+      target.focus()
     })
   }
 
@@ -1049,6 +1117,13 @@ export class Dock {
    * the shell on destroy so a left-open modal never leaks its key handler. */
   destroy(): void {
     this.closeOverlays()
+    // #781: clear the pending Tab-direction reset so no timer fires after
+    // teardown and no stale flag wraps a future focus move.
+    if (this.tabResetTimer !== null) {
+      window.clearTimeout(this.tabResetTimer)
+      this.tabResetTimer = null
+    }
+    this.lastTabDirection = null
   }
 
   private buildFrame(plugin: PluginEntry, layout: PluginLayout): HTMLIFrameElement {
