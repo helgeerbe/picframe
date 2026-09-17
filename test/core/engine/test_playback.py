@@ -165,17 +165,33 @@ def test_engine_command_event_dispatches_directly(
     config: dict[str, Any],
 ) -> None:
     engine = PlaybackEngine(
-        mock_event_publisher,
-        mock_event_subscriber,
-        mock_playlist_manager,
-        mock_renderer,
-        config,
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
     )
     engine._state = State.PLAYING
     engine._trigger_next_media = MagicMock()
 
     engine._handle_command(CommandEvent(command=Command.NEXT))
 
+    engine._trigger_next_media.assert_called_once_with()
+
+
+def test_engine_restart_playlist_rebuilds_and_triggers_next(
+    mock_event_publisher: MagicMock,
+    mock_event_subscriber: MagicMock,
+    mock_playlist_manager: MagicMock,
+    mock_renderer: MagicMock,
+    config: dict[str, Any],
+) -> None:
+    """RESTART_PLAYLIST clears the playlist and displays the first item (#786)."""
+    engine = PlaybackEngine(
+        mock_event_publisher, mock_event_subscriber, mock_playlist_manager, mock_renderer, config
+    )
+    engine._state = State.PLAYING
+    engine._trigger_next_media = MagicMock()
+
+    engine._handle_command(CommandEvent(command=Command.RESTART_PLAYLIST))
+
+    mock_playlist_manager.restart_playlist.assert_called_once_with()
     engine._trigger_next_media.assert_called_once_with()
 
 

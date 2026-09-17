@@ -124,7 +124,9 @@
       "shuffleMode": "Shuffle mode",
       "shuffleModeStandard": "Random",
       "shuffleModeFewerRepeats": "Fewer repeats",
-      "shuffleModeAgeWeighted": "Age weighted"
+      "shuffleModeAgeWeighted": "Age weighted",
+      "restartPlaylist": "Restart playlist",
+      "reshuffleNow": "Reshuffle now"
     },
     "overlays": {
       "title": "Text Overlays",

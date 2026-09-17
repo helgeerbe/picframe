@@ -225,6 +225,10 @@ export const usePlayerStore = defineStore('player', () => {
     sendCommand('PREV')
   }
 
+  function restartPlaylist() {
+    sendCommand('RESTART_PLAYLIST')
+  }
+
   function normalizeBrightness(value: number) {
     if (!Number.isFinite(value)) return brightness.value
     return Math.max(0, Math.min(1, value))
@@ -263,6 +267,7 @@ export const usePlayerStore = defineStore('player', () => {
     pause,
     next,
     previous,
+    restartPlaylist,
     previewBrightness,
     setBrightness,
     isDisplayOn,

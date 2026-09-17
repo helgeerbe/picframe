@@ -1464,6 +1464,10 @@ def create_app(
                                 event_publisher.publish(CommandEvent(command=Command.PURGE_FILES))
                             elif command_str == "STOP":
                                 event_publisher.publish(CommandEvent(command=Command.STOP))
+                            elif command_str == "RESTART_PLAYLIST":
+                                event_publisher.publish(
+                                    CommandEvent(command=Command.RESTART_PLAYLIST)
+                                )
                             elif command_str == "REBOOT_HOST":
                                 event_publisher.publish(CommandEvent(command=Command.REBOOT_HOST))
                             elif command_str == "SHUTDOWN_HOST":

@@ -1,38 +1,39 @@
 # Active Context
 
 ## Current Focus
-**#783 — unify Pause/Play between UI Remote tab and on-screen overlay dock
-(branch `fix/overlay-pause-play-toggle-783`, PR pending):** root-cause bug
-`INPUT_ACTION_TOGGLE` in `overlay_ipc.py`/`webkit_overlay_renderer.py`
-hard-mapped to `Command.PLAY` (resume-only) so the dock + `p` key could never
-pause. Fix + full sync shipped:
-- **Toggle fix:** `_command_for_input_action` now maps `INPUT_ACTION_TOGGLE` →
-  `Command.PAUSE` (the real backend toggle: PAUSED↔resume, PLAYING/etc→pause).
-- **Playback-state IPC bridge:** new `PlaybackStateChangedCommand`
-  (`overlay_ipc.py`) forwarded by `WebKitOverlayRenderer._on_state_event`
-  (subscribes `StateEvent`, filters to genuine playback states — skips
-  `CONFIG_CHANGED`/`STATS_UPDATED`/`SLEEPING` signals so a config change never
-  falsely flips the dock icon while `PLAYING`). Worker injects
-  `window.picframe.applyPlaybackState(<state>)`. Cached for `REQUEST_STATE`
-  replay (worker respawn/reconnect).
-- **Two-state dock icon:** `dock.ts` `setPlaybackState` flips the toggle
-  button to `⏸`/Pause while playing, `▶`/Play while paused (matches the UI
-  Remote `isPlaying` set); updated in place (no full re-render).
-- **Pause-pins-dock:** `shell.ts` `applyPlaybackState` pins the dock visible
-  while `state === 'PAUSED'` (suppresses the dock idle-hide timer; Escape
-  can't dismiss while pinned); restores normal auto-hide on resume. Only
-  `PAUSED` pins — `IDLE`/`ERROR` flip the icon but don't pin.
-- **Center-text gating:** `playback.py` `_overlay_active()` reads
-  `overlay.enabled`; when on, the legacy pi3d center "PAUSED" text **and** the
-  GTK video "PAUSED" label are both suppressed (the overlay dock stacks above
-  the GTK4 video host, so the pinned dock is the sole, unified pause
-  indicator). When the overlay is off (or no config repo is wired) both remain
-  as fallback. Per the ticket, this is transitional — #753 will retire the
-  center-text path entirely (and now also the GTK video "PAUSED" label).
-Tests: backend (renderer/worker/ipc/playback) + frontend (dock/shell) — all
-green; `pytest` (662 in touched dirs)/`mypy`/`ruff`; `yarn test` (140)/
-`lint`/`format`/`build` (vue-tsc). Transitional per ticket: #753 retires the
-center-text path later.
+**#786 — persist & resume non-shuffled playback position + "Restart playlist"
+command (branch `feat/786-resume-non-shuffle-playback`, PR pending):**
+- **Resume marker:** `PlaylistManager` persists the primary media id of each
+  displayed slot to `model.resume_media_id` in `config.db3` **only while
+  `shuffle is False`** (shuffle order is not stable across restarts, so a
+  marker would be meaningless). On the first non-shuffle `build_playlist`
+  after startup, `_apply_resume_position()` advances the cursor past the
+  marked slot (slot+1; wraps to 0 at the end; falls back to 0 if the marked
+  item is gone). One-shot via `_resume_applied` so config-change rebuilds and
+  `restart_playlist` don't re-jump. Robust against file additions/reordering
+  because it keys on media id, not raw index.
+- **Restart playlist:** new `Command.RESTART_PLAYLIST` (high priority) handled
+  in `PlaybackEngine._handle_restart_playlist_command` →
+  `PlaylistManager.restart_playlist()` (clears the marker, drops history,
+  rebuilds with the current shuffle setting) then `_trigger_next_media()`.
+  WebSocket dispatch added in `api/app.py`; `"RESTART_PLAYLIST"` added to the
+  `WebSocketCommandMessage` literal in `api/models.py`.
+- **UI:** the Remote shuffle dropdown gained a divided action row with an
+  adaptive label — "Restart playlist" (shuffle off) / "Reshuffle now"
+  (shuffle on) — one underlying command (`player.ts` `restartPlaylist()`,
+  `RemoteView.vue` action button, i18n `restartPlaylist`/`reshuffleNow` en+de).
+- Tests: `test_playlist.py` (resume +1, fallback, shuffle-skip, persist
+  on/off, restart clears), `test_playback.py` (RESTART_PLAYLIST dispatch),
+  `test_app.py` (WS→CommandEvent), `player.test.ts` (WS send). All gates
+  green: `pytest` (931 in core+api)/`mypy`/`ruff`; `yarn test` (142)/
+  `lint`/`format`/`build` (vue-tsc). Docs: `manual.md`.
+
+**Recently shipped:** #783/#784 (overlay Pause/Play unification, squash-merged
+to `dev` as `0fef970`) — `_command_for_input_action` toggle fix, playback-state
+IPC bridge, two-state dock icon, pause-pins-dock, center-text gating
+(transitional; #753 retires center-text later). #777 overlay keyboard nav PR
+still open on `dev`. #739 touch-overlay/plugin system + #762 wake-on-input
+shipped earlier.
 
 **WebKitGTK touch overlay + plugin system (#739) shipped via PR #754
 (squash-merged to `dev` as `6ec7c74`)** — nine issues closed (#739, #750,

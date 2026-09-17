@@ -43,6 +43,7 @@ class Command(Enum):
     DISPLAY_TOGGLE = auto()
     SET_BRIGHTNESS = auto()
     REQUEST_STATE = auto()
+    RESTART_PLAYLIST = auto()
 
 
 class State(Enum):
@@ -104,6 +105,7 @@ class CommandEvent(Event):
             Command.RESTART_SERVICE,
             Command.DELETE,
             Command.STOP,
+            Command.RESTART_PLAYLIST,
         }
         return 1 if self.command in high_priority else 2
 

@@ -607,6 +607,28 @@ selected mode is persisted, but it only affects playback while shuffle is
 enabled. If `model.shuffle_mode` is missing or invalid, Picframe falls back to
 `random`.
 
+#### Resuming non-shuffled playback
+
+When shuffle is **off**, Picframe remembers where it was. After each displayed
+item it writes that item's media id to `model.resume_media_id` in
+`config.db3`, and on the next start it resumes playback at the item *after* the
+last one shown. The marker is only read and written while shuffle is off —
+shuffled order is not stable across restarts, so a marker would be meaningless,
+and shuffle never resumes. If the marked item is no longer in the playlist
+(e.g. it was deleted or filtered out), playback simply starts from the
+beginning.
+
+#### Restart playlist / Reshuffle now
+
+The Remote shuffle dropdown has a divided action row at the bottom that
+restarts the current playlist from the beginning with a single command
+(`RESTART_PLAYLIST`). Its label adapts to the active mode:
+
+*   **Restart playlist** while shuffle is off — clears the resume marker and
+    plays the first item in order.
+*   **Reshuffle now** while shuffle is on — rebuilds a fresh shuffled order
+    and plays the first item.
+
 ### Home Assistant / MQTT
 
 MQTT is optional. When `mqtt.use_mqtt` is enabled, the next-generation runtime

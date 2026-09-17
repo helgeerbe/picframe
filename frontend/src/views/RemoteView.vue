@@ -292,6 +292,19 @@ const setShuffleMode = async (mode: ShuffleMode) => {
   }
 }
 
+// #786: one command (RESTART_PLAYLIST) restarts the playlist. The label adapts
+// to the active shuffle state — "Restart playlist" in order, "Reshuffle now"
+// when shuffling — so the same control reads naturally in both modes.
+const restartPlaylistLabelKey = computed(() =>
+  isShuffleEnabled.value ? 'remote.controls.reshuffleNow' : 'remote.controls.restartPlaylist'
+)
+
+const restartPlaylist = () => {
+  closeShuffleModeMenu()
+  if (isSavingShuffle.value || isConfigLoading.value) return
+  playerStore.restartPlaylist()
+}
+
 const currentMediaItems = computed(() => {
   if (currentMedia.value?.items?.length) return currentMedia.value.items
   return currentMedia.value ? [currentMedia.value] : []
@@ -1275,6 +1288,23 @@ const metadataFields = computed(() => {
                       ]"
                     />
                     <span class="truncate">{{ t(mode.labelKey) }}</span>
+                  </button>
+                  <!-- #786: restart/reshuffle the current playlist from the beginning -->
+                  <div
+                    class="my-1 border-t border-gray-200 dark:border-gray-700"
+                    role="separator"
+                  ></div>
+                  <button
+                    type="button"
+                    role="menuitem"
+                    :disabled="isSavingShuffle || isConfigLoading"
+                    :aria-label="t(restartPlaylistLabelKey)"
+                    :title="t(restartPlaylistLabelKey)"
+                    class="flex h-10 w-full items-center gap-2 px-3 text-left text-sm font-medium text-gray-700 transition-colors hover:bg-indigo-50 hover:text-indigo-700 focus:bg-indigo-50 focus:text-indigo-700 focus:outline-none disabled:cursor-wait disabled:opacity-60 dark:text-gray-200 dark:hover:bg-indigo-500/10 dark:hover:text-indigo-200 dark:focus:bg-indigo-500/10 dark:focus:text-indigo-200"
+                    @click="restartPlaylist"
+                  >
+                    <ArrowPathIcon class="h-4 w-4 flex-shrink-0" />
+                    <span class="truncate">{{ t(restartPlaylistLabelKey) }}</span>
                   </button>
                 </div>
               </div>
