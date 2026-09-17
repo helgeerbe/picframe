@@ -79,10 +79,15 @@ class PlaylistManager:
         self._run_through_count: int = 0
         self._reshuffle_num: int = 1
         self._portrait_pairs: bool = False
-        # Resume marker (model.resume_media_id) is applied once, on the first
-        # non-shuffle build after startup, so a restart resumes past the last
-        # displayed media. Subsequent rebuilds (e.g. config changes) and
-        # restart_playlist deliberately skip resume. See #786.
+        # One-shot latch for startup resume (model.resume_media_id). The latch
+        # is consumed on the first playlist build after startup, regardless of
+        # shuffle mode or whether media is available. Resume only actually fires
+        # when that first build is non-shuffle with a non-empty playlist: the
+        # cursor then advances past the slot holding the persisted media id. If
+        # Picframe starts in shuffle mode or with no media, the latch is spent
+        # and a later non-shuffle rebuild starts at slot 0 — toggling shuffle off
+        # is treated as a clean restart by design. Subsequent rebuilds (e.g.
+        # config changes) and restart_playlist deliberately skip resume. See #786.
         self._resume_applied: bool = False
 
     def build_playlist(self, shuffle: bool | None = None) -> None:
@@ -379,8 +384,11 @@ class PlaylistManager:
 
         Reads ``model.resume_media_id`` and, when the marker is found in the
         freshly built display playlist, moves ``_current_index`` to the slot
-        after it so playback resumes past the last-displayed media. Only applied
-        on the first non-shuffle build after startup. See #786.
+        after it so playback resumes past the last-displayed media. The one-shot
+        latch ``_resume_applied`` is consumed on the first build after startup
+        regardless of shuffle mode or an empty playlist, so resume only fires
+        when that first build is non-shuffle with a non-empty playlist; a
+        shuffled or empty first build cannot resume later. See #786.
         """
         if self._shuffle or self._resume_applied or self._config_repo is None:
             self._resume_applied = True
