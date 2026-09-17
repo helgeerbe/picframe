@@ -124,7 +124,9 @@
       "shuffleMode": "Zufallsmodus",
       "shuffleModeStandard": "Zufall",
       "shuffleModeFewerRepeats": "Weniger Wiederholungen",
-      "shuffleModeAgeWeighted": "Altersgewichtet"
+      "shuffleModeAgeWeighted": "Altersgewichtet",
+      "restartPlaylist": "Wiedergabeliste neu starten",
+      "reshuffleNow": "Jetzt neu mischen"
     },
     "overlays": {
       "title": "Text-Overlays",
