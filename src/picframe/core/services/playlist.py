@@ -79,6 +79,11 @@ class PlaylistManager:
         self._run_through_count: int = 0
         self._reshuffle_num: int = 1
         self._portrait_pairs: bool = False
+        # Resume marker (model.resume_media_id) is applied once, on the first
+        # non-shuffle build after startup, so a restart resumes past the last
+        # displayed media. Subsequent rebuilds (e.g. config changes) and
+        # restart_playlist deliberately skip resume. See #786.
+        self._resume_applied: bool = False
 
     def build_playlist(self, shuffle: bool | None = None) -> None:
         """
@@ -122,10 +127,12 @@ class PlaylistManager:
         if not self._display_playlist:
             logger.warning("No media items found to build playlist.")
             self._current_index = -1
+            self._resume_applied = True
             return
 
         self._run_through_count = 0
         self._current_index = 0
+        self._apply_resume_position()
         logger.info(
             "Playlist built with %s media items and %s display slots.",
             len(self._playlist),
@@ -163,6 +170,7 @@ class PlaylistManager:
             prepared_slot = self._prepare_slot_for_display(slot_data)
             if prepared_slot:
                 self._history.append(prepared_slot)
+                self._persist_resume_media_id(prepared_slot)
                 return self._slot_to_display_item(prepared_slot)
 
         return DisplayItem.single(self._get_no_images_placeholder())
@@ -352,6 +360,80 @@ class PlaylistManager:
             orientation=1,
             is_deleted=False,
         )
+
+    def restart_playlist(self) -> None:
+        """Restart the current playlist from the beginning and clear the resume marker.
+
+        Clears ``model.resume_media_id`` so a later restart starts fresh, drops
+        the display history, and rebuilds the playlist with the current shuffle
+        setting (reshuffling when shuffle is on). The next ``get_next()`` call
+        returns the first slot. See #786.
+        """
+        self._clear_resume_media_id()
+        self._resume_applied = True  # do not jump to a stale marker on this build
+        self._history.clear()
+        self.build_playlist(shuffle=self._shuffle)
+
+    def _apply_resume_position(self) -> None:
+        """Advance the cursor past the last-displayed slot (non-shuffle, once).
+
+        Reads ``model.resume_media_id`` and, when the marker is found in the
+        freshly built display playlist, moves ``_current_index`` to the slot
+        after it so playback resumes past the last-displayed media. Only applied
+        on the first non-shuffle build after startup. See #786.
+        """
+        if self._shuffle or self._resume_applied or self._config_repo is None:
+            self._resume_applied = True
+            return
+        self._resume_applied = True
+        if not self._display_playlist:
+            return
+        resume_id = _config_optional_int(
+            self._config_repo.get_app_config("model.resume_media_id", None)
+        )
+        if resume_id is None:
+            return
+        for index, slot in enumerate(self._display_playlist):
+            if any(int(item.get("id", 0) or 0) == resume_id for item in slot):
+                next_index = index + 1
+                if next_index >= len(self._display_playlist):
+                    next_index = 0
+                self._current_index = next_index
+                logger.info(
+                    "Resuming non-shuffle playlist at slot %d (resume_media_id=%s).",
+                    next_index,
+                    resume_id,
+                )
+                return
+        logger.info(
+            "Resume media id %s not found in playlist; starting from beginning.",
+            resume_id,
+        )
+
+    def _persist_resume_media_id(self, prepared_slot: list[dict[str, Any]]) -> None:
+        """Persist the primary media id of the displayed slot for non-shuffle resume.
+
+        Only written while ``shuffle`` is False — shuffle order is not stable
+        across restarts, so a marker would be meaningless. See #786.
+        """
+        if self._shuffle or self._config_repo is None or not prepared_slot:
+            return
+        media_id = prepared_slot[0].get("id")
+        if media_id is None:
+            return
+        try:
+            self._config_repo.set_app_config("model.resume_media_id", int(media_id))
+        except Exception:
+            logger.debug("Failed to persist resume media id", exc_info=True)
+
+    def _clear_resume_media_id(self) -> None:
+        """Clear the persisted resume marker so the next build starts fresh."""
+        if self._config_repo is None:
+            return
+        try:
+            self._config_repo.set_app_config("model.resume_media_id", "")
+        except Exception:
+            logger.debug("Failed to clear resume media id", exc_info=True)
 
     def _advance_playlist_cycle(self) -> None:
         """Loop or reshuffle when the current playlist has been exhausted."""

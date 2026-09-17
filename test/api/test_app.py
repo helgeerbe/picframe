@@ -2656,3 +2656,57 @@ def test_websocket_state_pushes_overlay_visibility_event() -> None:
     payload = json.loads(captured[0]["text"])
     assert payload["type"] == "OverlayVisibilityChangedEvent"
     assert payload["on_screen_plugins"] == ["clock", "weather"]
+
+
+def test_websocket_state_dispatches_restart_playlist_command() -> None:
+    """Drive the /ws/state ASGI endpoint by hand (httpx has no ws:// support) to
+    verify an inbound ``{"command": "RESTART_PLAYLIST"}`` frame publishes a
+    ``CommandEvent(command=Command.RESTART_PLAYLIST)`` on the event bus (#786).
+    """
+    publisher = MagicMock()
+    app = create_app(cors_allowed_origins=["*"], event_publisher=publisher)
+
+    async def drive() -> None:
+        incoming: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
+        await incoming.put({"type": "websocket.connect"})
+        await incoming.put(
+            {"type": "websocket.receive", "text": json.dumps({"command": "RESTART_PLAYLIST"})}
+        )
+        await incoming.put({"type": "websocket.disconnect", "code": 1000})
+
+        async def receive() -> dict[str, Any]:
+            return await incoming.get()
+
+        async def send(message: dict[str, Any]) -> None:
+            # No outbound messages are expected for an inbound-only command; the
+            # disconnect simply lets receive_messages unwind.
+            if message["type"] == "websocket.disconnect":
+                raise WebSocketDisconnect(code=1000)
+
+        scope: dict[str, Any] = {
+            "type": "websocket",
+            "asgi": {"version": "3.0", "spec_version": "2.3"},
+            "http_version": "1.1",
+            "path": "/ws/state",
+            "raw_path": b"/ws/state",
+            "query_string": b"",
+            "headers": [],
+            "subprotocols": [],
+            "root_path": "",
+            "client": ("testclient", 12345),
+            "server": ("testserver", 80),
+            "app": app,
+        }
+        try:
+            await app(scope, receive, send)
+        except WebSocketDisconnect:
+            pass
+
+    asyncio.run(drive())
+
+    from picframe.core.events.dto import Command, CommandEvent
+
+    published = [call.args[0] for call in publisher.publish.call_args_list]
+    assert any(
+        isinstance(e, CommandEvent) and e.command == Command.RESTART_PLAYLIST for e in published
+    ), f"expected RESTART_PLAYLIST command, got {published!r}"

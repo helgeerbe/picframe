@@ -383,6 +383,8 @@ class PlaybackEngine:
             self._resume_playback()
         elif event.command == Command.STOP:
             self.stop()
+        elif event.command == Command.RESTART_PLAYLIST:
+            self._handle_restart_playlist_command()
         elif event.command == Command.DELETE:
             self._handle_delete_command(event.payload)
         elif event.command == Command.PURGE_FILES:
@@ -392,6 +394,15 @@ class PlaybackEngine:
         elif event.command == Command.SET_VOL:
             if self._video_player and event.payload is not None:
                 self._video_player.set_volume(float(event.payload))
+
+    def _handle_restart_playlist_command(self) -> None:
+        """Restart the playlist from the beginning and display the first item (#786).
+
+        Delegates the marker clear + rebuild to the playlist manager, then
+        triggers a fresh media transition so playback resumes at slot 0.
+        """
+        self._playlist_manager.restart_playlist()
+        self._trigger_next_media()
 
     def _has_active_video_playback(self) -> bool:
         return hasattr(self, "_active_video_media")

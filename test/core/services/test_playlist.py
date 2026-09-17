@@ -940,3 +940,137 @@ def test_normalize_shuffle_mode_accepts_age_weighted() -> None:
         SHUFFLE_MODE_FEWER_REPEATS,
         SHUFFLE_MODE_AGE_WEIGHTED,
     }
+
+
+# ---------------------------------------------------------------------------
+# Non-shuffle resume + restart playlist (#786)
+#
+# The resume marker (``model.resume_media_id``) persists the media id of the
+# last-displayed slot so a restart can resume non-shuffled playback past it.
+# It is only read/written while ``shuffle`` is False; shuffle never resumes.
+
+
+def _resume_config_repo(
+    mock_media_repo: Mock,
+    *,
+    shuffle: bool = False,
+    resume_media_id: Any = None,
+) -> Mock:
+    """Build a config repo mock that reports a shuffle flag + optional resume marker."""
+    config_repo = Mock()
+    config_repo.get_app_config.side_effect = lambda key, default=None: {
+        "model.shuffle_mode": SHUFFLE_MODE_STANDARD,
+        "model.pic_dir": "/pictures",
+        "model.resume_media_id": resume_media_id,
+    }.get(key, default)
+    config_repo.get_app_config_bool.side_effect = lambda key, default=False: {
+        "model.shuffle": shuffle,
+        "model.portrait_pairs": False,
+    }.get(key, default)
+    mock_media_repo.query_media.return_value = mock_media_repo.get_all_media.return_value
+    return config_repo
+
+
+@patch("os.path.isfile", return_value=True)
+def test_resume_advances_cursor_past_marker_slot(mock_isfile: Mock, mock_media_repo: Mock) -> None:
+    with patch("os.stat", _stat_for_rows(mock_media_repo.get_all_media.return_value)):
+        config_repo = _resume_config_repo(mock_media_repo, shuffle=False, resume_media_id=2)
+        manager = PlaylistManager(mock_media_repo, config_repo)
+        manager.build_playlist()
+
+        # id 2 lives in display slot index 1; resume should advance past it to 2.
+        assert manager._current_index == 2
+        first = manager.get_next()
+        assert first is not None
+        assert first.id == 3
+
+
+@patch("os.path.isfile", return_value=True)
+def test_resume_falls_back_to_start_when_marker_not_found(
+    mock_isfile: Mock, mock_media_repo: Mock
+) -> None:
+    with patch("os.stat", _stat_for_rows(mock_media_repo.get_all_media.return_value)):
+        config_repo = _resume_config_repo(mock_media_repo, shuffle=False, resume_media_id=999)
+        manager = PlaylistManager(mock_media_repo, config_repo)
+        manager.build_playlist()
+
+        assert manager._current_index == 0
+        first = manager.get_next()
+        assert first is not None
+        assert first.id == 1
+
+
+def test_resume_skipped_when_shuffle(mock_media_repo: Mock) -> None:
+    config_repo = _resume_config_repo(mock_media_repo, shuffle=True, resume_media_id=2)
+    manager = PlaylistManager(mock_media_repo, config_repo)
+    manager.build_playlist()
+
+    # Shuffle never resumes; the cursor stays at the start of the shuffled list.
+    assert manager._current_index == 0
+
+
+@patch("os.path.isfile", return_value=True)
+def test_resume_marker_persisted_when_shuffle_false(
+    mock_isfile: Mock, mock_media_repo: Mock
+) -> None:
+    with patch("os.stat", _stat_for_rows(mock_media_repo.get_all_media.return_value)):
+        config_repo = _resume_config_repo(mock_media_repo, shuffle=False)
+        manager = PlaylistManager(mock_media_repo, config_repo)
+        manager.build_playlist()
+
+        manager.get_next()  # displays id 1
+
+        config_repo.set_app_config.assert_any_call("model.resume_media_id", 1)
+
+
+@patch("os.path.isfile", return_value=True)
+def test_resume_marker_not_persisted_when_shuffle_true(
+    mock_isfile: Mock, mock_media_repo: Mock
+) -> None:
+    with patch("os.stat", _stat_for_rows(mock_media_repo.get_all_media.return_value)):
+        config_repo = _resume_config_repo(mock_media_repo, shuffle=True)
+        manager = PlaylistManager(mock_media_repo, config_repo)
+        manager.build_playlist()
+
+        manager.get_next()
+
+        resume_writes = [
+            call
+            for call in config_repo.set_app_config.call_args_list
+            if call.args and call.args[0] == "model.resume_media_id"
+        ]
+        assert resume_writes == []
+
+
+@patch("os.path.isfile", return_value=True)
+def test_restart_playlist_clears_marker_and_starts_at_zero(
+    mock_isfile: Mock, mock_media_repo: Mock
+) -> None:
+    with patch("os.stat", _stat_for_rows(mock_media_repo.get_all_media.return_value)):
+        config_repo = _resume_config_repo(mock_media_repo, shuffle=False)
+        manager = PlaylistManager(mock_media_repo, config_repo)
+        manager.build_playlist()
+        manager.get_next()  # id 1 (marker persisted)
+        manager.get_next()  # id 2 (marker persisted)
+
+        manager.restart_playlist()
+
+        # The resume marker is cleared so a later restart starts fresh.
+        config_repo.set_app_config.assert_any_call("model.resume_media_id", "")
+        assert manager._current_index == 0
+        assert manager._history == []
+        first = manager.get_next()
+        assert first is not None
+        assert first.id == 1
+
+
+def test_restart_playlist_does_not_resume_after_clear(mock_media_repo: Mock) -> None:
+    """After restart_playlist the stale marker must not jump the cursor again."""
+    config_repo = _resume_config_repo(mock_media_repo, shuffle=False, resume_media_id=2)
+    manager = PlaylistManager(mock_media_repo, config_repo)
+    manager.build_playlist()
+    # Simulate the marker being present from a prior session; restart must
+    # ignore it and start from the beginning.
+    manager.restart_playlist()
+
+    assert manager._current_index == 0

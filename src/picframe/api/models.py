@@ -568,6 +568,7 @@ class WebSocketCommandMessage(BaseModel):
         "SHUTDOWN_HOST",
         "REQUEST_STATE",
         "SET_CONFIG",
+        "RESTART_PLAYLIST",
     ] = Field(description="Command name to publish to the Picframe event bus.")
     value: float | None = Field(
         default=None,
